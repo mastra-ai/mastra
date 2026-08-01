@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:fs', () => ({
   existsSync: vi.fn(() => true),
@@ -9,8 +9,59 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 // Import after mocks are set up.
-const { createSpaStaticMiddleware } = await import('./spa-static.js');
+const { createSpaStaticMiddleware, resolveUiDistDir } = await import('./spa-static.js');
+const { existsSync } = await import('node:fs');
 const { readFile, stat } = await import('node:fs/promises');
+
+const originalUiDist = process.env.MASTRACODE_UI_DIST;
+const originalProjectRoot = process.env.MASTRA_PROJECT_ROOT;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  if (originalUiDist === undefined) delete process.env.MASTRACODE_UI_DIST;
+  else process.env.MASTRACODE_UI_DIST = originalUiDist;
+  if (originalProjectRoot === undefined) delete process.env.MASTRA_PROJECT_ROOT;
+  else process.env.MASTRA_PROJECT_ROOT = originalProjectRoot;
+});
+
+describe('resolveUiDistDir', () => {
+  beforeEach(() => {
+    delete process.env.MASTRACODE_UI_DIST;
+    delete process.env.MASTRA_PROJECT_ROOT;
+    vi.mocked(existsSync).mockReturnValue(false);
+  });
+
+  it('resolves factory assets under the server cwd', () => {
+    vi.spyOn(process, 'cwd').mockReturnValue('/project/src/mastra/public');
+    vi.mocked(existsSync).mockImplementation(path => path === '/project/src/mastra/public/factory/index.html');
+
+    expect(resolveUiDistDir()).toBe('/project/src/mastra/public/factory');
+  });
+
+  it('prefers the explicit UI dist override', () => {
+    process.env.MASTRACODE_UI_DIST = '/custom/factory-ui';
+    vi.spyOn(process, 'cwd').mockReturnValue('/project/src/mastra/public');
+    vi.mocked(existsSync).mockImplementation(
+      path => path === '/custom/factory-ui/index.html' || path === '/project/src/mastra/public/factory/index.html',
+    );
+
+    expect(resolveUiDistDir()).toBe('/custom/factory-ui');
+  });
+
+  it('falls back to the source layout under MASTRA_PROJECT_ROOT', () => {
+    process.env.MASTRA_PROJECT_ROOT = '/project';
+    vi.spyOn(process, 'cwd').mockReturnValue('/runtime');
+    vi.mocked(existsSync).mockImplementation(path => path === '/project/src/mastra/public/factory/index.html');
+
+    expect(resolveUiDistDir()).toBe('/project/src/mastra/public/factory');
+  });
+
+  it('returns undefined when no Factory UI build exists', () => {
+    vi.spyOn(process, 'cwd').mockReturnValue('/runtime');
+
+    expect(resolveUiDistDir()).toBeUndefined();
+  });
+});
 
 /** Minimal Hono-like context stub for middleware tests. */
 function mockContext(method: string, path: string, accept = '*/*'): any {
@@ -64,6 +115,18 @@ describe('createSpaStaticMiddleware – path traversal', () => {
     expect(c._resHeaders['Content-Type']).toBe('text/javascript; charset=utf-8');
   });
 
+  it('serves web app manifests with their standard MIME type', async () => {
+    vi.mocked(readFile).mockResolvedValue(Buffer.from('{}'));
+    vi.mocked(stat).mockResolvedValue({ isFile: () => true } as any);
+
+    const middleware = createSpaStaticMiddleware('/app/ui');
+    const c = mockContext('GET', '/manifest.webmanifest');
+    await middleware(c, async () => {});
+
+    expect(readFile).toHaveBeenCalledWith('/app/ui/manifest.webmanifest');
+    expect(c._resHeaders['Content-Type']).toBe('application/manifest+json');
+  });
+
   it('sets immutable cache for hashed assets', async () => {
     vi.mocked(readFile).mockResolvedValue(Buffer.from('js'));
     vi.mocked(stat).mockResolvedValue({ isFile: () => true } as any);
@@ -89,7 +152,7 @@ describe('createSpaStaticMiddleware – path traversal', () => {
 
   it('passes through server-owned prefixes', async () => {
     const middleware = createSpaStaticMiddleware('/app/ui');
-    for (const prefix of ['/api/foo', '/web/bar', '/auth/callback']) {
+    for (const prefix of ['/api/foo', '/web/bar', '/auth/callback', '/connect/slack']) {
       const c = mockContext('GET', prefix);
       let calledNext = false;
       await middleware(c, async () => {

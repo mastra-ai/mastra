@@ -7,7 +7,7 @@ packages:
 
 # Agents and tools
 
-Workflow steps can call agents to leverage LLM reasoning or call tools for type-safe logic. You can either invoke them from within a step's `execute()` function or compose them directly as steps using `createStep()`.
+Workflow steps can call agents to use LLM reasoning or call tools for type-safe logic. You can either invoke them from within a step's `execute()` function or compose them directly as steps using `createStep()`.
 
 ## Using agents in workflows
 
@@ -115,11 +115,11 @@ The `structuredOutput.schema` option accepts any Standard JSON Schema. The agent
 
 ## Using tools in workflows
 
-Use tools in workflow steps to leverage existing tool logic. Call from a step's `.execute()` function when you need to prepare context or process responses. Compose tools as steps when you don't need to modify how the tool is used.
+Use tools in workflow steps to use existing tool logic. Call from a step's `.execute()` function when you need to prepare context or process responses. Compose tools as steps when you don't need to modify how the tool is used.
 
 ### Calling tools
 
-Call tools inside a step's `.execute()` function. This gives you more control over the tool's input context, or process its response before passing it to the next step.
+Call tools inside a step's `.execute()` function. You get more control over the tool's input context, or process its response before passing it to the next step.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testTool } from '../tools/test-tool'

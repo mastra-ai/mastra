@@ -182,19 +182,19 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group flex gap-3 rounded-3xl border border-border1 bg-surface2 p-4 text-left transition-colors duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+                className="starter-chip group border-border1 bg-surface2 duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
               >
-                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-surface3 text-neutral4 transition-colors group-hover:text-neutral6">
+                <span className="bg-surface3 text-neutral4 group-hover:text-neutral6 mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors">
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
                   <Txt
                     variant="ui-sm"
-                    className="text-neutral6 font-medium transition-colors group-hover:text-neutral6"
+                    className="text-neutral6 group-hover:text-neutral6 font-medium transition-colors"
                   >
                     {starterPrompt.title}
                   </Txt>
-                  <Txt variant="ui-xs" className="mt-1 text-neutral4 transition-colors group-hover:text-neutral5">
+                  <Txt variant="ui-xs" className="text-neutral4 group-hover:text-neutral5 mt-1 transition-colors">
                     {starterPrompt.description}
                   </Txt>
                 </span>

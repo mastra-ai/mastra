@@ -71,7 +71,8 @@ export class FavoritesPG extends FavoritesStorage {
 
     // Lookup index for entity-scoped queries (cascade delete, count rebuild).
     const fullTableName = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
-    await this.#db.client.none(
+    await this.#db.createIndexFromStatement(
+      'idx_favorites_entity',
       `CREATE INDEX IF NOT EXISTS idx_favorites_entity ON ${fullTableName} ("entityType", "entityId")`,
     );
   }

@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeyChart } from './sankey-chart';
+import type { SankeyChartNodeSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
 
@@ -49,6 +50,8 @@ function TestControls() {
 
 function Example({
   onCurveClick,
+  onNodeClick,
+  isNodeClickable,
   columnOrder,
   onColumnOrderChange,
   visibleColumnIds,
@@ -56,6 +59,8 @@ function Example({
   getColumnHue,
 }: {
   onCurveClick?: (selection: unknown) => void;
+  onNodeClick?: (selection: unknown) => void;
+  isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
   columnOrder?: Array<string>;
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
@@ -73,7 +78,7 @@ function Example({
       getColumnHue={getColumnHue}
     >
       <TestControls />
-      <SankeyChart onCurveClick={onCurveClick} />
+      <SankeyChart onCurveClick={onCurveClick} onNodeClick={onNodeClick} isNodeClickable={isNodeClickable} />
     </Sankey>
   );
 }
@@ -148,6 +153,63 @@ describe('SankeyChart', () => {
       expect(shortLabel?.getAttribute('x')).toBe(longLabel?.getAttribute('x'));
       expect(shortLabel?.getAttribute('text-anchor')).toBe('start');
       expect(longLabel?.getAttribute('text-anchor')).toBe('start');
+    });
+  });
+
+  describe('when the chart is narrower than its labels need', () => {
+    const longChannel = 'A deliberately long channel label';
+    const signalsMargin = { top: 64, right: 32, bottom: 24, left: 32 };
+
+    function renderAtWidth(width: number, chartColumns = columns) {
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(width);
+      return render(
+        <Sankey data={[{ channel: longChannel, region: 'EU', outcome: 'Won' }]} columns={chartColumns}>
+          <SankeyChart margin={signalsMargin} />
+        </Sankey>,
+      );
+    }
+
+    function getVisibleText(element: Element | undefined) {
+      return [...(element?.childNodes ?? [])]
+        .filter(node => node.nodeType === Node.TEXT_NODE)
+        .map(node => node.textContent)
+        .join('');
+    }
+
+    it('truncates node labels further than a wide chart does', async () => {
+      const findFirstColumnLabel = (container: HTMLElement) =>
+        [...container.querySelectorAll('svg text[font-size="11"]')].find(
+          label => label.getAttribute('text-anchor') === 'start',
+        );
+
+      const wide = renderAtWidth(800);
+      await screen.findAllByText('EU');
+      const wideLabel = getVisibleText(findFirstColumnLabel(wide.container));
+      cleanup();
+
+      const narrow = renderAtWidth(400);
+      await screen.findAllByText('EU');
+      const narrowLabel = getVisibleText(findFirstColumnLabel(narrow.container));
+
+      expect(wideLabel.endsWith('…')).toBe(true);
+      expect(narrowLabel.endsWith('…')).toBe(true);
+      expect(narrowLabel.length).toBeLessThan(wideLabel.length);
+    });
+
+    it('truncates column headers and keeps the full name in a title', async () => {
+      const { container } = renderAtWidth(400, [
+        { id: 'channel', label: 'Acquisition channel grouping' },
+        { id: 'region', label: 'Region' },
+        { id: 'outcome', label: 'Outcome' },
+      ]);
+      await screen.findAllByText('EU');
+
+      const header = [...container.querySelectorAll('svg text[font-size="12"]')].find(label =>
+        label.textContent?.includes('Acquisition'),
+      );
+
+      expect(getVisibleText(header).endsWith('…')).toBe(true);
+      expect(header?.querySelector('title')?.textContent).toBe('Acquisition channel grouping');
     });
   });
 
@@ -458,6 +520,44 @@ describe('SankeyChart', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
 
     expect(onVisibleColumnIdsChange).toHaveBeenCalledWith(['channel', 'outcome']);
+  });
+
+  describe('when node activation is configured', () => {
+    it('lifts node identity by mouse and keyboard', async () => {
+      const onNodeClick = vi.fn();
+      render(<Example onNodeClick={onNodeClick} />);
+      const searchNode = await screen.findByRole('button', { name: 'Search: 3 traces (75%)' });
+
+      fireEvent.click(searchNode);
+      fireEvent.keyDown(searchNode, { key: 'Enter' });
+      fireEvent.keyDown(searchNode, { key: ' ' });
+
+      expect(onNodeClick).toHaveBeenCalledTimes(3);
+      expect(onNodeClick).toHaveBeenLastCalledWith({
+        column: { id: 'channel', label: 'Channel' },
+        value: 'Search',
+      });
+    });
+
+    it('leaves ineligible nodes noninteractive', async () => {
+      const onNodeClick = vi.fn();
+      render(<Example onNodeClick={onNodeClick} isNodeClickable={selection => selection.value !== 'Referral'} />);
+
+      await screen.findByLabelText('Referral: 1 trace (25%)');
+
+      expect(screen.queryByRole('button', { name: 'Referral: 1 trace (25%)' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Search: 3 traces (75%)' })).not.toBeNull();
+    });
+  });
+
+  describe('when node activation is not configured', () => {
+    it('does not expose nodes as buttons', async () => {
+      render(<Example />);
+
+      await screen.findByLabelText('Search: 3 traces (75%)');
+
+      expect(screen.queryByRole('button', { name: 'Search: 3 traces (75%)' })).toBeNull();
+    });
   });
 
   it('lifts the selected link metadata and contributing records by mouse and keyboard', async () => {

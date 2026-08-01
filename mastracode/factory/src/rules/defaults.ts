@@ -26,9 +26,9 @@ function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): bo
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-issue`,
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
     role: 'triage',
-    skillName: 'understand-issue',
+    skillName: 'factory-triage',
     arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
 }
@@ -43,19 +43,29 @@ function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
     : context.item.title;
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-linear-issue`,
+    idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
     role: 'triage',
-    skillName: 'understand-issue',
+    skillName: 'factory-triage',
     arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+  } as const;
+}
+
+function planWorkItem(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-plan`,
+    role: 'plan',
+    skillName: 'factory-plan',
+    arguments: context.item.url ? `Work item (${context.item.url})` : context.item.title,
   } as const;
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-pr`,
+    idempotencyKey: `${context.ingress.id}:factory-review`,
     role: 'review',
-    skillName: 'understand-pr',
+    skillName: 'factory-review',
     arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
   } as const;
 }
@@ -67,6 +77,8 @@ function resultContent(value: unknown): string | undefined {
   return typeof content === 'string' ? content : undefined;
 }
 
+// Interactive-session path only: factory-plan never calls submit_plan — it
+// advances planning → execute via factory_transition_work_item directly.
 function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
   if (
     context.result.status !== 'success' ||
@@ -87,6 +99,13 @@ function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
   } as const;
 }
 
+function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {
+  if (!createdAt) return false;
+  const sourceCreatedAt = Date.parse(createdAt);
+  const projectCreatedAt = Date.parse(factoryCreatedAt);
+  return Number.isFinite(sourceCreatedAt) && Number.isFinite(projectCreatedAt) && sourceCreatedAt > projectCreatedAt;
+}
+
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
   return {
@@ -97,7 +116,10 @@ function issueOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage: trustedGithubActor(context) ? 'triage' : 'intake',
+    stage:
+      trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt)
+        ? 'triage'
+        : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
@@ -115,17 +137,41 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-pr:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage: trustedGithubActor(context) ? 'review' : 'intake',
+    stage:
+      trustedGithubActor(context) && createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt)
+        ? 'review'
+        : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+      headBranch: context.pullRequest.headBranch,
+      baseBranch: context.pullRequest.baseBranch,
     },
   } as const;
 }
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest?.merged) return;
+  if (context.board === 'review') {
+    // The event is bound to the PR's own Review card: a merged PR is finished
+    // review work, so always move the card to Done. The message only reaches
+    // an active session (if any) — cards without one just move, instead of
+    // failing retries against a binding that never existed.
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:pull-request-merged`,
+      board: 'review',
+      stage: 'done',
+      message: {
+        text:
+          `Pull request #${context.pullRequest.number} merged; this Review card was moved to Done. ` +
+          'No further review is needed unless follow-up work was requested.',
+      },
+    } as const;
+  }
+  // Provenance bound the event to the originating Work item instead: remind
+  // its agent to assess completion — never auto-complete the Work item.
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:assess-work-completion`,
@@ -133,6 +179,24 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
     message:
       `Pull request #${context.pullRequest.number} merged. Assess whether the linked Work item is complete. ` +
       'Do not mark it Done solely because this PR merged; use factory_transition_work_item only after verifying the work.',
+  } as const;
+}
+
+function pullRequestClosed(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
+  if (context.board !== 'review') return;
+  // A PR closed without merging is abandoned review work: clear the card off
+  // the board instead of leaving it in Reviewing forever.
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:pull-request-closed`,
+    board: 'review',
+    stage: 'canceled',
+    message: {
+      text:
+        `Pull request #${context.pullRequest.number} was closed without merging; ` +
+        'this Review card was moved to Canceled.',
+    },
   } as const;
 }
 
@@ -165,6 +229,11 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: investigateTriagedIssue },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
     },
+    planning: {
+      issue: { onEnter: planWorkItem },
+      linearIssue: { onEnter: planWorkItem },
+      manual: { onEnter: planWorkItem },
+    },
   },
   review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
@@ -172,6 +241,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     issueOpened: { onEvent: issueOpened },
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestMerged: { onEvent: pullRequestMerged },
+    pullRequestClosed: { onEvent: pullRequestClosed },
   },
   linear: { issueObserved: { onEvent: linearIssueObserved } },
 };

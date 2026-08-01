@@ -62,6 +62,38 @@ const renderSave = ({
 };
 
 describe('useSaveAgent', () => {
+  describe('when saving an agent configuration', () => {
+    it('requests immediate publication', async () => {
+      const { hook, captured } = renderSave({
+        agentId: 'existing-id',
+        availableAgentTools: [],
+        defaultValues: {
+          name: 'Existing',
+          description: '',
+          instructions: 'Updated instructions',
+          tools: {},
+          agents: {},
+          workflows: {},
+          skills: {},
+        },
+      });
+
+      await act(async () => {
+        await hook.current.save({
+          name: 'Existing',
+          description: '',
+          instructions: 'Updated instructions',
+          tools: {},
+          agents: {},
+          workflows: {},
+          skills: {},
+        });
+      });
+
+      expect(captured.body?.autoPublish).toBe(true);
+    });
+  });
+
   describe('when updating an agent with selected tools and agents', () => {
     it('persists the selected tools as a record', async () => {
       const { hook, captured } = renderSave({

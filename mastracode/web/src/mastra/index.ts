@@ -28,7 +28,10 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import { SlackIntegration, createGithubSourceControl } from '../web/channels/slack/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -63,12 +66,49 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
+// Factory dev is auth-less by default. Production can opt out explicitly;
+// otherwise MastraFactory installs its platform-backed auth provider.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {
   auth = null;
 }
+
+// Direct GitHub App fallback: when the platform-backed integration isn't in
+// play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
+// a GithubIntegration so the app still gets a real GitHub connection — Connect
+// GitHub in onboarding, the repo picker, and webhooks. A partial group stays
+// disabled so the status route can report exactly what's missing.
+const githubAppId = process.env.GITHUB_APP_ID?.trim();
+const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
+const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
+const githubClientSecret = process.env.GITHUB_APP_CLIENT_SECRET?.trim();
+const githubAppSlug = process.env.GITHUB_APP_SLUG?.trim();
+const github =
+  githubAppId && githubPrivateKey && githubClientId && githubClientSecret && githubAppSlug
+    ? new GithubIntegration({
+        appId: githubAppId,
+        privateKey: githubPrivateKey,
+        clientId: githubClientId,
+        clientSecret: githubClientSecret,
+        slug: githubAppSlug,
+        webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+      })
+    : undefined;
+
+// Direct Linear OAuth fallback for self-hosted / local deploys. As with the
+// GitHub fallback, only a complete credential group enables the integration;
+// partial configuration remains available to the diagnostics routes.
+const linearClientId = process.env.LINEAR_CLIENT_ID?.trim();
+const linearClientSecret = process.env.LINEAR_CLIENT_SECRET?.trim();
+const linear =
+  linearClientId && linearClientSecret
+    ? new LinearIntegration({
+        clientId: linearClientId,
+        clientSecret: linearClientSecret,
+      })
+    : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -134,6 +174,7 @@ const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.e
 if (!databaseUrl && !localDevelopmentMode) {
   throw new Error('DATABASE_URL is required outside local development and tests.');
 }
+
 const storage = databaseUrl
   ? new PgFactoryStorage({
       id: 'mastra-code-storage',
@@ -147,8 +188,36 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+// Deployment-stable secret for OAuth/link `state` signing. Shared by the
+// factory's integration signer and the channel-account-link deep link so both
+// sign/verify with the same key: webhook secret first, then the WorkOS cookie
+// password. Unset → per-process random secret (single-process local dev only).
+const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+
+// Slack channels + account linking. Optional: the Slack adapter validates the
+// signing secret at construction, so the integration is only built when the
+// Slack app env is configured. Repo-backed Slack threads additionally need the
+// direct GitHub App wiring, hence the source-control slice.
+const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
+const slack = slackSigningSecret
+  ? new SlackIntegration({
+      signingSecret: slackSigningSecret,
+      botToken: process.env.SLACK_APP_BOT_TOKEN,
+      clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+      clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+      // Slack requires an HTTPS redirect_uri, which locally is the tunnel
+      // origin rather than the app's own public URL.
+      oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+      uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      sourceControl: github ? createGithubSourceControl(github) : undefined,
+    })
+  : undefined;
+
+const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+
 export const factory = new MastraFactory({
   auth,
+  integrations,
   sandbox: {
     machine: sandbox,
     // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
@@ -174,23 +243,18 @@ export const factory = new MastraFactory({
     .map(o => o.trim())
     .filter(Boolean),
   // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
-  // flows). Same resolution the state signer used before it moved into the
-  // factory: webhook secret first, then the WorkOS cookie password. Unset →
-  // per-process random secret (single-process local dev only).
-  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // flows). See `stateSecret` above.
+  stateSecret,
 });
+
+const preparedArgs = await factory.prepare();
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
-const prepared = await factory.prepare();
 export const mastra = new Mastra({
-  ...prepared,
-  bundler: {
-    externals: ['@anush008/tokenizers', '@duckdb/node-bindings', '@node-rs/xxhash', 'supports-color'],
-    transpilePackages: ['@mastra/factory'],
-  },
+  ...preparedArgs,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

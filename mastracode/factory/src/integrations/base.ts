@@ -18,6 +18,7 @@
  */
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
+import type { AgentControllerChannels } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -26,41 +27,21 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
+import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { ParsedGithubWebhook } from './github/webhook.js';
-
-export interface LinearIssueIngress {
-  id: string;
-  identifier: string;
-  title: string;
-  url: string;
-  state: string;
-  stateType: string;
-  priorityLabel: string;
-  assignee: string | null;
-  team: string | null;
-  labels: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
-  ingestGithubEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
-  ingestLinearIssues?: (input: {
-    orgId: string;
-    userId: string;
-    factoryProjectId: string;
-    issues: LinearIssueIngress[];
-  }) => Promise<unknown>;
 }
 
 /**
@@ -92,9 +73,8 @@ export interface IntegrationContext {
    */
   fleet: SandboxFleet;
   /**
-   * Root factory storage backend. Supplies the cross-replica
-   * `withDistributedLock` capability and the `appDbConfigured` diagnostic.
-   * Absent when the host runs without an application database.
+   * Root factory storage backend and source of the `appDbConfigured`
+   * diagnostic. Absent when the host runs without an application database.
    */
   factoryStorage?: FactoryStorage;
   /** Browser-facing origin (OAuth redirect base), no trailing slash. */
@@ -114,6 +94,21 @@ export interface IntegrationContext {
     projects: FactoryProjectsStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
+    /**
+     * Reverse index from a chat-platform sender to a Mastra tenant. Channel
+     * integrations resolve an inbound sender through this to run under the
+     * right user's credentials.
+     */
+    channelIdentity: ChannelIdentityStorage;
+  };
+  /**
+   * Factory rule runtime available when the work-item domain is ready.
+   * Integrations attach their own provider event rules to their ingress
+   * surfaces instead of relying on provider-specific services in the host.
+   */
+  rules?: {
+    config: FactoryRules;
+    workItems: WorkItemsStorage;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -171,6 +166,23 @@ export interface FactoryIntegration {
    * duplicates fail the `new Mastra(...)` construction loudly.
    */
   workers?(ctx: IntegrationContext): MastraWorker[];
+  /**
+   * Chat-platform channels this integration contributes (Slack, Discord, …).
+   * Called once at boot for READY integrations only; the factory attaches the
+   * result to the mounted agent controller via `setChannels`, so inbound
+   * platform messages reach the same agents the web UI drives.
+   *
+   * An integration providing this slot also declares a dependency on the
+   * `channel-identity` domain, which the factory folds into its readiness
+   * gate — so an integration whose reverse index isn't migrated yet reports
+   * not-ready and its channels never attach, rather than dispatching runs it
+   * can't resolve a tenant for.
+   *
+   * Only one integration may provide channels; the factory fails loud at boot
+   * on a second, because `setChannels` replaces rather than merges and the
+   * loser would silently never receive a message.
+   */
+  channels?(ctx: IntegrationContext): AgentControllerChannels;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

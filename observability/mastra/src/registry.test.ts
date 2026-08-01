@@ -486,6 +486,38 @@ describe('Observability Registry', () => {
 
       expect(instance.getMastraEnvironment()).toBe('production');
     });
+
+    it('logs asynchronous exporter initialization failures', async () => {
+      class RejectingInitExporter extends TestExporter {
+        override name = 'rejecting-init-exporter';
+        init = vi.fn(() => Promise.reject(new Error('storage unavailable')));
+      }
+
+      const exporter = new RejectingInitExporter();
+      const logger = new ConsoleLogger({ name: 'test' });
+      vi.spyOn(logger, 'child').mockReturnValue(logger);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      observability = new Observability({
+        configs: {
+          failing: {
+            serviceName: 'failing-service',
+            exporters: [exporter],
+          },
+        },
+      });
+      observability.setLogger({ logger });
+
+      observability.setMastraContext({ mastra: { getEnvironment: () => undefined } as any });
+
+      expect(exporter.init).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(warn).toHaveBeenCalledWith('Failed to initialize observability exporter', {
+          exporterName: 'rejecting-init-exporter',
+          error: 'storage unavailable',
+        });
+      });
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('observability = new Observability edge cases', () => {

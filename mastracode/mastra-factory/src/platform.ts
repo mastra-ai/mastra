@@ -1,5 +1,7 @@
 import { MASTRA_PLATFORM_API_URL, authHeaders, extractApiErrorDetail, platformFetch } from 'mastra/internal/auth';
 
+export type ProjectRegion = 'eu' | 'us';
+
 export interface PlatformProject {
   id: string;
   slug: string;
@@ -66,15 +68,17 @@ export async function createServerProject({
   token,
   orgId,
   name,
+  region,
 }: {
   token: string;
   orgId: string;
   name: string;
+  region: ProjectRegion;
 }): Promise<PlatformProject> {
   const res = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/server/projects`, {
     method: 'POST',
     headers: { ...authHeaders(token, orgId), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, factoryEnabled: true }),
+    body: JSON.stringify({ name, region, factoryEnabled: true }),
   });
   if (!res.ok) {
     throw new PlatformApiError(res.status, `Failed to create project — ${await extractError(res)}`);
@@ -126,14 +130,14 @@ export async function attachNeonDatabase({
   orgId: string;
   projectId: string;
   name: string;
-  regionId?: string;
+  regionId: string;
 }): Promise<AttachedDatabase> {
   const res = await platformFetch(
     `${MASTRA_PLATFORM_API_URL}/v1/server/projects/${encodeURIComponent(projectId)}/databases`,
     {
       method: 'POST',
       headers: { ...authHeaders(token, orgId), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'neon', name, ...(regionId ? { regionId } : {}) }),
+      body: JSON.stringify({ kind: 'neon', name, regionId }),
     },
   );
   if (!res.ok) {

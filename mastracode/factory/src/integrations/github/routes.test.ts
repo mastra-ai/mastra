@@ -142,7 +142,15 @@ function subscriptionRow(row: Record<string, any>) {
   };
 }
 
+const settingsRows = new Map<string, Record<string, any>>();
+
 const integrationStorage = {
+  settings: {
+    get: vi.fn(async (orgId: string, userId: string) => settingsRows.get(`${orgId}:${userId}`) ?? null),
+    save: vi.fn(async (orgId: string, userId: string, config: Record<string, any>) => {
+      settingsRows.set(`${orgId}:${userId}`, config);
+    }),
+  },
   subscriptions: {
     create: vi.fn(async (input: Record<string, any>) => {
       const row = subscriptionRow({
@@ -376,7 +384,12 @@ const stateSigner = {
 };
 
 const ensureProjectSandbox = vi.fn(
-  async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes']; onProgress?: (e: any) => void }) => {
+  async (opts: {
+    row: any;
+    storage: SourceControlStorageInMemory['sandboxes'];
+    token: string;
+    onProgress?: (e: any) => void;
+  }) => {
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
     return { id: 'sb' };
@@ -386,6 +399,7 @@ const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) =>
   opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -433,6 +447,8 @@ vi.mock('./sandbox', () => {
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
+    recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
+      recycleClaimedWorkdir(sb, workdir, defaultBranch),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (input: any) => createPullRequest(input),
@@ -635,19 +651,20 @@ beforeEach(() => {
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   sourceControlStorage.sessionsRows = tables.sessions as any;
+  sourceControlStorage.sandboxPoolRows = [];
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
+  settingsRows.clear();
   auditRecorded = [];
   auditFailure = undefined;
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // The webhook route verifies deliveries against the injected instance's secret.
   githubStub.webhookSecret = 'test-webhook-secret';
-  // No Postgres in these unit tests: keep the project lock purely in-process.
-  process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
+  recycleClaimedWorkdir.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
@@ -662,7 +679,6 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.GITHUB_APP_WEBHOOK_SECRET;
-  delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
 });
 
@@ -886,6 +902,81 @@ describe('status route', () => {
   });
 });
 
+describe('pat route', () => {
+  const jsonPost = (token: unknown, kind?: unknown) =>
+    new Request('http://localhost/web/github/pat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(kind === undefined ? { token } : { token, kind }),
+    });
+  const del = (kind?: string) =>
+    new Request(`http://localhost/web/github/pat${kind ? `?kind=${kind}` : ''}`, { method: 'DELETE' });
+
+  it('requires an authenticated org tenant', async () => {
+    const res = await buildApp(null).request('/web/github/pat');
+    expect(res.status).toBe(401);
+  });
+
+  it('reports not configured by default', async () => {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/pat');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+
+  it('saves a pasted worker token and reports configured without ever returning it', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    const saved = await app.request(jsonPost('ghp_secret123'));
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ configured: true, reviewerConfigured: false });
+
+    const status = await app.request('/web/github/pat');
+    const body = await status.json();
+    expect(body).toEqual({ configured: true, reviewerConfigured: false });
+    expect(JSON.stringify(body)).not.toContain('ghp_secret123');
+  });
+
+  it('saves and removes a reviewer token independently of the worker token', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    await app.request(jsonPost('ghp_worker', 'default'));
+    const saved = await app.request(jsonPost('ghp_reviewer', 'reviewer'));
+    expect(await saved.json()).toEqual({ configured: true, reviewerConfigured: true });
+
+    const removed = await app.request(del('reviewer'));
+    expect(await removed.json()).toEqual({ configured: true, reviewerConfigured: false });
+  });
+
+  it('rejects an unknown token kind', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    expect((await app.request(jsonPost('ghp_x', 'author'))).status).toBe(400);
+    expect((await app.request(del('author'))).status).toBe(400);
+  });
+
+  it('rejects an empty or whitespace token', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    expect((await app.request(jsonPost('   '))).status).toBe(400);
+    expect((await app.request(jsonPost('bad token'))).status).toBe(400);
+    expect((await app.request(jsonPost(42))).status).toBe(400);
+    const status = await app.request('/web/github/pat');
+    expect(await status.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+
+  it('removes the configured worker token', async () => {
+    const app = buildApp({ workosId: 'u1' });
+    await app.request(jsonPost('ghp_secret123'));
+    const removed = await app.request(del());
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ configured: false, reviewerConfigured: false });
+    const status = await app.request('/web/github/pat');
+    expect(await status.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+
+  it('scopes the tokens per org', async () => {
+    await buildApp({ workosId: 'u1' }).request(jsonPost('ghp_org1'));
+    const other = await buildApp({ workosId: 'u2', organizationId: 'org2' }).request('/web/github/pat');
+    expect(await other.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+});
+
 describe('subscriptions route', () => {
   it('returns pull request links for the exact scoped thread', async () => {
     tables.subscriptions.push({
@@ -985,6 +1076,26 @@ describe('repos route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
     expect(res.status).toBe(500);
     expect(tables.installations).toHaveLength(1);
+  });
+
+  it('lists multiple installations concurrently', async () => {
+    install(7, 'octo');
+    install(8, 'other');
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return defaultImpl(installationId);
+    });
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(res.status).toBe(200);
+    // Serial listing would never overlap; the route must fan out.
+    expect(maxInFlight).toBe(2);
   });
 });
 
@@ -1176,6 +1287,9 @@ describe('ensure (materialize)', () => {
       projectRepositoryId: 'p1',
     });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
+    );
     expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
       orgId: 'org1',
       repositoryId: 'repository-octo/hello',
@@ -1195,6 +1309,48 @@ describe('ensure (materialize)', () => {
       method: 'POST',
     });
     expect(res.status).toBe(404);
+  });
+
+  it('self-heals a stale sandbox provider by recomputing the workdir against the current fleet', async () => {
+    // The row was linked while a different provider was active — its workdir
+    // points into that provider's filesystem and would fail to clone here.
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/old-provider/hello',
+      }),
+    );
+    // A per-user binding already inherited the stale workdir and thinks it is materialized.
+    tables.sandboxes.push(
+      sandboxRow({
+        id: 'sbrow-1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sb-old',
+        sandboxWorkdir: '/old-provider/hello',
+        materializedAt: new Date(),
+      }),
+    );
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/hello' });
+    // The project row was healed to the current fleet's provider + workdir…
+    expect(tables.projectRepositories[0]).toMatchObject({
+      sandboxProvider: 'railway',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    // …and the per-user binding was re-pointed and forced to re-materialize.
+    expect(tables.sandboxes[0]).toMatchObject({ sandboxWorkdir: '/workspace/hello', materializedAt: null });
+    expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
+    );
   });
 
   it('streams server-side progress events when the client accepts an event stream', async () => {
@@ -1384,6 +1540,7 @@ describe('issues route', () => {
       branch: 'factory/issue-12',
     });
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
+    expect(addIssueLabels).toHaveBeenCalledOnce();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
@@ -1394,7 +1551,36 @@ describe('issues route', () => {
       resourceId: 'factory-p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
+      defaultModelId: undefined,
     });
+  });
+
+  it('normalises labels through the shared wrapper and resolves the default model', async () => {
+    seedMaterializedProject();
+    const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
+    const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
+      '/web/github/projects/p1/issues/5/triage',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Normalise labels',
+          url: 'https://github.com/octo/hello/issues/5',
+          labels: ['enhancement'],
+        }),
+      },
+    );
+    expect(res.status).toBe(202);
+    // The wrapper calls addIssueLabels exactly once (no duplicate from the handler).
+    expect(addIssueLabels).toHaveBeenCalledOnce();
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['auto-triaged']);
+    // The runner receives labels with 'auto-triaged' appended by the wrapper.
+    expect(runIssueTriage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: ['enhancement', 'auto-triaged'],
+        defaultModelId: undefined,
+      }),
+    );
   });
 
   it('400s when manual triage receives a non-canonical issue URL', async () => {
@@ -1614,6 +1800,38 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
   });
 
+  it('returns a remote session sandbox to the reuse pool on delete instead of destroying it', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(
+      tables.sessions.find(row => row.sessionId === sessionId)!,
+      {
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      },
+    );
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+    // The VM stays alive for the next session, but the released session's
+    // work is scrubbed off it before it enters the pool.
+    expect(reattachSandbox).toHaveBeenCalledWith('sb-live');
+    expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
+    expect(sourceControlStorage.sandboxPoolRows).toEqual([
+      expect.objectContaining({
+        orgId: 'org1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    ]);
+  });
+
   it('does not expose another user or organization session', async () => {
     seedMaterializedProject();
     const created = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
@@ -1736,6 +1954,7 @@ describe('pr route', () => {
       headBranch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
+      actingUserId: 'u1',
     });
   });
 

@@ -37,6 +37,8 @@ const platform = vi.hoisted(() => ({
 
 const cliAuth = vi.hoisted(() => ({
   getToken: vi.fn(),
+  loadCredentials: vi.fn(),
+  LoginCancelledError: class LoginCancelledError extends Error {},
   resolveCurrentOrg: vi.fn(),
   fetchOrgs: vi.fn(),
   MASTRA_PLATFORM_API_URL: 'https://platform.example.test',
@@ -77,12 +79,14 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   // Sensible default: platform provisioning succeeds. Tests can override.
+  cliAuth.loadCredentials.mockResolvedValue({ token: 'cached' });
   cliAuth.getToken.mockResolvedValue('wos-token');
   cliAuth.resolveCurrentOrg.mockResolvedValue({ orgId: 'org_123', orgName: 'Acme' });
   cliAuth.fetchOrgs.mockResolvedValue([
     { id: 'org_123', name: 'Acme', role: 'admin', isCurrent: true },
     { id: 'org_456', name: 'Beta', role: 'member', isCurrent: false },
   ]);
+  clack.select.mockResolvedValue('eu');
   platform.createServerProject.mockResolvedValue({ id: 'proj_abc', slug: 'my-factory', name: 'my-factory' });
   platform.mintOrgApiKey.mockResolvedValue('sk_live_test');
   platform.attachNeonDatabase.mockResolvedValue({ id: 'db_1', status: 'provisioning', error: null });
@@ -97,7 +101,7 @@ beforeEach(() => {
   fs.mkdirSync(templateDir);
   fs.writeFileSync(
     path.join(templateDir, 'package.json'),
-    `${JSON.stringify({ name: 'mastra-software-factory', version: '0.1.0', private: true }, null, 2)}\n`,
+    `${JSON.stringify({ name: 'mastra-factory', version: '0.1.0', private: true }, null, 2)}\n`,
   );
   fs.writeFileSync(path.join(templateDir, '.env.example'), ENV_EXAMPLE);
   process.chdir(workDir);
@@ -153,8 +157,11 @@ describe('create --no-platform', () => {
     expect(cliAuth.getToken).not.toHaveBeenCalled();
     expect(platform.createServerProject).not.toHaveBeenCalled();
 
-    // Next steps shown.
+    // Next steps show the integrated Factory UI on the Mastra server port.
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Your Mastra Factory is ready!'), 'Next steps');
+    expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('http://localhost:4111'), 'Next steps');
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringContaining('http://localhost:5173'), 'Next steps');
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringContaining('Mastra Studio'), 'Next steps');
   });
 
   it('fails the run when the template clone fails, without a success outro', async () => {
@@ -210,8 +217,9 @@ describe('create (platform provisioning)', () => {
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
 
-    // All five platform keys present with real values.
-    expect(env).toMatch(/^MASTRA_SHARED_API_URL=https:\/\/platform\.example\.test$/m);
+    // All four platform keys present with real values; the shared API URL is
+    // no longer written (consumers default to the production platform URL).
+    expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
@@ -224,28 +232,42 @@ describe('create (platform provisioning)', () => {
     // Platform pipeline hit in order.
     expect(cliAuth.getToken).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).toHaveBeenCalledWith('wos-token', { forcePrompt: true });
+    expect(clack.select).toHaveBeenCalledWith({
+      message: 'Where should your Factory project run?',
+      options: [
+        { value: 'eu', label: '🇪🇺 eu' },
+        { value: 'us', label: '🇺🇸 us' },
+      ],
+    });
     expect(platform.createServerProject).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       name: 'my-factory',
+      region: 'eu',
     });
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       keyName: 'create-factory: my-factory',
     });
-    expect(platform.attachNeonDatabase).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: 'proj_abc',
-        name: 'my-factory',
-      }),
-    );
+    expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
+      token: 'wos-token',
+      orgId: 'org_123',
+      projectId: 'proj_abc',
+      name: 'my-factory',
+      regionId: 'aws-eu-central-1',
+    });
 
-    // Success outro mentions the connected project.
+    // Success outro summarizes the provisioned infra so the user isn't
+    // surprised by what now exists in their platform org.
     const note = clack.note.mock.calls[0]![0] as string;
-    expect(note).toContain('Platform connected.');
+    expect(note).toContain('Provisioned on Mastra platform');
     expect(note).toContain('my-factory');
     expect(note).toContain('Acme');
+    expect(note).toContain('Postgres database');
+    expect(note).toContain('Sandboxes (code agent sessions run here)');
+    expect(note).toContain('Manage your project at');
+    expect(note).toContain('https://projects.mastra.ai');
   });
 
   it('surfaces a Neon 403 as a "need admin role" hint without failing the run', async () => {
@@ -277,7 +299,7 @@ describe('create (platform provisioning)', () => {
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
     const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
-    expect(env).toMatch(/^MASTRA_SHARED_API_URL=/m);
+    expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
@@ -288,15 +310,37 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('still provisioning');
   });
 
-  it('passes --region through to the Neon attach', async () => {
+  it('passes --region to project creation and skips the region picker', async () => {
     await create({
       projectName: 'my-factory',
       template: TEMPLATE_REPO,
-      region: 'aws-us-east-2',
+      region: 'us',
       analytics,
     });
 
-    expect(platform.attachNeonDatabase).toHaveBeenCalledWith(expect.objectContaining({ regionId: 'aws-us-east-2' }));
+    expect(clack.select).not.toHaveBeenCalled();
+    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'us' }));
+    expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
+      token: 'wos-token',
+      orgId: 'org_123',
+      projectId: 'proj_abc',
+      name: 'my-factory',
+      regionId: 'aws-us-west-2',
+    });
+  });
+
+  it('rejects unsupported --region values before scaffolding', async () => {
+    await expect(
+      create({
+        projectName: 'my-factory',
+        template: TEMPLATE_REPO,
+        region: 'aws-us-east-2',
+        analytics,
+      }),
+    ).rejects.toThrow('Invalid --region "aws-us-east-2". Expected one of: eu, us.');
+
+    expect(tinyexec.x).not.toHaveBeenCalled();
+    expect(platform.createServerProject).not.toHaveBeenCalled();
   });
 
   it('--org <name> skips the interactive picker and resolves via fetchOrgs', async () => {
@@ -310,6 +354,61 @@ describe('create (platform provisioning)', () => {
     expect(cliAuth.fetchOrgs).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).not.toHaveBeenCalled();
     expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org_456' }));
+  });
+
+  it('asks for confirmation before opening browser authentication', async () => {
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    cliAuth.loadCredentials.mockResolvedValue(null);
+    clack.text.mockResolvedValue('');
+
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    expect(clack.text).toHaveBeenCalledWith({
+      message: 'Mastra account is required, press enter to continue...',
+      defaultValue: '',
+    });
+    expect(clack.text.mock.invocationCallOrder[0]!).toBeLessThan(cliAuth.getToken.mock.invocationCallOrder[0]!);
+    vi.unstubAllEnvs();
+  });
+
+  it('cancels the process when Ctrl+C is pressed at the authentication confirmation', async () => {
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    cliAuth.loadCredentials.mockResolvedValue(null);
+    clack.text.mockResolvedValue(Symbol.for('clack.cancel'));
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process exited');
+    });
+
+    try {
+      await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+      expect(clack.cancel).toHaveBeenCalledWith('Operation cancelled');
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(cliAuth.getToken).not.toHaveBeenCalled();
+    } finally {
+      exit.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('allows any key to skip while waiting for platform authentication', async () => {
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(cliAuth.getToken).toHaveBeenCalledWith(undefined, { skipOnInput: true });
+    expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Provisioned on Mastra platform'), 'Next steps');
+  });
+
+  it('treats keyboard cancellation as skipped platform setup', async () => {
+    cliAuth.getToken.mockRejectedValue(new cliAuth.LoginCancelledError());
+
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    expect(platform.createServerProject).not.toHaveBeenCalled();
+    expect(clack.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
+    const note = clack.note.mock.calls[0]![0] as string;
+    expect(note).toContain('Skipped Mastra platform setup');
+    expect(note).not.toContain('Platform provisioning failed');
   });
 
   it('--org fails with a clear message when no org matches', async () => {

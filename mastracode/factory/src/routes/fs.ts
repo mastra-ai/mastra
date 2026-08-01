@@ -1,10 +1,16 @@
 import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import { isAbsolute, join, posix as posixPath, resolve, sep } from 'node:path';
 
+import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
+import type { Context } from 'hono';
+
+import type { MaterializationSandbox, SandboxFleet } from '../sandbox/fleet.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import type { RouteAuth } from './route.js';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -68,6 +74,39 @@ export interface WorkspaceFile {
   truncated?: boolean;
 }
 
+export type WorkspaceChangeStatus =
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'untracked'
+  | 'conflicted';
+
+export interface WorkspaceChange {
+  path: string;
+  previousPath?: string;
+  status: WorkspaceChangeStatus;
+  additions?: number;
+  deletions?: number;
+  binary?: boolean;
+}
+
+export interface WorkspaceChanges {
+  workspacePath: string;
+  available: boolean;
+  changes: WorkspaceChange[];
+  additions?: number;
+  deletions?: number;
+}
+
+export interface WorkspaceDiff {
+  workspacePath: string;
+  path: string;
+  patch: string;
+  truncated: boolean;
+}
+
 export type ArtifactEntry = WorkspaceRenderedEntry;
 
 export interface ArtifactListing {
@@ -79,8 +118,51 @@ export interface ArtifactListing {
 }
 
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
+const MAX_DIFF_BYTES = 512 * 1024;
+const WORKSPACE_NUMSTAT_SCRIPT = `
+set -e
+workdir=$1
+index_file=$(mktemp)
+untracked_file=$(mktemp)
+object_dir=$(mktemp -d)
+trap 'rm -f "$index_file" "$untracked_file"; rm -rf "$object_dir"' EXIT
+rm -f "$index_file"
+git -C "$workdir" diff --numstat -z --find-renames --no-ext-diff --no-textconv HEAD
+git -C "$workdir" ls-files --others --exclude-standard -z >"$untracked_file"
+git_dir=$(git -C "$workdir" rev-parse --absolute-git-dir)
+export GIT_INDEX_FILE="$index_file"
+export GIT_OBJECT_DIRECTORY="$object_dir"
+export GIT_ALTERNATE_OBJECT_DIRECTORIES="$git_dir/objects"
+git -C "$workdir" read-tree --empty
+git -C "$workdir" update-index --add -z --stdin <"$untracked_file"
+empty_tree=$(git -C "$workdir" hash-object -t tree /dev/null)
+git -C "$workdir" diff --cached --numstat -z --no-ext-diff --no-textconv "$empty_tree"
+`;
+const BOUNDED_GIT_DIFF_SCRIPT = `
+allow_exit_one=$1
+shift
+status_file=$(mktemp)
+stderr_file=$(mktemp)
+trap 'rm -f "$status_file" "$stderr_file"' EXIT
+(
+  git "$@" 2>"$stderr_file"
+  printf '%s' "$?" >"$status_file"
+) | head -c ${MAX_DIFF_BYTES + 1}
+status=$(cat "$status_file")
+case "$status" in
+  0|141) exit 0 ;;
+  1) [ "$allow_exit_one" = "1" ] && exit 0 ;;
+esac
+cat "$stderr_file" >&2
+exit "\${status:-1}"
+`;
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
 const APPROVED_RENDERED_ROOTS = new Set(['.artifacts']);
+
+/** Erase a route handler's path-parameterized context to a plain `Context`. */
+function loose(c: unknown): Context {
+  return c as Context;
+}
 
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
@@ -319,6 +401,347 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
   };
 }
 
+// ── Session-backed workspace access ──────────────────────────────────────────
+//
+// The web UI identifies a Factory session workspace by its session id (a UUID),
+// not by a server-local filesystem path — the session's files live inside the
+// session's sandbox (a remote VM on deployed factories). These helpers resolve
+// the session, enforce that the caller owns it, reattach to its sandbox, and
+// serve the approved rendered roots through `SandboxFilesystem`.
+
+/** Dependencies for resolving a `workspacePath` that is a Factory session id. */
+export interface SessionFsDeps {
+  auth: RouteAuth;
+  fleet: SandboxFleet;
+  sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
+}
+
+/**
+ * Resolve a `workspacePath` query param as a Factory session id. Returns the
+ * session when one exists and the caller owns it, `null` when no session
+ * matches (the caller should fall back to local-path handling), and throws
+ * when a session exists but belongs to another tenant.
+ */
+async function resolveAuthorizedSession(
+  c: Context,
+  deps: SessionFsDeps | undefined,
+  workspacePath: string,
+): Promise<SourceControlSession | null> {
+  if (!deps) return null;
+  const session = await deps.sessions.getBySessionId(workspacePath);
+  if (!session) return null;
+  if (deps.auth.enabled()) {
+    await deps.auth.ensureUser(c);
+    const tenant = deps.auth.tenant(c);
+    if (!tenant || tenant.orgId !== session.orgId || tenant.userId !== session.userId) {
+      throw new Error('Session is not available to the current user');
+    }
+  }
+  return session;
+}
+
+interface SessionSandboxHandle {
+  sandbox: MaterializationSandbox;
+  filesystem: SandboxFilesystem;
+  workdir: string;
+}
+
+/**
+ * Reattach to the session's sandbox and wrap its workdir in a
+ * `SandboxFilesystem`. Returns `null` when the session has no provisioned
+ * sandbox yet (nothing materialized → nothing to list), or when the sandbox
+ * can no longer be reattached (e.g. torn down by the provider's idle GC).
+ * This is a passive read path, so it never re-provisions: the session's
+ * filesystem is preserved in its provider checkpoint and comes back the next
+ * time the workspace is actually opened (e.g. by sending a message).
+ */
+async function sessionSandbox(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+): Promise<SessionSandboxHandle | null> {
+  if (!fleet.enabled || !session.sandboxId || !session.sandboxWorkdir) return null;
+  let sandbox: Awaited<ReturnType<SandboxFleet['reattachSandbox']>>;
+  try {
+    sandbox = await fleet.reattachSandbox(session.sandboxId, { workingDirectory: session.sandboxWorkdir });
+  } catch {
+    // Sandbox is gone (idle GC) or unreachable. Degrade to an empty view
+    // rather than surfacing a 500 from a file-viewer panel.
+    return null;
+  }
+  return {
+    sandbox,
+    filesystem: new SandboxFilesystem({ sandbox, workdir: session.sandboxWorkdir }),
+    workdir: session.sandboxWorkdir,
+  };
+}
+
+/** List an approved rendered root inside a Factory session's sandbox workdir. */
+export async function listSessionRenderedPath(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  renderedRoot: string,
+): Promise<WorkspaceRenderedListing> {
+  const safeRoot = assertApprovedRenderedRoot(renderedRoot);
+  const rootPath = posixPath.join(session.sandboxWorkdir ?? '', safeRoot);
+  const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
+
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) return empty;
+
+  // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
+  // from a fixed allowlist so interpolating it (quoted) is safe.
+  const quotedRoot = `'${rootPath.replace(/'/g, `'\\''`)}'`;
+  const result = await handle.sandbox.executeCommand(
+    'sh',
+    [
+      '-c',
+      `test -d ${quotedRoot} && find ${quotedRoot} -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null || true`,
+    ],
+    { timeout: 30_000 },
+  );
+  if (result.exitCode !== 0) return empty;
+
+  const entries: WorkspaceRenderedEntry[] = [];
+  for (const line of result.stdout.split('\n')) {
+    if (!line) continue;
+    const [type, sizeStr, mtimeStr, ...pathParts] = line.split('\t');
+    const fullPath = pathParts.join('\t');
+    if (!fullPath || !fullPath.startsWith(`${rootPath}/`)) continue;
+    const relativePath = fullPath.slice(rootPath.length + 1);
+    entries.push({
+      name: posixPath.basename(relativePath),
+      path: relativePath,
+      type: type === 'd' ? 'directory' : 'file',
+      size: type === 'd' ? 0 : Number(sizeStr) || 0,
+      updatedAt: new Date((Number(mtimeStr) || 0) * 1000).toISOString(),
+    });
+  }
+  entries.sort((a, b) => a.path.localeCompare(b.path));
+
+  return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
+}
+
+/** Read a file under an approved rendered root inside a session's sandbox. */
+export async function readSessionWorkspaceFile(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  path: string,
+): Promise<WorkspaceFile> {
+  const safePath = assertRelativePath(path, 'path');
+  assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
+
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) throw new Error('Session workspace is not available');
+  const { filesystem } = handle;
+  const info = await filesystem.stat(safePath);
+  if (info.type === 'directory') throw new Error('Path is a directory');
+
+  const buffer = (await filesystem.readFile(safePath)) as Buffer;
+  const truncated = buffer.length > MAX_TEXT_FILE_BYTES;
+  const base = {
+    workspacePath: session.sessionId,
+    path: safePath,
+    name: posixPath.basename(safePath),
+    size: buffer.length,
+    updatedAt: info.modifiedAt.toISOString(),
+  };
+  try {
+    const content = TEXT_DECODER.decode(truncated ? buffer.subarray(0, MAX_TEXT_FILE_BYTES) : buffer);
+    return { ...base, contentType: 'text', content, truncated };
+  } catch {
+    return { ...base, contentType: 'unsupported' };
+  }
+}
+
+function changeStatus(code: string): WorkspaceChangeStatus {
+  if (code === '??') return 'untracked';
+  if (code.includes('U') || code === 'AA' || code === 'DD') return 'conflicted';
+  if (code.includes('R')) return 'renamed';
+  if (code.includes('C')) return 'copied';
+  if (code.includes('D')) return 'deleted';
+  if (code.includes('A')) return 'added';
+  return 'modified';
+}
+
+export function parseWorkspaceChanges(output: string): WorkspaceChange[] {
+  const records = output.split('\0');
+  const changes: WorkspaceChange[] = [];
+
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record || record.length < 4) continue;
+    const code = record.slice(0, 2);
+    const path = record.slice(3);
+    const status = changeStatus(code);
+    if (status === 'renamed' || status === 'copied') {
+      const previousPath = records[index + 1];
+      if (previousPath) index += 1;
+      changes.push({ path, previousPath: previousPath || undefined, status });
+      continue;
+    }
+    changes.push({ path, status });
+  }
+
+  return changes.toSorted((a, b) => a.path.localeCompare(b.path));
+}
+
+export function parseWorkspaceChangeStats(output: string) {
+  const records = output.split('\0');
+  const stats = new Map<string, { additions?: number; deletions?: number; binary?: boolean }>();
+
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) continue;
+    const firstTab = record.indexOf('\t');
+    const secondTab = record.indexOf('\t', firstTab + 1);
+    if (firstTab < 0 || secondTab < 0) continue;
+
+    const additionsText = record.slice(0, firstTab);
+    const deletionsText = record.slice(firstTab + 1, secondTab);
+    let path = record.slice(secondTab + 1);
+    if (!path) {
+      const renamedPath = records[index + 2];
+      if (!renamedPath) continue;
+      path = renamedPath;
+      index += 2;
+    }
+    if (path.startsWith('./')) path = path.slice(2);
+
+    if (additionsText === '-' || deletionsText === '-') {
+      stats.set(path, { binary: true });
+      continue;
+    }
+
+    const additions = Number(additionsText);
+    const deletions = Number(deletionsText);
+    if (Number.isFinite(additions) && Number.isFinite(deletions)) stats.set(path, { additions, deletions });
+  }
+
+  return stats;
+}
+
+function unavailableWorkspaceChanges(workspacePath: string): WorkspaceChanges {
+  return { workspacePath, available: false, changes: [] };
+}
+
+export async function listSessionWorkspaceChanges(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+): Promise<WorkspaceChanges> {
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
+
+  const [statusResult, statsResult] = await Promise.all([
+    handle.sandbox.executeCommand(
+      'git',
+      ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      { timeout: 30_000 },
+    ),
+    handle.sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir], {
+      timeout: 30_000,
+    }),
+  ]);
+  if (statusResult.exitCode !== 0) return unavailableWorkspaceChanges(session.sessionId);
+
+  const changes = parseWorkspaceChanges(statusResult.stdout);
+  if (statsResult.exitCode !== 0) {
+    return { workspacePath: session.sessionId, available: true, changes };
+  }
+
+  const stats = parseWorkspaceChangeStats(statsResult.stdout);
+  let additions = 0;
+  let deletions = 0;
+  const changesWithStats = changes.map(change => {
+    const changeStats = stats.get(change.path);
+    additions += changeStats?.additions ?? 0;
+    deletions += changeStats?.deletions ?? 0;
+    return { ...change, ...changeStats };
+  });
+
+  return { workspacePath: session.sessionId, available: true, changes: changesWithStats, additions, deletions };
+}
+
+async function executeBoundedGitDiff(sandbox: MaterializationSandbox, args: string[], allowExitOne = false) {
+  return sandbox.executeCommand(
+    'sh',
+    ['-c', BOUNDED_GIT_DIFF_SCRIPT, 'mastracode-diff', allowExitOne ? '1' : '0', ...args],
+    { timeout: 30_000 },
+  );
+}
+
+function truncatePatch(patchBuffer: Buffer): string {
+  const patch = patchBuffer.subarray(0, MAX_DIFF_BYTES).toString('utf8');
+  const lastNewline = patch.lastIndexOf('\n');
+  if (lastNewline >= 0) return patch.slice(0, lastNewline + 1);
+  return patch.replace(/\uFFFD+$/, '');
+}
+
+export async function readSessionWorkspaceDiff(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  path: string,
+  previousPath?: string,
+): Promise<WorkspaceDiff> {
+  const safePath = assertRelativePath(path, 'path');
+  const safePreviousPath = previousPath ? assertRelativePath(previousPath, 'previousPath') : undefined;
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) throw new Error('Session workspace is not available');
+
+  const pathspecs = safePreviousPath ? [safePreviousPath, safePath] : [safePath];
+  let result = await executeBoundedGitDiff(handle.sandbox, [
+    '--literal-pathspecs',
+    '-C',
+    handle.workdir,
+    'diff',
+    '--find-renames',
+    '--no-ext-diff',
+    '--no-color',
+    '--unified=3',
+    'HEAD',
+    '--',
+    ...pathspecs,
+  ]);
+  if (result.exitCode !== 0) throw new Error(result.stderr || 'Unable to read workspace diff');
+
+  if (!result.stdout) {
+    const untracked = await handle.sandbox.executeCommand(
+      'git',
+      ['--literal-pathspecs', '-C', handle.workdir, 'ls-files', '--others', '--exclude-standard', '--', safePath],
+      { timeout: 30_000 },
+    );
+    if (untracked.exitCode === 0 && untracked.stdout.trim()) {
+      result = await executeBoundedGitDiff(
+        handle.sandbox,
+        [
+          '-C',
+          handle.workdir,
+          'diff',
+          '--no-index',
+          '--no-ext-diff',
+          '--no-color',
+          '--unified=3',
+          '--',
+          '/dev/null',
+          safePath,
+        ],
+        true,
+      );
+      if (result.exitCode !== 0 && result.exitCode !== 1) {
+        throw new Error(result.stderr || 'Unable to read workspace diff');
+      }
+    }
+  }
+
+  const patchBuffer = Buffer.from(result.stdout);
+  const truncated = patchBuffer.length > MAX_DIFF_BYTES;
+  return {
+    workspacePath: session.sessionId,
+    path: safePath,
+    patch: truncated ? truncatePatch(patchBuffer) : result.stdout,
+    truncated,
+  };
+}
+
 export interface ResolvedCodebase {
   /**
    * The resourceId the TUI would use for this path — derived identically so a
@@ -356,8 +779,9 @@ export function resolveCodebase(projectPath: string): ResolvedCodebase {
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
  *   - `GET /web/codebase/resolve?path=...` — TUI-compatible codebase resourceId
  */
-export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
+export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDeps } = {}): ApiRoute[] {
   const root = resolveFsRoot(options.root);
+  const sessionFs = options.sessionFs;
 
   return [
     registerApiRoute('/web/fs/list', {
@@ -398,6 +822,10 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!renderedRoot) return c.json({ error: 'Missing required query param: root' }, 400);
         try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (session && sessionFs) {
+            return c.json(await listSessionRenderedPath(sessionFs.fleet, session, renderedRoot));
+          }
           return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -405,7 +833,47 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
             message.includes('outside') ||
             message.includes('relative') ||
             message.includes('escapes') ||
-            message.includes('not approved')
+            message.includes('not approved') ||
+            message.includes('not available')
+              ? 403
+              : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/changes', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json(unavailableWorkspaceChanges(workspacePath));
+          return c.json(await listSessionWorkspaceChanges(sessionFs.fleet, session));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return c.json({ error: message }, message.includes('not available') ? 403 : 500);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/changes/diff', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const path = c.req.query('path');
+        const previousPath = c.req.query('previousPath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
+          return c.json(await readSessionWorkspaceDiff(sessionFs.fleet, session, path, previousPath));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('relative') || message.includes('escapes') || message.includes('not available')
               ? 403
               : 500;
           return c.json({ error: message }, status);
@@ -421,6 +889,10 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
         try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (session && sessionFs) {
+            return c.json(await readSessionWorkspaceFile(sessionFs.fleet, session, path));
+          }
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -428,11 +900,14 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
             message.includes('outside') ||
             message.includes('relative') ||
             message.includes('escapes') ||
-            message.includes('not approved')
+            message.includes('not approved') ||
+            message.includes('not available')
               ? 403
               : message.includes('directory')
                 ? 400
-                : 500;
+                : message.includes('not found')
+                  ? 404
+                  : 500;
           return c.json({ error: message }, status);
         }
       },

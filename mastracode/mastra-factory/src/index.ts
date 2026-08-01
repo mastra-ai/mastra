@@ -29,7 +29,7 @@ program
   .option('--template <template-name>', 'Create a project from a template (public GitHub URL)', DEFAULT_TEMPLATE_REPO)
   .option('--no-platform', 'Skip Mastra platform sign-in, project, and Neon provisioning')
   .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
-  .option('--region <region>', 'Neon region id (passed to the platform verbatim)')
+  .option('--region <region>', 'Platform project region (eu or us); prompts when omitted')
   .version(pkg.version, '-v, --version')
   .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
     await create({

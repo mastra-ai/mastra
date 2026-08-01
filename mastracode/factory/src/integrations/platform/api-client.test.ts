@@ -95,7 +95,7 @@ describe('PlatformApiClient', () => {
     expect(error).toBeInstanceOf(PlatformApiError);
     expect(error).toMatchObject({ message: 'Rate limited', status: 429, retryAfterSeconds: 17 });
     const logged = String(errorLog.mock.calls[0]?.[0]);
-    expect(logged).toContain('[MastraCode Web] ERROR Platform API request failed');
+    expect(logged).toContain('[Mastra Factory] ERROR Platform API request failed');
     expect(logged).toContain('"method":"GET"');
     expect(logged).toContain('"path":"/v1/test"');
     expect(logged).toContain('"status":429');

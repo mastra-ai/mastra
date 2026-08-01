@@ -251,6 +251,11 @@ vi.mock('../mcp/index.js', () => ({
 vi.mock('../onboarding/packs.js', () => ({
   getAvailableModePacks: getAvailableModePacksMock,
   getAvailableOmPacks: getAvailableOmPacksMock,
+  selectPreferredOMPack: vi.fn(() => undefined),
+}));
+
+vi.mock('../onboarding/om-settings.js', () => ({
+  hasExplicitOMConfiguration: vi.fn(() => false),
 }));
 
 vi.mock('../onboarding/settings.js', () => ({
@@ -471,6 +476,56 @@ describe('createMastraCode', () => {
     expect(createStorageMock).not.toHaveBeenCalled();
   });
 
+  // Simulates a duplicated-dependency graph: the injected store was built
+  // against a different copy of @mastra/core, so `instanceof
+  // MastraCompositeStore` (and `instanceof LibSQLStore`/`PostgresStore`) fail
+  // even though the instance is a real store. Detection must be structural.
+  describe('injected storage from a foreign @mastra/core copy', () => {
+    class ForeignCompositeStore {
+      stores = {};
+      async init() {}
+      __registerMastra() {}
+    }
+
+    it('detects a foreign LibSQLStore instance and resolves the libsql backend', async () => {
+      class LibSQLStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new LibSQLStore() as any });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('detects a foreign PostgresStore subclass and resolves the pg backend', async () => {
+      class PostgresStore extends ForeignCompositeStore {}
+      class CustomPgStore extends PostgresStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new CustomPgStore() as any });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts an unrecognized foreign store when storageBackend is configured', async () => {
+      class SomeOtherStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new SomeOtherStore() as any, storageBackend: 'pg' });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('still requires an explicit backend for unrecognized foreign stores', async () => {
+      class SomeOtherStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await expect(createMastraCode({ storage: new SomeOtherStore() as any })).rejects.toThrow(
+        'storageBackend is required when injecting a custom storage instance.',
+      );
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('uses caller memory while applying configDir to startup services and state', async () => {
     const projectPath = '/tmp/mastracode-project';
     const customMemory = { id: 'custom-memory' };
@@ -492,7 +547,8 @@ describe('createMastraCode', () => {
     });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { memory?: unknown; initialState?: Record<string, unknown> } | undefined;
+      | { memory?: unknown; initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.memory).toBe(customMemory);
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
@@ -534,7 +590,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> } | undefined;
+      | { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
@@ -577,7 +634,8 @@ describe('createMastraCode', () => {
     });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { modes?: { id: string; default?: boolean; defaultModelId: string }[] } | undefined;
+      | { modes?: { id: string; default?: boolean; defaultModelId: string }[] }
+      | undefined;
     expect(agentControllerConfig?.modes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'review', default: true, defaultModelId: '__GATEWAY_OPENAI_MODEL__' }),
@@ -601,7 +659,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ cwd: projectPath });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.initialState?.projectPath).toBe(projectPath);
   });
 
@@ -628,7 +687,8 @@ describe('createMastraCode', () => {
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
   });
 
@@ -675,7 +735,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      { pubsub?: unknown; threadLock?: unknown } | undefined;
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeDefined();
   });
@@ -687,7 +748,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      { pubsub?: unknown; threadLock?: unknown } | undefined;
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeUndefined();
   });
@@ -726,7 +788,8 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe(false);
   });
 
@@ -736,7 +799,8 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe('auto');
   });
 
@@ -753,18 +817,19 @@ describe('createMastraCode', () => {
     expect(controllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('runs stream error retries before provider-specific error recovery processors', async () => {
+  it('runs provider history compat before stream error retries so bad requests are repaired, not blindly retried', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      { errorProcessors?: Array<{ id?: string }> } | undefined;
+      | { errorProcessors?: Array<{ id?: string }> }
+      | undefined;
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
       'stream-error-retry-processor',
       'prefill-error-handler',
-      'provider-history-compat',
     ]);
   });
 
@@ -775,8 +840,9 @@ describe('createMastraCode', () => {
 
     expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
-      { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown }> } | undefined;
-    expect(options?.matchers).toHaveLength(2);
+      | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown; onRetry?: unknown }> }
+      | undefined;
+    expect(options?.matchers).toHaveLength(3);
 
     // First matcher: Bad Request (400) with maxRetries 1 and 2s delay.
     const badRequestPolicy = options!.matchers![0]!;
@@ -784,22 +850,55 @@ describe('createMastraCode', () => {
     expect(badRequestPolicy.maxRetries).toBe(1);
     expect(badRequestPolicy.delayMs).toBe(2000);
 
-    // Second matcher: transient connection failures with maxRetries 2 and exponential backoff.
+    // Second matcher: transient connection failures with maxRetries 10, visible status, and exponential backoff.
     const transientConnectionPolicy = options!.matchers![1] as {
       match?: (error: unknown) => boolean;
       maxRetries?: number;
-      delayMs?: (args: { retryCount: number }) => number;
+      delayMs?: (args: { error?: unknown; retryCount: number }) => number;
+      onRetry?: (args: {
+        error: Error;
+        retryCount: number;
+        requestContext?: { get: (key: string) => unknown };
+        delayMs: number;
+      }) => void | Promise<void>;
     };
     expect(typeof transientConnectionPolicy.match).toBe('function');
     expect(transientConnectionPolicy.match!(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))).toBe(true);
     expect(transientConnectionPolicy.match!(new Error('Cannot connect to API: other side closed'))).toBe(true);
-    expect(transientConnectionPolicy.maxRetries).toBe(2);
+    expect(transientConnectionPolicy.maxRetries).toBe(10);
     expect(typeof transientConnectionPolicy.delayMs).toBe('function');
-    expect(transientConnectionPolicy.delayMs!({ retryCount: 0 })).toBe(1000);
-    expect(transientConnectionPolicy.delayMs!({ retryCount: 1 })).toBe(2000);
-    expect(transientConnectionPolicy.delayMs!({ retryCount: 2 })).toBe(4000);
+
+    const emitEvent = vi.fn();
+    const error = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+    const delayMs = transientConnectionPolicy.delayMs!({ error, retryCount: 0 });
+    expect(delayMs).toBe(500);
+    await transientConnectionPolicy.onRetry!({
+      error,
+      retryCount: 0,
+      requestContext: { get: () => ({ emitEvent }) },
+      delayMs,
+    });
+    expect(emitEvent).toHaveBeenCalledWith({
+      type: 'error',
+      error,
+      retryable: true,
+      retryDelay: 500,
+      retryAttempt: 1,
+      maxRetries: 10,
+    });
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 1 })).toBe(1000);
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 2 })).toBe(2000);
     // High retry counts are capped at the max delay (30000ms).
     expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
+
+    // Third matcher: provider server failures use the same retry budget and visible status.
+    const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
+    expect(typeof serverErrorPolicy.match).toBe('function');
+    expect(serverErrorPolicy.match!(new Error('Server error. The API may be experiencing issues.'))).toBe(true);
+    expect(serverErrorPolicy.match!(Object.assign(new Error('Bad gateway'), { status: 502 }))).toBe(true);
+    expect(serverErrorPolicy.maxRetries).toBe(10);
+    expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
+    expect(typeof serverErrorPolicy.onRetry).toBe('function');
   });
 
   it('prepends embedding input processors without replacing mandatory built-ins', async () => {
@@ -809,7 +908,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ inputProcessors: [customProcessor] });
 
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      { inputProcessors?: Array<{ id?: string }> } | undefined;
+      | { inputProcessors?: Array<{ id?: string }> }
+      | undefined;
     const processors = agentConfig?.inputProcessors ?? [];
     expect(processors[0]).toBe(customProcessor);
     expect(processors.map(processor => processor.id)).toEqual([
@@ -827,7 +927,8 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> } | undefined;
+      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
+      | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });

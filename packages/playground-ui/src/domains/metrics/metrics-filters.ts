@@ -1,13 +1,15 @@
-import { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/observability';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+
+type EntityTypeValue = `${EntityType}`;
 
 /** Primitive type options — matches the traces filter vocabulary. */
 export const METRICS_ROOT_ENTITY_TYPE_OPTIONS = [
-  { label: 'Agent', entityType: EntityType.AGENT },
-  { label: 'Workflow', entityType: EntityType.WORKFLOW_RUN },
-  { label: 'Scorer', entityType: EntityType.SCORER },
-  { label: 'Ingest', entityType: EntityType.RAG_INGESTION },
-] as const;
+  { label: 'Agent', entityType: 'agent' },
+  { label: 'Workflow', entityType: 'workflow_run' },
+  { label: 'Scorer', entityType: 'scorer' },
+  { label: 'Ingest', entityType: 'rag_ingestion' },
+] as const satisfies readonly { label: string; entityType: EntityTypeValue }[];
 
 /** Field IDs that live in dedicated URL params (not the generic `filterX` set). */
 export const METRICS_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType'] as const;
@@ -307,12 +309,12 @@ function isNeutralValue(v: string): boolean {
  *  values can be arbitrary strings, so we validate against the allowed set
  *  before letting them reach the filter object. Returns `undefined` if the
  *  value isn't a known enum option. */
-const VALID_ROOT_ENTITY_TYPES: ReadonlySet<EntityType> = new Set(
+const VALID_ROOT_ENTITY_TYPES: ReadonlySet<EntityTypeValue> = new Set(
   METRICS_ROOT_ENTITY_TYPE_OPTIONS.map(o => o.entityType),
 );
 function toValidRootEntityType(v: string): EntityType | undefined {
   const trimmed = v.trim();
-  return VALID_ROOT_ENTITY_TYPES.has(trimmed as EntityType) ? (trimmed as EntityType) : undefined;
+  return VALID_ROOT_ENTITY_TYPES.has(trimmed as EntityTypeValue) ? (trimmed as EntityType) : undefined;
 }
 
 export function buildMetricsDimensionalFilter(tokens: PropertyFilterToken[]): MetricsDimensionalFilter {

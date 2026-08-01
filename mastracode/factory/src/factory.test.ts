@@ -205,10 +205,13 @@ describe('MastraFactory.prepare', () => {
       'work-items',
       'model-credentials',
       'model-packs',
+      'memory-settings',
+      'custom-providers',
       'queue-health',
       'integrations',
       'projects',
       'source-control',
+      'channel-identity',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -283,6 +286,18 @@ describe('MastraFactory.prepare', () => {
     expect(config.vector).toBe(vector);
   });
 
+  it('tells the SDK which backend the Mastra store uses (instanceof breaks across duplicate package copies)', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    expect(config.storageBackend).toBe('libsql');
+  });
+
+  it('resolves the pg backend from the FactoryStorage class name', async () => {
+    class PgFactoryStorage extends LibSQLFactoryStorage {}
+    const storage = new PgFactoryStorage({ url: ':memory:', id: 'factory-test-pg-named' });
+    const config = await prepareFactory({ storage });
+    expect(config.storageBackend).toBe('pg');
+  });
+
   it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
@@ -317,13 +332,13 @@ describe('MastraFactory.prepare', () => {
     } satisfies AuthInitContext);
   });
 
-  it('defaults publicUrl to the local Factory UI origin', async () => {
+  it('defaults publicUrl to the local Factory server origin (single server serves UI and API)', async () => {
     const auth = fakeProvider();
     const storage = fakeStorage();
     await prepareFactory({ auth, storage });
     expect(auth.init).toHaveBeenCalledExactlyOnceWith({
       database: storage.authDatabase(),
-      publicUrl: 'http://localhost:5173',
+      publicUrl: 'http://localhost:4111',
       allowedOrigins: [],
     } satisfies AuthInitContext);
   });
@@ -388,8 +403,9 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('installs the auth gate and tenant credential primer when auth is configured', async () => {
-    // The SPA static middleware is environment-dependent (present when ui/dist
-    // exists), so assert the delta from the two auth-specific middleware.
+    // Both modes mount the custom-providers primer and the SPA static
+    // middleware is environment-dependent (present when ui/dist exists), so
+    // assert the delta from the two auth-specific middleware.
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -398,6 +414,29 @@ describe('MastraFactory.prepare', () => {
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+  });
+
+  it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
+    // Deploys must authenticate BOTH plain API callers (server.auth) and
+    // Studio requests routed via `x-mastra-client-type: studio` (studio.auth).
+    const provider = fakeProvider();
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: provider });
+    const args = (await factory.prepare()) as { studio?: { auth?: unknown } };
+    expect(args.studio?.auth).toBe(provider);
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBe(provider);
+  });
+
+  it('omits server.auth and studio.auth when auth is explicitly disabled (auth: null)', async () => {
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: null });
+    const args = (await factory.prepare()) as { studio?: unknown };
+    expect(args.studio).toBeUndefined();
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBeUndefined();
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {
@@ -740,6 +779,107 @@ describe('MastraFactory.prepare integrations', () => {
     const factory = new MastraFactory({ storage: fakeStorage(), integrations: [fakeIntegration({ id: 'custom' })] });
     const args = await factory.prepare();
     expect(args).not.toHaveProperty('workers');
+  });
+
+  /**
+   * Channel integrations attach chat platforms (Slack, Discord, …) to the
+   * mounted controller. The default `prepareMock` returns a placeholder `base`,
+   * so these tests swap in one carrying a controller whose `setChannels` can be
+   * observed.
+   */
+  describe('integration channels', () => {
+    function withController() {
+      const setChannels = vi.fn();
+      prepareMock.mockResolvedValueOnce({
+        base: { controller: { setChannels } },
+        mastraArgs: {},
+        finalize: vi.fn(async () => {}),
+      } as never);
+      return setChannels;
+    }
+
+    it("attaches a ready integration's channels to the mounted controller", async () => {
+      const setChannels = withController();
+      const channelsInstance = { __channels: true } as never;
+      const channels = vi.fn((_ctx: IntegrationContext) => channelsInstance);
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(setChannels).toHaveBeenCalledWith(channelsInstance);
+      // Channels get the same context shape as routes()/workers(), plus the
+      // storage domain only a channel integration needs.
+      const ctx = channels.mock.calls[0]![0];
+      expect(ctx.storage.channelIdentity).toBeDefined();
+      expect(ctx.auth).toBeDefined();
+    });
+
+    it('leaves the controller alone when no integration provides channels', async () => {
+      const setChannels = withController();
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'custom' })],
+      });
+
+      await factory.prepare();
+
+      expect(setChannels).not.toHaveBeenCalled();
+    });
+
+    it('does not attach channels from an integration that is not ready', async () => {
+      const setChannels = withController();
+      const storage = fakeStorage();
+      // A channel integration whose reverse index isn't migrated can't resolve
+      // a sender's tenant — attaching it would dispatch on default credentials.
+      vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
+      const channels = vi.fn(() => ({}) as never);
+      const factory = new MastraFactory({
+        storage,
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(channels).not.toHaveBeenCalled();
+      expect(setChannels).not.toHaveBeenCalled();
+    });
+
+    it('requires the channel-identity domain before a channel integration is ready', async () => {
+      const setChannels = withController();
+      const storage = fakeStorage();
+      // Everything the integration needs EXCEPT its reverse index. Without the
+      // channel-identity entry in the readiness gate this passes and channels
+      // attach against an unmigrated domain.
+      vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'channel-identity');
+      const channels = vi.fn(() => ({}) as never);
+      const factory = new MastraFactory({
+        storage,
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(channels).not.toHaveBeenCalled();
+      expect(setChannels).not.toHaveBeenCalled();
+    });
+
+    it('fails loud when two integrations both provide channels', async () => {
+      withController();
+      // setChannels replaces rather than merges, so the loser would silently
+      // never receive a message.
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({ id: 'slack', channels: vi.fn(() => ({}) as never) }),
+          fakeIntegration({ id: 'discord', channels: vi.fn(() => ({}) as never) }),
+        ],
+      });
+
+      await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
+    });
   });
 });
 

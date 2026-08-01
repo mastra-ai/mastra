@@ -1982,6 +1982,90 @@ describe('MessageList V5 Support', () => {
       });
     });
 
+    it('translates image tool-result media to file content for v7 (spec v4) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v7-1',
+            toolName: 'screenshotTool',
+            input: { url: 'https://example.com' },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v7-1',
+            toolName: 'screenshotTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/png' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      const prompt = await list.get.all.aiV7.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'file', data: { type: 'data', data: 'base64imagedata' }, mediaType: 'image/png' }],
+      });
+    });
+
+    it('translates non-image tool-result media to file content for v7 (spec v4) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Fetch a document', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v7-2',
+            toolName: 'docTool',
+            input: {},
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v7-2',
+            toolName: 'docTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64pdfdata', mediaType: 'application/pdf' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      const prompt = await list.get.all.aiV7.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'file', data: { type: 'data', data: 'base64pdfdata' }, mediaType: 'application/pdf' }],
+      });
+    });
+
     it('should convert MCP content-array tool results to multimodal model output without providerMetadata duplication', async () => {
       const list = new MessageList({ threadId, resourceId });
 
@@ -2042,7 +2126,9 @@ describe('MessageList V5 Support', () => {
       });
     });
 
-    it('should preserve explicit modelOutput over MCP-style raw content in llmPrompt', async () => {
+    it('should preserve explicit modelOutput without inspecting circular MCP-style raw content', async () => {
+      const circularContentPart: Record<string, unknown> = { type: 'resource' };
+      circularContentPart.self = circularContentPart;
       const list = new MessageList({ threadId, resourceId });
 
       list.add('Summarize tool output', 'input');
@@ -2064,10 +2150,7 @@ describe('MessageList V5 Support', () => {
                   state: 'result',
                   args: {},
                   result: {
-                    content: [
-                      { type: 'text', text: 'raw text' },
-                      { type: 'image', data: 'raw-base64', mimeType: 'image/png' },
-                    ],
+                    content: [circularContentPart, { type: 'image', data: 'raw-base64', mimeType: 'image/png' }],
                   },
                 },
                 providerMetadata: {
