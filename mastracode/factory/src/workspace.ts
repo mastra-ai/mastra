@@ -14,8 +14,8 @@ import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { resolveGithubPat } from './integrations/github/pat.js';
-import type { GithubPatKind, ResolvedGithubPat } from './integrations/github/pat.js';
+import { getGithubPat } from './integrations/github/pat.js';
+import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
   MaterializeError,
@@ -24,7 +24,6 @@ import {
   runWorktreeSetup,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
-import type { GithubCredentialSource } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -132,7 +131,6 @@ type GithubTokenRegistration = {
   inject: (token: string) => void;
   patKind: GithubPatKind;
   installedPatKind: GithubPatKind;
-  credentialSource: GithubCredentialSource;
   generation: number;
   ghToken: string;
 };
@@ -242,7 +240,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       const generation = registered.generation;
       const patKind = registered.patKind;
-      registerGithubTokenInjector(requestContext, (token, source) => {
+      registerGithubTokenInjector(requestContext, token => {
         if (
           githubTokenInjectors.get(workspaceId) !== registered ||
           registered.generation !== generation ||
@@ -251,17 +249,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         ) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
-        if (source === 'reviewer' && patKind !== 'reviewer') {
-          throw new Error('GitHub token refresh cannot install reviewer credentials into a worker workspace.');
-        }
         registered.inject(token);
         registered.ghToken = token;
-        registered.installedPatKind = patKind;
-        if (registered.credentialSource !== source) {
-          registered.credentialSource = source;
-          registered.generation += 1;
-          registerGithubTokenContext(registered);
-        }
+        registered.generation += 1;
+        registerGithubTokenContext(registered);
       });
       registerGithubPatKind(requestContext, patKind);
     };
@@ -278,9 +269,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const resolution = await resolveGithubPatKind();
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
           if ('error' in resolution) {
-            const unsafePendingDowngrade =
-              registered.patKind === 'default' && registered.credentialSource === 'reviewer';
-            if (unsafePendingDowngrade) throw resolution.error;
+            if (registered.patKind !== registered.installedPatKind) throw resolution.error;
             registerGithubTokenContext(registered);
             return;
           }
@@ -290,78 +279,52 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.generation += 1;
           }
 
-          let resolvedPat: ResolvedGithubPat;
-          try {
-            resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
-          } catch (error) {
-            const installedCredentialIsSafe =
-              registered.patKind === 'reviewer' || registered.credentialSource !== 'reviewer';
-            if (registered.installedPatKind !== registered.patKind && !installedCredentialIsSafe) throw error;
-            if (installedCredentialIsSafe) registered.installedPatKind = registered.patKind;
-            registerGithubTokenContext(registered);
-            return;
-          }
+          const roleChanged = registered.installedPatKind !== registered.patKind;
+          const pat = await getGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
-          const roleChanged = registered.installedPatKind !== registered.patKind;
+          if (pat) {
+            if (pat !== registered.ghToken) {
+              try {
+                registered.inject(pat);
+              } catch (error) {
+                if (roleChanged && registered.patKind === 'default') throw error;
+                if (registered.patKind === 'reviewer') registered.installedPatKind = 'reviewer';
+                registerGithubTokenContext(registered);
+                return;
+              }
+              registered.ghToken = pat;
+              registered.generation += 1;
+            }
+            registered.installedPatKind = registered.patKind;
+            registerGithubTokenContext(registered);
+            return;
+          }
+
+          if (registered.patKind === 'reviewer') {
+            // The worker or repository credential already installed is the
+            // documented fallback when no reviewer PAT is configured.
+            registered.installedPatKind = 'reviewer';
+            registerGithubTokenContext(registered);
+            return;
+          }
           if (!roleChanged) {
-            if (!resolvedPat || resolvedPat.token === registered.ghToken) {
-              if (resolvedPat && registered.credentialSource !== resolvedPat.kind) {
-                registered.credentialSource = resolvedPat.kind;
-                registered.generation += 1;
-              }
-              registerGithubTokenContext(registered);
-              return;
-            }
-            try {
-              registered.inject(resolvedPat.token);
-              registered.ghToken = resolvedPat.token;
-              if (registered.credentialSource !== resolvedPat.kind) {
-                registered.credentialSource = resolvedPat.kind;
-                registered.generation += 1;
-              }
-            } catch {
-              // Same-role PAT refreshes remain best-effort.
-            }
+            // Preserve the existing best-effort behavior when PAT settings
+            // are unavailable or cleared without an identity transition.
             registerGithubTokenContext(registered);
             return;
           }
 
-          let credentialSource: GithubCredentialSource | undefined = resolvedPat?.kind;
-          let nextToken = resolvedPat?.token;
-          if (!nextToken && registered.patKind === 'reviewer') {
-            // Worker and repository credentials are valid reviewer fallbacks.
-            registered.installedPatKind = registered.patKind;
-            registerGithubTokenContext(registered);
-            return;
+          // A reviewer credential must never survive a transition back to a
+          // worker role. With no worker PAT, replace it with repository access.
+          const token = await getRepositoryToken();
+          if (githubTokenInjectors.get(workspaceId) !== registered) return;
+          if (token !== registered.ghToken) {
+            registered.inject(token);
+            registered.ghToken = token;
+            registered.generation += 1;
           }
-          if (!nextToken && registered.credentialSource !== 'reviewer') {
-            // A review workspace already using the worker fallback can return
-            // to work without replacing an equivalent identity.
-            registered.installedPatKind = registered.patKind;
-            registerGithubTokenContext(registered);
-            return;
-          }
-
-          try {
-            if (!nextToken) {
-              nextToken = await getRepositoryToken();
-              credentialSource = 'repository';
-            }
-            if (githubTokenInjectors.get(workspaceId) !== registered) return;
-            if (nextToken !== registered.ghToken) registered.inject(nextToken);
-            registered.ghToken = nextToken;
-          } catch (error) {
-            const installedCredentialIsSafe =
-              registered.patKind === 'reviewer' || registered.credentialSource !== 'reviewer';
-            if (!installedCredentialIsSafe) throw error;
-            registered.installedPatKind = registered.patKind;
-            registerGithubTokenContext(registered);
-            return;
-          }
-
-          registered.installedPatKind = registered.patKind;
-          registered.credentialSource = credentialSource ?? registered.credentialSource;
+          registered.installedPatKind = 'default';
           registerGithubTokenContext(registered);
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
@@ -421,14 +384,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // sessions with no resolvable run binding — uses the worker token.
       const patKindResolution = await resolveGithubPatKind();
       const patKind = 'patKind' in patKindResolution ? patKindResolution.patKind : 'default';
-      let resolvedPat: ResolvedGithubPat = null;
-      try {
-        resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
-      } catch {
-        // Initial materialization remains fail-soft and uses repository access.
-      }
-      const ghCliToken = resolvedPat?.token ?? token;
-      const credentialSource: GithubCredentialSource = resolvedPat?.kind ?? 'repository';
+      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(
@@ -491,7 +447,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         inject: injectGithubToken,
         patKind,
         installedPatKind: patKind,
-        credentialSource,
         generation: 0,
         ghToken: ghCliToken,
       };

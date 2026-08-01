@@ -27,8 +27,6 @@ const PAT_SETTINGS_USER_ID = '__github_org_settings__';
 
 export type GithubPatKind = 'default' | 'reviewer';
 
-export type ResolvedGithubPat = { token: string; kind: GithubPatKind } | null;
-
 type GithubOrgSettings = { pat?: string; reviewerPat?: string };
 
 const FIELD_FOR_KIND: Record<GithubPatKind, keyof GithubOrgSettings> = {
@@ -38,24 +36,6 @@ const FIELD_FOR_KIND: Record<GithubPatKind, keyof GithubOrgSettings> = {
 
 function asToken(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-/** Resolve the configured PAT and the identity it belongs to. Unlike the
- * fail-soft public getter, storage errors propagate so workspace reuse can
- * preserve a settled credential instead of mistaking an outage for removal. */
-export async function resolveGithubPat(
-  getStorage: () => GithubSubscriptionStorage,
-  orgId: string,
-  kind: GithubPatKind = 'default',
-): Promise<ResolvedGithubPat> {
-  const settings = (await getStorage().settings.get(orgId, PAT_SETTINGS_USER_ID)) as GithubOrgSettings | null;
-  if (!settings) return null;
-  if (kind === 'reviewer') {
-    const reviewerPat = asToken(settings.reviewerPat);
-    if (reviewerPat) return { token: reviewerPat, kind: 'reviewer' };
-  }
-  const defaultPat = asToken(settings.pat);
-  return defaultPat ? { token: defaultPat, kind: 'default' } : null;
 }
 
 /** The PAT to install for `kind`, or null. `reviewer` falls back to the
@@ -69,7 +49,10 @@ export async function getGithubPat(
   kind: GithubPatKind = 'default',
 ): Promise<string | null> {
   try {
-    return (await resolveGithubPat(getStorage, orgId, kind))?.token ?? null;
+    const settings = (await getStorage().settings.get(orgId, PAT_SETTINGS_USER_ID)) as GithubOrgSettings | null;
+    if (!settings) return null;
+    if (kind === 'reviewer') return asToken(settings.reviewerPat) ?? asToken(settings.pat);
+    return asToken(settings.pat);
   } catch {
     return null;
   }

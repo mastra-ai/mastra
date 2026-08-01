@@ -9,7 +9,7 @@ import type {
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
 import type { GithubIntegration } from './integration.js';
-import { resolveGithubPat } from './pat.js';
+import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
 import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
 
@@ -159,13 +159,13 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
   // installation token (which 403s on integration-restricted endpoints). The
   // workspace records which PAT kind the sandbox was provisioned with, so a
   // review-board sandbox keeps its reviewer token on refresh.
-  const pat = await resolveGithubPat(
+  const pat = await getGithubPat(
     () => github.integrationStorage,
     target.orgId,
     getRegisteredGithubPatKind(requestContext),
-  ).catch(() => null);
+  );
   if (pat) {
-    injectGithubToken(requestContext, pat.token, pat.kind);
+    injectGithubToken(requestContext, pat);
     return;
   }
   const access = await github.versionControl.getRepositoryAccess({
@@ -174,7 +174,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
   });
   const token = access.authorization?.token;
   if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
-  injectGithubToken(requestContext, token, 'repository');
+  injectGithubToken(requestContext, token);
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
