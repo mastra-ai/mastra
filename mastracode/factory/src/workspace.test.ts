@@ -832,22 +832,26 @@ describe('GitHub session workspace preparation', () => {
       throw new Error('runtime injection failed');
     });
     const existing = { setToolsConfig: vi.fn() };
+    const removeWorkspace = vi.fn(async () => true);
+    const mastra = { getWorkspaceById: vi.fn(() => existing), removeWorkspace };
     await expect(
       workspace({
         requestContext: createGithubRequestContext('project-1', 'session-a'),
-        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+        mastra: mastra as any,
       }),
     ).rejects.toThrow('runtime injection failed');
 
+    expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
 
     mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('binding lookup failed'));
     await expect(
       workspace({
         requestContext: createGithubRequestContext('project-1', 'session-a'),
-        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+        mastra: mastra as any,
       }),
     ).rejects.toThrow('binding lookup failed');
+    expect(removeWorkspace).toHaveBeenCalledTimes(2);
   });
 
   it('keeps reviewer PAT rotation injection failures best-effort', async () => {
@@ -1003,6 +1007,43 @@ describe('GitHub session workspace preparation', () => {
     await materialization;
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+  });
+
+  it('does not register a materialized workspace when a reviewer downgrade cannot be reconciled', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    let releaseMaterialization!: () => void;
+    mocks.materializeRepo.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          releaseMaterialization = resolve;
+        }),
+    );
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const addWorkspace = vi.fn();
+
+    const materialization = workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: {
+        getWorkspaceById: vi.fn(() => {
+          throw new Error('Workspace not found');
+        }),
+        addWorkspace,
+      } as any,
+    });
+    await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime injection failed');
+    });
+    releaseMaterialization();
+
+    await expect(materialization).rejects.toThrow('runtime injection failed');
+    expect(addWorkspace).not.toHaveBeenCalled();
   });
 
   it('falls back to the worker PAT for review sessions without a reviewer token', async () => {

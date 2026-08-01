@@ -375,6 +375,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
     };
+    const reconcileRegisteredGithubToken = async (workspace: Workspace): Promise<Workspace> => {
+      try {
+        await reconcileGithubToken();
+      } catch (error) {
+        // Do not leave a cached workspace globally addressable when it may
+        // still carry reviewer credentials after a failed replacement.
+        await mastra?.removeWorkspace?.(workspaceId);
+        throw error;
+      }
+
+      // A concurrent failure or rematerialization may have changed the
+      // registry while reconciliation was queued. Return the active workspace,
+      // or restore this safe one when no replacement exists.
+      try {
+        const registered = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
+        if (registered) return registered;
+      } catch {
+        // Missing from the registry; restore it below.
+      }
+      mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
+      return workspace;
+    };
 
     let existing: Workspace | undefined;
     try {
@@ -384,8 +406,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     if (existing) {
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
-      await reconcileGithubToken();
-      return existing;
+      return reconcileRegisteredGithubToken(existing);
     }
 
     const materialize = async (): Promise<Workspace> => {
@@ -511,15 +532,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         skills: skillPaths,
         skillSource: effectiveSkillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
       });
-      // Register with the Mastra instance so sync HTTP handlers that resolve
-      // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions
-      // probe, MCP/tool routes) find it instead of throwing
-      // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`. `addWorkspace` is idempotent on
-      // key collision, so the inflight coalescing and reuse paths above stay
-      // race-safe. Registration happens synchronously with the return so a
-      // concurrent lookup on another request cannot observe an unregistered
-      // workspace.
-      mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
       return workspace;
     };
 
@@ -529,18 +541,22 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const inflight = inflightMaterializations.get(workspaceId);
     if (inflight) {
       const workspace = await inflight;
-      await reconcileGithubToken();
-      return workspace;
+      return reconcileRegisteredGithubToken(workspace);
     }
     // A fresh materialization supersedes any request contexts left behind by
     // an unregistered workspace; invalidate them before credentials are read.
     githubTokenInjectors.delete(workspaceId);
-    const materialization = materialize();
+    const materialization = (async () => {
+      const workspace = await materialize();
+      await reconcileGithubToken();
+      // Register only after the authoritative role is reconciled so sync
+      // workspace lookups cannot observe stale reviewer credentials.
+      mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
+      return workspace;
+    })();
     inflightMaterializations.set(workspaceId, materialization);
     try {
-      const workspace = await materialization;
-      await reconcileGithubToken();
-      return workspace;
+      return await materialization;
     } finally {
       inflightMaterializations.delete(workspaceId);
     }
