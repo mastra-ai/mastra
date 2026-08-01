@@ -38,13 +38,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Mastra calls `storage.init()` during startup and creates the required tables and indexes.
-
-:::warning[Node.js runtime required]
-
-`@mastra/pg` uses the Node.js `pg` driver. Integration with [`@neondatabase/serverless`](https://neon.com/docs/serverless/serverless-driver) isn't currently documented or tested.
-
-:::
+On startup, Mastra calls `storage.init()` and creates its tables and indexes in Neon. This setup uses `@mastra/pg` with a standard Neon Postgres connection string and must run in Node.js.
 
 ## Production connections
 
