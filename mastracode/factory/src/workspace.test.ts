@@ -933,6 +933,81 @@ describe('GitHub session workspace preparation', () => {
     await rematerialization;
   });
 
+  it('does not restore a workspace superseded by concurrent rematerialization', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const staleWorkspace = await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+    });
+
+    let resolveStaleLookup!: (binding: { role: string; orgId: string }) => void;
+    let resolveReplacementLookup!: (binding: { role: string; orgId: string }) => void;
+    mocks.findRunBindingBySession.mockClear();
+    mocks.materializeRepo.mockClear();
+    mocks.findRunBindingBySession
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveStaleLookup = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ role: 'work', orgId: 'org-1' })
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveReplacementLookup = resolve;
+          }),
+      );
+
+    let registeredWorkspace: unknown = staleWorkspace;
+    const addWorkspace = vi.fn((candidate: unknown) => {
+      // Mastra keeps the first workspace registered for a given id.
+      registeredWorkspace ??= candidate;
+    });
+    const mastra = {
+      getWorkspaceById: vi.fn(() => {
+        if (!registeredWorkspace) throw new Error('Workspace not found');
+        return registeredWorkspace;
+      }),
+      addWorkspace,
+      removeWorkspace: vi.fn(async () => {
+        registeredWorkspace = undefined;
+        return true;
+      }),
+    };
+
+    const staleReuse = workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: mastra as any,
+    });
+    await vi.waitFor(() => expect(mocks.findRunBindingBySession).toHaveBeenCalledTimes(1));
+
+    registeredWorkspace = undefined;
+    mocks.runBindingRole = 'work';
+    const rematerialization = workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: mastra as any,
+    });
+    await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    expect(mocks.findRunBindingBySession).toHaveBeenCalledTimes(2);
+
+    resolveStaleLookup({ role: 'work', orgId: 'org-1' });
+    await vi.waitFor(() => expect(mocks.findRunBindingBySession).toHaveBeenCalledTimes(3));
+    const restoredStaleWorkspace = addWorkspace.mock.calls.length > 0;
+
+    resolveReplacementLookup({ role: 'work', orgId: 'org-1' });
+    const [reusedWorkspace, replacementWorkspace] = await Promise.all([staleReuse, rematerialization]);
+
+    expect(restoredStaleWorkspace).toBe(false);
+    expect(reusedWorkspace).toBe(replacementWorkspace);
+    expect(registeredWorkspace).toBe(replacementWorkspace);
+    expect(addWorkspace).toHaveBeenCalledTimes(1);
+  });
+
   it('reconciles the role for callers reusing an inflight materialization', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';

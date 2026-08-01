@@ -376,13 +376,37 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       }
     };
     const reconcileRegisteredGithubToken = async (workspace: Workspace): Promise<Workspace> => {
+      const tokenRegistration = githubTokenInjectors.get(workspaceId);
+      const followReplacementWorkspace = async (): Promise<Workspace | null> => {
+        const replacement = inflightMaterializations.get(workspaceId);
+        if (replacement) return reconcileRegisteredGithubToken(await replacement);
+        try {
+          const active = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
+          if (active && active !== workspace) return reconcileRegisteredGithubToken(active);
+        } catch {
+          // No replacement is registered yet.
+        }
+        return null;
+      };
+
       try {
         await reconcileGithubToken();
       } catch (error) {
+        if (githubTokenInjectors.get(workspaceId) !== tokenRegistration) {
+          const replacement = await followReplacementWorkspace();
+          if (replacement) return replacement;
+        }
         // Do not leave a cached workspace globally addressable when it may
         // still carry reviewer credentials after a failed replacement.
         await mastra?.removeWorkspace?.(workspaceId);
         throw error;
+      }
+
+      if (githubTokenInjectors.get(workspaceId) !== tokenRegistration) {
+        const replacement = await followReplacementWorkspace();
+        if (replacement) return replacement;
+        await mastra?.removeWorkspace?.(workspaceId);
+        throw new Error('Factory workspace was superseded during GitHub credential reconciliation.');
       }
 
       // A concurrent failure or rematerialization may have changed the
