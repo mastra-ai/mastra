@@ -141,6 +141,8 @@ type GithubTokenRegistration = {
   reconciliationRequired: boolean;
 };
 
+type GithubPatKindResolution = { patKind: GithubPatKind } | { error: unknown };
+
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, fleet, workItems } = options;
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
@@ -266,18 +268,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       });
       registerGithubPatKind(requestContext, requestPatKind);
     };
-    const resolveGithubPatKind = async (): Promise<GithubPatKind | undefined> => {
-      if (!workItems) return 'default';
+    const resolveGithubPatKind = async (): Promise<GithubPatKindResolution> => {
+      if (!workItems) return { patKind: 'default' };
       try {
         const address = getFactorySessionAddress(requestContext);
         const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
         if (runBinding?.status === 'active' && runBinding.role === 'review' && runBinding.orgId === session.orgId) {
-          return 'reviewer';
+          return { patKind: 'reviewer' };
         }
-        return 'default';
-      } catch {
+        return { patKind: 'default' };
+      } catch (error) {
         // Reuse must preserve its cached identity when binding storage is unavailable.
-        return undefined;
+        return { error };
       }
     };
     const getRepositoryToken = async (): Promise<string> => {
@@ -299,13 +301,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const registered = githubTokenInjectors.get(workspaceId);
           if (!registered) return;
 
-          const resolvedPatKind = await resolveGithubPatKind();
+          const resolution = await resolveGithubPatKind();
           assertCurrentGithubTokenRegistration(registered);
-          if (!resolvedPatKind && !registered.reconciliationRequired) {
+          if ('error' in resolution) {
+            // An installed identity can survive a transient lookup failure,
+            // but a pending target is not authoritative enough to install.
+            if (registered.reconciliationRequired) throw resolution.error;
             registerGithubTokenContext(registered);
             return;
           }
-          const patKind = resolvedPatKind ?? registered.patKind;
+          const patKind = resolution.patKind;
           const patKindChanged = patKind !== registered.patKind;
           let contextInvalidated = false;
           const invalidateRequestContexts = () => {
@@ -410,7 +415,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // (run-binding role `review`) authenticate `gh` as the reviewer account
       // when a reviewer token is configured; everything else — including
       // sessions with no resolvable run binding — uses the worker token.
-      const patKind = (await resolveGithubPatKind()) ?? 'default';
+      const patKindResolution = await resolveGithubPatKind();
+      const patKind = 'patKind' in patKindResolution ? patKindResolution.patKind : 'default';
       const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
       const ghCliToken = pat.token ?? token;
       const credentialSource = pat.sourceKind ?? 'repository';

@@ -943,6 +943,51 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
+  it('does not install a pending reviewer credential when the binding lookup fails', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'work';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.runBindingRole = 'review';
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime token injection failed');
+    });
+    const existing = { setToolsConfig: vi.fn() };
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('runtime token injection failed');
+
+    mocks.runBindingRole = 'work';
+    mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('binding storage unavailable'));
+    mocks.setEnvironmentVariable.mockClear();
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('binding storage unavailable');
+
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+
+    const workerRequestContext = createGithubRequestContext('project-1', 'session-a');
+    await expect(
+      workspace({
+        requestContext: workerRequestContext,
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).resolves.toBe(existing);
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(getRegisteredGithubPatKind(workerRequestContext)).toBe('default');
+  });
+
   it('rejects a token-only refresh from a stale reviewer request after the workspace becomes a worker', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
