@@ -10,7 +10,6 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import type { GithubIntegration } from './integration.js';
 import { resolveGithubPat } from './pat.js';
-import type { ResolvedGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
 import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
 
@@ -160,15 +159,13 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
   // installation token (which 403s on integration-restricted endpoints). The
   // workspace records which PAT kind the sandbox was provisioned with, so a
   // review-board sandbox keeps its reviewer token on refresh.
-  const patKind = getRegisteredGithubPatKind(requestContext);
-  let resolvedPat: ResolvedGithubPat = null;
-  try {
-    resolvedPat = await resolveGithubPat(() => github.integrationStorage, target.orgId, patKind);
-  } catch {
-    // Preserve fail-soft PAT lookup behavior and fall back to repository access.
-  }
-  if (resolvedPat) {
-    injectGithubToken(requestContext, resolvedPat.token, resolvedPat.kind);
+  const pat = await resolveGithubPat(
+    () => github.integrationStorage,
+    target.orgId,
+    getRegisteredGithubPatKind(requestContext),
+  ).catch(() => null);
+  if (pat) {
+    injectGithubToken(requestContext, pat.token, pat.kind);
     return;
   }
   const access = await github.versionControl.getRepositoryAccess({

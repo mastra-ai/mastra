@@ -40,9 +40,9 @@ function asToken(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-/** Resolve the configured PAT and the identity it belongs to. Storage errors
- * propagate so live workspace reconciliation can distinguish an outage from
- * an intentionally cleared PAT. */
+/** Resolve the configured PAT and the identity it belongs to. Unlike the
+ * fail-soft public getter, storage errors propagate so workspace reuse can
+ * preserve a settled credential instead of mistaking an outage for removal. */
 export async function resolveGithubPat(
   getStorage: () => GithubSubscriptionStorage,
   orgId: string,

@@ -170,7 +170,7 @@ describe('GitHub subscription entry points', () => {
     expect(inject).toHaveBeenCalledWith('ghp_reviewer', 'reviewer');
   });
 
-  it('tracks the worker PAT source when a reviewer refresh uses the fallback token', async () => {
+  it('tracks the worker identity when a reviewer refresh uses the fallback PAT', async () => {
     integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
     const requestContext = authenticatedRequestContext();
     const inject = vi.fn();
