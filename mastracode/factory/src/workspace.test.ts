@@ -1074,6 +1074,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('binding storage unavailable'));
+    mocks.getRepositoryAccess.mockClear();
     mocks.setEnvironmentVariable.mockClear();
     const requestContext = createGithubRequestContext('project-1', 'session-a');
 
@@ -1084,6 +1085,7 @@ describe('GitHub session workspace preparation', () => {
 
     expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
     expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 
   it('serializes concurrent role reconciliation so an older lookup cannot restore stale credentials', async () => {
