@@ -31,6 +31,7 @@ import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { SandboxCloneOptions } from './sandbox';
 import type { SandboxInfo } from './types';
+export const MASTRA_GENERATED_HEADER = ';; Mastra Generated Sandbox Profile';
 
 // =============================================================================
 // Mount Path Validation
@@ -265,13 +266,27 @@ export class LocalSandbox extends MastraSandbox {
         try {
           const content = await fs.readFile(userProvidedPath, 'utf-8');
           this._seatbeltProfile = content;
-          this._isCustomProfileLoaded = !content.startsWith(';; Mastra Generated Sandbox Profile');
+          if (content.startsWith(MASTRA_GENERATED_HEADER)) {
+            this._isCustomProfileLoaded = false;
+          } else {
+            // Check if it matches a legacy generated profile exactly
+            const expectedLegacy = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+            if (content === expectedLegacy) {
+              this._isCustomProfileLoaded = false;
+              // Rewrite the file with the header so it self-migrates on disk
+              this._seatbeltProfile = `${MASTRA_GENERATED_HEADER}\n${expectedLegacy}`;
+              await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
+            } else {
+              this._isCustomProfileLoaded = true;
+            }
+          }
         } catch (err: unknown) {
           if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw err;
           }
           // File doesn't exist, generate default and write to user's path
-          this._seatbeltProfile = ';; Mastra Generated Sandbox Profile\n' + generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+          this._seatbeltProfile =
+            `${MASTRA_GENERATED_HEADER}\n` + generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
           // Ensure parent directory exists
           await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
           await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
