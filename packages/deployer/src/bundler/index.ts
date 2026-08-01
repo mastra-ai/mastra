@@ -148,8 +148,8 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir), pnpmOverrides, installState });
   }
 
-  protected getBundleDependencyPackageManager(rootDir: string, _explicitManager?: PackageManager): PackageManager {
-    return new DepsService(rootDir).getPackageManager();
+  protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: PackageManager): PackageManager {
+    return explicitManager ?? new DepsService(rootDir).getPackageManager();
   }
 
   protected resolveBundleDependencyInstallState({
