@@ -50,10 +50,10 @@ Mastra calls `storage.init()` during startup and creates the required tables and
 
 Neon provides direct and pooled connection strings:
 
-- **Direct connections**: Use for schema initialization and migrations.
-- **Pooled connections**: Use for application traffic and deployments that create many concurrent connections. The hostname contains `-pooler`.
+- Use a direct connection for schema initialization and migrations.
+- Use a pooled connection for normal application traffic, especially when your deployment opens many concurrent connections. Pooled hostnames contain `-pooler`.
 
-For deployment, store the pooled connection string in `DATABASE_URL` and the direct connection string in `DATABASE_URL_UNPOOLED`. Initialize the schema with the direct connection:
+In production, keep the pooled connection string in `DATABASE_URL` and the direct connection string in `DATABASE_URL_UNPOOLED`. Initialize the schema with the direct connection:
 
 ```typescript title="scripts/init-storage.ts"
 import { PostgresStore } from '@mastra/pg'
@@ -100,4 +100,4 @@ const vector = new PgVector({
 })
 ```
 
-`PgVector` installs the extension when it creates the first index. Use a direct connection for setup. After the extension and indexes exist, use the pooled connection with `disableInit: true`.
+`PgVector` installs the extension when it creates its first index. Create the extension and indexes over the direct connection, then use the pooled connection with `disableInit: true` at runtime.
