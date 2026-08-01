@@ -696,23 +696,27 @@ async function saveTaskAndMaybeSendPushNotification({
   expectedVersion?: number;
   logger?: IMastraLogger;
 }): Promise<Task> {
-  await taskStore.save({ agentId, data: nextTask, expectedVersion });
+  const storedTask = await taskStore.save({ agentId, data: nextTask, expectedVersion, skipIfCanceled: true });
 
-  if (!shouldSendPushNotification(previousTask, nextTask)) {
-    return nextTask;
+  if (storedTask.status.state === 'canceled' && nextTask.status.state !== 'canceled') {
+    return storedTask;
+  }
+
+  if (!shouldSendPushNotification(previousTask, storedTask)) {
+    return storedTask;
   }
 
   void pushNotificationSender
     .sendNotifications({
       agentId,
-      task: nextTask,
+      task: storedTask,
       logger,
     })
     .catch(error => {
       logger?.error('Failed to schedule A2A push notification', error);
     });
 
-  return nextTask;
+  return storedTask;
 }
 
 function extractFullStreamTextDelta(value: unknown): string | null {

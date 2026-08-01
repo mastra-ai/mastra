@@ -50,15 +50,23 @@ export class InMemoryTaskStore {
     agentId,
     data,
     expectedVersion,
+    skipIfCanceled = false,
   }: {
     agentId: string;
     data: Task;
     expectedVersion?: number;
-  }): Promise<void> {
+    skipIfCanceled?: boolean;
+  }): Promise<Task> {
     // Store copies to prevent internal mutation if caller reuses objects
     const key = this.getKey(agentId, data.id);
     if (!data.id) {
       throw new Error('Task ID is required');
+    }
+
+    const existingTask = this.store.get(key);
+
+    if (skipIfCanceled && existingTask?.status.state === 'canceled' && data.status.state !== 'canceled') {
+      return { ...existingTask };
     }
 
     const currentVersion = this.versions.get(key) ?? 0;
@@ -78,6 +86,8 @@ export class InMemoryTaskStore {
         listener({ task: { ...storedTask }, version: nextVersion });
       }
     }
+
+    return { ...storedTask };
   }
 
   getVersion({ agentId, taskId }: { agentId: string; taskId: string }): number {
