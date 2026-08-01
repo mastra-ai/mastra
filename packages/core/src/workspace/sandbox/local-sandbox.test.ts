@@ -1254,6 +1254,59 @@ describe('LocalSandbox', () => {
         await sandbox._destroy();
       }
     });
+
+    it('should reset _isCustomProfileLoaded to false on restart if custom profile file is deleted', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const userProfilePath = path.join(tempDir, 'deleted-custom-profile.sb');
+      const customContent = ';; Custom Seatbelt Profile Content\n(version 1)\n(allow default)';
+      await fs.mkdir(path.dirname(userProfilePath), { recursive: true });
+      await fs.writeFile(userProfilePath, customContent, 'utf-8');
+
+      const sandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          seatbeltProfilePath: userProfilePath,
+        },
+      });
+
+      try {
+        await sandbox._start();
+        expect((sandbox as any)._isCustomProfileLoaded).toBe(true);
+
+        // Stop the sandbox and delete the custom profile file
+        await sandbox._destroy();
+        await fs.rm(userProfilePath, { force: true });
+
+        // Restart the sandbox
+        await sandbox._start();
+        expect((sandbox as any)._isCustomProfileLoaded).toBe(false);
+
+        // Mount a newly required host path
+        const sourcePath = path.join(tempDir, 'src-dir-restart');
+        await fs.mkdir(sourcePath, { recursive: true });
+        const canonicalSourcePath = await fs.realpath(sourcePath);
+        const expectedWriteRule = `(allow file-write* (subpath "${canonicalSourcePath}"))`;
+
+        const mockFs = {
+          id: 'test-fs',
+          name: 'MockFs',
+          provider: 'local',
+          getMountConfig: () => ({ type: 'local', basePath: canonicalSourcePath }),
+        } as any;
+        await sandbox.mount(mockFs, '/my-mount-restart');
+
+        // Verify regeneration occurred and includes the new mount rule
+        const regeneratedProfile = (sandbox as any)._seatbeltProfile;
+        expect(regeneratedProfile).toContain(expectedWriteRule);
+      } finally {
+        await sandbox._destroy();
+        await fs.rm(userProfilePath, { force: true });
+      }
+    });
   });
 
   // ===========================================================================

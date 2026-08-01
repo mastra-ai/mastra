@@ -261,6 +261,7 @@ export class LocalSandbox extends MastraSandbox {
         // User provided a custom path
         this._seatbeltProfilePath = userProvidedPath;
         this._userProvidedProfilePath = true;
+        this._isCustomProfileLoaded = false;
 
         // Check if file exists at user's path
         try {
