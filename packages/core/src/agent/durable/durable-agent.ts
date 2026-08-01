@@ -2050,9 +2050,9 @@ export class DurableAgent<
    * `resume()` path.
    */
   override async declineToolCall(
-    options: { runId: string; toolCallId?: string } & Record<string, any>,
+    options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
-    return this.resumeStream({ approved: false }, options);
+    return this.resumeStream({ approved: false, reason: options.reason }, options);
   }
 
   override async approveToolCallGenerate<OUTPUT = undefined>(
@@ -2063,10 +2063,10 @@ export class DurableAgent<
   }
 
   override async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const { runId, ...resumeOptions } = options;
-    return this.resumeGenerate(runId, { approved: false }, resumeOptions as any) as any;
+    return this.resumeGenerate(runId, { approved: false, reason: options.reason }, resumeOptions as any) as any;
   }
 
   /**

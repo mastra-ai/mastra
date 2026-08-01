@@ -599,6 +599,7 @@ export function createDurableToolCallStep() {
           type: 'object',
           properties: {
             approved: { type: 'boolean' },
+            reason: { type: 'string' },
           },
           required: ['approved'],
         });
@@ -673,7 +674,7 @@ export function createDurableToolCallStep() {
             approval: {
               id: toolCallId,
               approved: false,
-              reason: 'Tool call was not approved by the user',
+              reason: (resumeData as { reason?: string }).reason || 'Tool call was not approved by the user',
             },
           };
         }
@@ -820,6 +821,7 @@ export function createDurableToolCallStep() {
               type: 'object',
               properties: {
                 approved: { type: 'boolean' },
+                reason: { type: 'string' },
               },
               required: ['approved'],
             });
