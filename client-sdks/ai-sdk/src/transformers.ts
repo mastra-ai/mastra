@@ -122,6 +122,8 @@ type TransformAgentResult = AgentDataPart | readonly [AgentDataPart, AgentStepDa
 
 // used so it's not serialized to JSON
 const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
+// persists completed-step details on the network step across subsequent events
+const COMPLETED_STEPS_SYMBOL = Symbol('completed-steps-cache');
 
 type ConvertMastraChunkToAISDK = <OUTPUT>(args: { chunk: ChunkType<OUTPUT>; mode?: 'generate' | 'stream' }) => any;
 
@@ -290,6 +292,7 @@ export function createAgentNetworkToAISDKTransformer<UI_CHUNK>() {
         task: null | Record<string, unknown>;
         input: StepResult['input'];
         [PRIMITIVE_CACHE_SYMBOL]: Map<string, any>;
+        [COMPLETED_STEPS_SYMBOL]?: Map<number, Record<string, any>>;
       })[];
       usage: LanguageModelV2Usage | null;
       output: unknown | null;
@@ -1224,6 +1227,7 @@ export function transformNetwork(
         task: null | Record<string, unknown>;
         input: StepResult['input'];
         [PRIMITIVE_CACHE_SYMBOL]: Map<string, any>;
+        [COMPLETED_STEPS_SYMBOL]?: Map<number, Record<string, any>>;
       })[];
       usage: LanguageModelV2Usage | null;
       output: unknown | null;
@@ -1580,14 +1584,22 @@ export function transformNetwork(
         const snapshot = Array.isArray(result) ? result[0] : result;
         if (snapshot) {
           const { request, response, ...data } = snapshot.data;
-          step.task = data;
-          // Merge full step detail from the completed-step delta so that
-          // suspended/failed terminations (no finish) still carry toolResults etc.
+          // If this event carries a completed-step delta, persist its full detail
+          // on the network step so subsequent events can re-apply it.
           if (Array.isArray(result)) {
             const { stepIndex, step: completedStepDetail } = result[1].data;
-            const taskSteps = data.steps;
-            if (Array.isArray(taskSteps) && stepIndex < taskSteps.length) {
-              taskSteps[stepIndex] = { ...taskSteps[stepIndex], ...completedStepDetail };
+            step[COMPLETED_STEPS_SYMBOL] = step[COMPLETED_STEPS_SYMBOL] || new Map();
+            step[COMPLETED_STEPS_SYMBOL].set(stepIndex, completedStepDetail);
+          }
+          step.task = data;
+          // Re-apply ALL persisted completed-step details after every assignment so
+          // later events (text-delta etc.) don't overwrite the merged toolResults.
+          const completedSteps = step[COMPLETED_STEPS_SYMBOL];
+          if (completedSteps && completedSteps.size > 0 && Array.isArray(data.steps)) {
+            for (const [stepIndex, completedStepDetail] of completedSteps) {
+              if (stepIndex < data.steps.length) {
+                data.steps[stepIndex] = { ...data.steps[stepIndex], ...completedStepDetail };
+              }
             }
           }
         }

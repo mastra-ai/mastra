@@ -1389,6 +1389,20 @@ describe('AgentNetworkToAISDKTransformer', () => {
           },
         });
 
+        // A text-delta for step 1 arrives after step-finish. Without the
+        // accumulated-detail fix this overwrites step.task with a fresh compact
+        // snapshot that has empty toolResults, demonstrating the regression.
+        controller.enqueue({
+          type: 'agent-execution-event-text-delta',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'text-delta',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: { text: 'step-1 text' },
+          },
+        });
+
         // Network finishes without a sub-agent finish (mirrors suspension)
         controller.enqueue({
           type: 'network-execution-event-finish',
@@ -1413,13 +1427,13 @@ describe('AgentNetworkToAISDKTransformer', () => {
     // No data-tool-agent-step must leak onto the network wire.
     expect(agentStepChunks).toHaveLength(0);
 
-    // Find the chunk produced by agent-execution-event-step-finish.
-    const stepFinishChunk = networkChunks.find(chunk =>
-      chunk.data?.steps?.some((s: any) => s.name === 'sus-agent' && s.task?.steps?.length > 0),
-    );
-    expect(stepFinishChunk).toBeDefined();
+    // Assert against the last agent-event chunk (before network-execution-event-finish)
+    // so the assertion observes terminal state after all events, not just the
+    // step-finish chunk that existed before the regression was introduced.
+    const lastAgentChunk = networkChunks.at(-2);
+    expect(lastAgentChunk).toBeDefined();
 
-    const agentStep = stepFinishChunk?.data?.steps?.find((s: any) => s.name === 'sus-agent' && s.task);
+    const agentStep = lastAgentChunk?.data?.steps?.find((s: any) => s.name === 'sus-agent' && s.task);
     expect(agentStep).toBeDefined();
 
     // Full step detail must be present even without a finish event.

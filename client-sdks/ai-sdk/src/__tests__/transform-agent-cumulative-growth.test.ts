@@ -304,8 +304,9 @@ describe('transformAgent cumulative growth', () => {
   it('total serialized bytes grow sub-quadratically when doubling step count', () => {
     // Completed step descriptors and run-level cumulative text/reasoning are still
     // re-emitted in every intermediate snapshot, so growth is ~O(N^1.74) rather than
-    // O(N) or O(N²). A bound of 4.0 rejects a pure O(N²) regression (which would give
-    // exactly 4x for 2x steps) while accepting the current behavior.
+    // O(N) or O(N²). The bound of 3.8 is derived from the measured head ratio
+    // (~3.33 for this fixture) with a 14% margin; it rejects the base O(N²) shape
+    // (~4.05) while accepting the compacted head behavior.
     const { emissions: emissionsN } = simulateMultiStepAgentRun(10);
     const { emissions: emissions2N } = simulateMultiStepAgentRun(20);
 
@@ -313,8 +314,8 @@ describe('transformAgent cumulative growth', () => {
     const bytes2N = emissions2N.reduce((sum, p) => sum + JSON.stringify(p).length, 0);
     const ratio = bytes2N / bytesN;
 
-    expect(ratio, `2x steps gave ${ratio.toFixed(2)}x bytes (expected < 4.0, would be 4.0 for O(N²))`).toBeLessThan(
-      4.0,
+    expect(ratio, `2x steps gave ${ratio.toFixed(2)}x bytes (expected < 3.8, head ~3.33, base ~4.05)`).toBeLessThan(
+      3.8,
     );
   });
 
