@@ -542,11 +542,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               break;
             case 'object-result':
+              // Buffer only. An output processor that aborts with `{ retry: true }` runs
+              // the model again and the retried attempt emits a fresh `object-result`, so
+              // resolving here would pin `object` to the attempt that was thrown away:
+              // a consumer that read `result.object` before the stream drained has already
+              // materialized the underlying promise, and a settled promise ignores every
+              // later `resolve`. The buffer is resolved once, on `finish`.
               self.#bufferedObject = chunk.object;
-              // Only resolve if not already rejected by validation error
-              if (self.#delayedPromises.object.status.type === 'pending') {
-                self.#delayedPromises.object.resolve(chunk.object);
-              }
               break;
             case 'source':
               self.#bufferedSources.push(chunk);
@@ -1070,6 +1072,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (self.#delayedPromises.object.status.type !== 'resolved') {
                   self.#delayedPromises.object.resolve(undefined as OUTPUT);
                 }
+              }
+
+              // Resolve the structured object from the last buffered `object-result`, so a
+              // retried attempt wins over the one it replaced. Left pending, `flush` still
+              // settles it as undefined; already rejected by validation, or already
+              // resolved as undefined by the error path above, it stays untouched.
+              if (self.#bufferedObject !== undefined && self.#delayedPromises.object.status.type === 'pending') {
+                self.#delayedPromises.object.resolve(self.#bufferedObject);
               }
 
               const reasoningText =

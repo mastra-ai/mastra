@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
@@ -1355,5 +1356,81 @@ describe('MastraModelOutput', () => {
       expect(aClosed).toBe(true);
       expect(receivedByA.map(c => c.type)).toEqual(['text-delta', 'text-delta', 'step-finish', 'finish']);
     }, 5000);
+  });
+  describe('structured output object after an output-processor retry', () => {
+    const createObjectResultChunk = (runId: string, object: unknown): ChunkType =>
+      ({ type: 'object-result', runId, from: ChunkFrom.AGENT, object }) as ChunkType;
+
+    it('resolves object with the retried attempt, not the rejected first one', async () => {
+      const runId = 'run-retry-object';
+      const rejected = { answer: 'first, rejected by the output processor' };
+      const retried = { answer: 'second, accepted' };
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createObjectResultChunk(runId, rejected),
+          createObjectResultChunk(runId, retried),
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList(),
+        messageId: 'msg-retry-object',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(await output.object).toEqual(retried);
+    });
+
+    it('keeps the final object when several retries occur', async () => {
+      const runId = 'run-multi-retry-object';
+      const final = { answer: 'third, accepted' };
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createObjectResultChunk(runId, { answer: 'first' }),
+          createObjectResultChunk(runId, { answer: 'second' }),
+          createObjectResultChunk(runId, final),
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList(),
+        messageId: 'msg-multi-retry-object',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(await output.object).toEqual(final);
+    });
+
+    it('gets the retried value even when object is read before the stream drains', async () => {
+      const runId = 'run-late-read-object';
+      const retried = { answer: 'second, accepted' };
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createObjectResultChunk(runId, { answer: 'first, rejected by the output processor' }),
+          createObjectResultChunk(runId, retried),
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList(),
+        messageId: 'msg-late-read-object',
+        options: { runId, structuredOutput: { schema: z.object({ answer: z.string() }) } },
+      });
+
+      // The consumer-facing path: reading `.object` here materializes the underlying
+      // promise, so resolving per `object-result` chunk would settle it on the first,
+      // discarded attempt and ignore the retry.
+      const objectPromise = output.object;
+      await output.consumeStream();
+
+      expect(await objectPromise).toEqual(retried);
+    });
   });
 });
