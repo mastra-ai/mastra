@@ -350,11 +350,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             return;
           }
 
-          // A reviewer PAT must not survive either a worker downgrade or its
-          // removal from settings. Safe worker/repository fallbacks can remain.
-          if (registered.credentialKind === 'reviewer') {
-            requireCredentialReconciliation();
-            await installRepositoryToken(registered);
+          // A PAT removed from settings must not remain installed. Reviewer
+          // credentials fail closed; replacing a worker PAT keeps the prior
+          // best-effort behavior because it does not cross an identity boundary.
+          if (registered.credentialKind !== 'repository') {
+            if (registered.credentialKind === 'reviewer') requireCredentialReconciliation();
+            try {
+              await installRepositoryToken(registered);
+            } catch (error) {
+              if (registered.credentialReconciliationPending) throw error;
+              registerGithubTokenContext(registered);
+              return;
+            }
           }
           registered.credentialReconciliationPending = false;
           registerGithubTokenContext(registered);

@@ -1086,6 +1086,23 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
   });
 
+  it('replaces a cleared worker PAT with repository access on the next reuse', async () => {
+    mocks.githubPat = 'ghp_worker';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.githubPat = null;
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+  });
+
   it('invalidates stale refresh contexts after a reviewer PAT rotation', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer_old';
