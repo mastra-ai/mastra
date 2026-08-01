@@ -148,7 +148,7 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir), pnpmOverrides, installState });
   }
 
-  protected getBundleDependencyPackageManager(rootDir: string): PackageManager {
+  protected getBundleDependencyPackageManager(rootDir: string, _explicitManager?: PackageManager): PackageManager {
     return new DepsService(rootDir).getPackageManager();
   }
 
@@ -161,8 +161,8 @@ export abstract class Bundler extends MastraBundler {
     lockfile?: string;
     hasPackedWorkspaceDependencies: boolean;
   }): BundleDependencyInstallState {
-    const packageManager = this.getBundleDependencyPackageManager(projectRoot);
     if (lockfile === undefined) {
+      const packageManager = this.getBundleDependencyPackageManager(projectRoot);
       return {
         packageManager,
         frozen: false,
@@ -195,6 +195,10 @@ export abstract class Bundler extends MastraBundler {
       throw new Error(`Bundle lockfile must be a file: ${sourcePath}`);
     }
 
+    const hasSourceLockfile = new DepsService(projectRoot).getLockFile() !== null;
+    const packageManager = hasSourceLockfile
+      ? this.getBundleDependencyPackageManager(projectRoot)
+      : this.getBundleDependencyPackageManager(projectRoot, explicitManager);
     if (explicitManager !== packageManager) {
       throw new Error(`Bundle lockfile ${basename} does not match the ${packageManager} bundle installer`);
     }
