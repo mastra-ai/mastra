@@ -392,7 +392,7 @@ const TEMPORAL_GAP_REMINDER =
 
 function promptWithAzureReminders(): LanguageModelV2Prompt {
   return [
-    { role: 'system', content: [{ type: 'text', text: TEMPORAL_GAP_REMINDER }] },
+    { role: 'system', content: TEMPORAL_GAP_REMINDER },
     { role: 'assistant', content: [{ type: 'text', text: TEMPORAL_GAP_REMINDER }] },
     {
       role: 'user',
@@ -405,7 +405,8 @@ function promptWithAzureReminders(): LanguageModelV2Prompt {
         { type: 'image', image: 'image-data' } as any,
       ],
     },
-    { role: 'user', content: TEMPORAL_GAP_REMINDER },
+    // string-content user shape cannot be produced by to-prompt; verifies the rule skips non-array user content
+    { role: 'user', content: TEMPORAL_GAP_REMINDER } as any,
   ];
 }
 
@@ -432,7 +433,9 @@ describe('azureSystemReminderTransform', () => {
     });
     expect(prompt).toEqual(sourcePrompt);
     expect(JSON.stringify(messageList.get.all.db())).toBe(sourceHistory);
-    expect(transformedPrompt[0]).toBe(prompt[0]);
+    expect(transformedPrompt[0]).not.toBe(prompt[0]);
+    expect((transformedPrompt[0] as any).content).not.toMatch(/<system-reminder/);
+    expect((transformedPrompt[0] as any).content).toContain('<memory-context');
     expect(transformedPrompt[1]).toBe(prompt[1]);
     expect(transformedPrompt[2]).not.toBe(prompt[2]);
     expect((transformedPrompt[2]!.content as any[])[1]).toBe((prompt[2]!.content as any[])[1]);
