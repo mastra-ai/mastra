@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --ignoreConfig --types node --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
+    "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --ignoreConfig --types node --esModuleInterop --resolveJsonModule --module node16 --moduleResolution node16 --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
     "dev": "mastra dev"
   },
   "dependencies": {
