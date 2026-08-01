@@ -251,6 +251,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (registered.contextVersion !== requestContextVersion && !canRecoverPendingReconciliation) {
           throw new Error('GitHub token refresh request context is stale for the active Factory workspace.');
         }
+        // A role transition can fail before PAT storage reveals its target
+        // source. Only the current role/version may establish it on refresh.
+        const canResolvePendingCredentialSource =
+          registered.reconciliationRequired &&
+          registered.contextVersion === requestContextVersion &&
+          source !== undefined &&
+          patKind === registered.patKind &&
+          (source !== 'reviewer' || patKind === 'reviewer');
+        if (canResolvePendingCredentialSource) registered.credentialSource = source;
         registered.inject(token, source, patKind);
         requestCredentialSource = registered.credentialSource;
         requestContextVersion = registered.contextVersion;
@@ -332,7 +341,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             const ghToken =
               pat.token ?? (installedCredentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
             assertCurrentGithubTokenRegistration(registered);
-            if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource);
+            if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource, patKind);
             registered.patKind = patKind;
             registered.credentialSource = credentialSource;
             registered.installedCredentialSource = credentialSource;
@@ -463,6 +472,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         refreshedPatKind?: GithubPatKind,
       ) => {
         const registered = githubTokenInjectors.get(workspaceId);
+        if (credentialSource === 'reviewer' && refreshedPatKind !== 'reviewer') {
+          throw new Error('GitHub reviewer credentials require an active reviewer workspace role.');
+        }
         if (refreshedPatKind && registered?.patKind !== refreshedPatKind) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }

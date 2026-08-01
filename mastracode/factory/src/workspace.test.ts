@@ -1053,6 +1053,53 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
+  it('allows the current worker refresh to recover after PAT lookup fails during a role transition', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerRequestContext });
+    mocks.runBindingRole = 'work';
+    mocks.githubPatReadError = new Error('PAT settings unavailable');
+    const recoveryRequestContext = createGithubRequestContext('project-1', 'session-a');
+    const existing = { setToolsConfig: vi.fn() };
+
+    await expect(
+      workspace({
+        requestContext: recoveryRequestContext,
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('PAT settings unavailable');
+
+    mocks.githubPatReadError = null;
+    mocks.setEnvironmentVariable.mockClear();
+    expect(() => injectGithubToken(recoveryRequestContext, 'ghp_reviewer', 'reviewer', 'default')).toThrow(
+      'GitHub reviewer credentials require an active reviewer workspace role.',
+    );
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    injectGithubToken(recoveryRequestContext, 'ghp_worker', 'default', 'default');
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    mocks.setEnvironmentVariable.mockClear();
+    expect(() => injectGithubToken(reviewerRequestContext, 'ghp_reviewer', 'reviewer', 'reviewer')).toThrow(
+      'GitHub token refresh no longer matches the active Factory workspace role.',
+    );
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    await expect(
+      workspace({
+        requestContext,
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).resolves.toBe(existing);
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+  });
+
   it('retries a failed repository credential downgrade without reusing the reviewer PAT', async () => {
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';
