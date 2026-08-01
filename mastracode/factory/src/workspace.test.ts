@@ -852,6 +852,46 @@ describe('GitHub session workspace preparation', () => {
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
+  it('keeps an unsafe reviewer workspace quarantined when eviction fails', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerContext });
+
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime injection failed');
+    });
+    const existing = {
+      setToolsConfig: vi.fn(),
+      destroy: vi.fn(async () => {
+        throw new Error('destroy failed');
+      }),
+    };
+    const mastra = {
+      getWorkspaceById: vi.fn(() => existing),
+      removeWorkspace: vi.fn(async () => {
+        throw new Error('remove failed');
+      }),
+    };
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
+    ).rejects.toThrow('runtime injection failed');
+    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+
+    mocks.setEnvironmentVariable.mockClear();
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
+    ).resolves.toBe(existing);
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+  });
+
   it('keeps same-role PAT refresh failures best-effort', async () => {
     mocks.githubPat = 'ghp_worker_old';
     const { workspace } = await createLocalFactory();

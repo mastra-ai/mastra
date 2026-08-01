@@ -299,18 +299,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         await reconcileGithubToken();
       } catch (error) {
         if (registered?.tokenReplacementPending && githubTokenInjectors.get(workspaceId) === registered) {
-          // Invalidate request-scoped refreshes, unregister synchronously, then
-          // best-effort destroy the sandbox that may still hold reviewer credentials.
-          githubTokenInjectors.delete(workspaceId);
+          // The role generation already invalidated reviewer refresh contexts.
+          // Keep the pending registration so failed eviction cannot make a
+          // still-live reviewer workspace look safe on the next reuse.
+          let evicted = false;
           try {
-            await mastra?.removeWorkspace?.(workspaceId);
+            evicted = (await mastra?.removeWorkspace?.(workspaceId)) === true;
           } catch {
-            // Preserve the credential-replacement error after invalidating refresh contexts.
+            // Preserve the credential-replacement error and retry on the next reuse.
           }
           try {
             await workspace.destroy();
+            evicted = true;
           } catch {
-            // The workspace is already unregistered; cleanup can be retried by the sandbox provider.
+            // The pending registration keeps the workspace quarantined if cleanup also fails.
+          }
+          if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
+            githubTokenInjectors.delete(workspaceId);
           }
         }
         throw error;
