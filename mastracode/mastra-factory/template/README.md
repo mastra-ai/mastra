@@ -37,6 +37,7 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `APP_DATABASE_URL`      |
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
 | Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
+| Jira intake              | WorkOS + `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` + `DATABASE_URL`                                                                           |
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
 | Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                              |
 
@@ -71,6 +72,15 @@ Webhooks (optional — powers auto-triage and PR notifications, requires a publi
 ### Linear (optional)
 
 Create a Linear OAuth app (Linear → Settings → API → OAuth applications → New) with callback URL `<your app origin>/auth/linear/callback`, then set `LINEAR_CLIENT_ID` / `LINEAR_CLIENT_SECRET` in `.env`.
+
+### Jira (optional)
+
+Connects a Jira Cloud site (`https://<site>.atlassian.net`) with deployment-global credentials — no OAuth app needed:
+
+1. Create an API token at https://id.atlassian.com → Security → API tokens.
+2. Set `JIRA_BASE_URL` (the site origin), `JIRA_EMAIL` (the Atlassian account the token belongs to), and `JIRA_API_TOKEN` in `.env`.
+
+All three variables are required together. Jira projects then become selectable intake sources in Settings → Intake, selected projects' issues appear on the board, and agents get `jira_get_issue` / `jira_create_comment` tools. The token's Jira permissions govern what the integration can read and post.
 
 ### Slack (optional)
 
