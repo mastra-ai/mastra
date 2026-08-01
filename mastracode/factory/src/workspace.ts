@@ -14,7 +14,7 @@ import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { getGithubPat } from './integrations/github/pat.js';
+import { resolveGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
@@ -239,15 +239,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
       return token;
     };
-    const resolveGithubPat = async (
-      patKind: GithubPatKind,
-    ): Promise<{ token: string | null; reviewerCredential: boolean }> => {
-      const token = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
-      if (patKind !== 'reviewer' || !token) return { token, reviewerCredential: false };
-
-      const workerToken = await getGithubPat(() => github.integrationStorage, session.orgId, 'default');
-      return { token, reviewerCredential: token !== workerToken };
-    };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       const generation = registered.generation;
       const patKind = registered.patKind;
@@ -298,8 +289,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
 
           const roleChanged = registered.installedPatKind !== registered.patKind;
-          const resolvedPat = await resolveGithubPat(registered.patKind);
-          const pat = resolvedPat.token;
+          let resolvedPat: Awaited<ReturnType<typeof resolveGithubPat>>;
+          let patLookupFailed = false;
+          try {
+            resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
+          } catch {
+            resolvedPat = null;
+            patLookupFailed = true;
+          }
+          const pat = resolvedPat?.token ?? null;
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (pat) {
@@ -316,21 +314,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               registered.generation += 1;
             }
             registered.installedPatKind = registered.patKind;
-            registered.reviewerCredentialInstalled = resolvedPat.reviewerCredential;
+            registered.reviewerCredentialInstalled = resolvedPat?.kind === 'reviewer';
             registerGithubTokenContext(registered);
             return;
           }
 
-          if (registered.patKind === 'reviewer') {
+          if (patLookupFailed && registered.patKind === 'reviewer') {
             // The worker or repository credential already installed is the
-            // documented fallback when no reviewer PAT is configured.
+            // safe fallback while PAT settings are temporarily unavailable.
             registered.installedPatKind = 'reviewer';
             registerGithubTokenContext(registered);
             return;
           }
-          if (!roleChanged) {
-            // Preserve the existing best-effort behavior when PAT settings
-            // are unavailable or cleared without an identity transition.
+          if (!roleChanged && !registered.reviewerCredentialInstalled) {
+            // Preserve the existing best-effort behavior for safe worker or
+            // repository credentials when no identity transition is needed.
             registerGithubTokenContext(registered);
             return;
           }
@@ -342,16 +340,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             return;
           }
 
-          // A reviewer credential must never survive a transition back to a
-          // worker role. With no worker PAT, replace it with repository access.
+          // A reviewer credential must never survive a worker downgrade or a
+          // cleared reviewer PAT. With no configured fallback, use repository
+          // access for the active role.
+          registered.generation += 1;
           const token = await getRepositoryToken();
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
           if (token !== registered.ghToken) {
             registered.inject(token);
             registered.ghToken = token;
-            registered.generation += 1;
           }
-          registered.installedPatKind = 'default';
+          registered.installedPatKind = registered.patKind;
           registered.reviewerCredentialInstalled = false;
           registerGithubTokenContext(registered);
         });
@@ -412,8 +411,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // sessions with no resolvable run binding — uses the worker token.
       const patKindResolution = await resolveGithubPatKind();
       const patKind = 'patKind' in patKindResolution ? patKindResolution.patKind : 'default';
-      const resolvedPat = await resolveGithubPat(patKind);
-      const ghCliToken = resolvedPat.token ?? token;
+      let resolvedPat: Awaited<ReturnType<typeof resolveGithubPat>>;
+      try {
+        resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
+      } catch {
+        resolvedPat = null;
+      }
+      const ghCliToken = resolvedPat?.token ?? token;
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(
@@ -476,7 +480,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         inject: injectGithubToken,
         patKind,
         installedPatKind: patKind,
-        reviewerCredentialInstalled: resolvedPat.reviewerCredential,
+        reviewerCredentialInstalled: resolvedPat?.kind === 'reviewer',
         generation: 0,
         ghToken: ghCliToken,
       };
