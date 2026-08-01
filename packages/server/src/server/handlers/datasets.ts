@@ -696,6 +696,9 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       const {
         targetType,
         targetId,
+        name,
+        description,
+        metadata,
         scorerIds,
         version,
         agentVersion,
@@ -705,6 +708,9 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
+        name?: string;
+        description?: string;
+        metadata?: Record<string, unknown>;
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
@@ -719,6 +725,9 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
+        name,
+        description,
+        metadata,
         scorers: scorerIds,
         version,
         agentVersion,
