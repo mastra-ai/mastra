@@ -35,7 +35,10 @@ function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | n
   };
 }
 
-async function requestIntakeConfig(baseUrl: string, init?: RequestInit): Promise<IntakeConfig> {
+async function requestIntakeConfig(
+  baseUrl: string,
+  init?: RequestInit,
+): Promise<Partial<Record<string, IntakeSelection>>> {
   const res = await fetch(`${baseUrl}/web/intake/config`, {
     headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
     credentials: 'include',
@@ -53,15 +56,24 @@ async function requestIntakeConfig(baseUrl: string, init?: RequestInit): Promise
     throw new Error(message);
   }
   const { config } = (await res.json()) as { config?: Partial<Record<string, IntakeSelection>> };
-  return normalizeIntakeConfig(config);
+  return config ?? {};
 }
 
 /** Read the caller's intake config (server falls back to the defaults). */
 export async function fetchIntakeConfig(baseUrl: string): Promise<IntakeConfig> {
-  return requestIntakeConfig(baseUrl);
+  return normalizeIntakeConfig(await requestIntakeConfig(baseUrl));
 }
 
-/** Save the caller's intake config; resolves to the persisted config. */
+/**
+ * Save the caller's intake config; resolves to the persisted config.
+ *
+ * The server rejects keys for integrations that aren't registered in the
+ * running deployment (e.g. `jira` when the `JIRA_*` env group is absent), while
+ * the UI always works with the fixed normalized shape — so read the registered
+ * keys first and send only those.
+ */
 export async function saveIntakeConfig(baseUrl: string, config: IntakeConfig): Promise<IntakeConfig> {
-  return requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify(config) });
+  const registered = await requestIntakeConfig(baseUrl);
+  const body = Object.fromEntries(Object.entries(config).filter(([integrationId]) => integrationId in registered));
+  return normalizeIntakeConfig(await requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify(body) }));
 }

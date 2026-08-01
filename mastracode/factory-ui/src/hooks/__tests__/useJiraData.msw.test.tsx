@@ -166,6 +166,34 @@ describe('intake config with the jira key', () => {
     expect(result.current.data?.jira).toEqual({ enabled: false, sourceIds: null });
   });
 
+  it('given the deployment registers only github and jira, when the config is saved, then unregistered keys are not sent', async () => {
+    // The server rejects keys for unregistered integrations (invalid_config),
+    // so the save must trim the fixed client shape down to the GET's keys.
+    const registered = { github: { enabled: true, sourceIds: null }, jira: { enabled: false, sourceIds: null } };
+    let putBody: unknown;
+    server.use(
+      http.get(CONFIG_URL, () => HttpResponse.json({ config: registered })),
+      http.put(CONFIG_URL, async ({ request }) => {
+        putBody = await request.json();
+        return HttpResponse.json({ config: putBody });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useSaveIntakeConfigMutation());
+
+    result.current.mutate({
+      github: { enabled: true, sourceIds: null },
+      linear: { enabled: false, sourceIds: null },
+      jira: { enabled: true, sourceIds: ['10001'] },
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(putBody).toEqual({
+      github: { enabled: true, sourceIds: null },
+      jira: { enabled: true, sourceIds: ['10001'] },
+    });
+  });
+
   it('given a jira selection is saved, when it succeeds, then the config cache updates and jira issues invalidate', async () => {
     const initial: IntakeConfig = {
       github: { enabled: true, sourceIds: null },

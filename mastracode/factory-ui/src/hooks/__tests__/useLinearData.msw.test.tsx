@@ -180,7 +180,11 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   });
 
   it('given the save fails, when it settles, then the mutation surfaces the server message', async () => {
-    server.use(http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })));
+    server.use(
+      // The save first reads the registered keys, then PUTs.
+      http.get(CONFIG_URL, () => HttpResponse.json({ config })),
+      http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })),
+    );
 
     const { result } = renderHookWithProviders(() => useSaveIntakeConfigMutation());
 
