@@ -409,6 +409,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        scorerIds,
       } = params as {
         externalId?: string | null;
         input: unknown;
@@ -419,6 +420,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory?: unknown;
         toolMocks?: DatasetItemToolMock[];
         unmockedToolPolicy?: 'allow' | 'deny';
+        scorerIds?: string[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       return await ds.addItem({
@@ -431,6 +433,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        scorerIds,
       });
     } catch (error) {
       if (isSchemaValidationError(error)) {
@@ -498,16 +501,25 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks, unmockedToolPolicy } =
-        params as {
-          input?: unknown;
-          groundTruth?: unknown;
-          requestContext?: Record<string, unknown> | RequestContext;
-          metadata?: Record<string, unknown>;
-          expectedTrajectory?: unknown;
-          toolMocks?: DatasetItemToolMock[];
-          unmockedToolPolicy?: 'allow' | 'deny';
-        };
+      const {
+        input,
+        groundTruth,
+        requestContext,
+        metadata,
+        expectedTrajectory,
+        toolMocks,
+        unmockedToolPolicy,
+        scorerIds,
+      } = params as {
+        input?: unknown;
+        groundTruth?: unknown;
+        requestContext?: Record<string, unknown> | RequestContext;
+        metadata?: Record<string, unknown>;
+        expectedTrajectory?: unknown;
+        toolMocks?: DatasetItemToolMock[];
+        unmockedToolPolicy?: 'allow' | 'deny';
+        scorerIds?: string[] | null;
+      };
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
       const existing = await ds.getItem({ itemId });
@@ -523,6 +535,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        scorerIds,
       });
     } catch (error) {
       if (isSchemaValidationError(error)) {
@@ -992,6 +1005,7 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
           expectedTrajectory?: unknown;
           toolMocks?: DatasetItemToolMock[];
           unmockedToolPolicy?: 'allow' | 'deny';
+          scorerIds?: string[];
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;
         }>;

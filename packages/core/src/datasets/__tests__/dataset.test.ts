@@ -245,10 +245,14 @@ describe('Dataset', () => {
   });
 
   // 16. updateItem
-  it('updateItem returns updated item', async () => {
-    const added = await ds.addItem({ input: { x: 1 } });
+  it('updateItem returns updated item and supports clearing scorer IDs', async () => {
+    const added = await ds.addItem({ input: { x: 1 }, scorerIds: ['quality'] });
     const updated = await ds.updateItem({ itemId: added.id, input: { x: 2 } });
     expect(updated.input).toEqual({ x: 2 });
+    expect(updated.scorerIds).toEqual(['quality']);
+
+    const cleared = await ds.updateItem({ itemId: added.id, scorerIds: null });
+    expect(cleared.scorerIds).toBeUndefined();
   });
 
   // 17. deleteItem
