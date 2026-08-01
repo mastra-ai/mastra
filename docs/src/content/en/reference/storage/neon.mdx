@@ -10,13 +10,69 @@ packages:
 
 [Neon](https://neon.com) is a managed PostgreSQL service. Mastra connects to Neon through [`PostgresStore`](/reference/storage/postgresql), which uses the Node.js `pg` driver. Neon doesn't require a separate Mastra storage package.
 
-## Quickstart
+## Set up Neon
 
-Create a Neon project and copy a [direct connection string](https://neon.com/docs/connect/connect-from-any-app) into a server-side environment variable:
+Install the [Neon CLI](https://neon.com/docs/cli/install):
+
+```bash npm2yarn
+npm install -g neon
+```
+
+From your project directory, link an existing Neon project or create one:
 
 ```bash
-DATABASE_URL="<your-neon-connection-string>"
+neon link
 ```
+
+The command signs you in, writes project context to `.neon`, and pulls the current branch's environment variables.
+
+To manage branch settings in the repository, create a [`neon.ts`](https://neon.com/docs/reference/neon-ts) file:
+
+```bash
+neon config init
+```
+
+This installs `@neon/config` and `@neon/env` and creates a starter config. For example, the following policy expires new non-default branches after seven days:
+
+```typescript title="neon.ts"
+import { defineConfig } from '@neon/config/v1'
+
+export default defineConfig({
+  branch: branch => {
+    if (branch.isDefault) {
+      return {}
+    }
+
+    if (!branch.exists) {
+      return { ttl: '7d' }
+    }
+
+    return {}
+  },
+})
+```
+
+Apply the config and refresh the local environment variables:
+
+```bash
+neon deploy
+neon env pull
+```
+
+`neon env pull` writes `DATABASE_URL` and `DATABASE_URL_UNPOOLED` to `.env.local`, or to `.env` when that file already exists.
+
+## Install Neon agent skills
+
+Install the [`neon` and `neon-postgres` agent skills](https://neon.com/docs/ai/agent-skills) from your project directory:
+
+```bash npm2yarn
+npx skills add neondatabase/agent-skills --skill neon -y
+npx skills add neondatabase/agent-skills --skill neon-postgres -y
+```
+
+The skills give compatible coding agents Neon setup instructions and Postgres-specific guidance.
+
+## Quickstart
 
 Install the PostgreSQL storage package:
 
@@ -24,7 +80,7 @@ Install the PostgreSQL storage package:
 npm install @mastra/pg@latest
 ```
 
-Pass the connection string to `PostgresStore`:
+Pass the direct connection string from `neon env pull` to `PostgresStore`:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -33,12 +89,12 @@ import { PostgresStore } from '@mastra/pg'
 export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'neon-storage',
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: process.env.DATABASE_URL_UNPOOLED!,
   }),
 })
 ```
 
-On startup, Mastra calls `storage.init()` and creates its tables and indexes in Neon. This setup uses `@mastra/pg` with a standard Neon Postgres connection string and must run in Node.js.
+On startup, Mastra calls `storage.init()` and creates its tables and indexes in Neon. This setup uses `@mastra/pg` and must run in Node.js.
 
 ## Production connections
 
