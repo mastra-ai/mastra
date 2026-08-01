@@ -15,6 +15,7 @@
  * — the instance's own credentials authenticate every call.
  */
 
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
 import type {
@@ -32,10 +33,14 @@ import type {
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
-import type { FactoryIntegration } from '../base.js';
+import type { RouteAuth } from '../../routes/route.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { adfToText } from './adf.js';
+import { buildJiraAgentTools } from './agent-tools.js';
 import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
 import { JiraApiClient, JiraApiError } from './api.js';
+import { buildJiraRoutes } from './routes.js';
 
 /** Deployment-global Jira Cloud credentials. All fields are required. */
 export interface JiraIntegrationConfig {
@@ -52,6 +57,8 @@ const ISSUE_COMMENTS_MAX_PAGES = 20;
 
 /** Jira issue keys look like `ENG-42`. */
 const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Capability state types (`capabilities/intake.ts`) → Jira status-category
@@ -86,10 +93,74 @@ export class JiraIntegration implements FactoryIntegration {
   /** Typed REST client bound to the deployment credentials. */
   readonly api: JiraApiClient;
 
+  /** Bound once by the factory via `initialize()` before any surface is used. */
+  #projects: FactoryProjectsStorage | undefined;
+  #auth: RouteAuth | undefined;
+  readonly #orgIdByResourceId = new Map<string, string | null>();
+
   constructor(config: JiraIntegrationConfig) {
     // JiraApiClient validates the credential group and normalizes the URL.
     this.api = new JiraApiClient(config);
     this.#config = config;
+  }
+
+  /**
+   * Bind the projects domain and the host auth seam. Jira has no per-org
+   * connection rows, so the generic storage handle is unused — credentials
+   * are deployment-global constructor config.
+   */
+  initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
+    this.#projects = projects;
+    this.#auth = auth;
+  }
+
+  /** Factory projects domain — maps a session's resourceId to its owning org. */
+  get projects(): FactoryProjectsStorage {
+    if (!this.#projects) {
+      throw new Error('JiraIntegration is not initialized — the factory binds storage during prepare().');
+    }
+    return this.#projects;
+  }
+
+  /**
+   * Whether the host runs with web auth enabled. Intake selections are
+   * org-owned, so every Jira surface is inert without a tenant auth seam.
+   */
+  get authEnabled(): boolean {
+    return this.#auth?.enabled() ?? false;
+  }
+
+  /**
+   * Map a session's resourceId (the factory project id) to its owning org.
+   * Same caching semantics as the Linear integration: definitive misses are
+   * cached, transient database failures are not.
+   */
+  async resolveOrgId(resourceId: string): Promise<string | null> {
+    const cached = this.#orgIdByResourceId.get(resourceId);
+    if (cached !== undefined) return cached;
+    // Non-UUID resource ids (local/dev resources) would make the uuid column
+    // comparison throw — they're definitively "not a project", so cache that.
+    if (!UUID_PATTERN.test(resourceId)) {
+      this.#orgIdByResourceId.set(resourceId, null);
+      return null;
+    }
+    let orgId: string | null;
+    try {
+      await this.projects.ensureReady();
+      const project = await this.projects.getById({ id: resourceId });
+      orgId = project?.orgId ?? null;
+    } catch {
+      // Transient database failure: skip the tools for this request but don't
+      // cache the miss, so the next request retries the lookup.
+      return null;
+    }
+    this.#orgIdByResourceId.set(resourceId, orgId);
+    return orgId;
+  }
+
+  /** Test hook: clear the org cache between specs. */
+  clearCaches(): void {
+    this.#orgIdByResourceId.clear();
   }
 
   /** Normalized site base URL (no trailing slash) — `/browse/<key>` links hang off this. */
@@ -293,9 +364,26 @@ export class JiraIntegration implements FactoryIntegration {
 
   // ── FactoryIntegration surface ───────────────────────────────────────────
 
-  /** HTTP surface — wired in the routes phase. */
-  routes(): ApiRoute[] {
-    return [];
+  /**
+   * The integration's HTTP surface: `/web/jira/*` Mastra `apiRoutes` (status,
+   * projects + issues for Intake). No OAuth routes — credentials are
+   * deployment-global. Handlers operate on this instance.
+   */
+  routes(ctx: IntegrationContext): ApiRoute[] {
+    return buildJiraRoutes({
+      jira: this,
+      auth: ctx.auth,
+      intake: ctx.storage.intake,
+    });
+  }
+
+  /**
+   * Org-scoped agent tools: issue detail + comment tools for sessions whose
+   * resource is a factory project (Jira credentials are deployment-global,
+   * so no per-org connection gates apply).
+   */
+  async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
+    return buildJiraAgentTools({ requestContext: args.requestContext, jira: this });
   }
 
   /** Non-secret config snapshot for system diagnostics/startup logs. */
