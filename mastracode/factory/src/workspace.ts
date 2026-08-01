@@ -132,6 +132,8 @@ type GithubTokenRegistration = {
   inject: (token: string, source?: GithubTokenSource, patKind?: GithubPatKind) => void;
   patKind: GithubPatKind;
   ghToken: string;
+  // Advances whenever older request-scoped token injectors must become stale.
+  contextVersion: number;
   // The target source advances before replacement to block stale refreshes.
   credentialSource: GithubTokenSource | 'unknown';
   // The installed source advances only after replacement succeeds.
@@ -224,6 +226,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       const requestPatKind = registered.patKind;
       let requestCredentialSource = registered.credentialSource;
+      let requestContextVersion = registered.contextVersion;
       // Bind refreshes to the role and credential source held by this request
       // so an older context cannot restore credentials that reuse replaced.
       registerGithubTokenInjector(requestContext, (token, source, patKind = requestPatKind) => {
@@ -233,8 +236,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (registered.credentialSource !== requestCredentialSource && source !== registered.credentialSource) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace credential source.');
         }
+        const canRecoverPendingReconciliation =
+          registered.reconciliationRequired &&
+          registered.contextVersion === requestContextVersion + 1 &&
+          source === registered.credentialSource &&
+          patKind === registered.patKind;
+        if (registered.contextVersion !== requestContextVersion && !canRecoverPendingReconciliation) {
+          throw new Error('GitHub token refresh request context is stale for the active Factory workspace.');
+        }
         registered.inject(token, source, patKind);
         requestCredentialSource = registered.credentialSource;
+        requestContextVersion = registered.contextVersion;
       });
       registerGithubPatKind(requestContext, requestPatKind);
     };
@@ -278,10 +290,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           const patKind = resolvedPatKind ?? registered.patKind;
           const patKindChanged = patKind !== registered.patKind;
+          let contextInvalidated = false;
+          const invalidateRequestContexts = () => {
+            if (contextInvalidated) return;
+            registered.contextVersion += 1;
+            contextInvalidated = true;
+          };
           // Make the authoritative role effective before any credential I/O.
           // If replacement fails, stale requests must not be able to restore
           // the previous role's token through the runtime refresh injector.
           if (patKindChanged) {
+            invalidateRequestContexts();
             registered.patKind = patKind;
             registered.reconciliationRequired = true;
           }
@@ -296,6 +315,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               // Persist the authoritative target before injection. If the
               // replacement fails, an older refresh must not be able to
               // restore the previous credential source and unblock reuse.
+              invalidateRequestContexts();
               registered.credentialSource = credentialSource;
               registered.reconciliationRequired = true;
             }
@@ -442,12 +462,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (!sandbox.setEnvironmentVariable) {
           throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
         }
+        const nextCredentialSource = credentialSource ?? 'unknown';
+        const credentialChanged =
+          registered &&
+          (registered.ghToken !== freshToken || registered.installedCredentialSource !== nextCredentialSource);
         sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
         if (registered) {
           registered.ghToken = freshToken;
           // Unknown sources are re-resolved on the next reuse instead of being trusted as a PAT or repository token.
-          registered.credentialSource = credentialSource ?? 'unknown';
-          registered.installedCredentialSource = credentialSource ?? 'unknown';
+          registered.credentialSource = nextCredentialSource;
+          registered.installedCredentialSource = nextCredentialSource;
+          if (credentialChanged) registered.contextVersion += 1;
           if (refreshedPatKind === registered.patKind && credentialSource) {
             registered.reconciliationRequired = false;
           }
@@ -457,6 +482,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         inject: injectGithubToken,
         patKind,
         ghToken: ghCliToken,
+        contextVersion: 0,
         credentialSource,
         installedCredentialSource: credentialSource,
         reconciliationRequired: false,
