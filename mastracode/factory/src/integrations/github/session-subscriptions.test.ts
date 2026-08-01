@@ -143,7 +143,7 @@ describe('GitHub subscription entry points', () => {
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
-    expect(inject).toHaveBeenCalledWith('fresh-gh-token', 'repository', 'default');
+    expect(inject).toHaveBeenCalledWith('fresh-gh-token');
   });
 
   it('re-injects a configured org PAT instead of minting an installation token', async () => {
@@ -154,7 +154,7 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_org_pat', 'default', 'default');
+    expect(inject).toHaveBeenCalledWith('ghp_org_pat');
     expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 
@@ -167,50 +167,7 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_reviewer', 'reviewer', 'reviewer');
-  });
-
-  it('keeps the injector that authorized an in-flight token refresh', async () => {
-    let resolveSettings!: (settings: { pat: string; reviewerPat: string }) => void;
-    const settings = new Promise<{ pat: string; reviewerPat: string }>(resolve => {
-      resolveSettings = resolve;
-    });
-    let markSettingsRead!: () => void;
-    const settingsRead = new Promise<void>(resolve => {
-      markSettingsRead = resolve;
-    });
-    integrationStorage.settings = {
-      get: vi.fn(async () => {
-        markSettingsRead();
-        return settings;
-      }),
-    };
-    const requestContext = authenticatedRequestContext();
-    const originalInject = vi.fn();
-    const replacementInject = vi.fn();
-    registerGithubTokenInjector(requestContext, originalInject);
-    registerGithubPatKind(requestContext, 'reviewer');
-
-    const refresh = refreshGithubToken(requestContext, githubStub);
-    await settingsRead;
-    registerGithubTokenInjector(requestContext, replacementInject);
-    resolveSettings({ pat: 'ghp_worker', reviewerPat: 'ghp_reviewer' });
-    await refresh;
-
-    expect(originalInject).toHaveBeenCalledWith('ghp_reviewer', 'reviewer', 'reviewer');
-    expect(replacementInject).not.toHaveBeenCalled();
-  });
-
-  it('records worker-PAT fallback when refreshing a reviewer sandbox', async () => {
-    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
-    const requestContext = authenticatedRequestContext();
-    const inject = vi.fn();
-    registerGithubTokenInjector(requestContext, inject);
-    registerGithubPatKind(requestContext, 'reviewer');
-
-    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
-
-    expect(inject).toHaveBeenCalledWith('ghp_worker', 'default', 'reviewer');
+    expect(inject).toHaveBeenCalledWith('ghp_reviewer');
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {

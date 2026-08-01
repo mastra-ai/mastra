@@ -27,11 +27,6 @@ const PAT_SETTINGS_USER_ID = '__github_org_settings__';
 
 export type GithubPatKind = 'default' | 'reviewer';
 
-export type GithubPatResolution = {
-  token: string | null;
-  sourceKind: GithubPatKind | null;
-};
-
 type GithubOrgSettings = { pat?: string; reviewerPat?: string };
 
 const FIELD_FOR_KIND: Record<GithubPatKind, keyof GithubOrgSettings> = {
@@ -43,37 +38,24 @@ function asToken(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-/** Resolve the PAT to install and the exact configured PAT it came from.
- * `reviewer` falls back to the worker token when no dedicated reviewer token
- * is configured. Storage errors read as "no PAT configured" by default so
- * token minting still works; cached-credential reconciliation can opt into
- * errors to avoid mistaking an unavailable store for a cleared PAT. */
-export async function resolveGithubPat(
-  getStorage: () => GithubSubscriptionStorage,
-  orgId: string,
-  kind: GithubPatKind = 'default',
-  options: { throwOnError?: boolean } = {},
-): Promise<GithubPatResolution> {
-  try {
-    const settings = (await getStorage().settings.get(orgId, PAT_SETTINGS_USER_ID)) as GithubOrgSettings | null;
-    const defaultPat = asToken(settings?.pat);
-    const reviewerPat = asToken(settings?.reviewerPat);
-    if (kind === 'reviewer' && reviewerPat) return { token: reviewerPat, sourceKind: 'reviewer' };
-    if (defaultPat) return { token: defaultPat, sourceKind: 'default' };
-    return { token: null, sourceKind: null };
-  } catch (error) {
-    if (options.throwOnError) throw error;
-    return { token: null, sourceKind: null };
-  }
-}
-
+/** The PAT to install for `kind`, or null. `reviewer` falls back to the
+ * worker token so review sessions still authenticate when no dedicated
+ * reviewer token is configured. Fail-soft: storage errors (e.g. integration
+ * storage not initialized in a partial test harness) read as "no PAT
+ * configured" so token minting still works. */
 export async function getGithubPat(
   getStorage: () => GithubSubscriptionStorage,
   orgId: string,
   kind: GithubPatKind = 'default',
-  options: { throwOnError?: boolean } = {},
 ): Promise<string | null> {
-  return (await resolveGithubPat(getStorage, orgId, kind, options)).token;
+  try {
+    const settings = (await getStorage().settings.get(orgId, PAT_SETTINGS_USER_ID)) as GithubOrgSettings | null;
+    if (!settings) return null;
+    if (kind === 'reviewer') return asToken(settings.reviewerPat) ?? asToken(settings.pat);
+    return asToken(settings.pat);
+  } catch {
+    return null;
+  }
 }
 
 /** Which tokens are configured, without fallback semantics — feeds the

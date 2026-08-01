@@ -14,7 +14,7 @@ import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { resolveGithubPat } from './integrations/github/pat.js';
+import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
@@ -24,7 +24,6 @@ import {
   runWorktreeSetup,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
-import type { GithubTokenSource } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -129,16 +128,10 @@ export interface CreateWorkspaceFactoryOptions {
 }
 
 type GithubTokenRegistration = {
-  inject: (token: string, source?: GithubTokenSource, patKind?: GithubPatKind) => void;
+  inject: (token: string) => void;
   patKind: GithubPatKind;
+  installedPatKind: GithubPatKind;
   ghToken: string;
-  // Advances whenever older request-scoped token injectors must become stale.
-  contextVersion: number;
-  // The target source advances before replacement to block stale refreshes.
-  credentialSource: GithubTokenSource | 'unknown';
-  // The installed source advances only after replacement succeeds.
-  installedCredentialSource: GithubTokenSource | 'unknown';
-  reconciliationRequired: boolean;
 };
 
 type GithubPatKindResolution = { patKind: GithubPatKind } | { error: unknown };
@@ -151,9 +144,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // chat) must not each provision a sandbox and clone the repository. The
   // first caller materializes; followers await the same promise.
   const inflightMaterializations = new Map<string, Promise<Workspace>>();
-  // Credential reconciliation mutates one shared sandbox and cache entry.
-  // Serialize it per workspace so an older lookup cannot finish last and
-  // overwrite a newer worker/reviewer decision.
   const githubTokenReconciliations = new Map<string, Promise<void>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
@@ -225,49 +215,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
-    const assertCurrentGithubTokenRegistration = (registered: GithubTokenRegistration): void => {
-      if (githubTokenInjectors.get(workspaceId) !== registered) {
-        throw new Error('GitHub token refresh request context is stale for the active Factory workspace.');
-      }
-    };
-    const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
-      assertCurrentGithubTokenRegistration(registered);
-      const requestPatKind = registered.patKind;
-      let requestCredentialSource = registered.credentialSource;
-      let requestContextVersion = registered.contextVersion;
-      // Bind refreshes to the role and credential source held by this request
-      // so an older context cannot restore credentials that reuse replaced.
-      registerGithubTokenInjector(requestContext, (token, source, patKind = requestPatKind) => {
-        assertCurrentGithubTokenRegistration(registered);
-        if (registered.patKind !== requestPatKind) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-        }
-        if (registered.credentialSource !== requestCredentialSource && source !== registered.credentialSource) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace credential source.');
-        }
-        const canRecoverPendingReconciliation =
-          registered.reconciliationRequired &&
-          registered.contextVersion === requestContextVersion + 1 &&
-          source === registered.credentialSource &&
-          patKind === registered.patKind;
-        if (registered.contextVersion !== requestContextVersion && !canRecoverPendingReconciliation) {
-          throw new Error('GitHub token refresh request context is stale for the active Factory workspace.');
-        }
-        // A role transition can fail before PAT storage reveals its target
-        // source. Only the current role/version may establish it on refresh.
-        const canResolvePendingCredentialSource =
-          registered.reconciliationRequired &&
-          registered.contextVersion === requestContextVersion &&
-          source !== undefined &&
-          patKind === registered.patKind &&
-          (source !== 'reviewer' || patKind === 'reviewer');
-        if (canResolvePendingCredentialSource) registered.credentialSource = source;
-        registered.inject(token, source, patKind);
-        requestCredentialSource = registered.credentialSource;
-        requestContextVersion = registered.contextVersion;
-      });
-      registerGithubPatKind(requestContext, requestPatKind);
-    };
     const resolveGithubPatKind = async (): Promise<GithubPatKindResolution> => {
       if (!workItems) return { patKind: 'default' };
       try {
@@ -278,7 +225,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         return { patKind: 'default' };
       } catch (error) {
-        // Reuse must preserve its cached identity when binding storage is unavailable.
         return { error };
       }
     };
@@ -290,6 +236,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const token = access.authorization?.token;
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
       return token;
+    };
+    const assertCurrentGithubTokenRegistration = (registered: GithubTokenRegistration): void => {
+      if (githubTokenInjectors.get(workspaceId) !== registered) {
+        throw new Error('GitHub token refresh request context is stale for the active Factory workspace.');
+      }
+    };
+    const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
+      assertCurrentGithubTokenRegistration(registered);
+      const requestPatKind = registered.patKind;
+      registerGithubTokenInjector(requestContext, token => {
+        assertCurrentGithubTokenRegistration(registered);
+        if (registered.patKind !== requestPatKind || registered.installedPatKind !== requestPatKind) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
+        registered.inject(token);
+      });
+      registerGithubPatKind(requestContext, requestPatKind);
     };
     const reconcileGithubToken = async (): Promise<void> => {
       if (!githubTokenInjectors.has(workspaceId)) return;
@@ -304,60 +267,30 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const resolution = await resolveGithubPatKind();
           assertCurrentGithubTokenRegistration(registered);
           if ('error' in resolution) {
-            // An installed identity can survive a transient lookup failure,
-            // but a pending target is not authoritative enough to install.
-            if (registered.reconciliationRequired) throw resolution.error;
+            // A settled identity survives transient binding-storage failures,
+            // but a failed role transition must remain unavailable.
+            if (registered.patKind !== registered.installedPatKind) throw resolution.error;
             registerGithubTokenContext(registered);
             return;
           }
+
           const patKind = resolution.patKind;
-          const patKindChanged = patKind !== registered.patKind;
-          let contextInvalidated = false;
-          const invalidateRequestContexts = () => {
-            if (contextInvalidated) return;
-            registered.contextVersion += 1;
-            contextInvalidated = true;
-          };
-          // Make the authoritative role effective before any credential I/O.
-          // If replacement fails, stale requests must not be able to restore
-          // the previous role's token through the runtime refresh injector.
-          if (patKindChanged) {
-            invalidateRequestContexts();
-            registered.patKind = patKind;
-            registered.reconciliationRequired = true;
-          }
-          let credentialSourceChanged = false;
+          const patKindChanged = patKind !== registered.installedPatKind;
+          // Invalidate older request-scoped injectors before credential I/O so
+          // they cannot restore reviewer credentials during a downgrade.
+          registered.patKind = patKind;
           try {
-            const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind, {
-              throwOnError: true,
-            });
+            const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+            const ghToken = pat ?? (patKindChanged ? await getRepositoryToken() : null);
             assertCurrentGithubTokenRegistration(registered);
-            const credentialSource = pat.sourceKind ?? 'repository';
-            credentialSourceChanged = credentialSource !== registered.credentialSource;
-            if (credentialSourceChanged) {
-              // Persist the authoritative target before injection. If the
-              // replacement fails, an older refresh must not be able to
-              // restore the previous credential source and unblock reuse.
-              invalidateRequestContexts();
-              registered.credentialSource = credentialSource;
-              registered.reconciliationRequired = true;
-            }
-            const installedCredentialSourceChanged = credentialSource !== registered.installedCredentialSource;
-            const ghToken =
-              pat.token ?? (installedCredentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
-            assertCurrentGithubTokenRegistration(registered);
-            if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource, patKind);
-            registered.patKind = patKind;
-            registered.credentialSource = credentialSource;
-            registered.installedCredentialSource = credentialSource;
-            registered.reconciliationRequired = false;
+            if (ghToken && ghToken !== registered.ghToken) registered.inject(ghToken);
+            registered.installedPatKind = patKind;
           } catch (error) {
-            // Same-source PAT refreshes remain best-effort. Role and credential
-            // source transitions fail closed instead of retaining a stale identity.
-            if (githubTokenInjectors.get(workspaceId) !== registered || registered.reconciliationRequired) throw error;
-          } finally {
-            if (githubTokenInjectors.get(workspaceId) === registered) registerGithubTokenContext(registered);
+            // Same-role PAT refreshes remain best-effort. Role transitions fail
+            // closed rather than returning a workspace with the old identity.
+            if (patKindChanged) throw error;
           }
+          registerGithubTokenContext(registered);
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
       try {
@@ -368,6 +301,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
     };
+
     let existing: Workspace | undefined;
     try {
       existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
@@ -376,8 +310,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     if (existing) {
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
-      // Re-resolve the binding role on every reuse so the live sandbox and
-      // request-scoped refresh tool use the current worker/reviewer identity.
       await reconcileGithubToken();
       return existing;
     }
@@ -417,9 +349,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // sessions with no resolvable run binding — uses the worker token.
       const patKindResolution = await resolveGithubPatKind();
       const patKind = 'patKind' in patKindResolution ? patKindResolution.patKind : 'default';
-      const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
-      const ghCliToken = pat.token ?? token;
-      const credentialSource = pat.sourceKind ?? 'repository';
+      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(
@@ -472,49 +402,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       });
       if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
 
-      const injectGithubToken = (
-        freshToken: string,
-        credentialSource?: GithubTokenSource,
-        refreshedPatKind?: GithubPatKind,
-      ) => {
-        const registered = githubTokenInjectors.get(workspaceId);
-        if (credentialSource === 'reviewer' && refreshedPatKind !== 'reviewer') {
-          throw new Error('GitHub reviewer credentials require an active reviewer workspace role.');
-        }
-        if (refreshedPatKind && registered?.patKind !== refreshedPatKind) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-        }
-        if (registered?.reconciliationRequired && registered.credentialSource !== credentialSource) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace credential source.');
-        }
+      const injectGithubToken = (freshToken: string) => {
         if (!sandbox.setEnvironmentVariable) {
           throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
         }
-        const nextCredentialSource = credentialSource ?? 'unknown';
-        const credentialChanged =
-          registered &&
-          (registered.ghToken !== freshToken || registered.installedCredentialSource !== nextCredentialSource);
         sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
-        if (registered) {
-          registered.ghToken = freshToken;
-          // Unknown sources are re-resolved on the next reuse instead of being trusted as a PAT or repository token.
-          registered.credentialSource = nextCredentialSource;
-          registered.installedCredentialSource = nextCredentialSource;
-          if (credentialChanged) registered.contextVersion += 1;
-          if (refreshedPatKind === registered.patKind && credentialSource) {
-            registered.reconciliationRequired = false;
-          }
-        }
+        const registered = githubTokenInjectors.get(workspaceId);
+        if (registered) registered.ghToken = freshToken;
       };
-      const tokenRegistration: GithubTokenRegistration = {
-        inject: injectGithubToken,
-        patKind,
-        ghToken: ghCliToken,
-        contextVersion: 0,
-        credentialSource,
-        installedCredentialSource: credentialSource,
-        reconciliationRequired: false,
-      };
+      const tokenRegistration = { inject: injectGithubToken, patKind, installedPatKind: patKind, ghToken: ghCliToken };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
 
@@ -548,19 +444,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const inflight = inflightMaterializations.get(workspaceId);
     if (inflight) {
       const workspace = await inflight;
-      // A binding can appear while the leader is materializing. Treat an
-      // inflight follower like any other cached-workspace reuse.
       await reconcileGithubToken();
       return workspace;
     }
     const materialization = materialize();
     inflightMaterializations.set(workspaceId, materialization);
     try {
-      const workspace = await materialization;
-      // The binding can also change while the leader is materializing. Keep
-      // its request-scoped refresh role aligned with the shared sandbox too.
-      await reconcileGithubToken();
-      return workspace;
+      return await materialization;
     } finally {
       inflightMaterializations.delete(workspaceId);
     }
