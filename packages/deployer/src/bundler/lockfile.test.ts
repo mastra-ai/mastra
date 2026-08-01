@@ -33,7 +33,13 @@ class LockfileTestBundler extends Bundler {
     this.options = options;
   }
 
-  async bundle(): Promise<void> {}
+  async bundle(
+    serverFile: string,
+    mastraEntryFile: string,
+    options: { projectRoot: string; outputDirectory: string },
+  ): Promise<void> {
+    await this.runBundle(serverFile, mastraEntryFile, options);
+  }
 
   getEnvFiles(): Promise<string[]> {
     return Promise.resolve([]);
@@ -96,7 +102,7 @@ describe('Bundler bundle lockfile authority', () => {
   it('copies exact lock bytes before the installer and skips secondary npm', async () => {
     const { projectRoot, outputDirectory, bundler } = await createBundleFixture({ lockfile: 'pnpm-lock.yaml' });
 
-    await bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), {
+    await bundler.bundle('server-file', join(projectRoot, 'mastra.ts'), {
       projectRoot,
       outputDirectory,
     });
