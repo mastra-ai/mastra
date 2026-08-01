@@ -114,7 +114,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 ### Plugins
 
-Use `/plugins` to install and manage trusted local or GitHub plugins. Plugins can add tools, commands, skills, system instructions, processors, and signal providers. A plugin can also reach the running controller and session, which means session state, model selection, and workspace access. Because plugins execute code inside Mastra Code and their instructions are appended to the agent prompt, only install plugins from sources you trust.
+Use `/plugins` to install and manage trusted local or GitHub plugins. Plugins can add tools, commands, skills, and system instructions. Because plugins execute code inside Mastra Code and their instructions are appended to the agent prompt, only install plugins from sources you trust.
 
 ### Goals
 
