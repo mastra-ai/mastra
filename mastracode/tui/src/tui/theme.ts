@@ -431,12 +431,24 @@ function setTheme(colors: ThemeColors): void {
 }
 
 /**
+ * Monotonic counter bumped on every theme change. Components that cache
+ * rendered lines key their cache on this so a `/theme` switch invalidates
+ * styled output built under the previous palette.
+ */
+let themeGeneration = 0;
+
+export function getThemeGeneration(): number {
+  return themeGeneration;
+}
+
+/**
  * Apply a theme mode, updating both the surface palette and the theme colors.
  */
 export function applyThemeMode(mode: ThemeMode, terminalBgHex?: string): void {
   currentThemeMode = mode;
   currentTheme = mode === 'light' ? lightTheme : darkTheme;
   detectedTerminalBg = terminalBgHex;
+  themeGeneration++;
   computeAdaptedColors();
   // Set terminal default foreground via OSC 10 so unstyled text (e.g. editor input)
   // adapts to the theme. Convert hex to rgb/ format for OSC.
