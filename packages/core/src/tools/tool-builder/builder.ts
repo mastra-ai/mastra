@@ -32,7 +32,7 @@ import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
-import { BUILDER_VALIDATED_INPUT } from '../tool';
+import { markBuilderValidatedInput } from '../tool';
 import type {
   CoreTool,
   McpMetadata,
@@ -743,7 +743,7 @@ export class CoreToolBuilder extends MastraBase {
             span: toolSpan,
             fn: async () => {
               if (inputValidationSchema) {
-                toolContext = { ...toolContext, [BUILDER_VALIDATED_INPUT]: true };
+                markBuilderValidatedInput(toolContext);
               }
               return tool?.execute?.(args, toolContext);
             },

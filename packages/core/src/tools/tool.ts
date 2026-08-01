@@ -24,16 +24,17 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
  */
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
+/** @internal Tracks contexts that already passed CoreToolBuilder compat validation. */
+const builderValidatedContexts = new WeakMap<object, true>();
+
 /** @internal Set by CoreToolBuilder after compat-layer input validation succeeds. */
-export const BUILDER_VALIDATED_INPUT = Symbol.for('mastra.core.tool.builderValidatedInput');
+export function markBuilderValidatedInput(context: object): void {
+  builderValidatedContexts.set(context, true);
+}
 
 /** @internal */
 export function isBuilderValidatedInput(context: unknown): boolean {
-  return (
-    typeof context === 'object' &&
-    context !== null &&
-    (context as Record<symbol, unknown>)[BUILDER_VALIDATED_INPUT] === true
-  );
+  return typeof context === 'object' && context !== null && builderValidatedContexts.has(context);
 }
 
 /**
