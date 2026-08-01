@@ -44,8 +44,9 @@ const mocks = vi.hoisted(() => ({
   githubReviewerPat: null as string | null,
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
+  runBindingStatus: 'active' as 'active' | 'revoked',
   findRunBindingBySession: vi.fn(async () =>
-    mocks.runBindingRole ? { role: mocks.runBindingRole, orgId: 'org-1' } : null,
+    mocks.runBindingRole ? { role: mocks.runBindingRole, status: mocks.runBindingStatus, orgId: 'org-1' } : null,
   ),
 }));
 
@@ -82,6 +83,7 @@ afterEach(async () => {
   mocks.githubPat = null;
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
+  mocks.runBindingStatus = 'active';
   mocks.findRunBindingBySession.mockClear();
 });
 
@@ -833,13 +835,20 @@ describe('GitHub session workspace preparation', () => {
     mocks.setEnvironmentVariable.mockImplementationOnce(() => {
       throw new Error('runtime injection failed');
     });
+    const destroy = vi.fn(async () => {});
+    const removeWorkspace = vi.fn(async () => true);
     await expect(
       workspace({
         requestContext: createGithubRequestContext('project-1', 'session-a'),
-        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        mastra: {
+          getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn(), destroy })),
+          removeWorkspace,
+        } as any,
       }),
     ).rejects.toThrow('runtime injection failed');
 
+    expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+    expect(destroy).toHaveBeenCalled();
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
@@ -924,6 +933,25 @@ describe('GitHub session workspace preparation', () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'triage';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_worker' },
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it('keeps the worker PAT when only a revoked review binding remains', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    mocks.runBindingStatus = 'revoked';
     const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });

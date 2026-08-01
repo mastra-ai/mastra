@@ -228,7 +228,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       try {
         const address = getFactorySessionAddress(requestContext);
         const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        return runBinding?.role === 'review' && runBinding.orgId === session.orgId ? 'reviewer' : 'default';
+        return runBinding?.role === 'review' && runBinding.status === 'active' && runBinding.orgId === session.orgId
+          ? 'reviewer'
+          : 'default';
       } catch {
         // Preserve the installed role when binding storage is temporarily unavailable.
         return fallback;
@@ -291,6 +293,33 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
     };
+    const reconcileRegisteredWorkspace = async (workspace: Workspace): Promise<Workspace> => {
+      const registered = githubTokenInjectors.get(workspaceId);
+      try {
+        await reconcileGithubToken();
+      } catch (error) {
+        if (registered?.tokenReplacementPending && githubTokenInjectors.get(workspaceId) === registered) {
+          // Invalidate request-scoped refreshes, unregister synchronously, then
+          // best-effort destroy the sandbox that may still hold reviewer credentials.
+          githubTokenInjectors.delete(workspaceId);
+          try {
+            await mastra?.removeWorkspace?.(workspaceId);
+          } catch {
+            // Preserve the credential-replacement error after invalidating refresh contexts.
+          }
+          try {
+            await workspace.destroy();
+          } catch {
+            // The workspace is already unregistered; cleanup can be retried by the sandbox provider.
+          }
+        }
+        throw error;
+      }
+      if (registered && githubTokenInjectors.get(workspaceId) !== registered) {
+        throw new Error('Factory workspace GitHub credential registration is no longer active.');
+      }
+      return workspace;
+    };
 
     let existing: Workspace | undefined;
     try {
@@ -301,8 +330,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       existing = undefined;
     }
     if (existing) {
-      await reconcileGithubToken();
-      return existing;
+      return reconcileRegisteredWorkspace(existing);
     }
 
     const materialize = async (): Promise<Workspace> => {
@@ -438,8 +466,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const inflight = inflightMaterializations.get(workspaceId);
     if (inflight) {
       const workspace = await inflight;
-      await reconcileGithubToken();
-      return workspace;
+      return reconcileRegisteredWorkspace(workspace);
     }
     const materialization = materialize();
     inflightMaterializations.set(workspaceId, materialization);
