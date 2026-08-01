@@ -2,15 +2,18 @@ import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { triggerExperimentBodySchema } from '../schemas/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
   DELETE_DATASET_ROUTE,
   GET_DATASET_ROUTE,
+  GET_EXPERIMENT_ROUTE,
   GET_ITEM_ROUTE,
   GET_ITEM_VERSION_ROUTE,
   LIST_DATASETS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
+  TRIGGER_EXPERIMENT_ROUTE,
   UPDATE_DATASET_ROUTE,
   UPDATE_ITEM_ROUTE,
 } from './datasets';
@@ -625,6 +628,55 @@ describe('Datasets Handlers', () => {
       expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
       expect(byInput.get('disabled')?.scorerIds).toEqual([]);
       expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
+    });
+  });
+
+  describe('experiment metadata', () => {
+    it('keeps name, description and metadata on the trigger body', () => {
+      const parsed = triggerExperimentBodySchema.parse({
+        targetType: 'agent',
+        targetId: 'my-agent',
+        name: 'Baseline run',
+        description: 'Haiku baseline',
+        metadata: { model: 'claude-haiku-4-5' },
+      });
+
+      expect(parsed).toMatchObject({
+        name: 'Baseline run',
+        description: 'Haiku baseline',
+        metadata: { model: 'claude-haiku-4-5' },
+      });
+    });
+
+    it('persists name, description and metadata on the triggered experiment', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Experiment DS' });
+      await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'first' },
+      } as any);
+
+      const triggered = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        targetType: 'agent',
+        targetId: 'my-agent',
+        name: 'Baseline run',
+        description: 'Haiku baseline',
+        metadata: { model: 'claude-haiku-4-5' },
+      } as any)) as any;
+
+      const experiment = (await GET_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: triggered.experimentId,
+      } as any)) as any;
+
+      expect(experiment).toMatchObject({
+        name: 'Baseline run',
+        description: 'Haiku baseline',
+        metadata: { model: 'claude-haiku-4-5' },
+      });
     });
   });
 });
