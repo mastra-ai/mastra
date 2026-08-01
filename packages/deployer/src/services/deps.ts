@@ -189,7 +189,7 @@ export class Deps extends MastraBase {
     this.packageManager = this.getPackageManager();
   }
 
-  private findLockFile(dir: string): string | null {
+  public getLockFile(dir = this.rootDir): string | null {
     const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock'];
     for (const file of lockFiles) {
       if (fs.existsSync(path.join(dir, file))) {
@@ -198,13 +198,13 @@ export class Deps extends MastraBase {
     }
     const parentDir = path.resolve(dir, '..');
     if (parentDir !== dir) {
-      return this.findLockFile(parentDir);
+      return this.getLockFile(parentDir);
     }
     return null;
   }
 
   public getPackageManager(): PackageManager {
-    const lockFile = this.findLockFile(this.rootDir);
+    const lockFile = this.getLockFile();
     switch (lockFile) {
       case 'pnpm-lock.yaml':
         return 'pnpm';
@@ -316,7 +316,7 @@ export class Deps extends MastraBase {
       case 'npm':
         return `${frozen ? 'ci --force' : cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
-        return `${cmd}${frozen ? ' --immutable' : ''}`;
+        return `${cmd}${frozen ? ' --frozen-lockfile' : ''}`;
       case 'pnpm':
         return `${cmd}${frozen ? ' --frozen-lockfile' : ''} --loglevel=error`;
       case 'bun':

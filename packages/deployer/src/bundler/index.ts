@@ -408,8 +408,8 @@ export abstract class Bundler extends MastraBundler {
     });
   }
 
-  protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: PackageManager): PackageManager {
-    return explicitManager ?? new DepsService(rootDir).getPackageManager();
+  protected getBundleDependencyPackageManager(rootDir: string, _explicitManager?: PackageManager): PackageManager {
+    return new DepsService(rootDir).getPackageManager();
   }
 
   protected resolveBundleDependencyInstallState({
@@ -455,7 +455,10 @@ export abstract class Bundler extends MastraBundler {
       throw new Error(`Bundle lockfile must be a file: ${sourcePath}`);
     }
 
-    const packageManager = this.getBundleDependencyPackageManager(projectRoot, explicitManager);
+    const hasSourceLockfile = new DepsService(projectRoot).getLockFile() !== null;
+    const packageManager = hasSourceLockfile
+      ? this.getBundleDependencyPackageManager(projectRoot)
+      : this.getBundleDependencyPackageManager(projectRoot, explicitManager);
     if (explicitManager !== packageManager) {
       throw new Error(`Bundle lockfile ${basename} does not match the ${packageManager} bundle installer`);
     }

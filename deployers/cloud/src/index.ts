@@ -65,7 +65,7 @@ export class CloudDeployer extends Deployer {
 
   async lint() {}
 
-  protected getBundleDependencyPackageManager(_rootDir: string): PackageManager {
+  protected getBundleDependencyPackageManager(_rootDir: string, _explicitManager?: PackageManager): PackageManager {
     return 'npm';
   }
 
