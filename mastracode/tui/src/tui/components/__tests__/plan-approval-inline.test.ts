@@ -197,6 +197,9 @@ describe('PlanApprovalInlineComponent', () => {
         expect(visibleWidth(line)).toBeLessThanOrEqual(42);
       }
       expect(box.render(42)).toBe(narrow);
+      // Byte-identity contract: cached output equals a fresh instance's output.
+      expect(narrow).toEqual(create().render(42));
+      expect(box.render(80)).toEqual(create().render(80));
     });
 
     it('recomputes after invalidate()', () => {

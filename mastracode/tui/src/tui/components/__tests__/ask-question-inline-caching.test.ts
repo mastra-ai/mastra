@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyThemeMode, getThemeMode } from '../../theme.js';
+import { applyThemeMode, getSelectListTheme, getThemeMode } from '../../theme.js';
 import { AskQuestionBorderedBox, AskQuestionInlineComponent } from '../ask-question-inline.js';
+import { WrappingSelectList } from '../wrapping-select-list.js';
 
 const ITEMS = [{ label: 'Option A' }, { label: 'Option B' }];
 
@@ -24,6 +25,9 @@ describe('AskQuestionBorderedBox render caching', () => {
     const narrow = box.render(40);
     expect(narrow).not.toBe(wide);
     expect(box.render(40)).toBe(narrow);
+    // Byte-identity contract: cached output equals a fresh instance's output.
+    expect(narrow).toEqual(answeredBox().render(40));
+    expect(box.render(80)).toEqual(answeredBox().render(80));
   });
 
   it('recomputes after invalidate()', () => {
@@ -45,6 +49,23 @@ describe('AskQuestionBorderedBox render caching', () => {
     } finally {
       applyThemeMode(originalMode);
     }
+  });
+
+  it('never caches interactive boxes: a selection move is reflected in the next render at the same width', () => {
+    const selectList = new WrappingSelectList(
+      ITEMS.map(i => ({ value: i.label, label: i.label })),
+      5,
+      getSelectListTheme(),
+    );
+    const box = new AskQuestionBorderedBox(['Which option?'], 'hint', ITEMS, selectList);
+    const first = box.render(80);
+    expect(first.join('\n')).toContain('→ Option A');
+
+    // Same width, selection moved — a cached render would still show Option A selected.
+    selectList.setSelectedIndex(1);
+    const second = box.render(80);
+    expect(second).not.toBe(first);
+    expect(second.join('\n')).toContain('→ Option B');
   });
 
   it('never caches unsettled boxes: streaming renders reflect updated args', () => {

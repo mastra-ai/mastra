@@ -428,6 +428,7 @@ function getTheme(): ThemeColors {
  */
 function setTheme(colors: ThemeColors): void {
   currentTheme = colors;
+  themeGeneration++;
 }
 
 /**
