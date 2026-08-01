@@ -257,6 +257,11 @@ export const factory = new MastraFactory({
   storage,
   vector,
   pubsub,
+  platform: {
+    // Platform's GitHub App identity is not included in the Platform credentials.
+    // Reuse the deployment's configured App slug to ignore Factory's own handoff writes.
+    githubAppSlug,
+  },
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.
   publicUrl: process.env.MASTRACODE_PUBLIC_URL,
