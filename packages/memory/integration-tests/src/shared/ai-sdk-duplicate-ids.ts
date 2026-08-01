@@ -35,7 +35,6 @@ export function getAiSdkDuplicateIdsTests(models: ModelConfig[]) {
 
         const result = streamTextFunction({
           model,
-          allowSystemInMessages: false,
           system:
             'First say "Let me check the weather", then call the get_weather tool, then summarize what you found.',
           prompt: 'What is the weather in Tokyo?',
