@@ -14,8 +14,8 @@ import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { getGithubPat } from './integrations/github/pat.js';
-import type { GithubPatKind } from './integrations/github/pat.js';
+import { resolveGithubPat } from './integrations/github/pat.js';
+import type { GithubPatKind, ResolvedGithubPat } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
   MaterializeError,
@@ -131,8 +131,13 @@ type GithubTokenRegistration = {
   inject: (token: string) => void;
   patKind: GithubPatKind;
   installedPatKind: GithubPatKind;
+  credentialSource: GithubCredentialSource;
+  installedCredentialSource: GithubCredentialSource;
+  contextVersion: number;
   ghToken: string;
 };
+
+type GithubCredentialSource = GithubPatKind | 'repository';
 
 type GithubPatKindResolution = { patKind: GithubPatKind } | { error: unknown };
 
@@ -245,9 +250,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       assertCurrentGithubTokenRegistration(registered);
       const requestPatKind = registered.patKind;
+      const requestContextVersion = registered.contextVersion;
       registerGithubTokenInjector(requestContext, token => {
         assertCurrentGithubTokenRegistration(registered);
-        if (registered.patKind !== requestPatKind || registered.installedPatKind !== requestPatKind) {
+        if (
+          registered.contextVersion !== requestContextVersion ||
+          registered.patKind !== requestPatKind ||
+          registered.installedPatKind !== requestPatKind ||
+          registered.credentialSource !== registered.installedCredentialSource
+        ) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
         registered.inject(token);
@@ -269,7 +280,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if ('error' in resolution) {
             // A settled identity survives transient binding-storage failures,
             // but a failed role transition must remain unavailable.
-            if (registered.patKind !== registered.installedPatKind) throw resolution.error;
+            if (
+              registered.patKind !== registered.installedPatKind ||
+              registered.credentialSource !== registered.installedCredentialSource
+            ) {
+              throw resolution.error;
+            }
             registerGithubTokenContext(registered);
             return;
           }
@@ -278,17 +294,38 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const patKindChanged = patKind !== registered.installedPatKind;
           // Invalidate older request-scoped injectors before credential I/O so
           // they cannot restore reviewer credentials during a downgrade.
-          registered.patKind = patKind;
+          if (registered.patKind !== patKind) {
+            registered.patKind = patKind;
+            registered.contextVersion += 1;
+          }
+
+          let resolvedPat: ResolvedGithubPat;
           try {
-            const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
-            const ghToken = pat ?? (patKindChanged ? await getRepositoryToken() : null);
+            resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
+          } catch (error) {
+            if (patKindChanged || registered.credentialSource !== registered.installedCredentialSource) throw error;
+            registerGithubTokenContext(registered);
+            return;
+          }
+
+          const credentialSource = resolvedPat?.kind ?? 'repository';
+          const credentialSourceChanged = credentialSource !== registered.installedCredentialSource;
+          if (registered.credentialSource !== credentialSource) {
+            registered.credentialSource = credentialSource;
+            registered.contextVersion += 1;
+          }
+
+          try {
+            const ghToken = resolvedPat?.token ?? (credentialSourceChanged ? await getRepositoryToken() : null);
             assertCurrentGithubTokenRegistration(registered);
             if (ghToken && ghToken !== registered.ghToken) registered.inject(ghToken);
             registered.installedPatKind = patKind;
+            registered.installedCredentialSource = credentialSource;
           } catch (error) {
-            // Same-role PAT refreshes remain best-effort. Role transitions fail
-            // closed rather than returning a workspace with the old identity.
-            if (patKindChanged) throw error;
+            // Same-identity PAT rotations remain best-effort. Identity-source
+            // transitions fail closed instead of returning stale credentials.
+            if (credentialSourceChanged) throw error;
+            registered.installedPatKind = patKind;
           }
           registerGithubTokenContext(registered);
         });
@@ -349,7 +386,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // sessions with no resolvable run binding — uses the worker token.
       const patKindResolution = await resolveGithubPatKind();
       const patKind = 'patKind' in patKindResolution ? patKindResolution.patKind : 'default';
-      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+      let resolvedPat: ResolvedGithubPat = null;
+      try {
+        resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
+      } catch {
+        // Initial materialization remains fail-soft and uses repository access.
+      }
+      const ghCliToken = resolvedPat?.token ?? token;
+      const credentialSource: GithubCredentialSource = resolvedPat?.kind ?? 'repository';
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(
@@ -410,7 +454,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const registered = githubTokenInjectors.get(workspaceId);
         if (registered) registered.ghToken = freshToken;
       };
-      const tokenRegistration = { inject: injectGithubToken, patKind, installedPatKind: patKind, ghToken: ghCliToken };
+      const tokenRegistration = {
+        inject: injectGithubToken,
+        patKind,
+        installedPatKind: patKind,
+        credentialSource,
+        installedCredentialSource: credentialSource,
+        contextVersion: 0,
+        ghToken: ghCliToken,
+      };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
 
@@ -450,7 +502,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const materialization = materialize();
     inflightMaterializations.set(workspaceId, materialization);
     try {
-      return await materialization;
+      const workspace = await materialization;
+      await reconcileGithubToken();
+      return workspace;
     } finally {
       inflightMaterializations.delete(workspaceId);
     }
