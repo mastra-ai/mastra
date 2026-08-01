@@ -408,8 +408,8 @@ export abstract class Bundler extends MastraBundler {
     });
   }
 
-  protected getBundleDependencyPackageManager(rootDir: string, _explicitManager?: PackageManager): PackageManager {
-    return new DepsService(rootDir).getPackageManager();
+  protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: PackageManager): PackageManager {
+    return explicitManager ?? new DepsService(rootDir).getPackageManager();
   }
 
   protected resolveBundleDependencyInstallState({

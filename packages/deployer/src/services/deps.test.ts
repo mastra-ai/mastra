@@ -142,4 +142,27 @@ describe('DepsService explicit lock install commands', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('propagates frozen install failure without a mutable fallback', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-deps-frozen-failure-'));
+    const failure = new Error('frozen install failed');
+    const childProcessLogger = vi.fn().mockRejectedValue(failure);
+    vi.mocked(createChildProcessLogger).mockReturnValueOnce(childProcessLogger as any);
+
+    try {
+      await expect(
+        new DepsService(dir).install({
+          dir,
+          installState: {
+            packageManager: 'pnpm',
+            frozen: true,
+            generateSecondaryNpmLockfile: false,
+          },
+        }),
+      ).rejects.toThrow('frozen install failed');
+      expect(childProcessLogger).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

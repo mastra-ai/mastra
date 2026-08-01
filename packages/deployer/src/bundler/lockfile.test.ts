@@ -2,15 +2,25 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DepsService } from '../services';
 import { Bundler } from './index';
 
-vi.mock('../build/analyze', () => ({
-  analyzeBundle: vi.fn(async () => ({
-    dependencies: new Map([['googleapis', '171.4.0']]),
-    externalDependencies: new Map([['googleapis', { version: '171.4.0' }]]),
-    workspaceMap: new Map(),
-  })),
-}));
+vi.mock('../build/analyze', async () => {
+  const { readFileSync } = await import('node:fs');
+  const issueReproduction = JSON.parse(
+    readFileSync(new URL('./fixtures/issue-20357/package.json', import.meta.url), 'utf8'),
+  ) as { dependencies: Record<string, string> };
+
+  return {
+    analyzeBundle: vi.fn(async () => ({
+      dependencies: new Map(Object.entries(issueReproduction.dependencies)),
+      externalDependencies: new Map(
+        Object.entries(issueReproduction.dependencies).map(([name, version]) => [name, { version }]),
+      ),
+      workspaceMap: new Map(),
+    })),
+  };
+});
 
 const tempDirs: string[] = [];
 
@@ -136,14 +146,44 @@ describe('Bundler bundle lockfile authority', () => {
     await writeFile(join(explicitRoot, 'pnpm-lock.yaml'), 'lock bytes\n');
 
     class NoSourceBundler extends LockfileTestBundler {
-      protected getBundleDependencyPackageManager(_rootDir: string, explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun') {
-        return explicitManager ?? 'npm';
+      protected getBundleDependencyPackageManager(
+        rootDir: string,
+        explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun',
+      ) {
+        return super.getBundleDependencyPackageManager(rootDir, explicitManager);
       }
     }
 
     const state = new NoSourceBundler().resolveState(projectRoot, join(explicitRoot, 'pnpm-lock.yaml'), false);
     expect(state.packageManager).toBe('pnpm');
     expect(state.frozen).toBe(true);
+  });
+
+  it('forwards the install state through the base installer seam', async () => {
+    const { projectRoot, outputDirectory, bundler } = await createBundleFixture();
+    const installState = {
+      packageManager: 'pnpm' as const,
+      frozen: true,
+      generateSecondaryNpmLockfile: false,
+    };
+    const install = vi.spyOn(DepsService.prototype, 'install').mockResolvedValue(undefined);
+
+    try {
+      await (Bundler.prototype as any).installDependencies.call(
+        bundler,
+        outputDirectory,
+        projectRoot,
+        {},
+        installState,
+      );
+      expect(install).toHaveBeenCalledWith({
+        dir: join(outputDirectory, 'output'),
+        pnpmOverrides: {},
+        installState,
+      });
+    } finally {
+      install.mockRestore();
+    }
   });
 
   it('rejects missing, directory, unsupported, and bun.lockb inputs', async () => {
