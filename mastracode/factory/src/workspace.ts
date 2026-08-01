@@ -128,22 +128,21 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
 }
 
+type GithubTokenRegistration = {
+  inject: (token: string, source?: GithubTokenSource, patKind?: GithubPatKind) => void;
+  patKind: GithubPatKind;
+  ghToken: string;
+  // The target source advances before replacement to block stale refreshes.
+  credentialSource: GithubTokenSource | 'unknown';
+  // The installed source advances only after replacement succeeds.
+  installedCredentialSource: GithubTokenSource | 'unknown';
+  reconciliationRequired: boolean;
+};
+
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, fleet, workItems } = options;
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
-  const githubTokenInjectors = new Map<
-    string,
-    {
-      inject: (token: string, source?: GithubTokenSource, patKind?: GithubPatKind) => void;
-      patKind: GithubPatKind;
-      ghToken: string;
-      // The target source advances before replacement to block stale refreshes.
-      credentialSource: GithubTokenSource | 'unknown';
-      // The installed source advances only after replacement succeeds.
-      installedCredentialSource: GithubTokenSource | 'unknown';
-      reconciliationRequired: boolean;
-    }
-  >();
+  const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
   // Concurrent requests for the same session (thread list + activity polling +
   // chat) must not each provision a sandbox and clone the repository. The
   // first caller materializes; followers await the same promise.
@@ -222,6 +221,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
+    const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
+      const requestPatKind = registered.patKind;
+      // Token-only refreshes remain supported, but inherit the role held by
+      // this request so an older reviewer context cannot refresh a worker workspace.
+      registerGithubTokenInjector(requestContext, (token, source, patKind = requestPatKind) => {
+        registered.inject(token, source, patKind);
+      });
+      registerGithubPatKind(requestContext, requestPatKind);
+    };
     const resolveGithubPatKind = async (): Promise<GithubPatKind | undefined> => {
       if (!workItems) return 'default';
       try {
@@ -255,10 +263,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const registered = githubTokenInjectors.get(workspaceId);
           if (!registered) return;
 
-          registerGithubTokenInjector(requestContext, registered.inject);
           const resolvedPatKind = await resolveGithubPatKind();
           if (!resolvedPatKind && !registered.reconciliationRequired) {
-            registerGithubPatKind(requestContext, registered.patKind);
+            registerGithubTokenContext(registered);
             return;
           }
           const patKind = resolvedPatKind ?? registered.patKind;
@@ -297,7 +304,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             // source transitions fail closed instead of retaining a stale identity.
             if (registered.reconciliationRequired) throw error;
           } finally {
-            registerGithubPatKind(requestContext, registered.patKind);
+            registerGithubTokenContext(registered);
           }
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
@@ -442,16 +449,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
         }
       };
-      githubTokenInjectors.set(workspaceId, {
+      const tokenRegistration: GithubTokenRegistration = {
         inject: injectGithubToken,
         patKind,
         ghToken: ghCliToken,
         credentialSource,
         installedCredentialSource: credentialSource,
         reconciliationRequired: false,
-      });
-      registerGithubTokenInjector(requestContext, injectGithubToken);
-      registerGithubPatKind(requestContext, patKind);
+      };
+      githubTokenInjectors.set(workspaceId, tokenRegistration);
+      registerGithubTokenContext(tokenRegistration);
 
       const filesystem = new SandboxFilesystem({ sandbox, workdir });
       const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
