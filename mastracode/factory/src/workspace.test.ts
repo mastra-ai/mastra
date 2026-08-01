@@ -816,6 +816,66 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
   });
 
+  it('fails closed when a removed reviewer PAT cannot fall back to the worker credential', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerContext });
+
+    mocks.githubReviewerPat = null;
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime injection failed');
+    });
+    const existing = { setToolsConfig: vi.fn() };
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('runtime injection failed');
+
+    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+
+    mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('binding lookup failed'));
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('binding lookup failed');
+  });
+
+  it('keeps reviewer PAT rotation injection failures best-effort', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer_old';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerContext });
+
+    mocks.githubReviewerPat = 'ghp_reviewer_current';
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime injection failed');
+    });
+    const existing = { setToolsConfig: vi.fn() };
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).resolves.toBe(existing);
+
+    expect(() => injectGithubToken(reviewerContext, 'ghp_reviewer_refreshed')).not.toThrow();
+  });
+
   it('invalidates reviewer token refresh contexts when a cached workspace returns to work', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
