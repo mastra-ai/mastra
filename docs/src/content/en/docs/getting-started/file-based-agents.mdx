@@ -21,7 +21,7 @@ This approach reduces glue code and makes the file system itself a direct repres
 
 You can build your entire project with file-based agents or combine this approach with agents and other primitives defined directly in code for incremental adoption.
 
-File-based agents have some limitations while in beta. Not every Mastra feature can be defined in a file yet, and they're not the best fit for dynamic configuration or runtime wiring. When needed, you can define agents and related primitives directly in code.
+File-based agents have some limitations while in beta. They don't support every Mastra feature yet. Runtime configuration and wiring are usually better defined directly in code, along with any related primitives.
 
 :::note
 
@@ -93,7 +93,7 @@ Map each primitive or feature to its file convention:
 | [Logger](/reference/file-based-agents/logger) | `src/mastra/logger.ts` |
 | [Server config](/reference/file-based-agents/server) | `src/mastra/server.ts` |
 | [Studio config](/reference/file-based-agents/studio) | `src/mastra/studio.ts` |
-| [Schedules](/docs/long-running-agents/schedules) | Not yet file-based — create at runtime with `mastra.schedules.create()` |
+| [Schedules](/docs/long-running-agents/schedules) | Not yet file-based, create at runtime with `mastra.schedules.create()` |
 
 ## Discovery lifecycle
 
@@ -101,7 +101,9 @@ File-based primitives are discovered by the Mastra bundler under `mastra dev` an
 
 After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). Calling it from the Agent API, Studio, workflows, or your application code uses the same runtime as a code-defined agent.
 
-Discovery is source-based and conservative. It skips symlinks, ignores test files, treats workflows and singleton project files as file-routed only when they have a default export, and ignores directories that aren't agent directories.
+Discovery is source-based and conservative.
+
+It skips symlinks, test files, and directories that aren't agent directories. Workflows and singleton project files are file-routed only when they have a default export.
 
 Start your app through the Mastra CLI so discovery runs:
 

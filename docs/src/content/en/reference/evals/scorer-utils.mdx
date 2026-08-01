@@ -317,7 +317,7 @@ const result = await myScorer.run({
 
 ### `extractTrajectory`
 
-Extracts a `Trajectory` from agent output messages (`MastraDBMessage[]`). Converts tool invocations into `ToolCallStep` objects. The `runEvals` pipeline calls this automatically for trajectory scorers — you only need it for direct testing.
+Extracts a `Trajectory` from agent output messages (`MastraDBMessage[]`). Converts tool invocations into `ToolCallStep` objects. The `runEvals` pipeline calls this automatically for trajectory scorers: you only need it for direct testing.
 
 Available from `@mastra/core/evals`.
 
@@ -329,7 +329,7 @@ const trajectory = extractTrajectory(agentOutputMessages)
 // trajectory.rawOutput — the original MastraDBMessage[] array
 ```
 
-**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawOutput`.
+**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawOutput`.
 
 ### `extractWorkflowTrajectory`
 
@@ -347,7 +347,7 @@ const trajectory = extractWorkflowTrajectory(
 // trajectory.steps — WorkflowStepStep[] in execution order
 ```
 
-**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawWorkflowResult`.
+**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawWorkflowResult`.
 
 ### `extractTrajectoryFromTrace`
 
@@ -396,7 +396,7 @@ Spans with types `GENERIC`, `MODEL_STEP`, `MODEL_CHUNK`, and `WORKFLOW_CONDITION
 
 Compares an actual trajectory against an expected trajectory and returns a detailed comparison result. Used internally by `createTrajectoryAccuracyScorerCode`.
 
-The `expected` parameter accepts either a `Trajectory` (actual trajectory) or `{ steps: ExpectedStep[] }`. When using `ExpectedStep[]`, you can match by name only, name + stepType, or include data for comparison. See [Expected steps](/reference/evals/trajectory-accuracy#expected-steps) for details.
+The `expected` parameter accepts either a `Trajectory` (actual trajectory) or `{ steps: ExpectedStep[] }`. When using `ExpectedStep[]`, you can match by name only or by name + stepType. You can also include data for comparison. See [Expected steps](/reference/evals/trajectory-accuracy#expected-steps) for details.
 
 ```typescript
 import { compareTrajectories } from '@mastra/evals/scorers/utils'

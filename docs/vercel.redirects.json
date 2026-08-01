@@ -1,8 +1,18 @@
 {
   "redirects": [
     {
+      "source": "/docs/mastra-platform/workspace",
+      "destination": "/docs/mastra-platform/workspaces",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels",
       "destination": "/docs/capabilities/channels/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/livekit",
+      "destination": "/docs/voice/realtime-voice",
       "permanent": true
     },
     {

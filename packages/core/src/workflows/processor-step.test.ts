@@ -307,7 +307,9 @@ describe('createStep with Processor', () => {
       expect(messageList.markResponseMessageBoundary).toHaveBeenCalledTimes(1);
       expect(messageList.addSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'system-reminder' }));
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal', transient: true }));
+      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal', transient: true }), {
+        messageId: 'response-2',
+      });
     });
 
     it('should provide sendSignal when phase is inputStep and messageList is synthesized', async () => {

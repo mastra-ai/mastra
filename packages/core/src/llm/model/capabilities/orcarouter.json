@@ -24,6 +24,7 @@
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
     "grok/grok-4.3",
+    "kimi/kimi-k2.5",
     "kimi/kimi-k2.6",
     "openai/gpt-4",
     "openai/gpt-4-turbo",
@@ -62,7 +63,8 @@
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
     "qwen/qwen3.5-397b-a17b",
-    "qwen/qwen3.6-35b-a3b"
+    "qwen/qwen3.6-35b-a3b",
+    "qwen/qwen3.6-plus"
   ],
   "temperature": [
     "anthropic/claude-haiku-4.5",

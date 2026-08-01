@@ -1,6 +1,5 @@
 {
   "attachment": [
-    "fugu-ultra",
     "gemma-4-26b-a4b",
     "kimi-k2-6",
     "kimi-k2-7-code",
@@ -49,6 +48,7 @@
     "qwen3-5-9b",
     "qwen3-5-plus",
     "qwen3-6-27b",
+    "qwen3-6-35b-a3b",
     "qwen3-6-flash",
     "qwen3-6-max-preview",
     "qwen3-6-plus",
@@ -62,7 +62,6 @@
   "structuredOutput": [
     "deepseek-v4-flash",
     "deepseek-v4-pro",
-    "fugu-ultra",
     "gemma-4-26b-a4b",
     "glm-4-5-flash",
     "glm-4-7-flash",
@@ -88,6 +87,7 @@
     "qwen3-5-9b",
     "qwen3-5-plus",
     "qwen3-6-27b",
+    "qwen3-6-35b-a3b",
     "qwen3-6-flash",
     "qwen3-6-max-preview",
     "qwen3-6-plus",

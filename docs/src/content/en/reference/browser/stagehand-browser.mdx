@@ -175,7 +175,7 @@ Core tools:
 | - | - |
 | `stagehand_act` | Perform actions using natural language instructions |
 | `stagehand_extract` | Extract structured data from pages |
-| `stagehand_observe` | Discover actionable elements on a page |
+| `stagehand_observe` | Discover useful elements on a page |
 | `stagehand_navigate` | Navigate to a URL |
 | `stagehand_tabs` | Manage browser tabs |
 | `stagehand_screenshot` | Capture a screenshot as PNG (viewport by default; set `fullPage: true` for full page) |
@@ -267,7 +267,7 @@ interface ExtractResult<T = unknown> {
 
 ### `stagehand_observe`
 
-Discover actionable elements on a page. Returns a list of elements with their selectors and descriptions.
+Discover useful elements on a page. Returns a list of elements with their selectors and descriptions.
 
 ```text
 // Find specific elements
@@ -318,7 +318,7 @@ Navigate to a URL.
 
 | Parameter | Type | Description |
 | - | - | - |
-| `url` | `string` | URL to navigate to (required) |
+| `url` | `string` | URL to open (required) |
 | `waitUntil` | `"load" \| "domcontentloaded" \| "networkidle"` | When to consider navigation complete (optional) |
 
 ### `stagehand_tabs`
@@ -341,7 +341,7 @@ Manage browser tabs.
 
 ### `stagehand_screenshot`
 
-Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `stagehand_observe` or `stagehand_extract` when you only need text or structured data.
+Capture a screenshot of the current page as PNG (viewport by default. Set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `stagehand_observe` or `stagehand_extract` when you only need text or structured data.
 
 ```text
 // Viewport only (default)

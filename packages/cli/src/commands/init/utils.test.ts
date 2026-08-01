@@ -28,7 +28,8 @@ vi.mock('../auth/orgs.js', () => ({
   resolveCurrentOrg: vi.fn(),
 }));
 
-const { getAPIKey, promptForObservability, writeObservabilityEnv, writeIndexFile } = await import('./utils');
+const { getAPIKey, promptForObservability, writeAPIKey, writeObservabilityEnv, writeIndexFile } =
+  await import('./utils');
 const prompts = await import('@clack/prompts');
 const { getToken, loadCredentials } = await import('../auth/credentials.js');
 const { resolveCurrentOrg } = await import('../auth/orgs.js');
@@ -203,6 +204,55 @@ describe('writeIndexFile', () => {
   });
 });
 
+describe('writeAPIKey', () => {
+  const cwd = '/mock-project';
+
+  beforeEach(() => {
+    vol.reset();
+    fs.mkdirSync(cwd, { recursive: true });
+    vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+  });
+
+  test.each([
+    ['sk-proj-abc123', 'plain key'],
+    ['sk-proj-a+b/c=d', 'key containing ='],
+    ['AIzaSyBx9K2mQ==', 'base64 padded key'],
+    ['sk-proj-a"b&c|d', 'key containing shell metacharacters'],
+  ])('writes %s verbatim (%s)', async apiKey => {
+    await writeAPIKey({ provider: 'openai', apiKey });
+
+    const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
+    expect(contents).toBe(`OPENAI_API_KEY=${apiKey}\n`);
+  });
+
+  test('writes a placeholder to .env.example when no key is given', async () => {
+    await writeAPIKey({ provider: 'anthropic' });
+
+    expect(fs.existsSync(`${cwd}/.env`)).toBe(false);
+    const contents = fs.readFileSync(`${cwd}/.env.example`, 'utf-8') as string;
+    expect(contents).toBe('ANTHROPIC_API_KEY=your-api-key\n');
+  });
+
+  test('appends without disturbing existing entries', async () => {
+    fs.writeFileSync(`${cwd}/.env`, 'EXISTING=1\n');
+
+    await writeAPIKey({ provider: 'openai', apiKey: 'sk-proj-abc123' });
+
+    const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
+    expect(contents).toBe('EXISTING=1\nOPENAI_API_KEY=sk-proj-abc123\n');
+  });
+
+  test('restricts permissions on an existing .env file', async () => {
+    fs.writeFileSync(`${cwd}/.env`, 'EXISTING=1\n', { mode: 0o644 });
+
+    await writeAPIKey({ provider: 'openai', apiKey: 'sk-proj-abc123' });
+
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(`${cwd}/.env`).mode & 0o777).toBe(0o600);
+    }
+  });
+});
+
 describe('writeObservabilityEnv', () => {
   const cwd = '/mock-project';
 
@@ -219,7 +269,7 @@ describe('writeObservabilityEnv', () => {
 
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toContain('EXISTING=1');
-    expect(contents).toContain('# Mastra Observability');
+    expect(contents).toContain('# Mastra platform');
     expect(contents).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=');
     expect(contents).not.toMatch(/MASTRA_PLATFORM_ACCESS_TOKEN=\S/);
   });
@@ -257,5 +307,47 @@ describe('writeObservabilityEnv', () => {
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=');
     expect(contents).toContain('MASTRA_PROJECT_ID=');
+  });
+
+  test('writes to an explicit project path and preserves provider credentials', async () => {
+    const projectPath = '/published-project';
+    fs.mkdirSync(projectPath, { recursive: true });
+    fs.writeFileSync(`${projectPath}/.env`, 'ANTHROPIC_API_KEY=provider-secret\n');
+
+    await writeObservabilityEnv({ projectPath, token: 'platform-secret', projectId: 'project-id' });
+
+    expect(fs.existsSync(`${cwd}/.env`)).toBe(false);
+    expect(fs.readFileSync(`${projectPath}/.env`, 'utf8')).toContain('ANTHROPIC_API_KEY=provider-secret');
+    expect(fs.readFileSync(`${projectPath}/.env`, 'utf8')).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=platform-secret');
+  });
+
+  test('updates existing Mastra platform values without duplicating assignments', async () => {
+    fs.writeFileSync(
+      `${cwd}/.env`,
+      [
+        'OPENAI_API_KEY=provider-secret',
+        'MASTRA_PLATFORM_ACCESS_TOKEN=old-token',
+        'MASTRA_PLATFORM_ACCESS_TOKEN=duplicate-token',
+        'MASTRA_PROJECT_ID=old-project',
+        '',
+      ].join('\n'),
+    );
+
+    await writeObservabilityEnv({ token: 'new-token', projectId: 'new-project' });
+
+    const contents = fs.readFileSync(`${cwd}/.env`, 'utf8') as string;
+    expect(contents).toContain('OPENAI_API_KEY=provider-secret');
+    expect(contents.match(/^MASTRA_PLATFORM_ACCESS_TOKEN=/gm)).toHaveLength(1);
+    expect(contents).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=new-token');
+    expect(contents.match(/^MASTRA_PROJECT_ID=/gm)).toHaveLength(1);
+    expect(contents).toContain('MASTRA_PROJECT_ID=new-project');
+  });
+
+  test.runIf(process.platform !== 'win32')('sets .env permissions to 0600', async () => {
+    fs.writeFileSync(`${cwd}/.env`, 'EXISTING=1\n', { mode: 0o644 });
+
+    await writeObservabilityEnv();
+
+    expect(fs.statSync(`${cwd}/.env`).mode & 0o777).toBe(0o600);
   });
 });

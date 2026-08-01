@@ -5,7 +5,7 @@ description: "Learn how to migrate client SDK changes when upgrading to v1."
 
 # Client SDK
 
-Client SDK changes align with server-side API updates including renamed utilities, updated pagination, and type naming conventions.
+Client SDK changes align with server-side API updates, including utility renames, updated pagination, and type naming conventions.
 
 ## Changed
 
@@ -137,7 +137,7 @@ npx @mastra/codemod@latest v1/client-sdk-types .
 
 ### Pagination parameters from `offset/limit` to `page/perPage`
 
-All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
+All client SDK methods that used `offset/limit` now use `page/perPage`, matching page-based web pagination.
 
 To migrate, update pagination parameters in all client SDK method calls. Example:
 
@@ -230,7 +230,7 @@ To migrate, use `runById()` instead, which now returns the same unified `Workflo
 
 ### `toAISdkFormat` function
 
-The `toAISdkFormat()` function has been removed from `@mastra/ai-sdk`. This change provides clearer naming for stream conversion utilities.
+The `toAISdkFormat()` function has been removed from `@mastra/ai-sdk`. Use the stream conversion utilities shown below instead.
 
 To migrate, use `toAISdkStream()` instead.
 

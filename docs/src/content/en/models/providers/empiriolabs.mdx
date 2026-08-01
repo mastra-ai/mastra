@@ -70,18 +70,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.3
   },
   {
-    "model": "empiriolabs/fugu-ultra",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": 7.5,
-    "outputCost": 45
-  },
-  {
     "model": "empiriolabs/gemma-4-26b-a4b",
     "imageInput": true,
     "audioInput": false,
@@ -380,6 +368,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 0.412564,
     "outputCost": 2.475384
+  },
+  {
+    "model": "empiriolabs/qwen3-6-35b-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.07,
+    "outputCost": 0.42
   },
   {
     "model": "empiriolabs/qwen3-6-flash",

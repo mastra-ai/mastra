@@ -463,6 +463,19 @@ export interface DuckDBStoreConfig {
    * Use ':memory:' for an ephemeral in-memory database.
    */
   path?: string;
+  /**
+   * Maximum memory DuckDB may use (e.g. '2GB', '512MB').
+   * @default '2GB'
+   * DuckDB's own default is 80% of system RAM, which is far too aggressive
+   * for a store embedded in an application server.
+   */
+  memoryLimit?: string;
+  /**
+   * Number of threads DuckDB may use. Defaults to DuckDB's default (one per
+   * CPU core). Lower this to keep queries from monopolizing all cores of a
+   * shared application server.
+   */
+  threads?: number;
 }
 
 /**
@@ -497,7 +510,7 @@ export class DuckDBStore extends MastraCompositeStore {
     const id = config.id ?? 'duckdb';
     super({ id, name: 'DuckDBStore' });
 
-    this.db = new DuckDBConnection({ path: config.path });
+    this.db = new DuckDBConnection({ path: config.path, memoryLimit: config.memoryLimit, threads: config.threads });
     this.observabilityStore = new ObservabilityStorageDuckDB({ db: this.db });
 
     this.stores = {
