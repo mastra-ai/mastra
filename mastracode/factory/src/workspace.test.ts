@@ -1240,6 +1240,29 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
   });
 
+  it('rejects a token-only refresh from a request holding a replaced reviewer credential', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const staleReviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: staleReviewerRequestContext });
+    mocks.githubReviewerPat = null;
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    mocks.setEnvironmentVariable.mockClear();
+
+    expect(() => injectGithubToken(staleReviewerRequestContext, 'ghp_reviewer')).toThrow(
+      'GitHub token refresh no longer matches the active Factory workspace credential source.',
+    );
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
   it('does not reuse stale reviewer credentials when worker-PAT fallback injection fails', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';

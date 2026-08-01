@@ -223,10 +223,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       const requestPatKind = registered.patKind;
-      // Token-only refreshes remain supported, but inherit the role held by
-      // this request so an older reviewer context cannot refresh a worker workspace.
+      let requestCredentialSource = registered.credentialSource;
+      // Bind refreshes to the role and credential source held by this request
+      // so an older context cannot restore credentials that reuse replaced.
       registerGithubTokenInjector(requestContext, (token, source, patKind = requestPatKind) => {
+        if (registered.patKind !== requestPatKind) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
+        if (registered.credentialSource !== requestCredentialSource && source !== registered.credentialSource) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace credential source.');
+        }
         registered.inject(token, source, patKind);
+        requestCredentialSource = registered.credentialSource;
       });
       registerGithubPatKind(requestContext, requestPatKind);
     };
@@ -428,11 +436,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (refreshedPatKind && registered?.patKind !== refreshedPatKind) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
-        if (
-          credentialSource &&
-          registered?.reconciliationRequired &&
-          registered.credentialSource !== credentialSource
-        ) {
+        if (registered?.reconciliationRequired && registered.credentialSource !== credentialSource) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace credential source.');
         }
         if (!sandbox.setEnvironmentVariable) {
