@@ -687,20 +687,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     toolCallId: inputData.toolCallId,
                     toolName: inputData.toolName,
                     args: inputData.args,
-                    resumeSchema: JSON.stringify(
-                      standardSchemaToJSONSchema(
-                        toStandardSchema(
-                          z.object({
-                            approved: z
-                              .boolean()
-                              .describe(
-                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                              ),
-                            reason: z.string().optional().describe('Reason for declining the tool call'),
-                          }),
-                        ),
-                      ),
-                    ),
+                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                   },
                 },
                 'approval',
@@ -718,20 +705,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 type: 'approval',
                 suspendedToolRunId: options.runId,
-                resumeSchema: JSON.stringify(
-                  standardSchemaToJSONSchema(
-                    toStandardSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                        reason: z.string().optional().describe('Reason for declining the tool call'),
-                      }),
-                    ),
-                  ),
-                ),
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                 metadata: approvalChunk.metadata,
               });
 

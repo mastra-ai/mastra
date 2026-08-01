@@ -144,7 +144,6 @@ describeForAllEngines(
 
       // Verify the recalled invocation carries the custom reason
       const { messages } = await sharedMemory.recall({ threadId, resourceId });
-      console.log('RECALLED MESSAGES FOR GENERATE:', JSON.stringify(messages, null, 2));
       const declined = messages
         .flatMap((m: any) => m.content?.parts ?? [])
         .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'sensitive-op')
