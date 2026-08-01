@@ -514,7 +514,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const materialization = materialize();
     inflightMaterializations.set(workspaceId, materialization);
     try {
-      return await materialization;
+      const workspace = await materialization;
+      await reconcileGithubToken();
+      return workspace;
     } finally {
       inflightMaterializations.delete(workspaceId);
     }

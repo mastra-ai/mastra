@@ -991,6 +991,39 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
   });
 
+  it('reconciles a reviewer downgrade that occurs during leader materialization', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    let releaseMaterialization!: () => void;
+    mocks.materializeRepo.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          releaseMaterialization = resolve;
+        }),
+    );
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const materialization = workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+    });
+    await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      { GH_TOKEN: 'ghp_reviewer' },
+      undefined,
+      expect.any(Object),
+    );
+
+    mocks.runBindingRole = 'work';
+    releaseMaterialization();
+    await materialization;
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+  });
+
   it('falls back to the worker PAT for review sessions without a reviewer token', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.runBindingRole = 'review';
