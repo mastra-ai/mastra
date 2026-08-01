@@ -1,0 +1,103 @@
+---
+title: "Reference: Neon storage | Storage"
+description: "Use Neon Postgres as a Mastra storage and vector backend."
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+---
+
+# Neon storage
+
+[Neon](https://neon.com) is a managed PostgreSQL service. Mastra connects to Neon through [`PostgresStore`](/reference/storage/postgresql), which uses the Node.js `pg` driver. Neon doesn't require a separate Mastra storage package.
+
+## Quickstart
+
+Create a Neon project and copy a [direct connection string](https://neon.com/docs/connect/connect-from-any-app) into a server-side environment variable:
+
+```bash
+DATABASE_URL="<your-neon-connection-string>"
+```
+
+Install the PostgreSQL storage package:
+
+```bash npm2yarn
+npm install @mastra/pg@latest
+```
+
+Pass the connection string to `PostgresStore`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'neon-storage',
+    connectionString: process.env.DATABASE_URL!,
+  }),
+})
+```
+
+Mastra calls `storage.init()` during startup and creates the required tables and indexes.
+
+:::warning[Node.js runtime required]
+
+`@mastra/pg` uses the Node.js `pg` driver. Integration with [`@neondatabase/serverless`](https://neon.com/docs/serverless/serverless-driver) isn't currently documented or tested.
+
+:::
+
+## Production connections
+
+Neon provides direct and pooled connection strings:
+
+- **Direct connections**: Use for schema initialization and migrations.
+- **Pooled connections**: Use for application traffic and deployments that create many concurrent connections. The hostname contains `-pooler`.
+
+For deployment, store the pooled connection string in `DATABASE_URL` and the direct connection string in `DATABASE_URL_UNPOOLED`. Initialize the schema with the direct connection:
+
+```typescript title="scripts/init-storage.ts"
+import { PostgresStore } from '@mastra/pg'
+
+const storage = new PostgresStore({
+  id: 'neon-storage-init',
+  connectionString: process.env.DATABASE_URL_UNPOOLED!,
+})
+
+try {
+  await storage.init()
+} finally {
+  await storage.close()
+}
+```
+
+After the schema exists, use the pooled connection at runtime and disable automatic initialization:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'neon-storage',
+    connectionString: process.env.DATABASE_URL!,
+    disableInit: true,
+  }),
+})
+```
+
+See [Neon connection pooling](https://neon.com/docs/connect/connection-pooling) for details.
+
+## Vector search
+
+Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use [`PgVector`](/reference/vectors/pg) for semantic recall and vector search:
+
+```typescript
+import { PgVector } from '@mastra/pg'
+
+const vector = new PgVector({
+  id: 'neon-vector',
+  connectionString: process.env.DATABASE_URL_UNPOOLED!,
+})
+```
+
+`PgVector` installs the extension when it creates the first index. Use a direct connection for setup. After the extension and indexes exist, use the pooled connection with `disableInit: true`.
