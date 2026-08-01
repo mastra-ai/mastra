@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import { useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useJiraIssuesQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { issueCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
+import { issueCandidate, jiraCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
 import type { BoardCandidate, IntakeSource } from '../boardCandidates';
 import { AUTO_TRIAGED_LABEL, hasLabel } from '../boardItems';
 import type { BoardKind } from '../boardStages';
@@ -32,6 +33,7 @@ export function useBoardIntake({
   const projectRepositoryId = repository.projectRepositoryId;
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
+  const jiraStatusQuery = useJiraStatusQuery();
 
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
@@ -40,6 +42,8 @@ export function useBoardIntake({
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =
     (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0;
+  const jiraConfigured = Boolean(jiraStatusQuery.data?.enabled && jiraStatusQuery.data.configured);
+  const jiraReady = (config?.jira.enabled ?? false) && jiraConfigured && (config?.jira.sourceIds?.length ?? 0) > 0;
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
@@ -47,7 +51,11 @@ export function useBoardIntake({
   const githubIntakeActive = githubEnabled && githubSelected;
   const available: IntakeSource[] = review
     ? ['github-prs']
-    : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
+    : [
+        ...(githubIntakeActive ? (['github'] as const) : []),
+        ...(linearReady ? (['linear'] as const) : []),
+        ...(jiraReady ? (['jira'] as const) : []),
+      ];
   const [selected, setSelected] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
@@ -56,6 +64,7 @@ export function useBoardIntake({
   const triageIssues = useProjectIssuesQuery(!review ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
   const pulls = useProjectPullRequestsQuery(active === 'github-prs' ? projectRepositoryId : undefined);
   const linearIssues = useLinearIssuesQuery(active === 'linear' ? factoryProjectId : undefined);
+  const jiraIssues = useJiraIssuesQuery(active === 'jira');
 
   const candidates = useMemo(() => {
     const intakeIssues = (active === 'github' ? (issues.data ?? []) : []).filter(
@@ -67,9 +76,10 @@ export function useBoardIntake({
           ...intakeIssues.map(issueCandidate),
           ...(triageIssues.data ?? []).map(issueCandidate),
           ...(active === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
+          ...(active === 'jira' ? (jiraIssues.data ?? []).map(jiraCandidate) : []),
         ];
     return all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
-  }, [knownSourceKeys, issues.data, triageIssues.data, pulls.data, linearIssues.data, active, review]);
+  }, [knownSourceKeys, issues.data, triageIssues.data, pulls.data, linearIssues.data, jiraIssues.data, active, review]);
 
   return {
     available,
@@ -80,11 +90,16 @@ export function useBoardIntake({
     issues,
     pulls,
     linearIssues,
+    jiraIssues,
     isPending:
-      (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
+      (!review &&
+        (configQuery.isPending ||
+          ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
+          ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending))) ||
       (active === 'github' && issues.isPending) ||
       (active === 'github-prs' && pulls.isPending) ||
-      (active === 'linear' && linearIssues.isPending),
+      (active === 'linear' && linearIssues.isPending) ||
+      (active === 'jira' && jiraIssues.isPending),
     isTriagePending: !review && triageIssues.isPending,
   };
 }

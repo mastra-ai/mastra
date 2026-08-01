@@ -20,6 +20,10 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Ambient Jira feature status (read wherever the intake surface renders).
+  // 404 mirrors a deployment without the JIRA_* env group — routes not
+  // mounted, the service degrades to disabled. Jira tests override it.
+  http.get('*/web/jira/status', () => HttpResponse.json(null, { status: 404 })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),

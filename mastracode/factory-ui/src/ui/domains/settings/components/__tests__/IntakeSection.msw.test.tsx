@@ -7,12 +7,15 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { IntakeConfig } from '../../../factory/services/intake';
+import type { JiraProject, JiraStatus } from '../../../factory/services/jira';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
 import { IntakeSection } from '../IntakeSection';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const LINEAR_STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
+const JIRA_STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
+const JIRA_PROJECTS_URL = `${TEST_BASE_URL}/web/jira/projects`;
 
 function baseConfig(): IntakeConfig {
   return {
@@ -37,6 +40,26 @@ const linearProjects: LinearProject[] = [
   { id: 'lproj-2', name: 'Design refresh', state: 'planned', teams: [] },
   { id: 'lproj-3', name: 'Shared initiative', state: 'started', teams: [engTeam, designTeam] },
 ];
+
+const configuredJiraStatus: JiraStatus = {
+  enabled: true,
+  configured: true,
+  site: 'acme.atlassian.net',
+  reason: 'ready',
+};
+
+const jiraProjects: JiraProject[] = [
+  { id: '10001', name: 'Engineering', key: 'ENG' },
+  { id: '10002', name: 'Operations', key: 'OPS' },
+];
+
+/** Register configured-Jira handlers on top of `useIntakeHandlers` (whose default is the ambient 404). */
+function useJiraHandlers(status: JiraStatus = configuredJiraStatus) {
+  server.use(
+    http.get(JIRA_STATUS_URL, () => HttpResponse.json(status)),
+    http.get(JIRA_PROJECTS_URL, () => HttpResponse.json({ projects: jiraProjects })),
+  );
+}
 
 function seedGithubProject() {
   server.use(
@@ -380,6 +403,90 @@ describe('IntakeSection', () => {
       // GitHub defaults to enabled; Linear stays off until it's connected here.
       expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
       expect(screen.getByRole('switch', { name: 'Sync Linear issues' })).not.toBeChecked();
+    });
+  });
+
+  describe('given Jira is not configured on the server', () => {
+    it('explains the env vars and disables the toggle without a connect button', async () => {
+      // No Jira handlers registered — the ambient 404 mirrors a deployment
+      // without the JIRA_* env group (routes not mounted).
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText(
+          'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: /Connect Jira/ })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given Jira is configured and enabled', () => {
+    it('shows the site and the project picker', async () => {
+      useIntakeHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      useJiraHandlers();
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Connected to acme.atlassian.net')).toBeInTheDocument();
+      const projects = await screen.findByRole('group', { name: 'Projects' });
+      await userEvent.click(within(projects).getByRole('button', { name: 'Projects' }));
+      expect(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' })).toBeInTheDocument();
+      expect(within(projects).getByRole('checkbox', { name: 'OPS · Operations' })).toBeInTheDocument();
+    });
+
+    it('persists an explicit Jira project selection under the jira key', async () => {
+      const saved = useIntakeHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      useJiraHandlers();
+
+      renderIntakeSection();
+
+      const projects = await screen.findByRole('group', { name: 'Projects' });
+      await userEvent.click(within(projects).getByRole('button', { name: 'Projects' }));
+      await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.jira.sourceIds).toEqual(['10001']);
+      expect(saved[0]!.jira.enabled).toBe(true);
+    });
+  });
+
+  describe('given Jira is configured but disabled', () => {
+    it('persists the config with jira enabled when the switch is toggled', async () => {
+      const saved = useIntakeHandlers();
+      useJiraHandlers();
+
+      renderIntakeSection();
+
+      const jiraSwitch = await screen.findByRole('switch', { name: 'Sync Jira issues' });
+      await waitFor(() => expect(jiraSwitch).toBeEnabled());
+      await userEvent.click(jiraSwitch);
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.jira.enabled).toBe(true);
+      expect(saved[0]!.github.enabled).toBe(true);
+    });
+  });
+
+  describe('given Jira rejects the configured credentials', () => {
+    it('explains the credential failure instead of an empty project picker', async () => {
+      useIntakeHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      server.use(
+        http.get(JIRA_STATUS_URL, () => HttpResponse.json(configuredJiraStatus)),
+        http.get(JIRA_PROJECTS_URL, () => HttpResponse.json({ error: 'jira_auth_failed' }, { status: 409 })),
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText(
+          'Jira rejected the configured credentials. Update JIRA_EMAIL and JIRA_API_TOKEN on the server.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Projects' })).not.toBeInTheDocument();
     });
   });
 
