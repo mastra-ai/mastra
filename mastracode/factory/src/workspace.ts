@@ -223,13 +223,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
+    const assertCurrentGithubTokenRegistration = (registered: GithubTokenRegistration): void => {
+      if (githubTokenInjectors.get(workspaceId) !== registered) {
+        throw new Error('GitHub token refresh request context is stale for the active Factory workspace.');
+      }
+    };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
+      assertCurrentGithubTokenRegistration(registered);
       const requestPatKind = registered.patKind;
       let requestCredentialSource = registered.credentialSource;
       let requestContextVersion = registered.contextVersion;
       // Bind refreshes to the role and credential source held by this request
       // so an older context cannot restore credentials that reuse replaced.
       registerGithubTokenInjector(requestContext, (token, source, patKind = requestPatKind) => {
+        assertCurrentGithubTokenRegistration(registered);
         if (registered.patKind !== requestPatKind) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
@@ -284,6 +291,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (!registered) return;
 
           const resolvedPatKind = await resolveGithubPatKind();
+          assertCurrentGithubTokenRegistration(registered);
           if (!resolvedPatKind && !registered.reconciliationRequired) {
             registerGithubTokenContext(registered);
             return;
@@ -309,6 +317,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind, {
               throwOnError: true,
             });
+            assertCurrentGithubTokenRegistration(registered);
             const credentialSource = pat.sourceKind ?? 'repository';
             credentialSourceChanged = credentialSource !== registered.credentialSource;
             if (credentialSourceChanged) {
@@ -322,6 +331,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             const installedCredentialSourceChanged = credentialSource !== registered.installedCredentialSource;
             const ghToken =
               pat.token ?? (installedCredentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
+            assertCurrentGithubTokenRegistration(registered);
             if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource);
             registered.patKind = patKind;
             registered.credentialSource = credentialSource;
@@ -330,9 +340,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           } catch (error) {
             // Same-source PAT refreshes remain best-effort. Role and credential
             // source transitions fail closed instead of retaining a stale identity.
-            if (registered.reconciliationRequired) throw error;
+            if (githubTokenInjectors.get(workspaceId) !== registered || registered.reconciliationRequired) throw error;
           } finally {
-            registerGithubTokenContext(registered);
+            if (githubTokenInjectors.get(workspaceId) === registered) registerGithubTokenContext(registered);
           }
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);

@@ -967,6 +967,30 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
+  it('rejects reviewer refreshes from a superseded workspace materialization', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const staleReviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: staleReviewerRequestContext });
+
+    mocks.githubReviewerPat = 'ghp_reviewer_rotated';
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => undefined), addWorkspace: vi.fn() } as any,
+    });
+    mocks.setEnvironmentVariable.mockClear();
+
+    expect(() => injectGithubToken(staleReviewerRequestContext, 'ghp_stale_reviewer', 'reviewer', 'reviewer')).toThrow(
+      'GitHub token refresh request context is stale for the active Factory workspace.',
+    );
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
   it('removes a stale reviewer PAT when the replacement work binding has no worker PAT', async () => {
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';
