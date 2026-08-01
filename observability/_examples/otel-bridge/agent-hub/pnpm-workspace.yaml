@@ -2,9 +2,6 @@
 packages:
   - .
 
-minimumReleaseAgeExclude:
-  - fast-uri@3.1.5
-
 overrides:
   '@mastra/core': link:../../../../packages/core
   '@mastra/libsql': link:../../../../stores/libsql
