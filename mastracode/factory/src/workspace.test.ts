@@ -42,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
   githubPat: null as string | null,
   githubReviewerPat: null as string | null,
+  githubPatReadError: null as Error | null,
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
@@ -82,6 +83,7 @@ afterEach(async () => {
   mocks.setEnvironmentVariable.mockClear();
   mocks.githubPat = null;
   mocks.githubReviewerPat = null;
+  mocks.githubPatReadError = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
   mocks.findRunBindingBySession.mockClear();
@@ -194,14 +196,15 @@ function fakeGithubIntegration() {
     getInstallationOctokit: vi.fn(),
     integrationStorage: {
       settings: {
-        get: vi.fn(async () =>
-          mocks.githubPat || mocks.githubReviewerPat
+        get: vi.fn(async () => {
+          if (mocks.githubPatReadError) throw mocks.githubPatReadError;
+          return mocks.githubPat || mocks.githubReviewerPat
             ? {
                 ...(mocks.githubPat ? { pat: mocks.githubPat } : {}),
                 ...(mocks.githubReviewerPat ? { reviewerPat: mocks.githubReviewerPat } : {}),
               }
-            : null,
-        ),
+            : null;
+        }),
       },
     },
     sourceControlStorage: {
@@ -816,6 +819,69 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+  });
+
+  it('keeps repository fallback credentials when a review workspace returns to work', async () => {
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledTimes(1);
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
+  it('keeps the worker fallback when PAT settings fail during a return to work', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.runBindingRole = 'work';
+    mocks.githubPatReadError = new Error('settings unavailable');
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledTimes(1);
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
+  it('keeps runtime refresh available when a safe worker PAT update fails', async () => {
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.runBindingRole = 'work';
+    mocks.githubPat = 'ghp_worker';
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime injection failed');
+    });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(() => injectGithubToken(requestContext, 'fresh-worker-token')).not.toThrow();
+    expect(mocks.setEnvironmentVariable).toHaveBeenLastCalledWith('GH_TOKEN', 'fresh-worker-token');
   });
 
   it('does not retain reviewer credentials after the review binding is revoked', async () => {

@@ -131,6 +131,7 @@ type GithubTokenRegistration = {
   inject: (token: string) => void;
   patKind: GithubPatKind;
   installedPatKind: GithubPatKind;
+  reviewerCredentialInstalled: boolean;
   generation: number;
   ghToken: string;
 };
@@ -237,6 +238,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
       return token;
     };
+    const resolveGithubPat = async (
+      patKind: GithubPatKind,
+    ): Promise<{ token: string | null; reviewerCredential: boolean }> => {
+      const token = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+      if (patKind !== 'reviewer' || !token) return { token, reviewerCredential: false };
+
+      const workerToken = await getGithubPat(() => github.integrationStorage, session.orgId, 'default');
+      return { token, reviewerCredential: token !== workerToken };
+    };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       const generation = registered.generation;
       const patKind = registered.patKind;
@@ -251,6 +261,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         registered.inject(token);
         registered.ghToken = token;
+        // Runtime refresh does not expose whether reviewer lookup fell back to
+        // a worker token, so keep reviewer refreshes conservative.
+        registered.reviewerCredentialInstalled = patKind === 'reviewer';
         registered.generation += 1;
         registerGithubTokenContext(registered);
       });
@@ -280,7 +293,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
 
           const roleChanged = registered.installedPatKind !== registered.patKind;
-          const pat = await getGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
+          const resolvedPat = await resolveGithubPat(registered.patKind);
+          const pat = resolvedPat.token;
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (pat) {
@@ -288,8 +302,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               try {
                 registered.inject(pat);
               } catch (error) {
-                if (roleChanged && registered.patKind === 'default') throw error;
-                if (registered.patKind === 'reviewer') registered.installedPatKind = 'reviewer';
+                if (registered.patKind === 'default' && registered.reviewerCredentialInstalled) throw error;
+                registered.installedPatKind = registered.patKind;
                 registerGithubTokenContext(registered);
                 return;
               }
@@ -297,6 +311,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               registered.generation += 1;
             }
             registered.installedPatKind = registered.patKind;
+            registered.reviewerCredentialInstalled = resolvedPat.reviewerCredential;
             registerGithubTokenContext(registered);
             return;
           }
@@ -314,6 +329,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registerGithubTokenContext(registered);
             return;
           }
+          if (!registered.reviewerCredentialInstalled) {
+            // Review sessions may already be using the worker or repository
+            // fallback. Returning to work does not require replacing it.
+            registered.installedPatKind = 'default';
+            registerGithubTokenContext(registered);
+            return;
+          }
 
           // A reviewer credential must never survive a transition back to a
           // worker role. With no worker PAT, replace it with repository access.
@@ -325,6 +347,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.generation += 1;
           }
           registered.installedPatKind = 'default';
+          registered.reviewerCredentialInstalled = false;
           registerGithubTokenContext(registered);
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
@@ -384,7 +407,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // sessions with no resolvable run binding — uses the worker token.
       const patKindResolution = await resolveGithubPatKind();
       const patKind = 'patKind' in patKindResolution ? patKindResolution.patKind : 'default';
-      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+      const resolvedPat = await resolveGithubPat(patKind);
+      const ghCliToken = resolvedPat.token ?? token;
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(
@@ -447,6 +471,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         inject: injectGithubToken,
         patKind,
         installedPatKind: patKind,
+        reviewerCredentialInstalled: resolvedPat.reviewerCredential,
         generation: 0,
         ghToken: ghCliToken,
       };
