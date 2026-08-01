@@ -896,6 +896,39 @@ describe('GitHub session workspace preparation', () => {
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
+  it('invalidates reviewer refresh contexts before rematerializing the workspace', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerContext });
+
+    let releaseMaterialization!: () => void;
+    mocks.materializeRepo.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          releaseMaterialization = resolve;
+        }),
+    );
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockClear();
+    const rematerialization = workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => undefined), addWorkspace: vi.fn() } as any,
+    });
+    await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(2));
+
+    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+
+    releaseMaterialization();
+    await rematerialization;
+  });
+
   it('reconciles the role for callers reusing an inflight materialization', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';

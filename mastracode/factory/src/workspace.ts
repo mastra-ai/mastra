@@ -525,6 +525,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       await reconcileGithubToken();
       return workspace;
     }
+    // A fresh materialization supersedes any request contexts left behind by
+    // an unregistered workspace; invalidate them before credentials are read.
+    githubTokenInjectors.delete(workspaceId);
     const materialization = materialize();
     inflightMaterializations.set(workspaceId, materialization);
     try {
