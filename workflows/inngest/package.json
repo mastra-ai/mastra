@@ -78,7 +78,8 @@
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@mastra/memory": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.13.2-0 <2.0.0-0",
