@@ -306,6 +306,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           try {
             resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
           } catch (error) {
+            // Worker and repository credentials are valid reviewer fallbacks,
+            // so a transient settings outage must not block that safe upgrade.
+            if (
+              patKindChanged &&
+              patKind === 'reviewer' &&
+              registered.installedPatKind === 'default' &&
+              registered.credentialSource === registered.installedCredentialSource
+            ) {
+              registered.installedPatKind = patKind;
+              registerGithubTokenContext(registered);
+              return;
+            }
             if (patKindChanged || registered.credentialSource !== registered.installedCredentialSource) throw error;
             registerGithubTokenContext(registered);
             return;
