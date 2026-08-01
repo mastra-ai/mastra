@@ -840,6 +840,25 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
+  it('keeps an unchanged runtime-refreshed repository fallback classified as safe', async () => {
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerContext });
+    injectGithubToken(reviewerContext, 'repo-token-repository-1');
+
+    mocks.runBindingRole = 'work';
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the worker fallback when PAT settings fail during a return to work', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.runBindingRole = 'review';

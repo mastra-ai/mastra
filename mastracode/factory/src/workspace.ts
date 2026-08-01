@@ -259,11 +259,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         ) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
+        const tokenChanged = token !== registered.ghToken;
         registered.inject(token);
         registered.ghToken = token;
         // Runtime refresh does not expose whether reviewer lookup fell back to
-        // a worker token, so keep reviewer refreshes conservative.
-        registered.reviewerCredentialInstalled = patKind === 'reviewer';
+        // a worker token. A changed reviewer token must stay conservative, but
+        // an unchanged token keeps its already-known credential classification.
+        if (patKind === 'default' || tokenChanged) {
+          registered.reviewerCredentialInstalled = patKind === 'reviewer';
+        }
         registered.generation += 1;
         registerGithubTokenContext(registered);
       });
