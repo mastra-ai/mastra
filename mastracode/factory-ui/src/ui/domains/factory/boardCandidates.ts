@@ -3,11 +3,20 @@ import type { ComponentType } from 'react';
 
 import { relativeTime } from '../../../lib/date/relativeTime';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL, hasLabel } from './boardItems';
-import { LINEAR_FETCH_HINT, approvalRunAction, guidedPrompt, issueRunActions, reviewRunAction } from './boardRunSpecs';
+import {
+  JIRA_FETCH_HINT,
+  LINEAR_FETCH_HINT,
+  approvalRunAction,
+  guidedPrompt,
+  issueRunActions,
+  reviewRunAction,
+} from './boardRunSpecs';
 import type { RunAction } from './boardRunSpecs';
 import { itemAppearsInStage } from './boardStages';
+import { JiraIcon } from '../../ui/icons';
 import { IssueSourceIcon } from './components/BoardIcons';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
+import type { JiraIssue } from './services/jira';
 import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
@@ -21,6 +30,7 @@ export const INTAKE_SOURCES = [
   { id: 'github', label: 'Issues' },
   { id: 'github-prs', label: 'PRs' },
   { id: 'linear', label: 'Linear' },
+  { id: 'jira', label: 'Jira' },
 ] as const;
 
 export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
@@ -106,6 +116,25 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     branch: `factory/linear-${issue.identifier.toLowerCase()}`,
     threadTitle: `${issue.identifier}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(`Investigate ${ref}. ${LINEAR_FETCH_HINT}`, instructions),
+    metadata: { identifier: issue.identifier, state: issue.state, assignee: issue.assignee },
+  };
+}
+
+export function jiraCandidate(issue: JiraIssue): BoardCandidate {
+  const ref = `Jira issue ${issue.identifier} (${issue.url})`;
+  return {
+    sourceKey: `jira:${issue.identifier}`,
+    source: 'jira-issue',
+    title: issue.title,
+    url: issue.url,
+    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    icon: JiraIcon,
+    iconClassName: 'text-[#2684FF]',
+    column: 'intake',
+    runActions: issueRunActions(ref, { context: JIRA_FETCH_HINT }),
+    branch: `factory/jira-${issue.identifier.toLowerCase()}`,
+    threadTitle: `${issue.identifier}: ${issue.title}`,
+    customPrompt: instructions => guidedPrompt(`Investigate ${ref}. ${JIRA_FETCH_HINT}`, instructions),
     metadata: { identifier: issue.identifier, state: issue.state, assignee: issue.assignee },
   };
 }

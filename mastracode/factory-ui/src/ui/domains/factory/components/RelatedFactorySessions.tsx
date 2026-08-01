@@ -33,6 +33,9 @@ function externalWorkItemLabel(item: WorkItem): string {
   if (item.source === 'linear-issue') {
     return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
   }
+  if (item.source === 'jira-issue') {
+    return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Jira issue');
+  }
   return 'Work item';
 }
 

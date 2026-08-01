@@ -139,6 +139,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   const config: IntakeConfig = {
     github: { enabled: true, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
+    jira: { enabled: false, sourceIds: null },
   };
 
   it('given a saved config, when the query resolves, then it exposes the config', async () => {
@@ -154,6 +155,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
     const updated: IntakeConfig = {
       github: { enabled: false, sourceIds: null },
       linear: { enabled: true, sourceIds: ['proj-1'] },
+      jira: { enabled: false, sourceIds: null },
     };
     let putBody: unknown;
     server.use(
@@ -178,7 +180,11 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   });
 
   it('given the save fails, when it settles, then the mutation surfaces the server message', async () => {
-    server.use(http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })));
+    server.use(
+      // The save first reads the registered keys, then PUTs.
+      http.get(CONFIG_URL, () => HttpResponse.json({ config })),
+      http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })),
+    );
 
     const { result } = renderHookWithProviders(() => useSaveIntakeConfigMutation());
 

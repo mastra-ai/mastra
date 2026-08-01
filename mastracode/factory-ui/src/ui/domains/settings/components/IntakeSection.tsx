@@ -13,7 +13,9 @@ import type { ReactNode } from 'react';
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { isJiraAuthError } from '../../factory/services/jira';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
@@ -153,6 +155,11 @@ export function IntakeSection() {
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
+  const jiraStatusQuery = useJiraStatusQuery();
+  const jiraStatus = jiraStatusQuery.data;
+  const jiraConfigured = Boolean(jiraStatus?.enabled && jiraStatus.configured);
+  const jiraProjectsQuery = useJiraProjectsQuery(jiraConfigured);
+
   const config = configQuery.data;
   const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
 
@@ -286,6 +293,59 @@ export function IntakeSection() {
                       }
                     />
                   ))}
+                </SourcePickerGroup>
+              )}
+            </div>
+          )
+        )}
+
+        <SettingsRow label="Jira issues" hint="Active issues from the selected projects.">
+          <Switch
+            aria-label="Sync Jira issues"
+            checked={config.jira.enabled}
+            disabled={busy || !jiraConfigured}
+            onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
+          />
+        </SettingsRow>
+
+        {!jiraConfigured ? (
+          // Jira credentials are deployment env config — no per-org connect
+          // flow, so the disabled state points the operator at the env vars.
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.
+            </Txt>
+          </div>
+        ) : config.jira.enabled && isJiraAuthError(jiraProjectsQuery.error) ? (
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              Jira rejected the configured credentials. Update JIRA_EMAIL and JIRA_API_TOKEN on the server.
+            </Txt>
+          </div>
+        ) : (
+          config.jira.enabled && (
+            <div className="flex flex-col gap-2.5 px-4 py-3">
+              <Txt as="span" variant="ui-sm" className="text-icon3">
+                Connected to {jiraStatus?.site ?? 'a Jira site'}
+              </Txt>
+              {(jiraProjectsQuery.data ?? []).length > 0 && (
+                <SourcePickerGroup>
+                  <SourcePickerSection
+                    label="Projects"
+                    items={(jiraProjectsQuery.data ?? []).map(project => ({
+                      id: project.id,
+                      label: project.key ? `${project.key} · ${project.name}` : project.name,
+                    }))}
+                    selectedIds={config.jira.sourceIds}
+                    disabled={busy}
+                    pending={busy}
+                    onToggleItem={projectId =>
+                      update({
+                        ...config,
+                        jira: { ...config.jira, sourceIds: toggleId(config.jira.sourceIds, projectId) },
+                      })
+                    }
+                  />
                 </SourcePickerGroup>
               )}
             </div>

@@ -34,6 +34,11 @@ export const queryKeys = {
   linearIssuesAll: () => ['linear', 'issues'] as const,
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
+  jiraStatus: () => ['jira', 'status'] as const,
+  jiraProjects: () => ['jira', 'projects'] as const,
+  // The Jira issues request carries no project scoping (the server applies the
+  // org's intake selection), so one cache entry covers the feed.
+  jiraIssues: () => ['jira', 'issues'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,

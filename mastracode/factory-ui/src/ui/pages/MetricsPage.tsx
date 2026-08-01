@@ -50,6 +50,7 @@ const SOURCE_LABELS: Record<string, string> = {
   'github:issue': 'GitHub issues',
   'github:pull-request': 'GitHub PRs',
   'linear:issue': 'Linear issues',
+  'jira:issue': 'Jira issues',
   manual: 'Manual',
 };
 
