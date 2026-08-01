@@ -4,11 +4,23 @@ import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
+/**
+ * Integration scenario test suite for declining tool calls with a custom reason.
+ * Evaluates behavior across both normal and durable execution engines.
+ */
 describeForAllEngines(
   'AIMock loop scenario: decline tool call with custom reason',
+  /**
+   * Runs tests for the specified execution engine.
+   * @param engine - The engine type under test.
+   */
   engine => {
     const getMock = useLoopScenarioAimock();
 
+    /**
+     * Test case verifying that the custom reason is correctly propagated and persisted
+     * when declining a tool call using the streaming `declineToolCall` API.
+     */
     it('propagates custom reason when tool call is declined via declineToolCall()', async () => {
       const sensitiveTool = createTool({
         id: 'sensitive-op',
@@ -17,6 +29,11 @@ describeForAllEngines(
           action: z.string(),
         }),
         requireApproval: true,
+        /**
+         * Simulates executing the sensitive tool call.
+         * @param params - Tool parameters.
+         * @returns Execution confirmation.
+         */
         execute: async ({ action }) => {
           return { performed: action, success: true };
         },
@@ -41,6 +58,10 @@ describeForAllEngines(
         memory: sharedMemory,
         threadId,
         resourceId,
+        /**
+         * Sets up mock LLM responses for the scenario run.
+         * @param llm - The mock LLM instance.
+         */
         fixtures: llm => {
           llm.onMessage(/perform/i, {
             toolCalls: [
@@ -86,6 +107,10 @@ describeForAllEngines(
       expect(declined?.approval?.reason).toBe(customReason);
     });
 
+    /**
+     * Test case verifying that the custom reason is correctly propagated and persisted
+     * when declining a tool call using the non-streaming `declineToolCallGenerate` API.
+     */
     it('propagates custom reason when tool call is declined via declineToolCallGenerate()', async () => {
       const sensitiveTool = createTool({
         id: 'sensitive-op',
@@ -94,6 +119,11 @@ describeForAllEngines(
           action: z.string(),
         }),
         requireApproval: true,
+        /**
+         * Simulates executing the sensitive tool call.
+         * @param params - Tool parameters.
+         * @returns Execution confirmation.
+         */
         execute: async ({ action }) => {
           return { performed: action, success: true };
         },
