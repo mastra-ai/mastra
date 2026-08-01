@@ -170,6 +170,37 @@ describe('GitHub subscription entry points', () => {
     expect(inject).toHaveBeenCalledWith('ghp_reviewer', 'reviewer', 'reviewer');
   });
 
+  it('keeps the injector that authorized an in-flight token refresh', async () => {
+    let resolveSettings!: (settings: { pat: string; reviewerPat: string }) => void;
+    const settings = new Promise<{ pat: string; reviewerPat: string }>(resolve => {
+      resolveSettings = resolve;
+    });
+    let markSettingsRead!: () => void;
+    const settingsRead = new Promise<void>(resolve => {
+      markSettingsRead = resolve;
+    });
+    integrationStorage.settings = {
+      get: vi.fn(async () => {
+        markSettingsRead();
+        return settings;
+      }),
+    };
+    const requestContext = authenticatedRequestContext();
+    const originalInject = vi.fn();
+    const replacementInject = vi.fn();
+    registerGithubTokenInjector(requestContext, originalInject);
+    registerGithubPatKind(requestContext, 'reviewer');
+
+    const refresh = refreshGithubToken(requestContext, githubStub);
+    await settingsRead;
+    registerGithubTokenInjector(requestContext, replacementInject);
+    resolveSettings({ pat: 'ghp_worker', reviewerPat: 'ghp_reviewer' });
+    await refresh;
+
+    expect(originalInject).toHaveBeenCalledWith('ghp_reviewer', 'reviewer', 'reviewer');
+    expect(replacementInject).not.toHaveBeenCalled();
+  });
+
   it('records worker-PAT fallback when refreshing a reviewer sandbox', async () => {
     integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
     const requestContext = authenticatedRequestContext();

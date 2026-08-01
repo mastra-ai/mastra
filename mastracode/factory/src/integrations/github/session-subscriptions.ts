@@ -11,7 +11,7 @@ import type {
 import type { GithubIntegration } from './integration.js';
 import { resolveGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
-import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
+import { captureGithubTokenInjector, getRegisteredGithubPatKind } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
@@ -160,9 +160,12 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
   // workspace records which PAT kind the sandbox was provisioned with, so a
   // review-board sandbox keeps its reviewer token on refresh.
   const patKind = getRegisteredGithubPatKind(requestContext);
+  // Keep the role-bound injector that authorized this lookup. Workspace reuse
+  // may replace the request-context registration while token I/O is pending.
+  const injectGithubToken = captureGithubTokenInjector(requestContext);
   const pat = await resolveGithubPat(() => github.integrationStorage, target.orgId, patKind);
   if (pat.token && pat.sourceKind) {
-    injectGithubToken(requestContext, pat.token, pat.sourceKind, patKind);
+    injectGithubToken(pat.token, pat.sourceKind, patKind);
     return;
   }
   const access = await github.versionControl.getRepositoryAccess({
@@ -171,7 +174,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
   });
   const token = access.authorization?.token;
   if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
-  injectGithubToken(requestContext, token, 'repository', patKind);
+  injectGithubToken(token, 'repository', patKind);
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {

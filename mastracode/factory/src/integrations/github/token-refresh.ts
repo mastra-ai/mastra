@@ -25,6 +25,14 @@ export function getRegisteredGithubPatKind(requestContext: RequestContext): Gith
   return kind === 'reviewer' ? 'reviewer' : 'default';
 }
 
+export function captureGithubTokenInjector(requestContext: RequestContext): GithubTokenInjector {
+  const injector = requestContext.get(GITHUB_TOKEN_INJECTOR_CONTEXT_KEY) as GithubTokenInjector | undefined;
+  if (!injector) {
+    throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');
+  }
+  return injector;
+}
+
 /** Inject a refreshed token with source and role metadata for cached-workspace reconciliation. */
 export function injectGithubToken(
   requestContext: RequestContext,
@@ -32,9 +40,5 @@ export function injectGithubToken(
   source?: GithubTokenSource,
   patKind?: GithubPatKind,
 ): void {
-  const injector = requestContext.get(GITHUB_TOKEN_INJECTOR_CONTEXT_KEY) as GithubTokenInjector | undefined;
-  if (!injector) {
-    throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');
-  }
-  injector(token, source, patKind);
+  captureGithubTokenInjector(requestContext)(token, source, patKind);
 }
