@@ -61,7 +61,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError } from './integrations/github/sandbox.js';
-import { injectGithubToken } from './integrations/github/token-refresh.js';
+import { getRegisteredGithubPatKind, injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { checkpointNameForSession, createWorkspaceFactory, getFactoryWorkspace } from './workspace.js';
 
@@ -800,6 +800,53 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+  });
+
+  it('preserves cached reviewer credentials when reuse cannot resolve a binding address', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = requestContext.get('controller') as Record<string, unknown>;
+    requestContext.set('controller', { ...controller, threadId: undefined });
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledTimes(1);
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
+  });
+
+  it('preserves cached reviewer credentials when the binding lookup fails', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('binding lookup unavailable'));
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledTimes(1);
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {

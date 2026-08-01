@@ -221,7 +221,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!workItems) return { patKind: 'default' };
       try {
         const address = getFactorySessionAddress(requestContext);
-        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
+        if (!address) return { error: new Error('Factory run binding address is unavailable') };
+        const runBinding = await workItems.findRunBindingBySession(address);
         const isReviewer =
           runBinding?.role === 'review' && runBinding.status === 'active' && runBinding.orgId === session.orgId;
         return { patKind: isReviewer ? 'reviewer' : 'default' };
