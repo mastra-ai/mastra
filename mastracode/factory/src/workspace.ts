@@ -130,8 +130,7 @@ export interface CreateWorkspaceFactoryOptions {
 type GithubTokenRegistration = {
   inject: (token: string) => void;
   patKind: GithubPatKind;
-  installedPatKind: GithubPatKind;
-  reviewerCredentialInstalled: boolean;
+  credentialKind: GithubPatKind | 'repository';
   generation: number;
   ghToken: string;
 };
@@ -224,7 +223,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (!address) return { error: new Error('Factory run binding address is unavailable') };
         const runBinding = await workItems.findRunBindingBySession(address);
         const isReviewer =
-          runBinding?.role === 'review' && runBinding.status === 'active' && runBinding.orgId === session.orgId;
+          runBinding?.role === 'review' && runBinding.status !== 'revoked' && runBinding.orgId === session.orgId;
         return { patKind: isReviewer ? 'reviewer' : 'default' };
       } catch (error) {
         return { error };
@@ -246,24 +245,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (
           githubTokenInjectors.get(workspaceId) !== registered ||
           registered.generation !== generation ||
-          registered.patKind !== patKind ||
-          registered.installedPatKind !== patKind
+          registered.patKind !== patKind
         ) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
         const tokenChanged = token !== registered.ghToken;
         registered.inject(token);
         registered.ghToken = token;
-        // Runtime refresh does not expose whether reviewer lookup fell back to
-        // a worker token. A changed reviewer token must stay conservative, but
-        // an unchanged token keeps its already-known credential classification.
-        if (patKind === 'default' || tokenChanged) {
-          registered.reviewerCredentialInstalled = patKind === 'reviewer';
-        }
-        registered.generation += 1;
-        registerGithubTokenContext(registered);
+        // Runtime refresh only exposes the selected role, not whether review
+        // lookup fell back to a worker or repository credential. Classifying a
+        // changed review token conservatively prevents it surviving a downgrade.
+        if (tokenChanged) registered.credentialKind = patKind;
       });
       registerGithubPatKind(requestContext, patKind);
+    };
+    const installRepositoryToken = async (registered: GithubTokenRegistration): Promise<void> => {
+      const token = await getRepositoryToken();
+      if (githubTokenInjectors.get(workspaceId) !== registered) return;
+      if (token !== registered.ghToken) {
+        registered.inject(token);
+        registered.ghToken = token;
+      }
+      registered.credentialKind = 'repository';
     };
     const reconcileGithubToken = async (): Promise<void> => {
       if (!githubTokenInjectors.has(workspaceId)) return;
@@ -278,7 +281,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const resolution = await resolveGithubPatKind();
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
           if ('error' in resolution) {
-            if (registered.patKind !== registered.installedPatKind) throw resolution.error;
+            // A failed downgrade remains closed until the reviewer credential
+            // is replaced; settled credentials retain the prior best-effort behavior.
+            if (registered.patKind === 'default' && registered.credentialKind === 'reviewer') {
+              throw resolution.error;
+            }
             registerGithubTokenContext(registered);
             return;
           }
@@ -288,70 +295,43 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.generation += 1;
           }
 
-          const roleChanged = registered.installedPatKind !== registered.patKind;
           let resolvedPat: Awaited<ReturnType<typeof resolveGithubPat>>;
-          let patLookupFailed = false;
           try {
             resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
           } catch {
-            resolvedPat = null;
-            patLookupFailed = true;
+            // Worker and repository credentials are safe role fallbacks during
+            // transient settings outages. Reviewer credentials are not safe
+            // after an authoritative downgrade, so replace them or fail closed.
+            if (registered.patKind === 'default' && registered.credentialKind === 'reviewer') {
+              await installRepositoryToken(registered);
+            }
+            registerGithubTokenContext(registered);
+            return;
           }
-          const pat = resolvedPat?.token ?? null;
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
-          if (pat) {
-            if (pat !== registered.ghToken) {
+          if (resolvedPat) {
+            if (resolvedPat.token !== registered.ghToken) {
               try {
-                registered.inject(pat);
+                registered.inject(resolvedPat.token);
               } catch (error) {
-                if (registered.patKind === 'default' && registered.reviewerCredentialInstalled) throw error;
-                registered.installedPatKind = registered.patKind;
+                if (registered.patKind === 'default' && registered.credentialKind === 'reviewer') throw error;
                 registerGithubTokenContext(registered);
                 return;
               }
-              registered.ghToken = pat;
-              registered.generation += 1;
+              registered.ghToken = resolvedPat.token;
             }
-            registered.installedPatKind = registered.patKind;
-            registered.reviewerCredentialInstalled = resolvedPat?.kind === 'reviewer';
+            registered.credentialKind = resolvedPat.kind;
             registerGithubTokenContext(registered);
             return;
           }
 
-          if (patLookupFailed && registered.patKind === 'reviewer') {
-            // The worker or repository credential already installed is the
-            // safe fallback while PAT settings are temporarily unavailable.
-            registered.installedPatKind = 'reviewer';
-            registerGithubTokenContext(registered);
-            return;
+          // A reviewer PAT must not survive either a worker downgrade or its
+          // removal from settings. Safe worker/repository fallbacks can remain.
+          if (registered.credentialKind === 'reviewer') {
+            registered.generation += 1;
+            await installRepositoryToken(registered);
           }
-          if (!roleChanged && !registered.reviewerCredentialInstalled) {
-            // Preserve the existing best-effort behavior for safe worker or
-            // repository credentials when no identity transition is needed.
-            registerGithubTokenContext(registered);
-            return;
-          }
-          if (!registered.reviewerCredentialInstalled) {
-            // Review sessions may already be using the worker or repository
-            // fallback. Returning to work does not require replacing it.
-            registered.installedPatKind = 'default';
-            registerGithubTokenContext(registered);
-            return;
-          }
-
-          // A reviewer credential must never survive a worker downgrade or a
-          // cleared reviewer PAT. With no configured fallback, use repository
-          // access for the active role.
-          registered.generation += 1;
-          const token = await getRepositoryToken();
-          if (githubTokenInjectors.get(workspaceId) !== registered) return;
-          if (token !== registered.ghToken) {
-            registered.inject(token);
-            registered.ghToken = token;
-          }
-          registered.installedPatKind = registered.patKind;
-          registered.reviewerCredentialInstalled = false;
           registerGithubTokenContext(registered);
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
@@ -479,8 +459,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const tokenRegistration: GithubTokenRegistration = {
         inject: injectGithubToken,
         patKind,
-        installedPatKind: patKind,
-        reviewerCredentialInstalled: resolvedPat?.kind === 'reviewer',
+        credentialKind: resolvedPat?.kind ?? 'repository',
         generation: 0,
         ghToken: ghCliToken,
       };
@@ -523,9 +502,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const materialization = materialize();
     inflightMaterializations.set(workspaceId, materialization);
     try {
-      const workspace = await materialization;
-      await reconcileGithubToken();
-      return workspace;
+      return await materialization;
     } finally {
       inflightMaterializations.delete(workspaceId);
     }
