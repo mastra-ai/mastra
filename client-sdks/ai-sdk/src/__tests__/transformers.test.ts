@@ -1309,6 +1309,125 @@ describe('AgentNetworkToAISDKTransformer', () => {
       answer: 'network-path result preserved',
     });
   });
+
+  it('preserves task.steps[0].toolResults on the network path when the agent terminates without finish (suspended)', async () => {
+    // Suspended/failed sub-agents never emit a finish event, so the only opportunity
+    // to capture full step detail is at step-finish via the completed-step delta.
+    const mockStream = new ReadableStream({
+      async start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'sus-net-1',
+          payload: {
+            networkId: 'test-net-sus',
+            agentId: 'sus-agent',
+            runId: 'sus-agent-run-1',
+            inputData: { iteration: 0, task: null, threadId: 'thread-sus', threadResourceId: 'res-sus' },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-start',
+          runId: 'sus-net-1',
+          payload: { agentId: 'sus-agent', runId: 'sus-agent-run-1', args: { prompt: 'do work', iteration: 0 } },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-start',
+          runId: 'sus-net-1',
+          payload: { type: 'start', runId: 'sus-agent-run-1', from: 'AGENT', payload: { id: 'sus-agent' } },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-call',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-call',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-call',
+              toolCallId: 'call-sus-0',
+              toolName: 'lookup',
+              args: { q: 'suspended-query' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-result',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-result',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-result',
+              toolCallId: 'call-sus-0',
+              toolName: 'lookup',
+              result: { answer: 'suspension-path result preserved' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        // step-finish but no subsequent finish (suspended termination)
+        controller.enqueue({
+          type: 'agent-execution-event-step-finish',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'step-finish',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              id: 'step-sus-0',
+              stepResult: { reason: 'tool-calls', warnings: [] },
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              metadata: { timestamp: new Date(), modelId: 'test-model' },
+            },
+          },
+        });
+
+        // Network finishes without a sub-agent finish (mirrors suspension)
+        controller.enqueue({
+          type: 'network-execution-event-finish',
+          runId: 'sus-net-1',
+          payload: { result: 'suspended', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+        });
+
+        controller.close();
+      },
+    });
+
+    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of aiSdkStream) {
+      chunks.push(chunk);
+    }
+
+    const networkChunks = chunks.filter(chunk => chunk.type === 'data-network' || chunk.type === 'data-tool-network');
+    const agentStepChunks = chunks.filter(chunk => chunk.type === 'data-tool-agent-step');
+
+    // No data-tool-agent-step must leak onto the network wire.
+    expect(agentStepChunks).toHaveLength(0);
+
+    // Find the chunk produced by agent-execution-event-step-finish.
+    const stepFinishChunk = networkChunks.find(chunk =>
+      chunk.data?.steps?.some((s: any) => s.name === 'sus-agent' && s.task?.steps?.length > 0),
+    );
+    expect(stepFinishChunk).toBeDefined();
+
+    const agentStep = stepFinishChunk?.data?.steps?.find((s: any) => s.name === 'sus-agent' && s.task);
+    expect(agentStep).toBeDefined();
+
+    // Full step detail must be present even without a finish event.
+    expect(agentStep?.task?.steps).toHaveLength(1);
+    expect(agentStep?.task?.steps?.[0]?.toolResults?.[0]?.result).toEqual({
+      answer: 'suspension-path result preserved',
+    });
+  });
 });
 
 describe('Network stream - core fix (text events from core)', () => {

@@ -658,7 +658,7 @@ function createAgentResponseState() {
   };
 }
 
-function createAgentRunState(id = '') {
+function createAgentRunState(id: unknown = '') {
   return {
     id,
     object: null,
@@ -792,8 +792,7 @@ export function transformAgent<OUTPUT>(
   let completedStep: { stepIndex: number; step: Record<string, any> } | null = null;
   switch (payload.type) {
     case 'start': {
-      const startState = createAgentRunState();
-      startState.id = payload.payload.id;
+      const startState = createAgentRunState(payload.payload.id);
       bufferedSteps.set(payload.runId!, startState);
       hasChanged = true;
       break;
@@ -1582,6 +1581,15 @@ export function transformNetwork(
         if (snapshot) {
           const { request, response, ...data } = snapshot.data;
           step.task = data;
+          // Merge full step detail from the completed-step delta so that
+          // suspended/failed terminations (no finish) still carry toolResults etc.
+          if (Array.isArray(result)) {
+            const { stepIndex, step: completedStepDetail } = result[1].data;
+            const taskSteps = data.steps;
+            if (Array.isArray(taskSteps) && stepIndex < taskSteps.length) {
+              taskSteps[stepIndex] = { ...taskSteps[stepIndex], ...completedStepDetail };
+            }
+          }
         }
 
         bufferedNetworks.set(payload.runId!, current);
