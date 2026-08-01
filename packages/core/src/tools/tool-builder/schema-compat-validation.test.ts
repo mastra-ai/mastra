@@ -117,6 +117,145 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     expect(llmJsonSchema?.required).toEqual(['req']);
   });
 
+  it('accepts omitted optional fields on o4-mini via processToCompatSchema validation', async () => {
+    const execute = vi.fn(async (input: { a: string; b?: string }) => input);
+    const tool = createTool({
+      id: 'optional-o4-tool',
+      description: 'Optional field tool',
+      inputSchema: z.object({
+        a: z.string(),
+        b: z.string().optional(),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'optional-o4-tool', {
+      provider: 'openai',
+      modelId: 'o4-mini',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: true,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: 'x' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'optional-o4',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(execute).toHaveBeenCalledWith({ a: 'x', b: undefined }, expect.any(Object));
+  });
+
+  it('accepts omitted default fields on o4-mini and applies defaults via compat validation', async () => {
+    const execute = vi.fn(async (input: { a: string; c: string }) => input);
+    const tool = createTool({
+      id: 'default-o4-tool',
+      description: 'Default field tool',
+      inputSchema: z.object({
+        a: z.string(),
+        c: z.string().default('fallback'),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'default-o4-tool', {
+      provider: 'openai',
+      modelId: 'o4-mini',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: true,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: 'x' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'default-o4',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(execute).toHaveBeenCalledWith({ a: 'x', c: 'fallback' }, expect.any(Object));
+  });
+
+  it('coerces string input to number on o4-mini without rejecting at validation', async () => {
+    const execute = vi.fn(async ({ a }: { a: number }) => ({ a }));
+    const tool = createTool({
+      id: 'coerce-o4-tool',
+      description: 'Coerce number field',
+      inputSchema: z.object({
+        a: z.coerce.number(),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'coerce-o4-tool', {
+      provider: 'openai',
+      modelId: 'o4-mini',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: true,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: '42' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'coerce-o4',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({ a: 42 });
+    expect(execute).toHaveBeenCalledWith({ a: 42 }, expect.any(Object));
+  });
+
+  it('coerces string input to number on gemini-2.0-flash-lite without rejecting at validation', async () => {
+    const execute = vi.fn(async ({ a }: { a: number }) => ({ a }));
+    const tool = createTool({
+      id: 'coerce-gemini-tool',
+      description: 'Coerce number field',
+      inputSchema: z.object({
+        a: z.coerce.number(),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'coerce-gemini-tool', {
+      provider: 'google',
+      modelId: 'gemini-2.0-flash-lite',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: false,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: '42' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'coerce-gemini',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({ a: 42 });
+    expect(execute).toHaveBeenCalledWith({ a: 42 }, expect.any(Object));
+  });
+
+  it('builds Haiku tools with z.tuple input schemas without throwing', () => {
+    const tool = createTool({
+      id: 'tuple-tool',
+      description: 'Tuple input tool',
+      inputSchema: z.tuple([z.string(), z.number()]),
+      execute: async () => ({ ok: true }),
+    });
+
+    expect(() => buildCoreTool(tool, 'tuple-tool', haikuModelConfig)).not.toThrow();
+  });
+
   it('strips string minLength from LLM-facing parameters and execute validation on Haiku', async () => {
     const inputSchema = z.object({
       message: z.string().min(10).describe('A message with minimum 10 characters'),

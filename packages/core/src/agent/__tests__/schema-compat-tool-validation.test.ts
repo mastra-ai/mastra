@@ -140,4 +140,28 @@ describe('Agent Haiku schema-compat tool validation', () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute).toHaveBeenCalledWith({ text: SHORT_TEXT }, expect.any(Object));
   });
+
+  it('convertTools builds Haiku tools with z.tuple schemas without throwing', async () => {
+    const tupleTool = createTool({
+      id: 'tuple-tool',
+      description: 'Tuple input tool',
+      inputSchema: z.tuple([z.string(), z.number()]),
+      execute: async () => ({ ok: true }),
+    });
+
+    const agent = new Agent({
+      id: 'haiku-agent',
+      name: 'Haiku Agent',
+      instructions: 'Use tuple tool',
+      model: createHaikuMockModel({ toolName: 'tupleTool', toolInput: ['x', 1] }),
+      tools: { tupleTool },
+    });
+
+    await expect(
+      agent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+      }),
+    ).resolves.toBeDefined();
+  });
 });
