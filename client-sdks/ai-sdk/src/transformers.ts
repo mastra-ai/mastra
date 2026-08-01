@@ -1580,6 +1580,11 @@ export function transformNetwork(
         }
 
         step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
+        // When the nested agent restarts (start event) discard stale step detail
+        // so a new run doesn't merge prior-run completedStepDetail into its steps.
+        if ((payload.payload as AgentChunkType).type === 'start') {
+          delete step[COMPLETED_STEPS_SYMBOL];
+        }
         const result = transformAgent(payload.payload as ChunkType<any>, step[PRIMITIVE_CACHE_SYMBOL]);
         const snapshot = Array.isArray(result) ? result[0] : result;
         if (snapshot) {

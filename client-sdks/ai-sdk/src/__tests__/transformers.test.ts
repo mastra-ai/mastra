@@ -1389,9 +1389,61 @@ describe('AgentNetworkToAISDKTransformer', () => {
           },
         });
 
-        // A text-delta for step 1 arrives after step-finish. Without the
-        // accumulated-detail fix this overwrites step.task with a fresh compact
-        // snapshot that has empty toolResults, demonstrating the regression.
+        // A second tool-call / tool-result / step-finish pair exercises the
+        // multi-entry branch of the re-application loop (completedSteps.size > 1).
+        controller.enqueue({
+          type: 'agent-execution-event-tool-call',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-call',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-call',
+              toolCallId: 'call-sus-1',
+              toolName: 'lookup',
+              args: { q: 'suspended-query-2' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-result',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-result',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-result',
+              toolCallId: 'call-sus-1',
+              toolName: 'lookup',
+              result: { answer: 'suspension-path result-2 preserved' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-step-finish',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'step-finish',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              id: 'step-sus-1',
+              stepResult: { reason: 'tool-calls', warnings: [] },
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              metadata: { timestamp: new Date(), modelId: 'test-model' },
+            },
+          },
+        });
+
+        // A text-delta arrives after both step-finishes. Without the fix this
+        // overwrites step.task with a compact snapshot that has empty toolResults
+        // for both completed steps, demonstrating the regression.
         controller.enqueue({
           type: 'agent-execution-event-text-delta',
           runId: 'sus-net-1',
@@ -1399,7 +1451,7 @@ describe('AgentNetworkToAISDKTransformer', () => {
             type: 'text-delta',
             runId: 'sus-agent-run-1',
             from: 'AGENT',
-            payload: { text: 'step-1 text' },
+            payload: { text: 'step-2 text' },
           },
         });
 
@@ -1427,19 +1479,27 @@ describe('AgentNetworkToAISDKTransformer', () => {
     // No data-tool-agent-step must leak onto the network wire.
     expect(agentStepChunks).toHaveLength(0);
 
-    // Assert against the last agent-event chunk (before network-execution-event-finish)
-    // so the assertion observes terminal state after all events, not just the
-    // step-finish chunk that existed before the regression was introduced.
+    // Assert on the last chunk produced before network-execution-event-finish.
+    // In production each chunk is serialized at emit time, so the last
+    // pre-termination chunk is the one that carries the final merged step state.
+    // Here all chunks share the same in-memory step object (shallow spread), so
+    // every chunk reads the final state; the at(-2) position is what matters in
+    // production and is kept for accuracy.
     const lastAgentChunk = networkChunks.at(-2);
     expect(lastAgentChunk).toBeDefined();
 
     const agentStep = lastAgentChunk?.data?.steps?.find((s: any) => s.name === 'sus-agent' && s.task);
     expect(agentStep).toBeDefined();
 
-    // Full step detail must be present even without a finish event.
-    expect(agentStep?.task?.steps).toHaveLength(1);
+    // Both completed steps' full detail must be present even without a finish event.
+    // This exercises the multi-entry branch (completedSteps.size > 1) of the
+    // re-application loop.
+    expect(agentStep?.task?.steps).toHaveLength(2);
     expect(agentStep?.task?.steps?.[0]?.toolResults?.[0]?.result).toEqual({
       answer: 'suspension-path result preserved',
+    });
+    expect(agentStep?.task?.steps?.[1]?.toolResults?.[0]?.result).toEqual({
+      answer: 'suspension-path result-2 preserved',
     });
   });
 });
