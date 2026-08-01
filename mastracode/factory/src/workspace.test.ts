@@ -841,7 +841,7 @@ describe('GitHub session workspace preparation', () => {
       }),
     ).rejects.toThrow('runtime injection failed');
 
-    expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+    expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory', { destroy: true });
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
 
     mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('binding lookup failed'));

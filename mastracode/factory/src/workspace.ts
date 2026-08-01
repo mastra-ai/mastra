@@ -396,16 +396,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const replacement = await followReplacementWorkspace();
           if (replacement) return replacement;
         }
-        // Do not leave a cached workspace globally addressable when it may
-        // still carry reviewer credentials after a failed replacement.
-        await mastra?.removeWorkspace?.(workspaceId);
+        // Do not leave a cached workspace usable or globally addressable when
+        // it may still carry reviewer credentials after a failed replacement.
+        await mastra?.removeWorkspace?.(workspaceId, { destroy: true });
         throw error;
       }
 
       if (githubTokenInjectors.get(workspaceId) !== tokenRegistration) {
         const replacement = await followReplacementWorkspace();
         if (replacement) return replacement;
-        await mastra?.removeWorkspace?.(workspaceId);
+        await mastra?.removeWorkspace?.(workspaceId, { destroy: true });
         throw new Error('Factory workspace was superseded during GitHub credential reconciliation.');
       }
 
