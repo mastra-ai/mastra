@@ -955,7 +955,9 @@ describe('GitHub session workspace preparation', () => {
       mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
     });
 
-    expect(() => injectGithubToken(staleReviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(() => injectGithubToken(staleReviewerContext, 'stale-reviewer-token', 'reviewer')).toThrow(
+      /no longer matches/,
+    );
   });
 
   it('reconciles the leader when a review binding appears during materialization', async () => {
@@ -1021,9 +1023,24 @@ describe('GitHub session workspace preparation', () => {
     const requestContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext });
-    injectGithubToken(requestContext, 'fresh-token');
+    injectGithubToken(requestContext, 'fresh-token', 'repository');
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'fresh-token');
+  });
+
+  it('rejects runtime token refreshes that omit the credential source', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext });
+    mocks.setEnvironmentVariable.mockClear();
+
+    expect(() => injectGithubToken(requestContext, 'untracked-token', undefined as never)).toThrow(
+      'GitHub token refresh must identify its credential source.',
+    );
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
   it('re-registers the token injector when reusing a workspace on a later request', async () => {
@@ -1037,7 +1054,7 @@ describe('GitHub session workspace preparation', () => {
       requestContext,
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
-    injectGithubToken(requestContext, 'later-token');
+    injectGithubToken(requestContext, 'later-token', 'repository');
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
   });
