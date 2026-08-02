@@ -8,10 +8,12 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { relationshipLabel } from '../../factory/services/relationships';
+import { githubNumberForItem } from '../../factory/boardItems';
+import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
@@ -50,11 +52,23 @@ export function WorkspacesSection() {
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
     allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const),
+      Object.values(item.sessions ?? {}).map(
+        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
+      ),
     ),
   );
   const rows = workspaceRows.flatMap(workspace => {
-    const item = workItemByPath.get(workspace.sessionId);
+    const workItemSession = workItemByPath.get(workspace.sessionId);
+    const item = workItemSession?.item;
+    const pullRequest =
+      item?.source === 'github-pr'
+        ? item
+        : item
+          ? [...relatedWorkItems(item, allWorkItems).filter(candidate => candidate.source === 'github-pr')].sort(
+              (a, b) => b.updatedAt.localeCompare(a.updatedAt),
+            )[0]
+          : undefined;
+    const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
     const factorySession = !workspace.branch.startsWith('user/');
@@ -71,6 +85,9 @@ export function WorkspacesSection() {
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
+        threadId: workItemSession?.threadId,
+        pullRequestNumber,
+        knownMerged: pullRequest?.metadata.merged === true,
       },
     ];
   });
@@ -93,6 +110,25 @@ export function WorkspacesSection() {
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
+  const pullRequestTargets = [...workRows.visible, ...reviewRows.visible].flatMap(row =>
+    row.threadId && row.pullRequestNumber !== undefined
+      ? [
+          {
+            sessionId: row.workspace.sessionId,
+            threadId: row.threadId,
+            projectPath: row.workspace.sessionId,
+            pullRequestNumber: row.pullRequestNumber,
+            knownMerged: row.knownMerged,
+          },
+        ]
+      : [],
+  );
+  const mergedByPath = useWorkspacePullRequestMerges({
+    baseUrl,
+    resourceId,
+    targets: pullRequestTargets,
+    enabled: sessionEnabled && Boolean(sessionId) && Boolean(resourceId),
+  });
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
@@ -124,6 +160,7 @@ export function WorkspacesSection() {
           allRows={workRows.all}
           kind="Work session"
           pending={pending}
+          mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -136,6 +173,7 @@ export function WorkspacesSection() {
           allRows={reviewRows.all}
           kind="Review session"
           pending={pending}
+          mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -184,6 +222,9 @@ interface FactoryWorkspaceRow {
   itemLabel?: string;
   itemTitle?: string;
   updatedAt: string;
+  threadId?: string;
+  pullRequestNumber?: number;
+  knownMerged: boolean;
 }
 
 function WorkspaceGroup({
@@ -192,6 +233,7 @@ function WorkspaceGroup({
   allRows,
   kind,
   pending,
+  mergedByPath,
   onSelect,
   onDelete,
 }: {
@@ -200,6 +242,7 @@ function WorkspaceGroup({
   allRows: FactoryWorkspaceRow[];
   kind: SessionPreviewDetails['kind'];
   pending: boolean;
+  mergedByPath: Record<string, boolean>;
   onSelect: (workspace: FactoryUserSession) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
@@ -225,6 +268,7 @@ function WorkspaceGroup({
             url={row.url}
             active={row.active}
             disabled={pending}
+            merged={mergedByPath[row.workspace.sessionId] === true}
             status={workspaceStatus(row)}
             preview={{
               kind,

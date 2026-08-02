@@ -47,7 +47,20 @@ const serializedStepSchema = z.object({
  * Represents different step flow types in the workflow graph
  */
 const serializedStepFlowEntrySchema = z.object({
-  type: z.enum(['step', 'sleep', 'sleepUntil', 'waitForEvent', 'parallel', 'conditional', 'loop', 'foreach']),
+  type: z.enum([
+    'step',
+    'agent',
+    'tool',
+    'mapping',
+    'sleep',
+    'sleepUntil',
+    'waitForEvent',
+    'parallel',
+    'conditional',
+    'loop',
+    'foreach',
+    'workflow',
+  ]),
 });
 
 /**
@@ -66,6 +79,7 @@ export const workflowInfoSchema = z.object({
   stateSchema: z.string().optional(),
   options: z.object({}).optional(),
   isProcessorWorkflow: z.boolean().optional(),
+  origin: z.enum(['code', 'stored']).optional(),
 });
 
 /**

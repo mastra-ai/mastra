@@ -187,6 +187,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
+  readonly #slug: string | undefined;
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
   readonly #reconcileEnabled: boolean;
@@ -384,7 +385,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         // GitHub assigns a new installation ID. Platform creates a new installation row,
         // and Factory's intake.listSources creates a new local installation row with the
         // new externalId. Try to find the new installation by accountName.
-        if (!isNotFound(err) || !installation.accountName) throw err;
+        if (!isDeadInstallation(err) || !installation.accountName) throw err;
         const installations = await this.storage.installations.list({ orgId });
         const newInstallation = installations.find(
           inst => inst.accountName === installation.accountName && inst.id !== installation.id,
@@ -393,8 +394,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const newInstallationId = parsePositiveInteger(newInstallation.externalId);
         if (newInstallationId === null) throw err;
 
-        // Persist the migration so we don't hit the 404 path on every call.
-        // This updates the repository's installation_id to the new installation.
+        // Persist the migration so we don't hit the recovery path on every call.
         await this.storage.repositories.migrateInstallation({
           orgId,
           id: repositoryId,
@@ -446,15 +446,23 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   constructor(
     options: {
       runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+      /** GitHub App slug used to recognize Factory's own webhook writes. */
+      slug?: string;
     } = {},
   ) {
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
+    this.#slug = options.slug;
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
     this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
     this.#runIssueTriage = options.runIssueTriage;
+  }
+
+  /** GitHub App slug when the deployment explicitly provides it. */
+  get slug(): string | undefined {
+    return this.#slug;
   }
 
   get storage(): SourceControlStorageHandle {
@@ -1399,4 +1407,10 @@ function reviewEvent(event: 'approve' | 'request-changes' | 'comment') {
 
 function isNotFound(error: unknown): boolean {
   return error instanceof PlatformApiError && error.status === 404;
+}
+
+// Platform answers 404 when the installation row is gone, 409 when it is suspended or soft-deleted.
+// A 502 also covers a dead installation but is indistinguishable from a transient GitHub outage.
+function isDeadInstallation(error: unknown): boolean {
+  return error instanceof PlatformApiError && (error.status === 404 || error.status === 409);
 }

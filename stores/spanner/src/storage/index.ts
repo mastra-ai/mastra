@@ -21,6 +21,7 @@ import { SchedulesSpanner } from './domains/schedules';
 import { ScorerDefinitionsSpanner } from './domains/scorer-definitions';
 import { ScoresSpanner } from './domains/scores';
 import { SkillsSpanner } from './domains/skills';
+import { WorkflowDefinitionsSpanner } from './domains/workflow-definitions';
 import { WorkflowsSpanner } from './domains/workflows';
 import { WorkspacesSpanner } from './domains/workspaces';
 
@@ -42,6 +43,7 @@ export {
   ScorerDefinitionsSpanner,
   ScoresSpanner,
   SkillsSpanner,
+  WorkflowDefinitionsSpanner,
   WorkflowsSpanner,
   WorkspacesSpanner,
 };
@@ -67,6 +69,7 @@ export const SPANNER_DOMAIN_KEYS = [
   'experiments',
   'favorites',
   'workspaces',
+  'workflowDefinitions',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 export type SpannerDomainKey = (typeof SPANNER_DOMAIN_KEYS)[number];
@@ -284,6 +287,9 @@ export class SpannerStore extends MastraCompositeStore {
         ...(wants('experiments') && { experiments: new ExperimentsSpanner(domainConfig) }),
         ...(wants('favorites') && { favorites: new FavoritesSpanner(domainConfig) }),
         ...(wants('workspaces') && { workspaces: new WorkspacesSpanner(domainConfig) }),
+        ...(wants('workflowDefinitions') && {
+          workflowDefinitions: new WorkflowDefinitionsSpanner(domainConfig),
+        }),
       };
     } catch (e) {
       throw new MastraError(
@@ -353,6 +359,7 @@ export class SpannerStore extends MastraCompositeStore {
         'experiments',
         'workspaces',
         'favorites',
+        'workflowDefinitions',
       ];
       for (const key of domainOrder) {
         const store = this.stores?.[key];
