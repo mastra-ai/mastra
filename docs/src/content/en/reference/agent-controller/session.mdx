@@ -113,14 +113,14 @@ The session is organized into sub-objects, each owning one domain of per-convers
 
 #### `getWorkspace()`
 
-Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
+Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope. Returns `undefined` when the session was created without a workspace.
 
 ```typescript
 const workspace = agentController.session.getWorkspace()
-const skill = await workspace.skills?.get('code-review')
+const skill = await workspace?.skills?.get('code-review')
 ```
 
-Returns: `Workspace`
+Returns: `Workspace | undefined`
 
 ### Permissions
 

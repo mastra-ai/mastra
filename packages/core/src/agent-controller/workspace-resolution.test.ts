@@ -114,7 +114,7 @@ describe('AgentController workspace — dynamic factory', () => {
     expect(factory).toHaveBeenCalledTimes(2);
   });
 
-  it('createSession throws when factory returns undefined', async () => {
+  it('createSession succeeds with no workspace when factory returns undefined', async () => {
     const nullFactory = vi.fn().mockResolvedValue(undefined);
     const controller = new AgentController({
       id: 'test',
@@ -124,9 +124,9 @@ describe('AgentController workspace — dynamic factory', () => {
     });
     await controller.init();
 
-    await expect(controller.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
-      'A session requires a valid workspace instance.',
-    );
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    expect(session).toBeDefined();
+    expect(session.getWorkspace()).toBeUndefined();
   });
 
   it('resolveWorkspace provides session state to the factory', async () => {
@@ -165,7 +165,7 @@ describe('AgentController workspace — dynamic factory', () => {
 // ===========================================================================
 
 describe('AgentController workspace — none configured', () => {
-  it('createSession throws when no workspace is configured', async () => {
+  it('createSession succeeds when no workspace is configured', async () => {
     const controller = new AgentController({
       id: 'test',
       storage: new InMemoryStore(),
@@ -173,9 +173,9 @@ describe('AgentController workspace — none configured', () => {
     });
     await controller.init();
 
-    await expect(controller.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
-      'A session requires a valid workspace instance.',
-    );
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    expect(session).toBeDefined();
+    expect(session.getWorkspace()).toBeUndefined();
   });
 });
 
@@ -309,17 +309,17 @@ describe('AgentController createSession — workspace isolation', () => {
       workspace: wsA,
     });
 
-    // Session B has no workspace override — should throw because no workspace is available
-    await expect(
-      controller.createSession({
-        id: 'session-b',
-        ownerId: 'test-owner',
-        resourceId: 'resource-b',
-      }),
-    ).rejects.toThrow('A session requires a valid workspace instance.');
+    // Session B has no workspace override and no controller-level workspace —
+    // it should not inherit session A's override.
+    const sessionB = await controller.createSession({
+      id: 'session-b',
+      ownerId: 'test-owner',
+      resourceId: 'resource-b',
+    });
 
-    // Session A still has its own workspace (init was called)
     expect(sessionA).toBeDefined();
+    expect(sessionA.getWorkspace()).toBe(wsA);
+    expect(sessionB.getWorkspace()).toBeUndefined();
     expect(initSpyA).toHaveBeenCalled();
   });
 });
