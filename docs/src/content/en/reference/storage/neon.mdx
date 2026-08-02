@@ -151,15 +151,16 @@ See [Neon connection pooling](https://neon.com/docs/connect/connection-pooling) 
 
 ## Vector search
 
-Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use [`PgVector`](/reference/vectors/pg) for semantic recall and vector search:
+Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use the direct `DATABASE_URL_UNPOOLED` connection while creating the extension and indexes. After setup, configure [`PgVector`](/reference/vectors/pg) with the pooled connection for runtime queries:
 
 ```typescript
 import { PgVector } from '@mastra/pg'
 
 const vector = new PgVector({
   id: 'neon-vector',
-  connectionString: process.env.DATABASE_URL_UNPOOLED!,
+  connectionString: process.env.DATABASE_URL!,
+  disableInit: true,
 })
 ```
 
-`PgVector` installs the extension when it creates its first index. If schema changes run separately, create the extension and indexes over the direct connection, then use the pooled connection with `disableInit: true` at runtime.
+Setting `disableInit: true` prevents the runtime process from creating or changing the extension, tables, and indexes.
