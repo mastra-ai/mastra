@@ -8,6 +8,7 @@
  *  - the domain is reachable through the LibSQLStore composite
  */
 import { createClient } from '@libsql/client';
+import { TABLE_WORKFLOW_DEFINITIONS } from '@mastra/core/storage';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -39,10 +40,11 @@ const graph: SerializedStepFlowEntry[] = [
 
 describe('WorkflowDefinitionsLibSQL', () => {
   let store: LibSQLStore;
+  let client: ReturnType<typeof createClient>;
 
   beforeEach(async () => {
     // Fresh in-memory db per test for full isolation.
-    const client = createClient({ url: ':memory:' });
+    client = createClient({ url: ':memory:' });
     store = new LibSQLStore({ id: 'wd-test', client, maxRetries: 1, initialBackoffMs: 10 });
     await store.init();
   });
@@ -77,6 +79,28 @@ describe('WorkflowDefinitionsLibSQL', () => {
     // schemas + graph are preserved across a partial update
     expect(updated.inputSchema).toEqual(inputSchema);
     expect(updated.graph).toEqual(graph);
+  });
+
+  it('updates authorId on an existing row and keeps createdAt stable', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+
+    const created = await wd.upsert({
+      id: 'wf-author',
+      inputSchema,
+      outputSchema,
+      graph,
+      authorId: 'author-1',
+    });
+    expect(created.authorId).toBe('author-1');
+
+    await new Promise(r => setTimeout(r, 5));
+    const updated = await wd.upsert({ id: 'wf-author', authorId: 'author-2' });
+    expect(updated.authorId).toBe('author-2');
+    expect(updated.createdAt.getTime()).toBe(created.createdAt.getTime());
+    expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
+
+    const fetched = await wd.get('wf-author');
+    expect(fetched?.authorId).toBe('author-2');
   });
 
   it('round-trips JSON columns intact', async () => {
@@ -123,6 +147,47 @@ describe('WorkflowDefinitionsLibSQL', () => {
     const byAuthor = await wd.list({ authorId: 'bob' });
     expect(byAuthor.total).toBe(1);
     expect(byAuthor.definitions[0]?.id).toBe('wf-b');
+  });
+
+  it('surfaces malformed JSON columns instead of returning the raw string', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+    await wd.upsert({ id: 'wf-corrupt', inputSchema, outputSchema, graph });
+
+    // Corrupt the graph column directly, simulating storage-level damage.
+    await client.execute({
+      sql: `UPDATE "${TABLE_WORKFLOW_DEFINITIONS}" SET graph = ? WHERE id = ?`,
+      args: ['{not valid json', 'wf-corrupt'],
+    });
+
+    // Corruption must fail loudly at read time — never hydrate a definition
+    // whose graph is a raw string. The SQL-level json() wrapper catches JSONB
+    // corruption; the JS-level parseJson guard covers anything that slips
+    // past it (e.g. legacy TEXT rows read without the wrapper).
+    await expect(wd.get('wf-corrupt')).rejects.toThrow(/malformed JSON/i);
+  });
+
+  it('falls back to update when a concurrent upsert wins the insert race', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+
+    // Another writer already created the row…
+    const winner = await wd.upsert({ id: 'wf-race', description: 'winner', inputSchema, outputSchema, graph });
+    // Ensure the loser's timestamp would differ if it clobbered the winner's row.
+    await new Promise(r => setTimeout(r, 10));
+
+    // …but our upsert's existence check raced it and saw nothing. Simulate the
+    // stale read deterministically: first get() returns null, later reads are real.
+    const getSpy = vi.spyOn(wd, 'get');
+    getSpy.mockImplementationOnce(async () => null);
+
+    // The create branch's insert hits the PRIMARY KEY violation and must fall
+    // back to the update path instead of surfacing the constraint error.
+    const result = await wd.upsert({ id: 'wf-race', description: 'loser', inputSchema, outputSchema, graph });
+    expect(result.description).toBe('loser');
+    expect(result.createdAt.getTime()).toBe(winner.createdAt.getTime());
+
+    getSpy.mockRestore();
+    const fetched = await wd.get('wf-race');
+    expect(fetched?.description).toBe('loser');
   });
 
   it('delete removes the row', async () => {

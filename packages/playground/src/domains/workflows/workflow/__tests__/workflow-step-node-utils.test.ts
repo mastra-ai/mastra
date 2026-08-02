@@ -71,6 +71,48 @@ describe('resolveWorkflowGraphStep', () => {
     const tool = resolveWorkflowGraphStep({ type: 'tool', id: 'double', toolId: 'double-tool' });
     expect(tool.kind).toBe('tool-step');
     expect((tool.flow as Extract<SerializedStepFlowEntry, { type: 'tool' }>).toolId).toBe('double-tool');
+
+    // Regression: the nested-workflow shim step used to expose the registry key
+    // (workflowId) as step.id instead of the declared call-site id.
+    const nested = resolveWorkflowGraphStep({
+      type: 'workflow',
+      id: 'call-site-id',
+      workflowId: 'registry-wf',
+      serializedStepFlow: [stepEntry('inner')],
+    });
+    expect(nested.kind).toBe('nested-workflow-step');
+    expect(nested.id).toBe('call-site-id');
+    expect(nested.step?.id).toBe('call-site-id');
+    expect((nested.flow as Extract<SerializedStepFlowEntry, { type: 'workflow' }>).workflowId).toBe('registry-wf');
+  });
+
+  it('preserves mapConfig and declarative fields for entries nested in foreach / loop', () => {
+    // Regression: the foreach/loop inner-entry shim used to be `{ id } as never`,
+    // dropping mapConfig/description so nested `.map()` steps rendered empty.
+    const foreachMapping = resolveWorkflowGraphStep({
+      type: 'foreach',
+      step: { type: 'mapping', id: 'map-each', mapConfig: 'return input' },
+      opts: { concurrency: 1 },
+    });
+    expect(foreachMapping.kind).toBe('foreach-step');
+    expect(foreachMapping.step?.mapConfig).toBe('return input');
+
+    const loopAgent = resolveWorkflowGraphStep({
+      type: 'loop',
+      step: { type: 'agent', id: 'writer', agentId: 'writer-agent', description: 'writes things' },
+      serializedCondition: { id: 'loop-condition', fn: 'true' },
+      loopType: 'dountil',
+    });
+    expect(loopAgent.kind).toBe('loop-step');
+    expect(loopAgent.step?.description).toBe('writes things');
+
+    const foreachWorkflow = resolveWorkflowGraphStep({
+      type: 'foreach',
+      step: { type: 'workflow', id: 'call-child', workflowId: 'child-wf', serializedStepFlow: [stepEntry('inner')] },
+      opts: { concurrency: 1 },
+    });
+    expect(foreachWorkflow.step?.component).toBe('WORKFLOW');
+    expect(foreachWorkflow.step?.serializedStepFlow).toHaveLength(1);
   });
 
   it('resolves agent / tool children nested in a parallel entry', () => {

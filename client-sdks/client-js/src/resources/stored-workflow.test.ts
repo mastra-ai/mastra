@@ -39,20 +39,6 @@ describe('StoredWorkflow resource', () => {
     client = new MastraClient({ baseUrl: 'http://localhost:4111', fetch: fetchMock });
   });
 
-  it('gets workflow builder settings', async () => {
-    const response: WorkflowBuilderSettingsResponse = {
-      enabled: true,
-      modelPolicy: { active: true, pickerVisible: false },
-    };
-    respond(response);
-
-    await expect(client.getWorkflowBuilderSettings()).resolves.toEqual(response);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:4111/api/editor/workflow-builder/settings',
-      expect.any(Object),
-    );
-  });
-
   it('lists stored workflows with filters', async () => {
     const response: ListStoredWorkflowsResponse = { workflows: [workflow], total: 1 };
     respond(response);
@@ -97,6 +83,20 @@ describe('StoredWorkflow resource', () => {
     expect(fetchMock).toHaveBeenLastCalledWith(
       'http://localhost:4111/api/stored/workflows/daily%20summary',
       expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('gets workflow builder settings', async () => {
+    const response: WorkflowBuilderSettingsResponse = {
+      enabled: true,
+      modelPolicy: { active: true, pickerVisible: false },
+    };
+    respond(response);
+
+    await expect(client.getWorkflowBuilderSettings()).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4111/api/editor/workflow-builder/settings',
+      expect.any(Object),
     );
   });
 

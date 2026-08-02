@@ -454,7 +454,9 @@ describe('validateStoredWorkflow', () => {
         type: 'array',
         items: expect.objectContaining({ type: 'object' }),
       });
-      expect((nonArray[0] as any).repair.action).not.toBe('insert-workflow-mapping-before');
+      // Inserting a mapping can never satisfy a foreach (mappings emit
+      // objects), so the repair must point at the upstream producer instead.
+      expect((nonArray[0] as any).repair.operation).toBe('update-workflow-step');
     });
 
     it('allows mappings to reference parallel and conditional child results', () => {

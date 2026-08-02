@@ -17,22 +17,25 @@ import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
-function parseJson(value: unknown): unknown {
+function parseJson(value: unknown, column: string, rowId: unknown): unknown {
   if (value == null) return null;
   if (typeof value === 'string') {
     try {
       return JSON.parse(value);
     } catch {
-      return value;
+      // Surface corruption loudly — returning the raw string would hand
+      // callers a definition whose graph/schema is a string, failing much
+      // later (or silently) at rehydration time.
+      throw new Error(`Workflow definition row "${String(rowId)}" has malformed JSON in column "${column}".`);
     }
   }
   return value;
 }
 
 function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
-  const inputSchema = parseJson(row.inputSchema);
-  const outputSchema = parseJson(row.outputSchema);
-  const graph = parseJson(row.graph);
+  const inputSchema = parseJson(row.inputSchema, 'inputSchema', row.id);
+  const outputSchema = parseJson(row.outputSchema, 'outputSchema', row.id);
+  const graph = parseJson(row.graph, 'graph', row.id);
   if (inputSchema == null || outputSchema == null || graph == null) {
     throw new Error(`Workflow definition row "${String(row.id)}" is missing required JSON columns.`);
   }
@@ -47,11 +50,11 @@ function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt as string),
   };
   if (row.description != null) def.description = String(row.description);
-  const metadata = parseJson(row.metadata);
+  const metadata = parseJson(row.metadata, 'metadata', row.id);
   if (metadata != null) def.metadata = metadata as Record<string, unknown>;
-  const stateSchema = parseJson(row.stateSchema);
+  const stateSchema = parseJson(row.stateSchema, 'stateSchema', row.id);
   if (stateSchema != null) def.stateSchema = stateSchema;
-  const requestContextSchema = parseJson(row.requestContextSchema);
+  const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema != null) def.requestContextSchema = requestContextSchema;
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
@@ -154,12 +157,26 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
         createdAt: now,
         updatedAt: now,
       };
-      await this.db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+      try {
+        await this.db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+      } catch (error) {
+        // A concurrent upsert may have created the row after our existence
+        // check; fall back to updating it so the upsert stays idempotent.
+        if (!(await this.get(input.id))) throw error;
+        return this.applyUpdate(input, now);
+      }
       const created = await this.get(input.id);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
 
+    return this.applyUpdate(input, now);
+  }
+
+  private async applyUpdate(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    now: Date,
+  ): Promise<WorkflowDefinition> {
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
     if ('metadata' in input && input.metadata !== undefined) data.metadata = input.metadata;
@@ -170,6 +187,7 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
+    if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 
     await this.db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
     const updated = await this.get(input.id);

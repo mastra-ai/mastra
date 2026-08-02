@@ -119,9 +119,28 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
         createdAt: now,
         updatedAt: now,
       };
-      await collection.insertOne(doc);
+      try {
+        await collection.insertOne(doc);
+      } catch (error) {
+        // A concurrent upsert may have created the document after our
+        // existence check; fall back to updating it so the upsert stays
+        // idempotent. Only duplicate-key failures (code 11000) qualify —
+        // anything else is a real persistence error and must propagate.
+        const isDuplicateKey = (error as { code?: number })?.code === 11000;
+        if (!isDuplicateKey || !(await collection.findOne({ id: input.id }))) throw error;
+        return this.applyUpdate(input, now);
+      }
       return docToDefinition(doc);
     }
+
+    return this.applyUpdate(input, now);
+  }
+
+  private async applyUpdate(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    now: Date,
+  ): Promise<WorkflowDefinition> {
+    const collection = await this.getCollection(TABLE_WORKFLOW_DEFINITIONS);
 
     const update: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) update.description = input.description;
@@ -133,10 +152,12 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
       update.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) update.graph = input.graph;
     if ('status' in input && input.status !== undefined) update.status = input.status;
+    if ('authorId' in input && input.authorId !== undefined) update.authorId = input.authorId;
 
     await collection.updateOne({ id: input.id }, { $set: update });
-    const merged = { ...existing, ...update, id: input.id, createdAt: existing.createdAt };
-    return docToDefinition(merged);
+    const updated = await collection.findOne<Record<string, any>>({ id: input.id });
+    if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    return docToDefinition(updated);
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {

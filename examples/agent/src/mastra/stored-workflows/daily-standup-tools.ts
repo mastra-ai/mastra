@@ -106,9 +106,7 @@ export const formatDigestWithEscalationTool = createTool({
   execute: async ({ teamName, digest, escalation }) => {
     const today = new Date().toISOString().slice(0, 10);
     const markdown =
-      `# ${teamName} — Daily Standup (${today})\n\n` +
-      `${digest.trim()}\n\n` +
-      `## Escalation\n${escalation.trim()}\n`;
+      `# ${teamName} — Daily Standup (${today})\n\n` + `${digest.trim()}\n\n` + `## Escalation\n${escalation.trim()}\n`;
     return { markdown };
   },
 });

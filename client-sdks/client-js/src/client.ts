@@ -133,6 +133,7 @@ import type {
   ListStoredWorkflowsParams,
   ListStoredWorkflowsResponse,
   UpsertStoredWorkflowParams,
+  WorkflowBuilderSettingsResponse,
   UpsertStoredWorkflowResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
@@ -152,7 +153,6 @@ import type {
   StoredSkillResponse,
   GetSystemPackagesResponse,
   BuilderSettingsResponse,
-  WorkflowBuilderSettingsResponse,
   BuilderAvailableModelsResponse,
   PermissionPatternsResponse,
   InfrastructureStatusResponse,
@@ -1294,6 +1294,11 @@ export class MastraClient extends BaseResource {
   // Stored Workflows
   // ============================================================================
 
+  /**
+   * Lists stored workflow definitions, optionally filtered by status or author
+   * @param params - Optional filters: `status` ('active' | 'archived') and `authorId`
+   * @returns Promise containing the matching definitions and a total count
+   */
   public listStoredWorkflows(params?: ListStoredWorkflowsParams): Promise<ListStoredWorkflowsResponse> {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.set('status', params.status);
@@ -1303,6 +1308,13 @@ export class MastraClient extends BaseResource {
     return this.request(`/stored/workflows${queryString ? `?${queryString}` : ''}`);
   }
 
+  /**
+   * Creates or replaces a stored workflow definition and live-registers it on the server.
+   * Optional `dependencies` lets helper workflows referenced by the root definition be
+   * saved in the same request; their ids are echoed back as `dependencyIds`.
+   * @param params - The workflow definition (id, schemas, graph) plus optional helper dependencies
+   * @returns Promise containing the persisted definition and any dependency ids
+   */
   public upsertStoredWorkflow(params: UpsertStoredWorkflowParams): Promise<UpsertStoredWorkflowResponse> {
     return this.request('/stored/workflows', {
       method: 'POST',
@@ -1310,8 +1322,21 @@ export class MastraClient extends BaseResource {
     });
   }
 
+  /**
+   * Gets a stored workflow instance by ID for further operations (details, delete).
+   * To execute a stored workflow, use `getWorkflow(id).createRun()` like any other workflow.
+   * @param storedWorkflowId - ID of the stored workflow definition
+   * @returns StoredWorkflow instance
+   */
   public getStoredWorkflow(storedWorkflowId: string): StoredWorkflow {
     return new StoredWorkflow(this.options, storedWorkflowId);
+  }
+
+  /**
+   * Retrieves workflow builder settings for UI gating.
+   */
+  public getWorkflowBuilderSettings(): Promise<WorkflowBuilderSettingsResponse> {
+    return this.request('/editor/workflow-builder/settings');
   }
 
   // ============================================================================
@@ -1623,13 +1648,6 @@ export class MastraClient extends BaseResource {
    */
   public getBuilderSettings(): Promise<BuilderSettingsResponse> {
     return this.request('/editor/builder/settings');
-  }
-
-  /**
-   * Retrieves workflow builder settings for UI gating.
-   */
-  public getWorkflowBuilderSettings(): Promise<WorkflowBuilderSettingsResponse> {
-    return this.request('/editor/workflow-builder/settings');
   }
 
   /**

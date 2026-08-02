@@ -29,9 +29,15 @@ export type ResolvedWorkflowRegularStep = ResolvedWorkflowStepBase<
   Extract<SerializedStepFlowEntry, { type: 'step' }>
 >;
 
+/**
+ * `flow` is a union: newer graphs emit a dedicated flat `mapping` entry, while
+ * older serialized graphs encoded `.map()` as a `step` entry whose wrapped step
+ * carries `mapConfig`. Narrow on `flow.type` before reading `mapConfig`
+ * (`flow.mapConfig` vs `flow.step.mapConfig`).
+ */
 export type ResolvedWorkflowMapStep = ResolvedWorkflowStepBase<
   'map-step',
-  Extract<SerializedStepFlowEntry, { type: 'mapping' }>
+  Extract<SerializedStepFlowEntry, { type: 'mapping' | 'step' }>
 >;
 
 export type ResolvedWorkflowAgentStep = ResolvedWorkflowStepBase<

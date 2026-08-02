@@ -37,6 +37,36 @@ export type WorkflowBoundaryNodeData = {
 
 export type WorkflowBoundaryNode = Node<WorkflowBoundaryNodeData, typeof WORKFLOW_BOUNDARY_NODE_TYPE>;
 
+type SerializedStepInner = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
+export type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'component'> &
+  Partial<Pick<SerializedStepInner, 'serializedStepFlow' | 'mapConfig' | 'canSuspend' | 'metadata'>>;
+
+/**
+ * `foreach.step` / `loop.step` is a `SerializedSingleStepEntry`
+ * (agent | tool | step | mapping | workflow). For the `type: 'step'` variant,
+ * forward the wrapped step directly; for declarative variants, synthesize a
+ * step-like shim carrying the fields downstream rendering reads
+ * (`description`, `mapConfig`, `component`, `serializedStepFlow`). Entry-only
+ * fields like `agentId`/`toolId` stay available on the resolved `flow`.
+ */
+export const unwrapInnerEntry = (
+  inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step'],
+): SerializedStepLike => {
+  if (inner.type === 'step') return inner.step;
+  if (inner.type === 'workflow') {
+    return {
+      id: inner.id,
+      description: inner.description,
+      component: 'WORKFLOW',
+      serializedStepFlow: inner.serializedStepFlow,
+    };
+  }
+  if (inner.type === 'mapping') {
+    return { id: inner.id, description: undefined, component: undefined, mapConfig: inner.mapConfig };
+  }
+  return { id: inner.id, description: inner.description, component: undefined };
+};
+
 export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): ResolvedWorkflowStep => {
   switch (flow.type) {
     case 'step':
@@ -56,7 +86,7 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
           kind: 'map-step',
           id: flow.step.id,
           step: flow.step,
-          flow: flow as never,
+          flow,
         };
       }
 
@@ -85,8 +115,7 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         flow,
       };
     case 'foreach': {
-      const inner = flow.step;
-      const innerStep = inner.type === 'step' ? inner.step : ({ id: inner.id } as never);
+      const innerStep = unwrapInnerEntry(flow.step);
       return {
         kind: 'foreach-step',
         id: innerStep.id,
@@ -107,8 +136,7 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         flow,
       };
     case 'loop': {
-      const inner = flow.step;
-      const innerStep = inner.type === 'step' ? inner.step : ({ id: inner.id } as never);
+      const innerStep = unwrapInnerEntry(flow.step);
       return {
         kind: 'loop-step',
         id: innerStep.id,
@@ -133,7 +161,9 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         kind: 'nested-workflow-step',
         id: flow.id,
         step: {
-          id: flow.workflowId,
+          // Use the declared call-site id, consistent with unwrapInnerEntry and
+          // collectGraphStepFlags; the registry key stays available as flow.workflowId.
+          id: flow.id,
           description: flow.description,
           component: 'WORKFLOW',
           serializedStepFlow: flow.serializedStepFlow,

@@ -53,7 +53,15 @@ export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecute
             : m.step,
         );
 
-    result[key] = traverseMappingPath(stepResult, m.path, `step ${m?.step?.id ?? 'initData'}`);
+    result[key] = traverseMappingPath(stepResult, m.path, describeMappingSource(m));
   }
   return result;
+}
+
+/** Human-readable source label for path-traversal errors. */
+function describeMappingSource(m: any): string {
+  if (m.initData) return 'initData';
+  const stepLabel = (s: any): string => (typeof s === 'string' ? s : (s?.id ?? 'unknown'));
+  if (Array.isArray(m.step)) return `step ${m.step.map(stepLabel).join('|')}`;
+  return `step ${stepLabel(m.step)}`;
 }

@@ -91,14 +91,9 @@ const definition = {
     {
       type: 'mapping',
       id: 'create-greeting',
-      outputSchema: {
-        type: 'object',
-        properties: { message: { type: 'string' } },
-        required: ['message'],
-      },
-      mappingConfig: {
+      mapConfig: JSON.stringify({
         message: { template: 'Hello, ${initData.name}!' },
-      },
+      }),
     },
   ],
 } satisfies UpsertStoredWorkflowParams

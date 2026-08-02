@@ -36,14 +36,23 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
           input.requestContextSchema !== undefined && { requestContextSchema: input.requestContextSchema }),
         ...('graph' in input && input.graph !== undefined && { graph: input.graph }),
         ...('status' in input && input.status !== undefined && { status: input.status }),
+        ...('authorId' in input && input.authorId !== undefined && { authorId: input.authorId }),
         updatedAt: now,
       };
       this.db.workflowDefinitions.set(input.id, merged);
       return this.deepCopy(merged);
     }
 
-    // Creation requires the full schema set + graph
-    if (!('inputSchema' in input) || !('outputSchema' in input) || !('graph' in input)) {
+    // Creation requires the full schema set + graph. Check values, not key
+    // presence — `{ graph: undefined }` must not slip through.
+    if (
+      !('inputSchema' in input) ||
+      input.inputSchema === undefined ||
+      !('outputSchema' in input) ||
+      input.outputSchema === undefined ||
+      !('graph' in input) ||
+      input.graph === undefined
+    ) {
       throw new Error(
         `Cannot create workflow definition "${input.id}": inputSchema, outputSchema, and graph are required.`,
       );
@@ -57,7 +66,7 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
       outputSchema: input.outputSchema,
       stateSchema: input.stateSchema,
       requestContextSchema: input.requestContextSchema,
-      graph: input.graph!,
+      graph: input.graph,
       status: 'active',
       source: 'storage',
       authorId: 'authorId' in input ? input.authorId : undefined,

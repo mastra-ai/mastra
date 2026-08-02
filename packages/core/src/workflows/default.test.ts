@@ -138,6 +138,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     stepResults = {} as Record<string, StepResult<any, any, any, any>>,
     timeTravel,
     executionPath = [],
+    steps,
   }: {
     conditions: any[];
     workflowId: string;
@@ -150,10 +151,11 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       inputData?: any;
     };
     executionPath?: number[];
+    steps?: any[];
   }) {
     const entry = {
       type: 'conditional' as const,
-      steps: [
+      steps: steps ?? [
         {
           type: 'step' as const,
           step: {
@@ -336,6 +338,62 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       // The truthy arm (step1) still runs and the conditional succeeds.
       expect(result.status).toBe('success');
       expect(finalStepResults.step2.status).not.toBe('running');
+    });
+
+    it("rewrites a targeted-but-non-truthy declarative arm (agent / mapping) from 'running' to 'skipped'", async () => {
+      const workflowId = 'test-workflow';
+      const runId = randomUUID();
+
+      // arm step1 (index 0) is truthy; the declarative arms (indexes 1 and 2) are NOT truthy.
+      const conditions = [async () => true, async () => false, async () => false];
+
+      // Declarative arms carry their own top-level `id` (no wrapped `step`). Reconciliation must
+      // key off getSingleStepEntryId rather than assuming a `{ type: 'step' }` shape.
+      const steps = [
+        {
+          type: 'step' as const,
+          step: {
+            id: 'step1',
+            inputSchema: z.any(),
+            outputSchema: z.any(),
+            execute: async () => ({ result: 'step1-output' }),
+          },
+        },
+        { type: 'agent' as const, id: 'agent-arm', agentId: 'some-agent' },
+        { type: 'mapping' as const, id: 'mapping-arm', mapConfig: {} },
+      ];
+
+      // Mirror createTimeTravelExecutionParams: the targeted declarative arm is pre-marked 'running'.
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        'agent-arm': {
+          status: 'running',
+          payload: { from: 'time-travel' },
+          startedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>,
+        'mapping-arm': {
+          status: 'running',
+          payload: { from: 'time-travel' },
+          startedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>,
+      };
+
+      const { result, stepResults: finalStepResults } = await runConditional({
+        conditions,
+        workflowId,
+        runId,
+        stepResults,
+        steps,
+        executionPath: [0],
+        timeTravel: {
+          executionPath: [0],
+          steps: ['agent-arm'],
+          stepResults: {},
+        },
+      });
+
+      expect(finalStepResults['agent-arm'].status).toBe('skipped');
+      expect(finalStepResults['mapping-arm'].status).toBe('skipped');
+      expect(result.status).toBe('success');
     });
 
     it("leaves a 'running' arm untouched for normal start/resume (no time travel)", async () => {

@@ -100,12 +100,29 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
         createdAt: now,
         updatedAt: now,
       };
-      await this.operations.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+      try {
+        // insertOnly: a plain INSERT so a concurrent create is detected as a
+        // duplicate-key error instead of ON DUPLICATE KEY UPDATE silently
+        // clobbering the winning row (and its createdAt).
+        await this.operations.insertOnly({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+      } catch (error) {
+        // A concurrent upsert may have created the row after our existence
+        // check; fall back to updating it so the upsert stays idempotent.
+        if (!(await this.get(input.id))) throw error;
+        return this.applyUpdate(input, now);
+      }
       const created = await this.get(input.id);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
 
+    return this.applyUpdate(input, now);
+  }
+
+  private async applyUpdate(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    now: Date,
+  ): Promise<WorkflowDefinition> {
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
     if ('metadata' in input && input.metadata !== undefined) data.metadata = input.metadata;
@@ -116,6 +133,7 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
+    if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 
     await this.operations.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
     const updated = await this.get(input.id);

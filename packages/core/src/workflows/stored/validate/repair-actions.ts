@@ -138,7 +138,15 @@ export function addWorkflowValidationRepairActions(
         ...(expectedSchema ? { expectedSchema } : {}),
         ...(actualSchema ? { actualSchema } : {}),
         legalSources: legalSources(def, targetIndex, expectedSchema, stepOutputs),
-        operation: issue.path === 'outputSchema' ? 'insert-workflow-mapping-after' : 'insert-workflow-mapping-before',
+        // A foreach consumes a raw array, and mappings always emit an object —
+        // inserting a mapping can never satisfy it. Advertise fixing the
+        // upstream producer (or the foreach body) instead.
+        operation:
+          containerEntry?.type === 'foreach'
+            ? 'update-workflow-step'
+            : issue.path === 'outputSchema'
+              ? 'insert-workflow-mapping-after'
+              : 'insert-workflow-mapping-before',
         arguments: entryId ? { targetStepId: entryId } : { targetPath: issue.path },
         blocksCheckpoint: false,
         blocksFinalize: true,

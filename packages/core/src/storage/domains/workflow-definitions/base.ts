@@ -63,6 +63,7 @@ export interface UpdateWorkflowDefinitionInput {
   requestContextSchema?: unknown;
   graph?: SerializedStepFlowEntry[];
   status?: 'active' | 'archived';
+  authorId?: string;
 }
 
 export interface ListWorkflowDefinitionsInput {

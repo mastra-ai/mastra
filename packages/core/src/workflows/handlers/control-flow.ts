@@ -463,9 +463,8 @@ export async function executeConditional(
   // time-travel so normal start/resume flows are untouched.
   if (timeTravel && timeTravel.executionPath.length > 0) {
     entry.steps.forEach((armEntry, index) => {
-      if (armEntry.type !== 'step') return;
       if (truthyIndexes.includes(index)) return;
-      const armId = armEntry.step.id;
+      const armId = getSingleStepEntryId(armEntry);
       const existing = stepResults[armId];
       if (existing?.status !== 'running') return;
       stepResults[armId] = {

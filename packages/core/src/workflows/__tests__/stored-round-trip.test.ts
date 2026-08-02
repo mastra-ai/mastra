@@ -186,6 +186,29 @@ describe('storage round-trip', () => {
     expect((rehydratedResult as any).result.message).toBe('Doubled value is 10');
   });
 
+  it('rehydrates workflow-level description and metadata from the stored definition', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage: new InMemoryStore({ id: 'metadata-hydration' }),
+    });
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'metadata-hydration',
+        description: 'carries metadata',
+        metadata: { owner: 'team-a', tags: ['stored'] },
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { doubled: { type: 'number' } }, required: ['doubled'] },
+        graph: [{ type: 'tool', id: 'calculate', toolId: 'double-tool' }],
+      },
+      mastra,
+    );
+
+    expect(workflow.description).toBe('carries metadata');
+    expect(workflow.metadata).toEqual({ owner: 'team-a', tags: ['stored'] });
+  });
+
   it('rehydrates mappings by local tool step id when it differs from the registered tool id', async () => {
     const mastra = new Mastra({
       logger: false,
@@ -244,6 +267,57 @@ describe('storage round-trip', () => {
         mastra,
       ),
     ).resolves.toBeDefined();
+  });
+
+  it('wraps a generic { type: "step" } tool reference in a real Step so it honors the executeStep contract', async () => {
+    // The stored graph schema reuses SerializedSingleStepEntry, which includes
+    // the generic step descriptor ({ type: 'step', step: { id } }) — a bare-id
+    // reference that doesn't declare agent vs. tool and resolves late against
+    // the live Mastra instance (see stored/validate/refs.ts). Rehydration must
+    // wrap the resolved tool with createStepFromTool — casting the raw Tool
+    // would hand its execute() step-shaped params ({ inputData, ... }) instead
+    // of the tool's input, silently producing garbage output.
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage: new InMemoryStore({ id: 'generic-step-tool' }),
+    });
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'generic-step-wf',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { doubled: { type: 'number' } }, required: ['doubled'] },
+        graph: [{ type: 'step', step: { id: 'double-tool' } } as any],
+      },
+      mastra,
+    );
+    mastra.addWorkflow(workflow, 'generic-step-wf');
+
+    const run = await mastra.getWorkflow('generic-step-wf').createRun();
+    const result = await run.start({ inputData: { value: 5 } });
+
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ doubled: 10 });
+  });
+
+  it('rejects a generic { type: "step" } reference that resolves to neither agent nor tool', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore({ id: 'generic-step-missing' }),
+    });
+
+    await expect(
+      rehydrateWorkflow(
+        {
+          id: 'generic-step-missing-wf',
+          inputSchema: { type: 'object', properties: {}, required: [] },
+          outputSchema: { type: 'object', properties: {}, required: [] },
+          graph: [{ type: 'step', step: { id: 'nope' } } as any],
+        },
+        mastra,
+      ),
+    ).rejects.toThrow(/references step "nope"/);
   });
 
   it('resolves nested workflow references by intrinsic workflow id even when the registration key differs', async () => {

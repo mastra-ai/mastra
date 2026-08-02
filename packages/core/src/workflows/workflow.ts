@@ -2156,7 +2156,7 @@ export class Workflow<
       conditions: resolved.map(({ condition }) => condition),
       serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
       ...(resolved.some(({ predicate }) => predicate)
-        ? { predicates: resolved.map(({ predicate }) => predicate) as Array<Predicate | undefined> }
+        ? { predicates: resolved.map(({ predicate }) => predicate ?? null) }
         : {}),
     } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
@@ -2164,7 +2164,7 @@ export class Workflow<
       steps: resolved.map(({ step }) => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
       serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
       ...(resolved.some(({ predicate }) => predicate)
-        ? { predicates: resolved.map(({ predicate }) => predicate) as Array<Predicate | undefined> }
+        ? { predicates: resolved.map(({ predicate }) => predicate ?? null) }
         : {}),
     } as SerializedStepFlowEntry);
     resolved.forEach(({ step }) => {

@@ -65,7 +65,7 @@ export const standupEscalationAgent = new Agent({
   name: 'Standup Escalation',
   description: 'Drafts a Slack-style escalation message when the standup contains blockers.',
   instructions: [
-    'You receive the day\'s standup digest (markdown) for a team and must draft',
+    "You receive the day's standup digest (markdown) for a team and must draft",
     'a short Slack-style message to the tech lead flagging the blockers.',
     'Keep it under 4 lines, plain text, no markdown headings.',
     'Start with "@techlead" and end with a concrete ask (e.g. "can you unblock X today?").',

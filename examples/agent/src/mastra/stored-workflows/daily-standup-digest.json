@@ -33,9 +33,21 @@
   "outputSchema": {
     "type": "object",
     "properties": {
-      "markdown": { "type": "string" }
-    },
-    "required": ["markdown"]
+      "call-with-escalation": {
+        "type": "object",
+        "properties": {
+          "markdown": { "type": "string" }
+        },
+        "required": ["markdown"]
+      },
+      "call-plain-digest": {
+        "type": "object",
+        "properties": {
+          "markdown": { "type": "string" }
+        },
+        "required": ["markdown"]
+      }
+    }
   },
   "graph": [
     {

@@ -117,10 +117,17 @@ function resolvePath(rawPath: string, ctx: PredicateContext): unknown | Missing 
         } catch {
           return MISSING;
         }
-        if (stepResult === undefined || stepResult === null) return MISSING;
       } else {
         return MISSING;
       }
+      // The runtime accessor (step.ts getStepResult) returns null both for a
+      // genuinely absent step and for a step without a successful output, so a
+      // null/undefined step result is indistinguishable from "missing". Treat
+      // it as MISSING in both context shapes so the same predicate evaluates
+      // identically whether the caller supplies a stepResults map or an
+      // accessor: `exists stepResults.<id>` means "step produced a successful,
+      // non-null output".
+      if (stepResult === undefined || stepResult === null) return MISSING;
       return walk(stepResult, subPath);
     }
     default:

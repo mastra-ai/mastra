@@ -61,28 +61,66 @@ const UNSUPPORTED_SCHEMA_KEYS = [
   'discriminator',
 ] as const;
 
+/** Values `z.literal()` can represent — the only const/enum members that survive conversion losslessly. */
+function isLiteralValue(v: unknown): v is string | number | boolean | null {
+  return v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+}
+
+/** Throw or warn-and-fallback per `onUnsupportedSchema`, matching the unsupported-keyword behavior. */
+function unsupported(message: string, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
+  if (opts.onUnsupportedSchema === 'warn') {
+    opts.onUnsupported?.(message);
+    return z.any();
+  }
+  throw new Error(message);
+}
+
 function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') return z.any();
 
   for (const key of UNSUPPORTED_SCHEMA_KEYS) {
     if (key in schema) {
-      const message =
+      return unsupported(
         `Stored workflow schema uses unsupported JSON Schema keyword "${key}". ` +
-        `This converter only supports the static subset that Zod round-trips through ` +
-        `standardSchemaToJSONSchema (object, array, string, number, integer, boolean, null, enum). ` +
-        `Simplify the schema or extend jsonSchemaToZod to cover this keyword.`;
-      if (opts.onUnsupportedSchema === 'warn') {
-        opts.onUnsupported?.(message);
-        return z.any();
-      }
-      throw new Error(message);
+          `This converter only supports the static subset that Zod round-trips through ` +
+          `standardSchemaToJSONSchema (object, array, string, number, integer, boolean, null, enum, const). ` +
+          `Simplify the schema or extend jsonSchemaToZod to cover this keyword.`,
+        opts,
+      );
     }
   }
 
   let out: z.ZodTypeAny;
 
-  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
-    out = z.enum(schema.enum.map(String) as [string, ...string[]]);
+  if ('const' in schema) {
+    // Zod emits `{ const: value }` for z.literal() — preserve it instead of
+    // silently dropping the constraint. Non-primitive consts (objects/arrays)
+    // can't be represented by z.literal, so treat them as unsupported.
+    if (!isLiteralValue(schema.const)) {
+      return unsupported(
+        `Stored workflow schema uses a non-primitive "const" value (${JSON.stringify(schema.const)}). ` +
+          `Only string, number, boolean, and null literals are supported.`,
+        opts,
+      );
+    }
+    out = z.literal(schema.const);
+  } else if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    const values = schema.enum as unknown[];
+    if (!values.every(isLiteralValue)) {
+      return unsupported(
+        `Stored workflow schema uses an "enum" with non-primitive members. ` +
+          `Only string, number, boolean, and null enum members are supported.`,
+        opts,
+      );
+    }
+    if (values.every(v => typeof v === 'string')) {
+      out = z.enum(values as [string, ...string[]]);
+    } else {
+      // Mixed/non-string enums (e.g. [1, 2, 3] or ['a', 1]): preserve the
+      // original member types via literal union instead of coercing to string.
+      const literals: z.ZodTypeAny[] = values.map(v => z.literal(v as string | number | boolean | null));
+      out = literals.length === 1 ? literals[0]! : z.union(literals as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+    }
   } else if (Array.isArray(schema.type)) {
     const options = schema.type.map((t: string) => walk({ ...schema, type: t }, opts));
     // z.union requires a tuple of at least two members; guard shorter arrays.
@@ -105,6 +143,16 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
         break;
       }
       case 'array':
+        // Tuple-form `items: [...]` positional schemas aren't representable by
+        // z.array(); converting to z.array(z.any()) would strip every
+        // positional constraint. Reject instead of silently widening.
+        if (Array.isArray(schema.items)) {
+          return unsupported(
+            `Stored workflow schema uses tuple-form "items" (an array of positional schemas). ` +
+              `Only a single item schema is supported; use "items": { ... } instead.`,
+            opts,
+          );
+        }
         out = z.array(walk(schema.items ?? {}, opts));
         break;
       case 'string':
@@ -128,9 +176,10 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
         out = z.any();
         break;
       default:
-        throw new Error(
+        return unsupported(
           `Stored workflow schema uses unsupported JSON Schema type "${String(schema.type)}". ` +
             `This converter only supports object, array, string, number, integer, boolean, null, and enum.`,
+          opts,
         );
     }
   }

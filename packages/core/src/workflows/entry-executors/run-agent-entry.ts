@@ -56,6 +56,10 @@ export async function runAgentEntry(
     streamPromise.resolve = resolve;
     streamPromise.reject = reject;
   });
+  // The promise is awaited later (and sometimes not at all when structured
+  // output short-circuits); attach a no-op handler so an early rejection
+  // can't surface as an unhandled rejection before the await.
+  streamPromise.promise.catch(() => {});
 
   // Track structured output result
   let structuredResult: any = null;
@@ -164,24 +168,32 @@ async function bridgeLegacyWatchEvents({
     runId,
     data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
   });
-  for await (const chunk of stream) {
-    if (chunk.type === 'tripwire') {
-      tripwireChunk = chunk;
-      break;
+  try {
+    for await (const chunk of stream) {
+      if (chunk.type === 'tripwire') {
+        tripwireChunk = chunk;
+        break;
+      }
+      if (chunk.type === 'text-delta') {
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
+        });
+      }
     }
-    if (chunk.type === 'text-delta') {
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
+  } finally {
+    // Watchers pair streaming-start with streaming-finish; publish it even
+    // when iteration throws or breaks early so they never hang open. Swallow
+    // publish failures here so they can't mask the original error.
+    await pubsub
+      .publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
-        data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-      });
-    }
+        data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
+      })
+      .catch(() => {});
   }
-  await pubsub.publish(`workflow.events.v2.${runId}`, {
-    type: 'watch',
-    runId,
-    data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-  });
   return tripwireChunk;
 }
 
