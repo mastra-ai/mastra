@@ -88,10 +88,10 @@ describe('Workspace activity indicators', () => {
   it('lights the running dot for a factory thread tagged with factorySessionId', async () => {
     // The real factory shape: matched by `factorySessionId`, while `projectPath`
     // points at the sandbox workdir and matches no row key at all.
-    stubWith(
-      sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }),
-      { [workSessionId]: 'active', [reviewSessionId]: 'idle' },
-    );
+    stubWith(sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }), {
+      [workSessionId]: 'active',
+      [reviewSessionId]: 'idle',
+    });
 
     renderSection();
 
@@ -99,10 +99,10 @@ describe('Workspace activity indicators', () => {
   });
 
   it('leaves an idle factory thread without a running dot', async () => {
-    stubWith(
-      sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }),
-      { [workSessionId]: 'idle', [reviewSessionId]: 'idle' },
-    );
+    stubWith(sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }), {
+      [workSessionId]: 'idle',
+      [reviewSessionId]: 'idle',
+    });
 
     renderSection();
 
@@ -112,10 +112,10 @@ describe('Workspace activity indicators', () => {
   });
 
   it('labels the row with the thread title rather than the branch', async () => {
-    stubWith(
-      sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }),
-      { [workSessionId]: 'active', [reviewSessionId]: 'idle' },
-    );
+    stubWith(sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }), {
+      [workSessionId]: 'active',
+      [reviewSessionId]: 'idle',
+    });
 
     renderSection();
 
