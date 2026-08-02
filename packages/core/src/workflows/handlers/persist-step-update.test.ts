@@ -7,10 +7,15 @@
  * memory of the previous write.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../di';
+import { Mastra } from '../../mastra';
+import { MockStore } from '../../storage/mock';
+import { createWorkflow } from '../create';
 import { DefaultExecutionEngine } from '../default';
 import type { ExecutionContext, WorkflowRunStatus } from '../types';
+import { createStep } from '../workflow';
 
 type PersistArgs = Parameters<Awaited<ReturnType<typeof getStore>>['persistWorkflowSnapshot']>[0];
 
@@ -238,5 +243,100 @@ describe('DefaultExecutionEngine — lastPersistedStatus accessors', () => {
     engine.setLastPersistedStatus('run-1', 'suspended');
     // Execute loop deliberately does NOT clear on suspended.
     expect(engine.getLastPersistedStatus('run-1')).toBe('suspended');
+  });
+});
+
+/**
+ * Regression test for issue #19699.
+ *
+ * `executeEntry` tags its terminal `persistStepUpdate` with `phase: 'resume'`
+ * whenever the invocation is a resume. That suffix is what keeps the resumed
+ * lineage's durable operation ID distinct from the memoized suspended write
+ * of the same execution path — without it, Inngest sees the same operation ID
+ * twice, trips AUTOMATIC_PARALLEL_INDEXING, and the resume payload is dropped.
+ *
+ * The default engine's `wrapDurableOperation` ignores the operation ID, so the
+ * suffix is invisible in default-engine behaviour. Asserting on the IDs handed
+ * to it is what pins the contract the durable engines depend on.
+ */
+describe('persistStepUpdate — resume phase in the durable operation ID', () => {
+  const STEP_UPDATE_RESUME = /\.stepUpdate\.resume$/;
+
+  let operationIds: string[];
+  let spy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    operationIds = [];
+    const original = DefaultExecutionEngine.prototype.wrapDurableOperation;
+    spy = vi.spyOn(DefaultExecutionEngine.prototype, 'wrapDurableOperation').mockImplementation(function (
+      this: DefaultExecutionEngine,
+      operationId: string,
+      operationFn: () => any,
+    ) {
+      operationIds.push(operationId);
+      return original.call(this, operationId, operationFn);
+    } as any);
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  const makeWorkflow = () => {
+    const approvalStep = createStep({
+      id: 'approval-step',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ approved: z.boolean() }),
+      suspendSchema: z.object({ question: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ resumeData, suspend }) => {
+        if (!resumeData) {
+          await suspend({ question: 'Proceed?' });
+          return { approved: false };
+        }
+        return { approved: resumeData.approved };
+      },
+    });
+
+    return createWorkflow({
+      id: 'resume-phase-workflow',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ approved: z.boolean() }),
+      steps: [approvalStep],
+      options: { validateInputs: false },
+    })
+      .then(approvalStep)
+      .commit();
+  };
+
+  it('omits the resume phase on a non-resumed invocation', async () => {
+    const workflow = makeWorkflow();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'resume-phase-workflow': workflow } });
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { name: 'alpha' } });
+
+    expect(result.status).toBe('suspended');
+    // Sanity: the terminal step-update fired at all, just without the suffix.
+    expect(operationIds.some(id => id.endsWith('.stepUpdate'))).toBe(true);
+    expect(operationIds.filter(id => STEP_UPDATE_RESUME.test(id))).toEqual([]);
+  });
+
+  it('tags the terminal step-update with the resume phase on a resumed invocation', async () => {
+    const workflow = makeWorkflow();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'resume-phase-workflow': workflow } });
+
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: { name: 'alpha' } })).status).toBe('suspended');
+
+    // Only look at what the resume invocation emitted.
+    operationIds.length = 0;
+
+    const resumed = await run.resume({ step: 'approval-step', resumeData: { approved: true } });
+
+    expect(resumed.status).toBe('success');
+    // The fix: the resumed lineage's terminal write carries `.resume`, so its
+    // operation ID cannot collide with the memoized suspended write.
+    expect(operationIds.some(id => STEP_UPDATE_RESUME.test(id))).toBe(true);
   });
 });
