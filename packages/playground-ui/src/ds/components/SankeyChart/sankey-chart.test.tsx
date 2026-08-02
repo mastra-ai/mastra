@@ -364,6 +364,11 @@ describe('SankeyChart', () => {
       Number(nextNode?.getAttribute('y')) - Number(node?.getAttribute('y')) - Number(node?.getAttribute('height')),
     ).toBeCloseTo(56);
     expect(channelLabel?.getAttribute('x')).toBe(node?.getAttribute('x'));
+    const columnXs = [...new Set(nodes.map(rect => Number(rect.getAttribute('x'))))].sort((a, b) => a - b);
+    expect(columnXs).toHaveLength(3);
+    const nodeWidth = Number(node?.getAttribute('width'));
+    expect(Number(regionLabel?.getAttribute('x'))).toBeCloseTo(columnXs[1] + nodeWidth / 2);
+    expect(Number(outcomeLabel?.getAttribute('x'))).toBeCloseTo(columnXs[2] + nodeWidth);
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
     expect(searchLabel?.getAttribute('font-size')).toBe('11');
     expect(searchLabel?.getAttribute('text-anchor')).toBe('start');
