@@ -16,6 +16,7 @@ import type {
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
@@ -438,6 +439,30 @@ export function reconciledClosedEvent(
 }
 
 /**
+ * The webhook handler retires subscriptions itself; the sweep replays only the
+ * rules ingress, so without this the thread's PR chip and the workspace row
+ * stay `open` forever on a deployment GitHub cannot reach.
+ */
+async function retireReconciledSubscriptions(
+  storage: IntegrationStorageHandle,
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  merged: boolean,
+): Promise<void> {
+  const target = changeRequestTargetKey({
+    installationExternalId: String(repository.installationId),
+    repositoryExternalId: String(repository.id),
+    changeRequestId: String(pullRequestNumber),
+  });
+  const rows = await storage.subscriptions.listByTarget(target);
+  await Promise.all(
+    rows
+      .filter(row => row.status === 'open')
+      .map(row => storage.subscriptions.updateStatus(row.id, merged ? 'merged' : 'closed')),
+  );
+}
+
+/**
  * State-based safety net for merge signals: webhooks and event-log tailing
  * can miss a merge (cursor gaps, downtime, terminally failed decisions), so
  * this sweep compares still-open PR cards against actual GitHub state and
@@ -509,6 +534,7 @@ export function createGithubPullRequestReconciler(
           summary.checked += 1;
           if (!state || state.state !== 'closed') continue;
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
+          await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {
@@ -520,7 +546,10 @@ export function createGithubPullRequestReconciler(
   };
 }
 
-function githubRulesOptions(github: GithubRulesIntegration, context: IntegrationContext): GithubRulesOptions | undefined {
+function githubRulesOptions(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+): GithubRulesOptions | undefined {
   if (!context.rules) return undefined;
   return {
     github,

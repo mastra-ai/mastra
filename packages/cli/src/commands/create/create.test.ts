@@ -835,6 +835,20 @@ describe('create materialization lifecycle', () => {
     }
   });
 
+  it('skips dependency installation when skipInstall is true', async () => {
+    const { create } = await import('./create');
+    const { installDependencies } = await import('../../utils/clone-template');
+
+    await create({
+      projectName: 'my-project',
+      empty: true,
+      skipInstall: true,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(installDependencies).not.toHaveBeenCalled();
+  });
+
   it('names the selected provider environment key in the completion note when the key is skipped', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
