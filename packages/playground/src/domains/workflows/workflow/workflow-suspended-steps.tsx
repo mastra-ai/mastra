@@ -60,9 +60,9 @@ export function WorkflowSuspendedSteps({
   }
 
   return (
-    <div className="space-y-5 rounded-lg border border-border1 bg-surface4 p-5" data-testid="workflow-suspended-steps">
+    <div className="border-border1 bg-surface4 space-y-5 rounded-lg border p-5" data-testid="workflow-suspended-steps">
       <div className="flex items-center justify-between gap-3">
-        <Txt as="p" variant="ui-md" className="flex items-center gap-2 text-neutral6 font-semibold">
+        <Txt as="p" variant="ui-md" className="text-neutral6 flex items-center gap-2 font-semibold">
           <Icon>
             <CirclePause />
           </Icon>
@@ -108,7 +108,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Txt as="p" variant="ui-md" className="text-neutral6 font-medium truncate">
+        <Txt as="p" variant="ui-md" className="text-neutral6 truncate font-medium">
           {step.stepId}
         </Txt>
         {description && (
@@ -120,7 +120,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
 
       {step.suspendPayload && (
         <div className="space-y-2">
-          <Txt as="p" variant="ui-sm" className="flex items-center gap-2 text-neutral3">
+          <Txt as="p" variant="ui-sm" className="text-neutral3 flex items-center gap-2">
             <Icon>
               <MoveDownLeft />
             </Icon>
@@ -128,8 +128,8 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
           </Txt>
 
           <Collapsible open={isPayloadOpen} onOpenChange={setIsPayloadOpen}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-border1 bg-surface3 px-3 py-2.5">
-              <span className="flex items-center gap-2 min-w-0">
+            <CollapsibleTrigger className="border-border1 bg-surface3 flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5">
+              <span className="flex min-w-0 items-center gap-2">
                 <Icon>
                   <ChevronRight
                     className={cn('transition-transform text-neutral3', { 'transform rotate-90': isPayloadOpen })}
@@ -153,7 +153,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
       )}
 
       <div className="space-y-3">
-        <Txt as="p" variant="ui-sm" className="flex items-center gap-2 text-neutral3">
+        <Txt as="p" variant="ui-sm" className="text-neutral3 flex items-center gap-2">
           <Icon>
             <MoveUpRight />
           </Icon>

@@ -14,10 +14,10 @@ export type MainSidebarNavLabelProps = ComponentPropsWithoutRef<'span'> & {
  *
  * Auto-hides via `VisuallyHidden` when the sidebar is collapsed (icon-only row),
  * so screen readers still announce the label without it leaking outside the
- * 36px collapsed item. Handles single-line truncation when expanded.
+ * 28px collapsed item. Handles single-line truncation when expanded.
  *
- * Required for `asChild` consumers — the default `link={...}` path wraps the
- * name internally, but slotted elements (`<button>`, custom links) bring their
+ * Required for custom `render` and legacy `asChild` consumers — the default
+ * `link={...}` path wraps the name internally, but custom elements bring their
  * own children, so the label needs to opt into the collapse-aware rendering.
  */
 export function MainSidebarNavLabel({ children, className, state: stateProp, ...rest }: MainSidebarNavLabelProps) {

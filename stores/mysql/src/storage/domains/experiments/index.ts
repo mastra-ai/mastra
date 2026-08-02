@@ -85,6 +85,7 @@ interface ExperimentResultRow {
   traceId: string | null;
   status: string | null;
   tags: string | null;
+  comment: string | null;
   createdAt: Date | string;
 }
 
@@ -185,7 +186,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['comment', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -239,6 +240,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       traceId: row.traceId ?? null,
       status: (row.status as ExperimentResultStatus | null) ?? null,
       tags: row.tags ? (parseJSON<string[]>(row.tags) ?? null) : null,
+      comment: row.comment ?? null,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
     };
   }
@@ -647,6 +649,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       }
       if (input.tags !== undefined) {
         updateData.tags = input.tags ? JSON.stringify(input.tags) : null;
+      }
+      if (input.comment !== undefined) {
+        updateData.comment = input.comment;
       }
 
       if (Object.keys(updateData).length > 0) {

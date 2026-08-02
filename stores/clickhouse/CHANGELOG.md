@@ -1,5 +1,115 @@
 # @mastra/clickhouse
 
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Stored workflow definitions now persist across restarts on every major database backend. ([#20471](https://github.com/mastra-ai/mastra/pull/20471))
+
+  Implement the `workflowDefinitions` storage domain for libsql, pg, mysql, mssql, mongodb, and spanner. Previously the stored-workflow persistence path (`POST /stored/workflows`, `Mastra.addStoredWorkflow`) only worked against `@mastra/core`'s in-memory store. Persistent adapters returned `undefined` from `storage.getStore('workflowDefinitions')` and threw when the HTTP handler tried to read/write a workflow.
+
+  ```ts
+  const workflowDefinitions = await storage.getStore('workflowDefinitions');
+  if (!workflowDefinitions) {
+    throw new Error('This storage adapter does not support the workflowDefinitions domain');
+  }
+
+  await workflowDefinitions.upsert({
+    id: 'greeting-workflow',
+    inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    outputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+    graph: [{ type: 'agent', id: 'greet', agentId: 'greeter-agent' }],
+  });
+
+  const { definitions, total } = await workflowDefinitions.list({ status: 'active' });
+  const definition = await workflowDefinitions.get('greeting-workflow');
+  await workflowDefinitions.delete('greeting-workflow');
+  ```
+
+  Each adapter now ships a `WorkflowDefinitions*` domain that:
+
+  - Creates the shared `mastra_workflow_definitions` table (or Mongo collection) from `WORKFLOW_DEFINITIONS_SCHEMA` during `init()`, plus a default index on `status`.
+  - Implements `upsert` / `get` / `list` / `delete` matching `WorkflowDefinitionsStorage` semantics (`list` supports `status` and `authorId` filters and orders by `updatedAt` desc). Partial upserts preserve unspecified fields, including `authorId` updates and `createdAt` / `updatedAt` semantics.
+  - Handles concurrent first-writes race-safely: if two callers upsert the same new id simultaneously, the losing insert detects the duplicate key, re-reads the row, and applies the partial-update path instead of failing.
+  - Round-trips the JSON columns (`inputSchema`, `outputSchema`, `stateSchema`, `requestContextSchema`, `metadata`, `graph`) through each adapter's JSON handling, so declarative workflow graphs rehydrate identically no matter which backend they were stored in. Malformed persisted JSON surfaces as an actionable error naming the row and column instead of hydrating raw strings.
+
+  Exported class names by adapter: `WorkflowDefinitionsLibSQL`, `WorkflowDefinitionsPG`, `WorkflowDefinitionsMySQL`, `WorkflowDefinitionsMSSQL`, `MongoDBWorkflowDefinitionsStore`, `WorkflowDefinitionsSpanner`. The composite stores (`LibSQLStore`, `PostgresStore`, `MySQLStore`, `MSSQLStore`, `MongoDBStore`, `SpannerStore`) auto-wire the new domain, so callers do not need to construct it manually — `storage.getStore('workflowDefinitions')` now returns a live handle.
+
+  The pg adapter reads `createdAt` / `updatedAt` from the auto-added `createdAtZ` / `updatedAtZ` `timestamptz` companion columns to avoid the naive-timestamp / local-TZ drift that a plain `TIMESTAMP` read exhibits under node-pg.
+
+  `@mastra/clickhouse` and `@mastra/cloudflare` register the new `mastra_workflow_definitions` table in their table/type maps so shared table constants stay exhaustive (no workflow-definitions domain implementation yet).
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+
+## 1.13.1
+
+### Patch Changes
+
+- dependencies updates: ([#19779](https://github.com/mastra-ai/mastra/pull/19779))
+  - Updated dependency [`@clickhouse/client@^1.23.1` ↗︎](https://www.npmjs.com/package/@clickhouse/client/v/1.23.1) (from `^1.20.0`, in `dependencies`)
+- Updated dependencies [[`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d), [`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`35b929b`](https://github.com/mastra-ai/mastra/commit/35b929b7abc3d20d85c7985880960ac2d04a6c86), [`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`9b3626a`](https://github.com/mastra-ai/mastra/commit/9b3626aeb1d16fcd34b0a8e94c114ddb80a3b240), [`4696963`](https://github.com/mastra-ai/mastra/commit/469696312ac4c618bc8475b0c5ed7949b8a3455e), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0
+
+## 1.13.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#19779](https://github.com/mastra-ai/mastra/pull/19779))
+  - Updated dependency [`@clickhouse/client@^1.23.1` ↗︎](https://www.npmjs.com/package/@clickhouse/client/v/1.23.1) (from `^1.20.0`, in `dependencies`)
+- Updated dependencies [[`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73)]:
+  - @mastra/core@1.55.0-alpha.3
+
+## 1.13.0
+
+### Minor Changes
+
+- Added exact metadata filtering to message history queries across Memory APIs and supported storage providers. ([#19991](https://github.com/mastra-ai/mastra/pull/19991))
+
+  ```ts
+  const messages = await memory.recall({
+    threadId: 'thread-1',
+    filter: {
+      metadata: {
+        status: 'done',
+        priority: 'high',
+      },
+    },
+  });
+  ```
+
+  Multiple fields use AND semantics. Supported values are strings, finite numbers, booleans, and `null`.
+
+### Patch Changes
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa), [`6218217`](https://github.com/mastra-ai/mastra/commit/62182171b6cfca0b099f1c6a77a2e65e7639ab86), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`29c584a`](https://github.com/mastra-ai/mastra/commit/29c584a13a88831e5ed1fdeb0ff8e82eae180433), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e), [`d12b2e4`](https://github.com/mastra-ai/mastra/commit/d12b2e4023fd9e3d3e93a9169f5088bcee2a849c)]:
+  - @mastra/core@1.54.0
+
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Added exact metadata filtering to message history queries across Memory APIs and supported storage providers. ([#19991](https://github.com/mastra-ai/mastra/pull/19991))
+
+  ```ts
+  const messages = await memory.recall({
+    threadId: 'thread-1',
+    filter: {
+      metadata: {
+        status: 'done',
+        priority: 'high',
+      },
+    },
+  });
+  ```
+
+  Multiple fields use AND semantics. Supported values are strings, finite numbers, booleans, and `null`.
+
+### Patch Changes
+
+- Updated dependencies [[`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa)]:
+  - @mastra/core@1.54.0-alpha.0
+
 ## 1.12.0
 
 ### Minor Changes
@@ -293,9 +403,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({
@@ -321,9 +429,7 @@
   **Example**
 
   ```ts
-  const storage = new LibSQLStore({
-    /* config */
-  });
+  const storage = new LibSQLStore({/* config */});
   const favorites = await storage.getStore('favorites');
 
   await favorites?.favorite({

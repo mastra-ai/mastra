@@ -32,15 +32,15 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 | Parameter | Type | Default | Description |
 | - | - | - | - |
-| `status` | `'draft' \| 'published'` | `'draft'` | Which stored version to resolve. `draft` returns the latest version, `published` returns the active published version. |
-| `versionId` | `string` | — | A specific version ID to resolve. Takes precedence over `status`. |
+| `status` | `'draft' \| 'published'` | `'published'` | Which stored version to resolve. `draft` returns the latest version, and `published` returns the active version. |
+| `versionId` | `string` | None | A specific version ID to resolve. Takes precedence over `status`. |
 
 ```bash
-# Get agent with latest draft overrides (default)
+# Get agent with active published overrides (default)
 GET /api/agents/my-agent
 
-# Get agent with published overrides
-GET /api/agents/my-agent?status=published
+# Get agent with latest draft overrides
+GET /api/agents/my-agent?status=draft
 
 # Get agent with a specific version's overrides
 GET /api/agents/my-agent?versionId=abc123

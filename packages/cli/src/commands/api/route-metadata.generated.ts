@@ -93,6 +93,7 @@ export const API_ROUTE_METADATA = {
       "maxSteps",
       "memory",
       "messages",
+      "model",
       "modelSettings",
       "output",
       "providerOptions",
@@ -132,6 +133,7 @@ export const API_ROUTE_METADATA = {
       "maxSteps",
       "memory",
       "messages",
+      "model",
       "modelSettings",
       "output",
       "providerOptions",
@@ -288,6 +290,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "format",
+      "model",
       "requestContext",
       "runId",
       "toolCallId"
@@ -307,6 +310,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "format",
+      "model",
       "requestContext",
       "runId",
       "toolCallId"
@@ -3091,6 +3095,7 @@ export const API_ROUTE_METADATA = {
       "maxSteps",
       "memory",
       "messages",
+      "model",
       "modelSettings",
       "output",
       "providerOptions",
@@ -3379,6 +3384,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "autoPublish",
       "browser",
       "defaultOptions",
       "description",
@@ -3417,6 +3423,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "autoPublish",
       "browser",
       "changeMessage",
       "defaultOptions",
@@ -3591,6 +3598,72 @@ export const API_ROUTE_METADATA = {
     "path": "/stored/agents/:storedAgentId/favorite",
     "pathParams": [
       "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /stored/workflows": {
+    "method": "GET",
+    "path": "/stored/workflows",
+    "pathParams": [],
+    "queryParams": [
+      "authorId",
+      "status"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "workflows"
+    }
+  },
+  "POST /stored/workflows": {
+    "method": "POST",
+    "path": "/stored/workflows",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "dependencies",
+      "description",
+      "graph",
+      "id",
+      "inputSchema",
+      "metadata",
+      "outputSchema",
+      "requestContextSchema",
+      "stateSchema"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /stored/workflows/:storedWorkflowId": {
+    "method": "GET",
+    "path": "/stored/workflows/:storedWorkflowId",
+    "pathParams": [
+      "storedWorkflowId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/workflows/:storedWorkflowId": {
+    "method": "DELETE",
+    "path": "/stored/workflows/:storedWorkflowId",
+    "pathParams": [
+      "storedWorkflowId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -4885,8 +4958,10 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
+      "scorerIds",
       "source",
-      "toolMocks"
+      "toolMocks",
+      "unmockedToolPolicy"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4956,8 +5031,10 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
+      "scorerIds",
       "source",
-      "toolMocks"
+      "toolMocks",
+      "unmockedToolPolicy"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -5148,6 +5225,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "comment",
       "status",
       "tags"
     ],
@@ -5852,7 +5930,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "resourceId",
       "sessionScope",
-      "tags"
+      "tags",
+      "threadId"
     ],
     "hasQuery": false,
     "hasBody": true,

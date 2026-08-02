@@ -2403,6 +2403,54 @@ describe('Memory', () => {
     });
   });
 
+  describe('thread-scoped processors attach without thread context', () => {
+    // Processor attachment must be permissive: `MastraMemory` may not be
+    // populated on requestContext at discovery time (agent processor discovery
+    // can run before thread preparation), and direct `getInputProcessors()`
+    // calls pass no context at all. Threadless safety lives at runtime instead:
+    // observational-memory no-ops when `getThreadContext` resolves no thread,
+    // and the processor runner skips `computeStateSignal` when no
+    // threadId/resourceId resolves (e.g. ephemeral workflow agent steps).
+
+    function memoryWithOMAndWMState() {
+      return new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, useStateSignals: true },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+    }
+
+    it('attaches observational-memory input processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const processors = await memory.getInputProcessors([], rc);
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+    });
+
+    it('attaches observational-memory output processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const processors = await memory.getOutputProcessors([], rc);
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+    });
+
+    it('attaches working-memory-state processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const inputs = await memory.getInputProcessors([], rc);
+      expect(inputs.find(p => p.id === 'working-memory-state')).toBeDefined();
+    });
+
+    it('attaches both processors when no requestContext is passed at all', async () => {
+      const memory = memoryWithOMAndWMState();
+      const processors = await memory.getInputProcessors();
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+      expect(processors.find(p => p.id === 'working-memory-state')).toBeDefined();
+    });
+  });
+
   describe('Vector Deletion', () => {
     function createMemoryWithMockVector(indexSeparator = '_') {
       const mockVector = {

@@ -3,37 +3,27 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { useThemeFlow, useThemeSnapshots } from '../hooks';
 import { themeFlowResponse, themeSnapshotsResponse } from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
-const BASE_URL = 'http://localhost:3100';
-const PROJECT_ID = 'project-1';
+const BASE_URL = window.location.origin;
 
-function TestQueryProvider({ children }: { children: ReactNode }) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+function TestQueryProvider({ children, queryClient }: { children: ReactNode; queryClient?: QueryClient }) {
+  const client = queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
-
-beforeEach(() => {
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
-  window.MASTRA_PLATFORM_PROJECT_ID = PROJECT_ID;
-});
-
-afterEach(() => {
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = undefined;
-  window.MASTRA_PLATFORM_PROJECT_ID = undefined;
-});
 
 describe('Agent Learning theme flow hooks', () => {
   describe('when an entity and signals are selected', () => {
-    it('loads snapshots with the session-scoped project header', async () => {
+    it('loads snapshots through the same-origin route without client-selected scope', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
           const url = new URL(request.url);
-          expect(request.headers.get('X-Mastra-Project-Id')).toBe(PROJECT_ID);
+          expect(request.headers.get('X-Mastra-Organization-Id')).toBeNull();
+          expect(request.headers.get('X-Mastra-Project-Id')).toBeNull();
           expect(url.searchParams.get('entityType')).toBe('agent');
           expect(url.searchParams.get('signalNames')).toBe('goal,outcome');
           expect(url.searchParams.get('limit')).toBe('50');
@@ -46,6 +36,43 @@ describe('Agent Learning theme flow hooks', () => {
       });
 
       await waitFor(() => expect(result.current.data).toEqual(themeSnapshotsResponse));
+    });
+
+    it('normalizes snapshot range dates into the request and query key', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const dateFrom = new Date('2026-07-01T00:00:00.000Z');
+      const dateTo = new Date('2026-07-08T12:30:00.000Z');
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get('from')).toBe('2026-07-01T00:00:00.000Z');
+          expect(url.searchParams.get('to')).toBe('2026-07-08T12:30:00.000Z');
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+      );
+
+      const { result } = renderHook(
+        () => useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome'], dateFrom, dateTo),
+        {
+          wrapper: ({ children }) => <TestQueryProvider queryClient={queryClient}>{children}</TestQueryProvider>,
+        },
+      );
+
+      await waitFor(() => expect(result.current.data).toEqual(themeSnapshotsResponse));
+      expect(
+        queryClient
+          .getQueryCache()
+          .getAll()
+          .map(query => query.queryKey),
+      ).toContainEqual([
+        'entity-learning',
+        'agent',
+        'support-agent',
+        'theme-snapshots',
+        ['goal', 'outcome'],
+        '2026-07-01T00:00:00.000Z',
+        '2026-07-08T12:30:00.000Z',
+      ]);
     });
 
     it('loads the weighted flow for a snapshot', async () => {

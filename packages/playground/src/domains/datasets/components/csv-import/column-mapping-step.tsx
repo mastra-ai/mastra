@@ -46,7 +46,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col gap-4">
-        <div className="text-sm text-neutral4">Drag columns to assign them to dataset fields</div>
+        <div className="text-neutral4 text-sm">Drag columns to assign them to dataset fields</div>
 
         {ZONES.map(zone => {
           const columnsInZone = getColumnsForZone(zone.id);
@@ -57,9 +57,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
             <div key={zone.id} className="flex flex-col gap-2">
               {/* Zone header */}
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-neutral1">{zone.label}</span>
-                {zone.required && <span className="text-xs text-accent1">*</span>}
-                <span className="text-xs text-neutral4">{zone.description}</span>
+                <span className="text-neutral1 text-sm font-medium">{zone.label}</span>
+                {zone.required && <span className="text-accent1 text-xs">*</span>}
+                <span className="text-neutral4 text-xs">{zone.description}</span>
               </div>
 
               {/* Drop zone */}
@@ -68,16 +68,10 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`
-                      min-h-header-default rounded-lg border-2 border-dashed p-2
-                      flex flex-wrap gap-2 items-center
-                      transition-colors
-                      ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-surface4'}
-                      ${needsAttention ? 'border-warning bg-warning/5' : ''}
-                    `}
+                    className={`min-h-header-default flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-surface4'} ${needsAttention ? 'border-warning bg-warning/5' : ''} `}
                   >
                     {isEmpty && !snapshot.isDraggingOver && (
-                      <span className="text-xs text-neutral4 italic">
+                      <span className="text-neutral4 text-xs italic">
                         {needsAttention ? 'Drag at least one column here' : 'No columns assigned'}
                       </span>
                     )}
@@ -90,13 +84,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`
-                                inline-flex items-center gap-1.5 px-2.5 py-1.5
-                                rounded-md text-sm font-medium
-                                bg-surface2 text-neutral1
-                                transition-all
-                                ${snapshot.isDragging ? 'shadow-lg ring-2 ring-accent1/30' : 'hover:bg-surface3'}
-                              `}
+                              className={`bg-surface2 text-neutral1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-all ${snapshot.isDragging ? 'ring-accent1/30 shadow-lg ring-2' : 'hover:bg-surface3'} `}
                             >
                               <span
                                 {...provided.dragHandleProps}
@@ -130,7 +118,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
         })}
 
         {/* Validation message */}
-        {!inputHasColumns && <div className="text-sm text-warning">At least one column must be mapped to Input</div>}
+        {!inputHasColumns && <div className="text-warning text-sm">At least one column must be mapped to Input</div>}
       </div>
     </DragDropContext>
   );

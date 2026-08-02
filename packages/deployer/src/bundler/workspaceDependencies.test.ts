@@ -7,6 +7,7 @@ import {
   collectTransitiveWorkspaceDependencies,
   packWorkspaceDependencies,
   getWorkspaceInformation,
+  hasRootExport,
 } from './workspaceDependencies';
 
 vi.mock('find-workspaces', () => ({
@@ -53,6 +54,25 @@ describe('workspaceDependencies', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('hasRootExport', () => {
+    it.each([
+      ['missing exports', undefined, true],
+      ['string shorthand', './dist/index.js', true],
+      ['array shorthand with target', ['./dist/index.js'], true],
+      ['array shorthand with only blocked targets', [null, false], false],
+      ['empty array shorthand', [], false],
+      ['root condition map', { import: './dist/index.mjs', require: './dist/index.cjs' }, true],
+      ['root condition map with no viable target', { import: null, require: false }, false],
+      ['explicit root target', { '.': './dist/index.js', './value': './dist/value.js' }, true],
+      ['explicit root condition map', { '.': { import: './dist/index.mjs' }, './value': './dist/value.js' }, true],
+      ['subpath-only map', { './value': './dist/value.js' }, false],
+      ['empty map', {}, false],
+      ['blocked explicit root', { '.': null, './value': './dist/value.js' }, false],
+    ])('detects %s', (_name, exportsField, expected) => {
+      expect(hasRootExport(exportsField)).toBe(expected);
+    });
   });
 
   describe('collectTransitiveWorkspaceDependencies', () => {
@@ -201,7 +221,12 @@ describe('workspaceDependencies', () => {
       vi.mocked(findWorkspaces).mockResolvedValue([
         {
           location: '/workspace/packages/pkg-a',
-          package: { name: 'pkg-a', dependencies: { lodash: '^4.0.0' }, version: '1.0.0' },
+          package: {
+            name: 'pkg-a',
+            dependencies: { lodash: '^4.0.0' },
+            version: '1.0.0',
+            exports: { './value': './dist/value.js' },
+          },
         },
         {
           location: '/workspace/packages/pkg-b',
@@ -222,6 +247,7 @@ describe('workspaceDependencies', () => {
         location: '/workspace/packages/pkg-a',
         dependencies: { lodash: '^4.0.0' },
         version: '1.0.0',
+        exports: { './value': './dist/value.js' },
       });
     });
 
@@ -282,6 +308,7 @@ describe('workspaceDependencies', () => {
         location: '/workspace/minimal',
         dependencies: undefined,
         version: undefined,
+        exports: undefined,
       });
       expect(result.isWorkspacePackage).toBe(true);
     });
@@ -308,6 +335,7 @@ describe('workspaceDependencies', () => {
       location: '/workspace/minimal',
       dependencies: undefined,
       version: undefined,
+      exports: undefined,
     });
     expect(result.isWorkspacePackage).toBe(true);
   });

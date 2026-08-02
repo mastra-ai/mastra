@@ -183,6 +183,19 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/kubernetes',
+          label: 'Kubernetes',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/mastra-workers',
+          label: 'Mastra Workers',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'deployment/netlify',
           label: 'Netlify',
         },

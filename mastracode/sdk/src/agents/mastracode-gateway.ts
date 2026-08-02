@@ -36,6 +36,7 @@ import {
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { xaiProvider } from '../providers/xai.js';
+import { resolveCustomProviders } from './custom-provider-source.js';
 
 export const OPENAI_PREFIX = 'openai/';
 export const MASTRA_GATEWAY_PREFIX = 'mastra/';
@@ -302,12 +303,16 @@ export class MastraCodeGateway extends MastraModelGateway {
     );
     if (customProvider?.apiKey) return true;
     return hasResolvedAuth(
-      MastraCodeGateway.resolveProviderAuth({
-        gatewayId: this.id,
-        providerId: parsed.providerId,
-        modelId: parsed.modelId,
-        routerId: modelId,
-      }),
+      MastraCodeGateway.resolveProviderAuth(
+        {
+          gatewayId: this.id,
+          providerId: parsed.providerId,
+          modelId: parsed.modelId,
+          routerId: modelId,
+        },
+        undefined,
+        this.#credentials,
+      ),
     );
   }
 
@@ -365,7 +370,10 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   #getCustomProviders(): MastraCodeCustomProvider[] {
-    return this.#customProviders ?? loadSettings(this.#settingsPath).customProviders;
+    // Explicit constructor list wins; then a registered source (deployed web,
+    // DB-backed — authoritative, so settings.json is never consulted); then
+    // the local file-backed settings.
+    return this.#customProviders ?? resolveCustomProviders() ?? loadSettings(this.#settingsPath).customProviders;
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
@@ -491,6 +499,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     return new ModelRouterLanguageModel({
       id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
+      apiKey: args.apiKey,
       headers: args.headers,
     }) as unknown as GatewayLanguageModel;
   }

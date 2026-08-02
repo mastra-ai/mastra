@@ -1,8 +1,7 @@
-import { Agent, createMessageSignal, createSignal, isDurableAgentLike } from '@mastra/core/agent';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { expect, Mock, vi } from 'vitest';
-import { Workflow } from '@mastra/core/workflows';
-import { normalizeRoutePath } from './route-test-utils';
+import { Workflow, createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { CompositeVoice } from '@mastra/core/voice';
@@ -11,18 +10,17 @@ import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { UnknownToolProviderError } from '@mastra/core/tool-provider';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
 import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
-import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-test-utils';
+import { generateValidDataFromSchema, getDefaultValidPathParams, normalizeRoutePath } from './route-test-utils';
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 import { getZodDef, getZodTypeName } from '@mastra/core/utils';
 vi.mock('@mastra/core/vector');
@@ -180,25 +178,6 @@ export function mockAgentMethods(agent: Agent) {
 
   // Mock resumeStream method - returns object with fullStream property
   vi.spyOn(agent, 'resumeStream').mockResolvedValue({ fullStream: createMockStream() } as any);
-
-  // Mock durable-only methods — attach directly since they don't exist on the
-  // base Agent class (only on DurableAgent). Handlers like RECOVER_ROUTE use
-  // isDurableAgentLike() to duck-type. Make sure the mocked shape satisfies
-  // that guard.
-  (agent as any).recover = vi.fn().mockResolvedValue({ fullStream: createMockStream() });
-  (agent as any).recoverActiveRuns = vi.fn().mockResolvedValue({ recovered: [], succeeded: 0, failed: 0 });
-  // Force a self-referential `agent` property so the mock satisfies
-  // isDurableAgentLike. The base Agent class exposes an `agent` getter that
-  // returns undefined unless `durable: true` is configured.
-  Object.defineProperty(agent, 'agent', {
-    value: agent,
-    configurable: true,
-  });
-  if (!isDurableAgentLike(agent)) {
-    throw new Error(
-      'mockAgentMethods: mocked agent does not satisfy isDurableAgentLike. Update the mock to match the current contract.',
-    );
-  }
 
   // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
@@ -779,6 +758,25 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           description: 'A test stored skill',
           instructions: 'Test skill instructions',
         },
+      });
+    }
+
+    // Add test stored workflow definition so GET /stored/workflows/:storedWorkflowId
+    // finds a row matching getDefaultValidPathParams' 'test-stored-workflow'
+    const workflowDefinitions = await storage.getStore('workflowDefinitions');
+    if (workflowDefinitions) {
+      await workflowDefinitions.upsert({
+        id: 'test-stored-workflow',
+        description: 'Test stored workflow',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+        graph: [
+          {
+            type: 'mapping',
+            id: 'greet',
+            mapConfig: JSON.stringify({ message: { template: 'Hello, ${initData.name}!' } }),
+          },
+        ],
       });
     }
 

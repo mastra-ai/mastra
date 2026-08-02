@@ -29,6 +29,7 @@ export {
   type ListSchedulesFilter,
 } from '../schedules';
 export * from './agent';
+export { getGoalActivityDurationMs } from './goal';
 export * from './utils';
 export * from './fs-routing';
 

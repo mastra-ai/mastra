@@ -1,7 +1,7 @@
-import * as babel from '@babel/core';
+import { transformAsync } from '@babel/core';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
-import type { Plugin } from 'rollup';
+import type { Plugin, SourceMapInput } from 'rollup';
 import { removeAllOptionsFromMastraExcept } from '../babel/remove-all-options-except';
 
 export function removeAllOptionsFromMastraExceptPlugin(
@@ -17,28 +17,16 @@ export function removeAllOptionsFromMastraExceptPlugin(
         return;
       }
 
-      return new Promise((resolve, reject) => {
-        babel.transform(
-          code,
-          {
-            babelrc: false,
-            configFile: false,
-            filename: id,
-            plugins: [removeAllOptionsFromMastraExcept(result, name, options?.logger)],
-            sourceMaps: options?.sourcemap,
-          },
-          (err, result) => {
-            if (err) {
-              return reject(err);
-            }
-
-            resolve({
-              code: result!.code!,
-              map: result!.map!,
-            });
-          },
-        );
-      });
+      return transformAsync(code, {
+        babelrc: false,
+        configFile: false,
+        filename: id,
+        plugins: [() => removeAllOptionsFromMastraExcept(result, name, options?.logger)],
+        sourceMaps: options?.sourcemap,
+      }).then(result => ({
+        code: result!.code!,
+        map: result!.map! as SourceMapInput,
+      }));
     },
   } satisfies Plugin;
 }
