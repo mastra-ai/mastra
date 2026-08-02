@@ -151,6 +151,7 @@ type SignalContinuationOptions = {
     topP?: number;
   };
   instructions?: ModelSettings['instructions'];
+  system?: ModelSettings['system'];
   providerOptions?: ModelSettings['providerOptions'];
   requireToolApproval?: boolean;
   tracingOptions?: TracingOptions;
@@ -580,6 +581,7 @@ export const useChat = ({
       topK,
       topP,
       instructions,
+      system,
       providerOptions,
       maxSteps,
       requireToolApproval,
@@ -616,6 +618,7 @@ export const useChat = ({
         topP,
       },
       instructions,
+      system,
       requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions,
@@ -679,6 +682,7 @@ export const useChat = ({
       topK,
       topP,
       instructions,
+      system,
       providerOptions,
       maxSteps,
       requireToolApproval,
@@ -699,6 +703,7 @@ export const useChat = ({
         topP,
       },
       instructions,
+      system,
       providerOptions,
       requireToolApproval,
       tracingOptions,
@@ -742,6 +747,7 @@ export const useChat = ({
           topP,
         },
         instructions,
+        system,
         requestContext: resolvedRequestContext,
         ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
         providerOptions,
@@ -796,6 +802,7 @@ export const useChat = ({
         topP,
       },
       instructions,
+      system,
       requestContext: requestContextRecord,
       providerOptions: providerOptions as any,
       requireToolApproval,

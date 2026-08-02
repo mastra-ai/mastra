@@ -44,6 +44,17 @@ export interface StreamChatProviderProps {
    * list and is not persisted as a chat turn.
    */
   extraInstructions?: string;
+  /**
+   * How `extraInstructions` reaches the agent.
+   *
+   * - `'replace'` (default) sends them as `modelSettings.instructions`, which
+   *   *replaces* the agent's configured instructions. Correct when the text is
+   *   a complete standalone prompt.
+   * - `'append'` sends them as `modelSettings.system`, which the agent appends
+   *   to its own resolved instructions. Required when the text is per-turn
+   *   state and the agent's constructor prompt must survive.
+   */
+  extraInstructionsMode?: 'replace' | 'append';
   streamPath?: string;
   enableThreadSignals?: boolean;
   debounceTime?: number;
@@ -70,6 +81,7 @@ export const StreamChatProvider = ({
   createClientTools,
   clientToolsResolver,
   extraInstructions,
+  extraInstructionsMode = 'replace',
   streamPath,
   enableThreadSignals,
   debounceTime = 0,
@@ -144,7 +156,10 @@ export const StreamChatProvider = ({
         payload.clientToolsResolver = clientToolsResolver;
       }
       if (instructions !== undefined && instructions.length > 0) {
-        payload.modelSettings = { ...payload.modelSettings, instructions };
+        payload.modelSettings =
+          extraInstructionsMode === 'append'
+            ? { ...payload.modelSettings, system: instructions }
+            : { ...payload.modelSettings, instructions };
       }
 
       const run = ++sendRunRef.current;
@@ -167,6 +182,7 @@ export const StreamChatProvider = ({
       currentUser,
       createClientTools,
       clientToolsResolver,
+      extraInstructionsMode,
       maxSteps,
       onSendStart,
       onSendComplete,

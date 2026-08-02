@@ -173,6 +173,37 @@ describe('WorkflowChatProvider', () => {
       expect(serializedTools).toContain('Each item is passed directly to the child step');
       expect(serializedTools).toContain('The workflow result is exactly the final top-level entry output');
     });
+
+    it('sends per-turn authoring state as additive `system`, not as replacement `instructions`', async () => {
+      let requestBody: Record<string, unknown> | undefined;
+      registerStreamingHandlers(body => (requestBody = body));
+      const state = createWorkflowDraftAuthoringState('additive-state-workflow');
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-additive-state-workflow"
+            authoringState={state}
+            initialMessages={[]}
+            createTools={() => ({})}
+          >
+            <Composer message="Build a workflow" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+
+      // Core resolves `options.instructions || getInstructions()`, so sending
+      // the per-turn state as `instructions` would replace the hidden agent's
+      // shared authoring playbook and Studio surface instructions outright.
+      // `system` is appended instead, leaving the base prompt intact.
+      expect(requestBody?.instructions).toBeUndefined();
+      expect(typeof requestBody?.system).toBe('string');
+      expect(requestBody?.system as string).toContain('Workflow construction rules');
+    });
   });
 
   describe('when submitted definitions are rejected', () => {

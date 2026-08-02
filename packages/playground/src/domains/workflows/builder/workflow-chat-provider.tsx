@@ -184,6 +184,11 @@ function WorkflowChatSession({
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
       extraInstructions={serializeWorkflowDraftInstructions(authoringState, candidateSnapshot, originalRequest)}
+      // Per-turn authoring state, not a standalone prompt. Sending it as
+      // `instructions` would replace the hidden agent's shared authoring
+      // playbook and Studio surface instructions, leaving the model to compose
+      // graphs with no canonical examples.
+      extraInstructionsMode="append"
       enableThreadSignals={false}
       debounceTime={debounceTime}
       maxSteps={1000}
