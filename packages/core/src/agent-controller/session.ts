@@ -2646,7 +2646,7 @@ export class Session<TState = unknown> {
    * filtered back to the session's scope. Empty when the session is unscoped.
    */
   readonly #tags: Record<string, string>;
-  readonly #workspace: Workspace;
+  readonly #workspace?: Workspace;
   browser?: MastraBrowser;
 
   constructor({
@@ -2663,7 +2663,7 @@ export class Session<TState = unknown> {
     id: string;
     ownerId: string;
     tags?: Record<string, string>;
-    workspace: Workspace;
+    workspace?: Workspace;
     browser?: MastraBrowser;
   }) {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
@@ -2678,7 +2678,7 @@ export class Session<TState = unknown> {
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
 
-    if (!workspace || !(workspace instanceof Workspace)) {
+    if (workspace && !(workspace instanceof Workspace)) {
       throw new Error(`A session requires a valid workspace instance.`);
     }
 
@@ -2701,7 +2701,7 @@ export class Session<TState = unknown> {
    * is created. Use this accessor for operations that must stay bound to the
    * session's workspace rather than resolving through controller-global state.
    */
-  getWorkspace(): Workspace {
+  getWorkspace(): Workspace | undefined {
     return this.#workspace;
   }
 
