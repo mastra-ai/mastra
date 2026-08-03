@@ -12,6 +12,7 @@ const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 type ExecutableTool = {
   execute: (input: unknown, context: unknown) => Promise<unknown>;
   inputSchema: { safeParse: (input: unknown) => { success: boolean } };
+  requireApproval: boolean;
 };
 
 function requestContext(
@@ -102,6 +103,20 @@ describe('factory_transition_work_item', () => {
         transitionService: service,
       }),
     ).resolves.toEqual({});
+  });
+
+  it('requires approval before executing a bound transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    await prepareBoundItem(storage);
+
+    const tools = await createFactoryTransitionTools({
+      requestContext: requestContext(),
+      storage,
+      transitionService: service,
+    });
+
+    expect((tools.factory_transition_work_item as ExecutableTool).requireApproval).toBe(true);
   });
 
   it('derives the item, board, actor, and immutable ingress from the binding and tool call', async () => {
