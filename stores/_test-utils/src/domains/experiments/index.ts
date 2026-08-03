@@ -79,6 +79,7 @@ export function createExperimentsTests({
           targetType: 'agent',
           targetId: 'agent-1',
           totalItems: 1,
+          metadata: { nested: { value: 'original' } },
           provenance: {
             source: 'github',
             sourceId: 'mastra-ai/mastra',
@@ -114,9 +115,14 @@ export function createExperimentsTests({
           trialIndex: 0,
         });
 
+        (exp.metadata as { nested: { value: string } }).nested.value = 'mutated';
+        (exp.provenance!.metadata as { nested: { branch: string } }).nested.branch = 'mutated';
+        exp.runnerAttestation!.runnerId = 'mutated';
+
         const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
 
         expect(fetched).toMatchObject({
+          metadata: { nested: { value: 'original' } },
           provenance: {
             source: 'github',
             sourceId: 'mastra-ai/mastra',
