@@ -652,17 +652,17 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         // worst-case latency by installation count.
         const listed = await Promise.all(
           installs.map(async inst => {
+            if (inst.brokenAt !== null) return { inst, list: [] };
             try {
               return { inst, list: await github.listInstallationRepos(Number(inst.externalId)) };
             } catch (err) {
-              // GitHub 404s when the installation no longer exists for this app
-              // (app uninstalled/reinstalled, or the row was recorded under
-              // different app credentials). Prune the stale row so `/status`
-              // reflects reality and the UI prompts a reconnect, then keep
-              // listing the remaining installations.
-              if ((err as { status?: number }).status !== 404) throw err;
-              console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
-              await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
+              if (!isDeadGithubInstallationError(err)) throw err;
+              console.error(`[Mastra Factory] marking GitHub installation ${inst.externalId} broken`);
+              await github.sourceControlStorage.installations.markBroken({
+                orgId,
+                id: inst.id,
+                brokenAt: Date.now(),
+              });
               return { inst, list: [] };
             }
           }),
@@ -780,11 +780,28 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
         const label = parseIssueLabelFilter(c.req.query('label'));
         if (label === null) return c.json({ error: 'invalid_label' }, 400);
+        const installationId = Number(loaded.project.installation.externalId);
+        if (loaded.project.installation.brokenAt !== null) {
+          const err = new GithubInstallationBrokenError({
+            installationId,
+            accountLogin: loaded.project.installation.accountName,
+            orgId: loaded.orgId,
+          });
+          return c.json(
+            {
+              error: err.code,
+              message: err.message,
+              installationId: err.installationId,
+              accountLogin: err.accountLogin,
+            },
+            424,
+          );
+        }
         try {
           const { issues, nextCursor } = await github.intake.listIssues({
             connection: {
               type: 'app-installation',
-              installationId: Number(loaded.project.installation.externalId),
+              installationId,
             },
             sourceIds: [loaded.project.repository.slug],
             labels: label ? [label] : undefined,
@@ -809,19 +826,32 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
-          if (err instanceof GithubInstallationBrokenError) {
+          let responseError = err;
+          if (!(err instanceof GithubInstallationBrokenError) && isDeadGithubInstallationError(err)) {
+            await github.sourceControlStorage.installations.markBroken({
+              orgId: loaded.orgId,
+              id: loaded.project.installation.id,
+              brokenAt: Date.now(),
+            });
+            responseError = new GithubInstallationBrokenError({
+              installationId,
+              accountLogin: loaded.project.installation.accountName,
+              orgId: loaded.orgId,
+            });
+          }
+          if (responseError instanceof GithubInstallationBrokenError) {
             return c.json(
               {
-                error: err.code,
-                message: err.message,
-                installationId: err.installationId,
-                accountLogin: err.accountLogin,
+                error: responseError.code,
+                message: responseError.message,
+                installationId: responseError.installationId,
+                accountLogin: responseError.accountLogin,
               },
               424,
             );
           }
           return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            { error: 'github_fetch_failed', message: responseError instanceof Error ? responseError.message : String(responseError) },
             502,
           );
         }
@@ -1076,7 +1106,7 @@ async function loadOrgProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
   c: RouteContext;
-}): Promise<{ project: ResolvedProjectRepository; userId: string } | { response: Response }> {
+}): Promise<{ project: ResolvedProjectRepository; orgId: string; userId: string } | { response: Response }> {
   const { github, auth, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
   if ('response' in resolved) return { response: resolved.response };
@@ -1090,7 +1120,7 @@ async function loadOrgProject(options: {
   if (!project) {
     return { response: c.json({ error: 'Project repository not found' }, 404) };
   }
-  return { project, userId };
+  return { project, orgId, userId };
 }
 
 /** Derive a commit/author identity from the authenticated host user. */
@@ -1215,6 +1245,11 @@ async function prepareProject(options: {
   const done: PrepareProgress = { phase: 'done', message: 'Workspace ready.' };
   onProgress?.(done);
   return result;
+}
+
+function isDeadGithubInstallationError(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status;
+  return status === 404 || status === 409;
 }
 
 /** Shape an /ensure failure into an HTTP status + JSON body (also used as the SSE error payload). */

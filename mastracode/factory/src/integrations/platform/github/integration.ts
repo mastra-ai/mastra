@@ -196,7 +196,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
-  readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  readonly #repositoryAccessCache = new Map<
+    string,
+    { access: RepositoryAccess; installationId: number; expiresAt: number }
+  >();
   readonly #runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
 
   readonly intake: Intake = {
@@ -352,10 +355,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       // instead of re-minting through the Platform each time. The TTL keeps
       // a wide margin under GitHub's ~60min installation-token lifetime.
       const cacheKey = `${orgId}:${repositoryId}`;
-      const cached = this.#repositoryAccessCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) return cached.access;
-      this.#repositoryAccessCache.delete(cacheKey);
-
       const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
       const cloneUrl = `https://github.com/${repository.slug}.git`;
@@ -364,6 +363,31 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const installationId = parsePositiveInteger(installation.externalId);
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
       const repositoryName = splitRepository(repository.slug).repo;
+
+      if (installation.brokenAt !== null) {
+        const hasReplacement =
+          installation.accountName !== null &&
+          (await this.storage.installations.list({ orgId })).some(
+            candidate => candidate.accountName === installation.accountName && candidate.id !== installation.id,
+          );
+        if (!hasReplacement) {
+          throw new GithubInstallationBrokenError({
+            installationId,
+            accountLogin: installation.accountName,
+            orgId,
+          });
+        }
+      }
+
+      const cached = this.#repositoryAccessCache.get(cacheKey);
+      if (
+        installation.brokenAt === null &&
+        cached?.installationId === installationId &&
+        cached.expiresAt > Date.now()
+      ) {
+        return cached.access;
+      }
+      this.#repositoryAccessCache.delete(cacheKey);
 
       try {
         const token = await this.#client.request<{ token: string }>(
@@ -377,6 +401,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         };
         setBounded(this.#repositoryAccessCache, cacheKey, {
           access,
+          installationId,
           expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
         });
         return access;
@@ -417,6 +442,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
               };
               setBounded(this.#repositoryAccessCache, cacheKey, {
                 access,
+                installationId: newInstallationId,
                 expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
               });
               return access;
@@ -695,6 +721,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       installation => installation.usable && !installation.suspendedAt,
     );
     const existingInstallations = await this.storage.installations.list({ orgId });
+    const existingByExternalId = new Map(
+      existingInstallations.map(installation => [installation.externalId, installation]),
+    );
     const liveExternalIds = new Set(usableInstallations.map(installation => String(installation.installationId)));
     const brokenAt = Date.now();
 
@@ -702,17 +731,22 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       ...existingInstallations
         .filter(installation => !liveExternalIds.has(installation.externalId))
         .map(installation => this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt })),
-      ...usableInstallations.map(installation =>
-        this.versionControl.registerInstallation({
-          orgId,
-          userId,
-          installation: {
-            externalId: String(installation.installationId),
-            accountName: installation.accountLogin,
-            accountType: installation.accountType,
-          },
-        }),
-      ),
+      ...usableInstallations
+        .filter(installation => {
+          const existing = existingByExternalId.get(String(installation.installationId));
+          return !existing || existing.brokenAt === null;
+        })
+        .map(installation =>
+          this.versionControl.registerInstallation({
+            orgId,
+            userId,
+            installation: {
+              externalId: String(installation.installationId),
+              accountName: installation.accountLogin,
+              accountType: installation.accountType,
+            },
+          }),
+        ),
     ]);
 
     return this.storage.installations.list({ orgId });
@@ -866,6 +900,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async mintInstallationToken(installationId: number, orgId: string): Promise<string> {
+    const installation = await this.storage.installations.findByExternalId({
+      orgId,
+      externalId: String(installationId),
+    });
+    if (installation && installation.brokenAt !== null) {
+      throw new GithubInstallationBrokenError({
+        installationId,
+        accountLogin: installation.accountName,
+        orgId,
+      });
+    }
+
     const repositories = await this.listInstallationRepos(installationId);
     if (repositories.length === 0 || repositories.length > 10) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');

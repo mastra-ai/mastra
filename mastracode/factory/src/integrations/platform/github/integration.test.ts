@@ -630,6 +630,11 @@ describe('PlatformGithubIntegration', () => {
         brokenAt: expect.any(Number),
       });
 
+      await expect(integration.mintInstallationToken(7, 'org-1')).rejects.toBeInstanceOf(
+        GithubInstallationBrokenError,
+      );
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+
       await integration.listInstallationRepos(7);
       expect(fetchImpl).toHaveBeenCalledTimes(3);
     },
@@ -720,6 +725,45 @@ describe('PlatformGithubIntegration', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('invalidates cached repository access when the database is repointed to another installation', async () => {
+    const { sourceControl } = await createPlatformStorageForTests();
+    const storage = sourceControl.forIntegration('github');
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ token: 'ghs_old', expiresAt: '2026-07-21T18:00:00Z' }))
+      .mockResolvedValueOnce(json({ token: 'ghs_new', expiresAt: '2026-07-21T18:00:00Z' }));
+    const integration = createIntegration(fetchImpl);
+    integration.versionControl.initialize({ storage });
+    const oldInstallation = await integration.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+    });
+    const newInstallation = await integration.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '8', accountName: 'acme', accountType: 'Organization' },
+    });
+    const [repository] = await integration.versionControl.registerRepositories({
+      orgId: 'org-1',
+      installationId: oldInstallation.id,
+      repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+    });
+
+    await expect(
+      integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository!.id }),
+    ).resolves.toMatchObject({ authorization: { token: 'ghs_old' } });
+    await storage.repositories.migrateInstallation({
+      orgId: 'org-1',
+      id: repository!.id,
+      newInstallationId: newInstallation.id,
+    });
+    await expect(
+      integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository!.id }),
+    ).resolves.toMatchObject({ authorization: { token: 'ghs_new' } });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
@@ -948,7 +992,7 @@ describe('PlatformGithubIntegration', () => {
     );
   });
 
-  it('reports missing installations as broken and clears the flag when they reappear', async () => {
+  it('preserves broken state while an installation remains live and clears it on explicit re-registration', async () => {
     const seed = await createPlatformStorageForTests();
     const sourceControl = seed.sourceControl.forIntegration('github');
     const installation = await sourceControl.installations.upsert({
@@ -1024,6 +1068,19 @@ describe('PlatformGithubIntegration', () => {
     });
 
     installationIsLive = true;
+    const stillBrokenStatus = await app.request('/web/github/status');
+    await expect(stillBrokenStatus.json()).resolves.toMatchObject({
+      connected: false,
+      installations: [],
+      brokenInstallations: [{ installationId: 7, accountLogin: 'acme', brokenAt: expect.any(Number) }],
+      reason: 'not_connected',
+    });
+
+    await integration.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+    });
     const recoveredStatus = await app.request('/web/github/status');
     await expect(recoveredStatus.json()).resolves.toMatchObject({
       connected: true,
@@ -1283,10 +1340,60 @@ describe('PlatformGithubIntegration', () => {
           brokenAt: expect.any(Number),
         });
 
+        await expect(
+          integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
+        ).rejects.toBeInstanceOf(GithubInstallationBrokenError);
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+
         await integration.listInstallationRepos(7);
         expect(fetchImpl).toHaveBeenCalledTimes(3);
       },
     );
+
+    it('retries immediately after explicit re-registration clears the broken state', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const installation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      const repository = await storage.repositories.upsert({
+        orgId: 'org-1',
+        input: {
+          installationId: installation.id,
+          externalId: '101',
+          slug: 'acme/app',
+          defaultBranch: 'main',
+        },
+      });
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ error: 'Installation unavailable' }, 404))
+        .mockResolvedValueOnce(json({ token: 'ghs_reconnected', expiresAt: '2026-07-21T18:00:00Z' }));
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
+      ).rejects.toBeInstanceOf(GithubInstallationBrokenError);
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
+      ).rejects.toBeInstanceOf(GithubInstallationBrokenError);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      await integration.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+      });
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
+      ).resolves.toMatchObject({ authorization: { token: 'ghs_reconnected' } });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
 
     it('recovers when a GitHub App installation is reinstalled with a new installation ID', async () => {
       const { sourceControl } = await createPlatformStorageForTests();
@@ -1411,6 +1518,28 @@ describe('PlatformGithubIntegration', () => {
 
       const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
       expect(migratedRepository?.installationId).toBe(newInstallation.id);
+    });
+
+    it('still runs same-account migration when the stored installation is already broken', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldInstallation, oldRepository, newInstallation } = await seedReinstalledOrg(storage);
+      await storage.installations.markBroken({ orgId: 'org-1', id: oldInstallation.id, brokenAt: Date.now() });
+
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ error: 'Installation not found' }, 404))
+        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toMatchObject({ authorization: { token: 'ghs_recovered' } });
+      await expect(storage.repositories.get({ orgId: 'org-1', id: oldRepository.id })).resolves.toMatchObject({
+        installationId: newInstallation.id,
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 
     it('leaves the repository alone when the mint fails for a transient reason', async () => {

@@ -54,6 +54,7 @@ function installationRow(row: Record<string, any>) {
     accountType: row.accountType ?? null,
     providerMetadata: {},
     createdAt: row.createdAt ?? new Date(),
+    brokenAt: row.brokenAt ?? null,
   };
 }
 
@@ -1048,25 +1049,29 @@ describe('repos route', () => {
     expect(tables.repositories).toHaveLength(1);
   });
 
-  it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
+  it.each([404, 409])('marks dead installations broken on %s and keeps listing the rest', async status => {
     install(7, 'octo');
     install(8, 'stale');
     vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
       if (installationId === 8) {
-        throw Object.assign(new Error('Not Found'), { status: 404 });
+        throw Object.assign(new Error('Installation unavailable'), { status });
       }
       return defaultImpl(installationId);
     });
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    const app = buildApp({ workosId: 'u1' });
+    const res = await app.request('/web/github/repos');
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.repos).toHaveLength(1);
     expect(json.repos[0].fullName).toBe('octo/hello');
-    // The stale row is gone; the live one remains.
-    expect(tables.installations.map(i => i.externalId)).toEqual(['7']);
-    expect(String(errorSpy.mock.calls[0]![0])).toContain('stale GitHub installation 8');
+    expect(tables.installations).toHaveLength(2);
+    expect(tables.installations.find(i => i.externalId === '8')).toMatchObject({ brokenAt: expect.any(Number) });
+    expect(String(errorSpy.mock.calls[0]![0])).toContain('marking GitHub installation 8 broken');
+
+    await app.request('/web/github/repos');
+    expect(vi.mocked(listInstallationRepos).mock.calls.filter(([installationId]) => installationId === 8)).toHaveLength(1);
     errorSpy.mockRestore();
   });
 
@@ -1571,21 +1576,24 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
-  it('returns 424 when the GitHub installation is broken', async () => {
+  it.each([404, 409])('returns 424 and stops refetching when the GitHub installation fails with %s', async status => {
     seedMaterializedProject();
-    listRepoOpenIssues.mockRejectedValueOnce(
-      new GithubInstallationBrokenError({ installationId: 7, accountLogin: 'octo', orgId: 'org1' }),
-    );
+    listRepoOpenIssues.mockRejectedValue(Object.assign(new Error('Installation unavailable'), { status }));
+    const app = buildApp({ workosId: 'u1' });
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
-
-    expect(res.status).toBe(424);
-    expect(await res.json()).toEqual({
+    const first = await app.request('/web/github/projects/p1/issues');
+    expect(first.status).toBe(424);
+    expect(await first.json()).toEqual({
       error: 'github_installation_broken',
       message: 'GitHub installation for @octo is unavailable. Reconnect GitHub to continue.',
       installationId: 7,
       accountLogin: 'octo',
     });
+    expect(tables.installations[0]).toMatchObject({ brokenAt: expect.any(Number) });
+
+    const second = await app.request('/web/github/projects/p1/issues');
+    expect(second.status).toBe(424);
+    expect(listRepoOpenIssues).toHaveBeenCalledTimes(1);
   });
 
   it('502s when GitHub is unavailable', async () => {

@@ -315,9 +315,8 @@ describe('ProjectRoutes', () => {
     const healthy = await app.request(`/web/factory/projects/${project.id}/source-control-connections`);
     expect(healthy.status).toBe(200);
 
-    // Simulate the pruning that happens in integrations/github/routes.ts when
-    // GitHub returns 404 for the installation (i.e. the user uninstalled the
-    // GitHub App from their org/account).
+    // Simulate an orphaned connection left by legacy data or an explicit
+    // installation deletion.
     await github.installations.delete({ orgId: 'org-1', id: installation.id });
 
     // This is the request the web UI fires on every page load. It must not
