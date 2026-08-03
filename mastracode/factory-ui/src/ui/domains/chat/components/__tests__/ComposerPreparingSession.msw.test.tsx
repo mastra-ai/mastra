@@ -151,6 +151,12 @@ function stubPreparingSession(): PreparingSession {
   return { finishWorkspace: release, sentMessages };
 }
 
+/** A create left hanging outlives the test, so tests that never wait for the session end here. */
+async function releaseSession(finishWorkspace: () => void) {
+  finishWorkspace();
+  await waitFor(() => expect(screen.queryByText('Preparing workspace…')).not.toBeInTheDocument());
+}
+
 /** The thread page mounts the kickoff dispatcher; mirror that wiring here. */
 function ThreadSurface() {
   useThreadPageKickoffs();
@@ -210,7 +216,7 @@ describe('Composer while a session prepares its workspace', () => {
   });
 
   it('refuses an image dropped while preparing, since a queued message carries text only', async () => {
-    const { sentMessages } = stubPreparingSession();
+    const { finishWorkspace, sentMessages } = stubPreparingSession();
 
     const { container } = renderThread();
 
@@ -227,10 +233,12 @@ describe('Composer while a session prepares its workspace', () => {
     );
     expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
     expect(sentMessages).toEqual([]);
+
+    await releaseSession(finishWorkspace);
   });
 
   it('keeps a slash command in the composer, since commands act on a live session', async () => {
-    const { sentMessages } = stubPreparingSession();
+    const { finishWorkspace, sentMessages } = stubPreparingSession();
     const user = userEvent.setup();
 
     renderThread();
@@ -245,5 +253,7 @@ describe('Composer while a session prepares its workspace', () => {
     await waitFor(() => expect(screen.getByText('Commands run once the session is ready.')).toBeInTheDocument());
     expect(message()).toHaveValue('/goal ship it');
     expect(sentMessages).toEqual([]);
+
+    await releaseSession(finishWorkspace);
   });
 });
