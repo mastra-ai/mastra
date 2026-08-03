@@ -61,8 +61,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           accountName: input.accountName ?? null,
           accountType: input.accountType ?? null,
           providerMetadata: input.providerMetadata ?? {},
-          // Re-registration clears the broken flag.
-          brokenAt: null,
+          ...(input.preserveBroken ? {} : { brokenAt: null }),
         });
         return existing;
       }

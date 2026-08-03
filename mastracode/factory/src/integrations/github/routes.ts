@@ -936,11 +936,25 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if ('response' in loaded) return loaded.response;
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
+        const installationId = Number(loaded.project.installation.externalId);
+        if (loaded.project.installation.brokenAt !== null) {
+          return c.json(
+            {
+              error: 'github_fetch_failed',
+              message: new GithubInstallationBrokenError({
+                installationId,
+                accountLogin: loaded.project.installation.accountName,
+                orgId: loaded.orgId,
+              }).message,
+            },
+            502,
+          );
+        }
         try {
           const { pullRequests, nextCursor } = await github.versionControl.listPullRequests({
             connection: {
               type: 'app-installation',
-              installationId: Number(loaded.project.installation.externalId),
+              installationId,
             },
             sourceId: loaded.project.repository.slug,
             includeDrafts: false,
@@ -965,10 +979,20 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
-          return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          let message = err instanceof Error ? err.message : String(err);
+          if (isDeadGithubInstallationError(err)) {
+            await github.sourceControlStorage.installations.markBroken({
+              orgId: loaded.orgId,
+              id: loaded.project.installation.id,
+              brokenAt: Date.now(),
+            });
+            message = new GithubInstallationBrokenError({
+              installationId,
+              accountLogin: loaded.project.installation.accountName,
+              orgId: loaded.orgId,
+            }).message;
+          }
+          return c.json({ error: 'github_fetch_failed', message }, 502);
         }
       },
     }),

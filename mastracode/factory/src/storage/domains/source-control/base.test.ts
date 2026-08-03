@@ -451,12 +451,14 @@ describe('SourceControlStorage', () => {
       expect(reread?.brokenAt).toBeNull();
     });
 
-    it('upsert clears brokenAt on re-registration', async () => {
+    it('upsert clears brokenAt on explicit re-registration', async () => {
       const installation = await createInstallation(github, { externalId: 'install-broken-5' });
-      await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt: 1_700_000_000_000 });
+      await github.installations.markBroken({
+        orgId: 'org-1',
+        id: installation.id,
+        brokenAt: 1_700_000_000_000,
+      });
 
-      // Re-registering the same externalId (typical after the user reconnects
-      // the GitHub App on the same account) clears the broken flag.
       const reupserted = await github.installations.upsert({
         orgId: 'org-1',
         connectedByUserId: 'user-1',
@@ -466,9 +468,23 @@ describe('SourceControlStorage', () => {
       });
       expect(reupserted.id).toBe(installation.id);
       expect(reupserted.brokenAt).toBeNull();
+    });
 
-      const reread = await github.installations.get({ orgId: 'org-1', id: installation.id });
-      expect(reread?.brokenAt).toBeNull();
+    it('upsert atomically preserves brokenAt during passive reconciliation', async () => {
+      const installation = await createInstallation(github, { externalId: 'install-broken-atomic' });
+      const brokenAt = 1_700_000_000_000;
+      await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt });
+
+      const reupserted = await github.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: 'install-broken-atomic',
+        accountName: 'mastra-ai',
+        accountType: 'organization',
+        preserveBroken: true,
+      });
+      expect(reupserted.id).toBe(installation.id);
+      expect(reupserted.brokenAt).toBe(brokenAt);
     });
 
     it('markBroken and clearBroken return null when the installation does not exist', async () => {

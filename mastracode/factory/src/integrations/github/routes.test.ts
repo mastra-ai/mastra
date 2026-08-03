@@ -1762,6 +1762,24 @@ describe('prs route', () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
   });
+
+  it.each([404, 409])('marks the installation broken on PR fetch %s without changing the PR contract', async status => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockRejectedValue(Object.assign(new Error('Installation unavailable'), { status }));
+    const app = buildApp({ workosId: 'u1' });
+
+    const first = await app.request('/web/github/projects/p1/prs');
+    expect(first.status).toBe(502);
+    expect(await first.json()).toEqual({
+      error: 'github_fetch_failed',
+      message: 'GitHub installation for @octo is unavailable. Reconnect GitHub to continue.',
+    });
+    expect(tables.installations[0]).toMatchObject({ brokenAt: expect.any(Number) });
+
+    const second = await app.request('/web/github/projects/p1/prs');
+    expect(second.status).toBe(502);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('project settings routes', () => {

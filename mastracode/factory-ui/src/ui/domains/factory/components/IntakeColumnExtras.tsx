@@ -1,8 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEffect } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import type { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
+import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import type { useLinearIssuesQuery } from '../../../../hooks/useLinearData';
 import { isGithubInstallationBrokenError, manageGithubConnection } from '../../workspaces/services/github';
 import type { IntakeSource } from '../boardCandidates';
@@ -26,12 +28,17 @@ export function IntakeColumnExtras({
   linearIssues: ReturnType<typeof useLinearIssuesQuery>;
 }) {
   const { baseUrl } = useApiConfig();
+  const githubSourceActive = source === 'github' || source === 'github-prs';
+  const githubStatus = useGithubStatusQuery(githubSourceActive);
+  useEffect(() => {
+    if (source === 'github-prs' && pulls.isError) void githubStatus.refetch();
+  }, [githubStatus.refetch, pulls.error, pulls.isError, source]);
   if (source === undefined) return null;
   const feed = source === 'github' ? issues : source === 'github-prs' ? pulls : linearIssues;
   const githubInstallationBroken =
-    (source === 'github' || source === 'github-prs') &&
-    feed.isError &&
-    isGithubInstallationBrokenError(feed.error);
+    githubSourceActive &&
+    ((feed.isError && isGithubInstallationBrokenError(feed.error)) ||
+      Boolean(githubStatus.data?.brokenInstallations?.length));
 
   return (
     <>

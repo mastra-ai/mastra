@@ -219,14 +219,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       );
       const repositories = await Promise.all(
         usable.map(async installation => {
-          const storedInstallation = await this.versionControl.registerInstallation({
+          const storedInstallation = await this.storage.installations.upsert({
             orgId,
-            userId,
-            installation: {
-              externalId: String(installation.installationId),
-              accountName: installation.accountLogin,
-              accountType: installation.accountType,
-            },
+            connectedByUserId: userId,
+            externalId: String(installation.installationId),
+            accountName: installation.accountLogin,
+            accountType: installation.accountType,
+            preserveBroken: true,
           });
           const result = await this.#client.request<{
             repositories: Array<{
@@ -364,19 +363,24 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
       const repositoryName = splitRepository(repository.slug).repo;
 
+      let skipDeadInstallationMint = false;
       if (installation.brokenAt !== null) {
-        const hasReplacement =
+        const hasHealthyReplacement =
           installation.accountName !== null &&
           (await this.storage.installations.list({ orgId })).some(
-            candidate => candidate.accountName === installation.accountName && candidate.id !== installation.id,
+            candidate =>
+              candidate.accountName === installation.accountName &&
+              candidate.id !== installation.id &&
+              candidate.brokenAt === null,
           );
-        if (!hasReplacement) {
+        if (!hasHealthyReplacement) {
           throw new GithubInstallationBrokenError({
             installationId,
             accountLogin: installation.accountName,
             orgId,
           });
         }
+        skipDeadInstallationMint = true;
       }
 
       const cached = this.#repositoryAccessCache.get(cacheKey);
@@ -390,6 +394,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       this.#repositoryAccessCache.delete(cacheKey);
 
       try {
+        if (skipDeadInstallationMint) {
+          throw new PlatformApiError('Stored GitHub installation is already marked broken.', 404);
+        }
         const token = await this.#client.request<{ token: string }>(
           'POST',
           `${API_PREFIX}/github-app/installations/${installationId}/token`,
@@ -418,7 +425,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         if (installation.accountName) {
           const installations = await this.storage.installations.list({ orgId });
           const newInstallation = installations.find(
-            inst => inst.accountName === installation.accountName && inst.id !== installation.id,
+            inst =>
+              inst.accountName === installation.accountName &&
+              inst.id !== installation.id &&
+              inst.brokenAt === null,
           );
           const newInstallationId = newInstallation ? parsePositiveInteger(newInstallation.externalId) : null;
 
@@ -449,6 +459,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             } catch (recoveryError) {
               if (!isDeadInstallation(recoveryError)) throw recoveryError;
               this.#installationReposCache.delete(newInstallationId);
+              await this.storage.installations.markBroken({
+                orgId,
+                id: newInstallation.id,
+                brokenAt: Date.now(),
+              });
             }
           }
         }
@@ -638,11 +653,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         await ctx.auth.ensureUser(loose(c));
         const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+        const orgId = tenant.orgId;
 
         const redirectTo = c.req.query('redirectTo') || c.req.query('return_to') || '/';
         const originator = routeBaseUrl(ctx, c.req.url);
         logPlatformInfo('Starting Platform GitHub connect flow', {
-          orgId: tenant.orgId,
+          orgId,
           redirectTo,
           originator,
         });
@@ -654,6 +670,20 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const { url } = await this.#client.request<{ url: string }>(
           'GET',
           `${API_PREFIX}/github-app/install-url?${query}`,
+        );
+        const brokenInstallations = (await this.storage.installations.list({ orgId })).filter(
+          installation => installation.brokenAt !== null,
+        );
+        await Promise.all(
+          brokenInstallations.map(async installation => {
+            await this.storage.installations.clearBroken({ orgId, id: installation.id });
+            const installationId = parsePositiveInteger(installation.externalId);
+            if (installationId === null) return;
+            this.#installationReposCache.delete(installationId);
+            for (const [cacheKey, cached] of this.#repositoryAccessCache) {
+              if (cached.installationId === installationId) this.#repositoryAccessCache.delete(cacheKey);
+            }
+          }),
         );
         return c.redirect(url);
       },
@@ -721,9 +751,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       installation => installation.usable && !installation.suspendedAt,
     );
     const existingInstallations = await this.storage.installations.list({ orgId });
-    const existingByExternalId = new Map(
-      existingInstallations.map(installation => [installation.externalId, installation]),
-    );
     const liveExternalIds = new Set(usableInstallations.map(installation => String(installation.installationId)));
     const brokenAt = Date.now();
 
@@ -731,22 +758,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       ...existingInstallations
         .filter(installation => !liveExternalIds.has(installation.externalId))
         .map(installation => this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt })),
-      ...usableInstallations
-        .filter(installation => {
-          const existing = existingByExternalId.get(String(installation.installationId));
-          return !existing || existing.brokenAt === null;
-        })
-        .map(installation =>
-          this.versionControl.registerInstallation({
-            orgId,
-            userId,
-            installation: {
-              externalId: String(installation.installationId),
-              accountName: installation.accountLogin,
-              accountType: installation.accountType,
-            },
-          }),
-        ),
+      ...usableInstallations.map(installation =>
+        this.storage.installations.upsert({
+          orgId,
+          connectedByUserId: userId,
+          externalId: String(installation.installationId),
+          accountName: installation.accountLogin,
+          accountType: installation.accountType,
+          preserveBroken: true,
+        }),
+      ),
     ]);
 
     return this.storage.installations.list({ orgId });

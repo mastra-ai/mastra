@@ -992,7 +992,7 @@ describe('PlatformGithubIntegration', () => {
     );
   });
 
-  it('preserves broken state while an installation remains live and clears it on explicit re-registration', async () => {
+  it('preserves broken state while an installation remains live and clears it when reconnect starts', async () => {
     const seed = await createPlatformStorageForTests();
     const sourceControl = seed.sourceControl.forIntegration('github');
     const installation = await sourceControl.installations.upsert({
@@ -1023,6 +1023,9 @@ describe('PlatformGithubIntegration', () => {
       }
       if (url.includes('/github-app/user-connection')) {
         return json({ connected: false, githubUsername: null });
+      }
+      if (url.includes('/github-app/install-url')) {
+        return json({ url: 'https://github.com/apps/mastra/installations/new?state=platform-state' });
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -1076,11 +1079,11 @@ describe('PlatformGithubIntegration', () => {
       reason: 'not_connected',
     });
 
-    await integration.versionControl.registerInstallation({
-      orgId: 'org-1',
-      userId: 'user-1',
-      installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
-    });
+    const reconnect = await app.request('/auth/github/connect');
+    expect(reconnect.status).toBe(302);
+    expect(reconnect.headers.get('location')).toBe(
+      'https://github.com/apps/mastra/installations/new?state=platform-state',
+    );
     const recoveredStatus = await app.request('/web/github/status');
     await expect(recoveredStatus.json()).resolves.toMatchObject({
       connected: true,
@@ -1091,6 +1094,39 @@ describe('PlatformGithubIntegration', () => {
     await expect(sourceControl.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
       brokenAt: null,
     });
+
+    let releasePassiveUpsert: () => void = () => {};
+    let signalPassiveUpsert: () => void = () => {};
+    const passiveUpsertGate = new Promise<void>(resolve => {
+      releasePassiveUpsert = resolve;
+    });
+    const passiveUpsertStarted = new Promise<void>(resolve => {
+      signalPassiveUpsert = resolve;
+    });
+    const originalUpsert = sourceControl.installations.upsert;
+    const upsertSpy = vi.spyOn(sourceControl.installations, 'upsert').mockImplementation(async input => {
+      if (input.preserveBroken) {
+        signalPassiveUpsert();
+        await passiveUpsertGate;
+      }
+      return originalUpsert(input);
+    });
+
+    const racingStatus = app.request('/web/github/status');
+    await passiveUpsertStarted;
+    await sourceControl.installations.markBroken({
+      orgId: 'org-1',
+      id: installation.id,
+      brokenAt: 1_700_000_000_000,
+    });
+    releasePassiveUpsert();
+
+    await expect((await racingStatus).json()).resolves.toMatchObject({
+      connected: false,
+      installations: [],
+      brokenInstallations: [{ installationId: 7, accountLogin: 'acme', brokenAt: 1_700_000_000_000 }],
+    });
+    upsertSpy.mockRestore();
   });
 
   it('logs the user-connection verification failure reason', async () => {
@@ -1528,7 +1564,6 @@ describe('PlatformGithubIntegration', () => {
 
       const fetchImpl = vi
         .fn<typeof fetch>()
-        .mockResolvedValueOnce(json({ error: 'Installation not found' }, 404))
         .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
       const integration = createIntegration(fetchImpl);
       integration.versionControl.initialize({ storage });
@@ -1539,7 +1574,11 @@ describe('PlatformGithubIntegration', () => {
       await expect(storage.repositories.get({ orgId: 'org-1', id: oldRepository.id })).resolves.toMatchObject({
         installationId: newInstallation.id,
       });
-      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://platform.example.com/v1/server/github-app/installations/456/token',
+        expect.anything(),
+      );
     });
 
     it('leaves the repository alone when the mint fails for a transient reason', async () => {

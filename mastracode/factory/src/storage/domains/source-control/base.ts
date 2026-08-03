@@ -27,7 +27,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       // Unix ms when the installation was first observed dead (Platform 404/409
       // on token mint, or missing from Platform's live list). `null` while
       // healthy; a persistent installation-broken signal that survives
-      // process restarts and is cleared by re-registration (`upsert`).
+      // process restarts and is cleared only by an explicit reconnect flow.
       broken_at: { type: 'bigint', nullable: true },
     },
     uniqueIndexes: [
@@ -213,7 +213,7 @@ export interface SourceControlInstallation {
   /**
    * Unix ms when the installation was first observed dead. `null` while
    * healthy. Set by `markBroken` (mint 404/409, or sync reconciliation);
-   * cleared by `clearBroken` and by `upsert` (re-registration).
+   * cleared by explicit re-registration or `clearBroken`.
    */
   brokenAt: number | null;
 }
@@ -225,6 +225,8 @@ export interface UpsertSourceControlInstallationInput {
   accountName?: string | null;
   accountType?: string | null;
   providerMetadata?: SourceControlProviderMetadata;
+  /** Preserve an existing broken marker during passive reconciliation. */
+  preserveBroken?: boolean;
 }
 
 export interface SourceControlRepository {
@@ -826,24 +828,40 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return row ? toInstallation(row) : null;
         },
         upsert: async input => {
-          const row = await db().upsertOne<InstallationDbRow>(
-            INSTALLATIONS,
-            ['integration_id', 'org_id', 'external_id'],
-            {
-              integration_id: integrationId,
-              org_id: input.orgId,
+          const where = {
+            integration_id: integrationId,
+            org_id: input.orgId,
+            external_id: input.externalId,
+          };
+          const updateExisting = () =>
+            db().updateAtomic<InstallationDbRow>(INSTALLATIONS, where, () => ({
               connected_by_user_id: input.connectedByUserId,
-              external_id: input.externalId,
+              account_name: input.accountName ?? null,
+              account_type: input.accountType ?? null,
+              provider_metadata: input.providerMetadata ?? {},
+              ...(input.preserveBroken ? {} : { broken_at: null }),
+            }));
+
+          const updated = await updateExisting();
+          if (updated) return toInstallation(updated);
+
+          try {
+            const row = await db().insertOne<InstallationDbRow>(INSTALLATIONS, {
+              ...where,
+              connected_by_user_id: input.connectedByUserId,
               account_name: input.accountName ?? null,
               account_type: input.accountType ?? null,
               provider_metadata: input.providerMetadata ?? {},
               created_at: new Date(),
-              // Re-registration clears the broken flag — a freshly (re)connected
-              // installation is by definition not broken.
               broken_at: null,
-            },
-          );
-          return toInstallation(row);
+            });
+            return toInstallation(row);
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            const row = await updateExisting();
+            if (!row) throw error;
+            return toInstallation(row);
+          }
         },
         delete: async ({ orgId, id }) => {
           const installation = await getInstallation({ orgId, id });

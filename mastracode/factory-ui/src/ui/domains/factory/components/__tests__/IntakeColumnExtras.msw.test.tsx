@@ -10,19 +10,24 @@ import { IntakeColumnExtras } from '../IntakeColumnExtras';
 
 const PROJECT_ID = 'github-project-1';
 const ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/issues`;
+const PULLS_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/prs`;
+const STATUS_URL = `${TEST_BASE_URL}/web/github/status`;
 
-function IntakeColumnExtrasHarness() {
-  const issues = useProjectIssuesQuery(PROJECT_ID);
-  const pulls = useProjectPullRequestsQuery(undefined);
+function IntakeColumnExtrasHarness({ source = 'github' }: { source?: 'github' | 'github-prs' }) {
+  const issues = useProjectIssuesQuery(source === 'github' ? PROJECT_ID : undefined);
+  const pulls = useProjectPullRequestsQuery(source === 'github-prs' ? PROJECT_ID : undefined);
   const linearIssues = useLinearIssuesQuery(undefined);
 
-  return <IntakeColumnExtras source="github" issues={issues} pulls={pulls} linearIssues={linearIssues} />;
+  return <IntakeColumnExtras source={source} issues={issues} pulls={pulls} linearIssues={linearIssues} />;
 }
 
 describe('IntakeColumnExtras GitHub installation health', () => {
   it('shows a reconnect banner for a broken installation and clears it after recovery', async () => {
     let broken = true;
     server.use(
+      http.get(STATUS_URL, () =>
+        HttpResponse.json({ enabled: true, connected: true, installations: [], brokenInstallations: [] }),
+      ),
       http.get(ISSUES_URL, () =>
         broken
           ? HttpResponse.json(
@@ -51,5 +56,34 @@ describe('IntakeColumnExtras GitHub installation health', () => {
         screen.queryByText('GitHub installation removed. Reconnect to keep syncing issues.'),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it('refetches GitHub status after a PR failure and shows the reconnect banner without changing the PR contract', async () => {
+    let statusRequests = 0;
+    server.use(
+      http.get(STATUS_URL, () => {
+        statusRequests += 1;
+        return HttpResponse.json({
+          enabled: true,
+          connected: statusRequests === 1,
+          installations: [],
+          brokenInstallations:
+            statusRequests === 1
+              ? []
+              : [{ installationId: 42, accountLogin: 'acme', accountType: 'Organization', brokenAt: Date.now() }],
+        });
+      }),
+      http.get(PULLS_URL, () =>
+        HttpResponse.json({ error: 'github_fetch_failed', message: 'Installation unavailable' }, { status: 502 }),
+      ),
+    );
+
+    renderWithProviders(<IntakeColumnExtrasHarness source="github-prs" />);
+
+    expect(
+      await screen.findByText('GitHub installation removed. Reconnect to keep syncing pull requests.'),
+    ).toBeInTheDocument();
+    expect(statusRequests).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('button', { name: 'Reconnect GitHub' })).toBeInTheDocument();
   });
 });
