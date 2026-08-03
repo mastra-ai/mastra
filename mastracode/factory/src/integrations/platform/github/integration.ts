@@ -62,6 +62,7 @@ import {
   PlatformApiError,
   platformApiClientConfigFromEnv,
 } from '../api-client.js';
+import { GithubInstallationBrokenError } from './errors.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
@@ -380,40 +381,58 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         });
         return access;
       } catch (err) {
+        if (!isDeadInstallation(err)) throw err;
+
+        this.#repositoryAccessCache.delete(cacheKey);
+        this.#installationReposCache.delete(installationId);
+
         // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
         // GitHub assigns a new installation ID. Platform creates a new installation row,
         // and Factory's intake.listSources creates a new local installation row with the
         // new externalId. Try to find the new installation by accountName.
-        if (!isDeadInstallation(err) || !installation.accountName) throw err;
-        const installations = await this.storage.installations.list({ orgId });
-        const newInstallation = installations.find(
-          inst => inst.accountName === installation.accountName && inst.id !== installation.id,
-        );
-        if (!newInstallation) throw err;
-        const newInstallationId = parsePositiveInteger(newInstallation.externalId);
-        if (newInstallationId === null) throw err;
+        if (installation.accountName) {
+          const installations = await this.storage.installations.list({ orgId });
+          const newInstallation = installations.find(
+            inst => inst.accountName === installation.accountName && inst.id !== installation.id,
+          );
+          const newInstallationId = newInstallation ? parsePositiveInteger(newInstallation.externalId) : null;
 
-        // Persist the migration so we don't hit the recovery path on every call.
-        await this.storage.repositories.migrateInstallation({
+          if (newInstallation && newInstallationId !== null) {
+            // Persist the migration so we don't hit the recovery path on every call.
+            await this.storage.repositories.migrateInstallation({
+              orgId,
+              id: repositoryId,
+              newInstallationId: newInstallation.id,
+            });
+
+            try {
+              const token = await this.#client.request<{ token: string }>(
+                'POST',
+                `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
+                { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+              );
+              const access: RepositoryAccess = {
+                cloneUrl,
+                authorization: { scheme: 'bearer', token: token.token },
+              };
+              setBounded(this.#repositoryAccessCache, cacheKey, {
+                access,
+                expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+              });
+              return access;
+            } catch (recoveryError) {
+              if (!isDeadInstallation(recoveryError)) throw recoveryError;
+              this.#installationReposCache.delete(newInstallationId);
+            }
+          }
+        }
+
+        await this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt: Date.now() });
+        throw new GithubInstallationBrokenError({
+          installationId,
+          accountLogin: installation.accountName,
           orgId,
-          id: repositoryId,
-          newInstallationId: newInstallation.id,
         });
-
-        const token = await this.#client.request<{ token: string }>(
-          'POST',
-          `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
-          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-        );
-        const access: RepositoryAccess = {
-          cloneUrl,
-          authorization: { scheme: 'bearer', token: token.token },
-        };
-        setBounded(this.#repositoryAccessCache, cacheKey, {
-          access,
-          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-        });
-        return access;
       }
     },
     listPullRequests: input => this.#listPullRequests(input),
@@ -547,6 +566,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             organizationRequired: true,
             connected: false,
             installations: [],
+            brokenInstallations: [],
             userConnected: false,
             userGithubUsername: null,
             reason: 'organization_required',
@@ -558,18 +578,26 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           this.#syncInstallations(tenant.orgId, tenant.userId),
           this.#fetchUserConnection(tenant.userId),
         ]);
+        const connectedInstallations = installations.filter(installation => installation.brokenAt === null);
+        const brokenInstallations = installations.filter(installation => installation.brokenAt !== null);
         return c.json({
           enabled: true,
           sandboxEnabled: ctx.fleet.enabled,
-          connected: installations.length > 0,
-          installations: installations.map(installation => ({
+          connected: connectedInstallations.length > 0,
+          installations: connectedInstallations.map(installation => ({
             installationId: Number(installation.externalId),
             accountLogin: installation.accountName,
             accountType: installation.accountType,
           })),
+          brokenInstallations: brokenInstallations.map(installation => ({
+            installationId: Number(installation.externalId),
+            accountLogin: installation.accountName,
+            accountType: installation.accountType,
+            brokenAt: installation.brokenAt,
+          })),
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
-          reason: installations.length > 0 ? 'ready' : 'not_connected',
+          reason: connectedInstallations.length > 0 ? 'ready' : 'not_connected',
           diagnostics: this.diagnostics(),
         });
       },
@@ -666,8 +694,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
     );
-    return Promise.all(
-      usableInstallations.map(installation =>
+    const existingInstallations = await this.storage.installations.list({ orgId });
+    const liveExternalIds = new Set(usableInstallations.map(installation => String(installation.installationId)));
+    const brokenAt = Date.now();
+
+    await Promise.all([
+      ...existingInstallations
+        .filter(installation => !liveExternalIds.has(installation.externalId))
+        .map(installation => this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt })),
+      ...usableInstallations.map(installation =>
         this.versionControl.registerInstallation({
           orgId,
           userId,
@@ -678,7 +713,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           },
         }),
       ),
-    );
+    ]);
+
+    return this.storage.installations.list({ orgId });
   }
 
   workers(ctx: IntegrationContext): PlatformGithubEventWorker[] {
@@ -828,17 +865,38 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return repos;
   }
 
-  async mintInstallationToken(installationId: number): Promise<string> {
+  async mintInstallationToken(installationId: number, orgId?: string): Promise<string> {
     const repositories = await this.listInstallationRepos(installationId);
     if (repositories.length === 0 || repositories.length > 10) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');
     }
-    const result = await this.#client.request<{ token: string }>(
-      'POST',
-      `${API_PREFIX}/github-app/installations/${installationId}/token`,
-      { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
-    );
-    return result.token;
+
+    try {
+      const result = await this.#client.request<{ token: string }>(
+        'POST',
+        `${API_PREFIX}/github-app/installations/${installationId}/token`,
+        { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
+      );
+      return result.token;
+    } catch (err) {
+      if (!isDeadInstallation(err)) throw err;
+
+      this.#installationReposCache.delete(installationId);
+      const installation = orgId
+        ? await this.storage.installations.findByExternalId({
+            orgId,
+            externalId: String(installationId),
+          })
+        : null;
+      if (installation && orgId) {
+        await this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt: Date.now() });
+      }
+      throw new GithubInstallationBrokenError({
+        installationId,
+        accountLogin: installation?.accountName ?? null,
+        orgId: orgId ?? '',
+      });
+    }
   }
 
   async addIssueLabels(
