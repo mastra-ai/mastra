@@ -1449,6 +1449,20 @@ describe('runExperiment', () => {
       expect(activeScorerFailed).toBe(true);
       expect(slowItemFinished).toBe(true);
       expect(task).toHaveBeenCalledTimes(3);
+
+      const experiments = await experimentsStorage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+      expect(experiments.experiments[0]).toMatchObject({
+        status: 'failed',
+        succeededCount: 1,
+        failedCount: 0,
+        skippedCount: 2,
+      });
+      const persistedResults = await experimentsStorage.listExperimentResults({
+        experimentId: experiments.experiments[0]!.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedResults.results).toHaveLength(1);
+      expect(persistedResults.results[0]).toMatchObject({ itemId: 'fast-item' });
     });
 
     it('preserves fail-fast behavior for non-observer mapper failures when an observer is present', async () => {

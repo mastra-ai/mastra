@@ -496,13 +496,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
           const itemCompletedAt = new Date();
 
-          // Track success/failure
-          if (execResult.error) {
-            failedCount++;
-          } else {
-            succeededCount++;
-          }
-
           // Build item result. `persistenceError` starts null and is set below
           // if `addExperimentResult` throws so callers can detect rows that
           // never landed in storage.
@@ -602,7 +595,21 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   { error: persistError },
                 );
             }
+          }
 
+          // Commit the result and counters together so suppressed post-target errors
+          // cannot leave terminal counters without a corresponding result.
+          results[idx] = {
+            ...itemResult,
+            scores: itemScores,
+          };
+          if (execResult.error) {
+            failedCount++;
+          } else {
+            succeededCount++;
+          }
+
+          if (experimentsStore) {
             // Throttled progress update
             const now = Date.now();
             if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
@@ -618,12 +625,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               }
             }
           }
-
-          // Store at original index for deterministic ordering
-          results[idx] = {
-            ...itemResult,
-            scores: itemScores,
-          };
 
           if (eventDispatcher) {
             await eventDispatcher.emit(
