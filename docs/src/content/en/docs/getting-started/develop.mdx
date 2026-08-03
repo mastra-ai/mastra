@@ -7,36 +7,150 @@ packages:
 
 # Develop
 
-After creating a Mastra project, you can run it locally, test your agents, and connect them to your application. Mastra provides a development server and Studio so you can move between editing code and trying it out.
+Once you have a Mastra project, you're ready to develop, run, and test your agent.
 
-## Develop locally
+## Run Mastra locally
 
-Start the local development server with `mastra dev`:
+The fastest way to see your agent working is in [Mastra Studio](/docs/studio/overview). From your project root, start Studio and the local development server with [`mastra dev`](/reference/cli/mastra#mastra-dev):
 
 ```bash npm2yarn
 npx mastra dev
 ```
 
-The server automatically restarts when your files change. It exposes endpoints for your agents, tools, and workflows, which lets your application connect to them while you develop. See the [`mastra dev` reference](/reference/cli/mastra#mastra-dev) for available options and endpoints.
+Open Studio at [`http://localhost:4111`](http://localhost:4111) to test your agent and inspect its runs.
 
-The same command starts [Mastra Studio](/docs/studio/overview), an interactive environment where you can test agents and inspect their runs without wiring up an application first. Open Studio at [`http://localhost:4111`](http://localhost:4111) while the server is running.
+The development server also exposes endpoints for your agents, tools, and workflows. Open [`http://localhost:4111/api`](http://localhost:4111/api) to browse the available endpoints. You can connect your frontend to these endpoints with the [Mastra Client](/docs/server/mastra-client).
+
+Changes in your `src/mastra/` directory automatically restart the development server, so you don't need to restart it manually as you build.
 
 {/* TODO: Add a screenshot of Mastra Studio running locally. */}
 
 ## Build with AI
 
-AI-assisted development can help you explore Mastra APIs and make changes without leaving your coding workflow. The [Mastra skill](/reference/build-with-ai#mastra-skills) gives supported coding agents current setup instructions, patterns, and documentation for the code they are working on.
+Mastra provides skills and a CLI to help your coding agent write high-quality Mastra code.
 
-The [Mastra CLI](/reference/build-with-ai#mastra-cli) lets a coding agent interact with your running project. It can call agents, run workflows and tools, inspect memory, and query traces or logs while it works.
+### Mastra skills
 
-## Understand your project
+AI models may not have up-to-date knowledge of Mastra's APIs. Use [Mastra skills](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance, best practices, and instructions for fetching the latest Mastra documentation.
 
-Projects created with `create-mastra` keep Mastra code under `src/mastra/`. The default layout separates agents, tools, workflows, and scorers, with `src/mastra/index.ts` as the central place where you configure and register them.
+Projects generated with [create mastra](/docs/getting-started/getting-started) include skills that your coding agent picks up automatically.
 
-This structure is a useful starting point rather than a requirement. You can adapt it as your application grows. See the [project structure reference](https://mastra.ai/reference/project-structure) for the default layout and recommended conventions.
+Install the skills manually with:
 
-## Try file-based agents
+```bash npm2yarn
+npx skills add mastra-ai/skills
+```
 
-File-based agents let you define an agent through a directory of files such as `config.ts`, `instructions.md`, and `tools/`. This can make an agent's configuration and capabilities easier to scan, especially for coding agents working in the project.
+Periodically update the skills to get the latest guidance:
 
-This convention is currently in beta and isn't the default way to define Mastra agents. You can try it for a new agent or use it alongside agents registered in code. Start with the [`config.ts` reference](/reference/file-based-agents/config), then follow the linked reference pages for instructions, tools, memory, and other supported files.
+```bash npm2yarn
+npx skills update mastra
+```
+
+### Mastra CLI
+
+Use the [`mastra` CLI](/reference/cli/mastra) to give your coding agent a feedback loop for testing updates and inspecting results, so it can build more ambitious features with less intervention. It can call agents, run workflows and tools, inspect memory, execute evals, and search traces and logs.
+
+For example, your coding agent can run an agent, then pull traces to inspect the results:
+
+```bash
+mastra api --url http://localhost:4111 agent run agent '{"messages":"Hello"}'
+mastra api --url http://localhost:4111 trace list
+```
+
+Remember to install the [Mastra skills](#mastra-skills) to teach your coding agent how to use the CLI.
+
+## Project structure
+
+One of the first decisions when adopting a framework is how to structure the project. We recommend keeping framework code under `src/mastra/`, with related primitives grouped into their own files or folders. Use `src/mastra/index.ts` as the central place to configure and register them.
+
+A minimal project can look like this:
+
+```text
+src/
+  mastra/
+    agents/
+      agent.ts
+    tools/
+      tool.ts
+    workflows/
+      workflow.ts
+    scorers/
+      scorer.ts
+    skills.ts
+    index.ts
+```
+
+See the [project structure reference](/reference/project-structure) for the default layout and recommended conventions.
+
+## File-based agents
+
+:::experimental
+
+File-based agents are in beta and may change before they're stable. Most examples in the documentation still define and register agents in code.
+
+:::
+
+By default, agents and their related primitives are imported and registered on your [`Mastra`](/reference/core/mastra-class) instance in `src/mastra/index.ts`. File-based agents are an experimental alternative that discovers them by convention from files under `src/mastra/`.
+
+This reduces glue code and keeps your project structure visible at a glance. You can adopt file-based agents incrementally, but unsupported features and runtime configuration still need code.
+
+### Basic layout
+
+Each agent has its own directory. Its configuration, instructions, tools, and skills are co-located:
+
+```text
+src/mastra/
+  agents/
+    agent/
+      config.ts
+      instructions.md
+      tools/
+        tool.ts
+      skills/
+        skill.md
+```
+
+Only `config.ts` and `instructions.md` are required. Add other capabilities as needed.
+
+### Quickstart
+
+In `src/mastra/agents/agent/`, create these two files:
+
+```typescript title="src/mastra/agents/agent/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+```markdown title="src/mastra/agents/agent/instructions.md"
+You are a helpful assistant.
+```
+
+Run `mastra dev`, then open Studio and select `agent`.
+
+### Add capabilities
+
+Add capabilities with these file conventions:
+
+| Capability | File convention |
+| - | - |
+| [Agent config](/reference/file-based-agents/config) | `src/mastra/agents/<agent-id>/config.ts` |
+| [Instructions](/reference/file-based-agents/instructions) | `src/mastra/agents/<agent-id>/instructions.md` |
+| [Tools](/reference/file-based-agents/tools) | `src/mastra/agents/<agent-id>/tools/` |
+| [Skills](/reference/file-based-agents/skills) | `src/mastra/agents/<agent-id>/skills/` |
+| [Memory](/reference/file-based-agents/memory) | `src/mastra/agents/<agent-id>/memory.ts` |
+| [Workspace](/reference/file-based-agents/workspace) | `src/mastra/agents/<agent-id>/workspace.ts` and `src/mastra/agents/<agent-id>/workspace/` |
+| [Processors](/reference/file-based-agents/processors) | `src/mastra/agents/<agent-id>/processors/` |
+| [Scorers](/reference/file-based-agents/scorers) | `src/mastra/agents/<agent-id>/scorers/` |
+| [Subagents](/reference/file-based-agents/subagents) | `src/mastra/agents/<agent-id>/subagents/` |
+| [Workflows](/reference/file-based-agents/workflows) | `src/mastra/workflows/` |
+| [Storage](/reference/file-based-agents/storage) | `src/mastra/storage.ts` |
+| [Observability](/reference/file-based-agents/observability) | `src/mastra/observability.ts` |
+| [Logger](/reference/file-based-agents/logger) | `src/mastra/logger.ts` |
+| [Server config](/reference/file-based-agents/server) | `src/mastra/server.ts` |
+| [Studio config](/reference/file-based-agents/studio) | `src/mastra/studio.ts` |
+| AgentController | Not yet file-based; create at runtime with `new AgentController()` |
+| Schedules | Not yet file-based; create at runtime with `mastra.schedules.create()` |
