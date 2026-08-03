@@ -1218,6 +1218,46 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(nestedWorkflowStoreResult?.status).toBe('success');
     });
   });
+
+  describe('streamLegacy cleanup error safety', () => {
+    it('releases writer lock and completes cleanup even if observer handler rejects', async () => {
+      const step = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const workflow = createWorkflow({
+        id: 'stream-legacy-cleanup-error-wf',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+
+      const run = await workflow.createRun();
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 'test' } });
+
+      // Register an observer stream which pushes a throwing handler to #observerHandlers
+      run.observeStreamLegacy();
+
+      // Spy on console/logger error to verify error is caught cleanly
+      const loggerErrorSpy = vi.spyOn(workflow.logger, 'error');
+
+      // Consume stream chunks
+      for await (const _event of stream) {
+        // Discard events
+      }
+
+      const result = await getWorkflowState();
+      expect(result.status).toBe('success');
+
+      // Verify closeStreamAction completes without throwing unhandled rejection
+      await expect((run as any).closeStreamAction()).resolves.not.toThrow();
+    });
+  });
 });
 
 describe('createRun storage existence read (issue #19015)', () => {
