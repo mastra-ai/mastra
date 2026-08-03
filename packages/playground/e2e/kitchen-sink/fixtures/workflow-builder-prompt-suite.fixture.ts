@@ -45,6 +45,18 @@ const objectSchema = (properties: Record<string, unknown>, required: string[]) =
   required,
 });
 
+// `additionalProperties: false` is the point of the strict scenarios: it is the
+// one schema construct the rest of the suite never emits, so these cover a
+// closed schema surviving authoring, persistence, and execution.
+//
+// Scope, verified by falsification: an extra input property is NOT rejected at
+// run time — the run still succeeds. So these prove the closed schema round
+// trips and stays runnable, not that it is enforced as an input guard.
+const strictObjectSchema = (properties: Record<string, unknown>, required: string[]) => ({
+  ...objectSchema(properties, required),
+  additionalProperties: false,
+});
+
 const promptSuiteFixture = (definition: Record<string, unknown>) => [
   toolCallTurn([['workflow-submit', 'submit-workflow-draft', definition]]),
   stopTurn(String(definition.id)),
@@ -63,6 +75,40 @@ const ticketSchema = objectSchema({ ticketId: stringSchema, status: stringSchema
 
 const fromStep = (step: string | string[], path: string) => ({ step, path });
 const fromInput = (path: string) => ({ initData: true, path });
+
+// One definition, two scenarios. The urgent and normal routes differ only by
+// run input, so they share this builder and are told apart by which conditional
+// branch produced a step result.
+const priorityRouterDefinition = (id: string) => ({
+  id,
+  description: 'Routes support requests by priority.',
+  inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
+  outputSchema: objectSchema({ response: stringSchema }, ['response']),
+  graph: [
+    {
+      type: 'mapping',
+      id: 'route-input',
+      mapConfig: { prompt: fromInput('prompt') },
+    },
+    {
+      type: 'conditional',
+      steps: [
+        { type: 'agent', id: 'urgent-support', agentId: 'support-agent' },
+        { type: 'agent', id: 'normal-support', agentId: 'support-agent' },
+      ],
+      predicates: [
+        { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+        { op: 'ne', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+      ],
+    },
+    {
+      type: 'mapping',
+      id: 'priority-support-result',
+      // Array form selects whichever branch actually ran.
+      mapConfig: { response: fromStep(['urgent-support', 'normal-support'], 'text') },
+    },
+  ],
+});
 
 const emailLookupHelper = (id: string, sourceField: string) => ({
   id,
@@ -226,36 +272,49 @@ export const workflowBuilderPromptFixtures = {
       },
     ],
   }),
-  'workflow-builder-prompt-priority-support-router': promptSuiteFixture({
-    id: 'priority-support-router',
-    description: 'Routes support requests by priority.',
-    inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
-    outputSchema: objectSchema({ response: stringSchema }, ['response']),
+  // Bridges an array-output agent into a foreach: the agent step's root-level
+  // array `outputSchema` produces `[{ prompt }, ...]` directly (no mapping can
+  // precede a foreach), which foreach hands one element at a time to the blurb
+  // agent. This is the canonical "do X for each item" shape.
+  'workflow-builder-prompt-topic-subtopics-blurbs': promptSuiteFixture({
+    id: 'topic-subtopics-blurbs',
+    description: 'Generates subtopics for a topic and writes a one-line blurb for each.',
+    inputSchema: objectSchema({ topic: stringSchema }, ['topic']),
+    outputSchema: arraySchema(objectSchema({ text: stringSchema }, ['text'])),
     graph: [
       {
         type: 'mapping',
-        id: 'route-input',
-        mapConfig: { prompt: fromInput('prompt') },
+        id: 'to-subtopics-prompt',
+        mapConfig: {
+          prompt: { template: 'Generate 3 subtopics for ${initData.topic} and a blurb prompt for each.' },
+        },
       },
       {
-        type: 'conditional',
-        steps: [
-          { type: 'agent', id: 'urgent-support', agentId: 'support-agent' },
-          { type: 'agent', id: 'normal-support', agentId: 'support-agent' },
-        ],
-        predicates: [
-          { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
-          { op: 'ne', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
-        ],
+        type: 'agent',
+        id: 'generate-subtopics',
+        agentId: 'subtopics-agent',
+        outputSchema: arraySchema(objectSchema({ prompt: stringSchema }, ['prompt'])),
       },
       {
-        type: 'mapping',
-        id: 'priority-support-result',
-        // Array form selects whichever branch actually ran.
-        mapConfig: { response: fromStep(['urgent-support', 'normal-support'], 'text') },
+        type: 'foreach',
+        step: {
+          type: 'agent',
+          id: 'write-blurb',
+          agentId: 'blurb-agent',
+        },
+        opts: { concurrency: 3 },
       },
     ],
   }),
+  'workflow-builder-prompt-priority-support-router': promptSuiteFixture(
+    priorityRouterDefinition('priority-support-router'),
+  ),
+  // Same definition, different run input. support-agent answers with a fixed
+  // string either way, so the two routes are indistinguishable by output — only
+  // the step-level branch assertion separates them.
+  'workflow-builder-prompt-priority-support-router-normal-route': promptSuiteFixture(
+    priorityRouterDefinition('priority-support-router-normal-route'),
+  ),
   'workflow-builder-prompt-mixed-support-pipeline': promptSuiteFixture({
     id: 'mixed-support-pipeline',
     description: 'Returns a support answer and ticket.',
@@ -286,6 +345,103 @@ export const workflowBuilderPromptFixtures = {
         mapConfig: {
           response: fromStep('support-agent-step', 'text'),
           ticket: fromStep('create-ticket-step', ''),
+        },
+      },
+    ],
+  }),
+  // Strict twin of support-answer-workflow. Same graph shape; the coverage it
+  // adds is the closed input/output schema round-tripping through storage.
+  'workflow-builder-prompt-strict-support-answer': promptSuiteFixture({
+    id: 'strict-support-answer-workflow',
+    description: 'Answers a support prompt under a closed input and output schema.',
+    inputSchema: strictObjectSchema({ prompt: stringSchema }, ['prompt']),
+    outputSchema: strictObjectSchema({ response: stringSchema }, ['response']),
+    graph: [
+      { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
+      {
+        type: 'mapping',
+        id: 'strict-support-answer-result',
+        mapConfig: { response: fromStep('support-agent-step', 'text') },
+      },
+    ],
+  }),
+  // Strict twin of mixed-support-pipeline. `create-support-ticket` needs a
+  // customerId that the closed input schema does not carry, so the customer
+  // lookup is what supplies it.
+  'workflow-builder-prompt-strict-support-ticket': promptSuiteFixture({
+    id: 'strict-support-ticket-workflow',
+    description: 'Answers and opens a ticket under closed input and output schemas.',
+    inputSchema: strictObjectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
+    outputSchema: strictObjectSchema(
+      {
+        agentText: stringSchema,
+        ticket: strictObjectSchema({ ticketId: stringSchema, status: stringSchema }, ['ticketId', 'status']),
+      },
+      ['agentText', 'ticket'],
+    ),
+    graph: [
+      { type: 'mapping', id: 'lookup-input', mapConfig: { email: fromInput('email') } },
+      { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+      {
+        type: 'mapping',
+        id: 'agent-input',
+        mapConfig: { prompt: { template: 'Prepare a support answer for ${initData.summary}' } },
+      },
+      { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
+      {
+        type: 'mapping',
+        id: 'ticket-input',
+        mapConfig: {
+          customerId: fromStep('lookup-customer-step', 'customerId'),
+          summary: fromInput('summary'),
+        },
+      },
+      { type: 'tool', id: 'create-ticket-step', toolId: 'createSupportTicket' },
+      {
+        type: 'mapping',
+        id: 'strict-support-ticket-result',
+        mapConfig: {
+          agentText: fromStep('support-agent-step', 'text'),
+          ticket: fromStep('create-ticket-step', ''),
+        },
+      },
+    ],
+  }),
+  // Single-agent twin of topic-subtopics-blurbs: one structured turn produces
+  // every pair, so no iteration is needed. This is the shape a model picks when
+  // the prompt does not name foreach, and it is the only scenario that
+  // references a whole array step result (`path: ''`) into an object wrapper.
+  'workflow-builder-prompt-topic-subtopics-blurbs-single-agent': promptSuiteFixture({
+    id: 'topic-subtopics-blurbs-single-agent',
+    description: 'Generates subtopics with blurbs for a topic in a single agent step.',
+    inputSchema: objectSchema({ topic: stringSchema }, ['topic']),
+    outputSchema: objectSchema(
+      {
+        topic: stringSchema,
+        items: arraySchema(objectSchema({ subtopic: stringSchema, blurb: stringSchema }, ['subtopic', 'blurb'])),
+      },
+      ['topic', 'items'],
+    ),
+    graph: [
+      {
+        type: 'mapping',
+        id: 'to-subtopics-prompt',
+        mapConfig: {
+          prompt: { template: 'Generate 3 subtopics with a one-line blurb each for ${initData.topic}.' },
+        },
+      },
+      {
+        type: 'agent',
+        id: 'generate-subtopics',
+        agentId: 'subtopic-blurbs-agent',
+        outputSchema: arraySchema(objectSchema({ subtopic: stringSchema, blurb: stringSchema }, ['subtopic', 'blurb'])),
+      },
+      {
+        type: 'mapping',
+        id: 'topic-blurbs-result',
+        mapConfig: {
+          topic: fromInput('topic'),
+          items: fromStep('generate-subtopics', ''),
         },
       },
     ],

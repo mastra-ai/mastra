@@ -5,11 +5,14 @@ import { PinoLogger } from '@mastra/loggers';
 
 import {
   askUserAgent,
+  blurbAgent,
   builderAgent,
   codeOverrideEditableAgent,
   codeOverrideLockedAgent,
   omAdaptiveAgent,
   omAgent,
+  subtopicBlurbsAgent,
+  subtopicsAgent,
   supportAgent,
   weatherAgent,
 } from './agents';
@@ -38,6 +41,9 @@ export const mastra = new Mastra({
   agents: {
     weatherAgent,
     supportAgent,
+    subtopicsAgent,
+    subtopicBlurbsAgent,
+    blurbAgent,
     omAgent,
     omAdaptiveAgent,
     codeOverrideEditableAgent,

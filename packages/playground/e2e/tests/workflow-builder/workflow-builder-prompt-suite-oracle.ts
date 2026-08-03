@@ -9,8 +9,13 @@ export type CanonicalWorkflowScenarioId =
   | 'support-answer-workflow'
   | 'nested-greeting-workflow'
   | 'foreach-customer-lookup-workflow'
+  | 'topic-subtopics-blurbs'
   | 'priority-support-router'
-  | 'mixed-support-pipeline';
+  | 'priority-support-router-normal-route'
+  | 'mixed-support-pipeline'
+  | 'strict-support-answer-workflow'
+  | 'strict-support-ticket-workflow'
+  | 'topic-subtopics-blurbs-single-agent';
 
 type OutputAssertion = (output: unknown) => boolean;
 
@@ -71,6 +76,17 @@ const scenarioMetadata = {
     assertOutput: (output: unknown) =>
       Array.isArray(output) && output.length === 1 && isCustomer(output[0], 'ada@example.com'),
   },
+  'topic-subtopics-blurbs': {
+    fixture: 'workflow-builder-prompt-topic-subtopics-blurbs',
+    // The inner foreach step id renders in the graph.
+    expectedGraphEntry: 'write-blurb',
+    // Three non-empty blurbs prove the foreach actually iterated the bridge
+    // agent's raw array once per element rather than collapsing it.
+    assertOutput: (output: unknown) =>
+      Array.isArray(output) &&
+      output.length === 3 &&
+      output.every(item => isRecord(item) && isNonEmptyString(item.text)),
+  },
   'priority-support-router': {
     fixture: 'workflow-builder-prompt-priority-support-router',
     expectedGraphEntry: 'priority-support-result',
@@ -82,14 +98,65 @@ const scenarioMetadata = {
     assertSteps: (steps: unknown) =>
       isRecord(steps) && didStepRun(steps['urgent-support']) && !didStepRun(steps['normal-support']),
   },
+  // Same definition and same fixed agent reply as the urgent route; only the
+  // run input differs. Asserting the mirrored branch is what proves the
+  // non-urgent predicate is evaluated rather than branch 0 always winning.
+  'priority-support-router-normal-route': {
+    fixture: 'workflow-builder-prompt-priority-support-router-normal-route',
+    expectedGraphEntry: 'priority-support-result',
+    assertOutput: (output: unknown) => isRecord(output) && isNonEmptyString(output.response),
+    assertSteps: (steps: unknown) =>
+      isRecord(steps) && didStepRun(steps['normal-support']) && !didStepRun(steps['urgent-support']),
+  },
   'mixed-support-pipeline': {
     fixture: 'workflow-builder-prompt-mixed-support-pipeline',
     expectedGraphEntry: 'mixed-support-result',
     assertOutput: (output: unknown) => isRecord(output) && isNonEmptyString(output.response) && isTicket(output.ticket),
   },
+  'strict-support-answer-workflow': {
+    fixture: 'workflow-builder-prompt-strict-support-answer',
+    expectedGraphEntry: 'strict-support-answer-result',
+    liveGraphPinned: false,
+    // A closed output schema rejects extra keys, so a successful run is itself
+    // the evidence that the mapping produced exactly `response`.
+    assertOutput: (output: unknown) =>
+      isRecord(output) && isNonEmptyString(output.response) && Object.keys(output).length === 1,
+  },
+  'strict-support-ticket-workflow': {
+    fixture: 'workflow-builder-prompt-strict-support-ticket',
+    expectedGraphEntry: 'strict-support-ticket-result',
+    liveGraphPinned: false,
+    assertOutput: (output: unknown) =>
+      isRecord(output) &&
+      isNonEmptyString(output.agentText) &&
+      isTicket(output.ticket) &&
+      Object.keys(output).length === 2,
+  },
+  'topic-subtopics-blurbs-single-agent': {
+    fixture: 'workflow-builder-prompt-topic-subtopics-blurbs-single-agent',
+    expectedGraphEntry: 'topic-blurbs-result',
+    liveGraphPinned: false,
+    // Three complete pairs prove the whole array step result was referenced
+    // (`path: ''`) rather than collapsed to a single item.
+    assertOutput: (output: unknown) =>
+      isRecord(output) &&
+      output.topic === 'renewable energy' &&
+      Array.isArray(output.items) &&
+      output.items.length === 3 &&
+      output.items.every(item => isRecord(item) && isNonEmptyString(item.subtopic) && isNonEmptyString(item.blurb)),
+  },
 } satisfies Record<
   CanonicalWorkflowScenarioId,
-  { fixture: Fixtures; expectedGraphEntry: string; assertOutput: OutputAssertion; assertSteps?: OutputAssertion }
+  {
+    fixture: Fixtures;
+    expectedGraphEntry: string;
+    // Whether the live matrix may assert this graph shape against the real
+    // model. Only true when the prompt itself directs the mechanism; scenarios
+    // that constrain schemas (or nothing) leave the model free to choose.
+    liveGraphPinned?: boolean;
+    assertOutput: OutputAssertion;
+    assertSteps?: OutputAssertion;
+  }
 >;
 
 const isCanonicalScenarioId = (value: string): value is CanonicalWorkflowScenarioId => value in scenarioMetadata;
@@ -100,7 +167,12 @@ export const canonicalWorkflowScenarios = promptSuite.scenarios.map(scenario => 
   }
 
   const metadata = scenarioMetadata[scenario.id];
-  if (metadata.fixture !== scenario.fixture || metadata.expectedGraphEntry !== scenario.expectedGraphEntry) {
+  const liveGraphPinned = 'liveGraphPinned' in metadata ? metadata.liveGraphPinned : true;
+  if (
+    metadata.fixture !== scenario.fixture ||
+    metadata.expectedGraphEntry !== scenario.expectedGraphEntry ||
+    liveGraphPinned !== scenario.liveGraphPinned
+  ) {
     throw new Error(`Canonical workflow metadata drift for ${scenario.id}`);
   }
 

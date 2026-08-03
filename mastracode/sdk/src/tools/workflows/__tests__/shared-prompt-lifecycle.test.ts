@@ -19,6 +19,18 @@ const objectSchema = (properties: Record<string, unknown>, required: string[]) =
   required,
 });
 
+// `additionalProperties: false` is the point of the strict scenarios: it is the
+// one schema construct the rest of the suite never emits, so these cover a
+// closed schema surviving authoring, persistence, and execution.
+//
+// Scope, verified by falsification: an extra input property is NOT rejected at
+// run time — the run still succeeds. So these prove the closed schema round
+// trips and stays runnable, not that it is enforced as an input guard.
+const strictObjectSchema = (properties: Record<string, unknown>, required: string[]) => ({
+  ...objectSchema(properties, required),
+  additionalProperties: false,
+});
+
 const stringSchema = { type: 'string' };
 const numberSchema = { type: 'number' };
 const arraySchema = (items: Record<string, unknown>) => ({ type: 'array', items });
@@ -93,6 +105,87 @@ const supportAgent = new Agent({
         ]),
       };
     },
+  }),
+});
+
+// Emits a fixed JSON payload for every call. Used by the structured-output
+// agents below, which differ only in what that payload contains.
+const jsonAgent = (id: string, name: string, instructions: string, payload: string) =>
+  new Agent({
+    id,
+    name,
+    instructions,
+    model: new MockLanguageModelV3({
+      doGenerate: async () => ({
+        content: [{ type: 'text', text: payload }],
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: modelUsage,
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id, modelId: `${id}-model`, timestamp: new Date(0) },
+          { type: 'text-start', id: `${id}-text` },
+          { type: 'text-delta', id: `${id}-text`, delta: payload },
+          { type: 'text-end', id: `${id}-text` },
+          { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: modelUsage },
+        ]),
+      }),
+    }),
+  });
+
+// A root-level array `outputSchema` on an agent step goes through Core's
+// structured-output path, which shows the model an `{ elements: [...] }` object
+// and unwraps it back to a raw array. So these mocks must emit the WRAPPED
+// JSON, not a bare array. The unwrapped array is what foreach iterates.
+const subtopicsAgent = jsonAgent(
+  'subtopics-agent',
+  'Subtopics Agent',
+  'Return three subtopic prompts for the foreach comparison test.',
+  JSON.stringify({
+    elements: [
+      { prompt: 'Write a one-line blurb about the first subtopic.' },
+      { prompt: 'Write a one-line blurb about the second subtopic.' },
+      { prompt: 'Write a one-line blurb about the third subtopic.' },
+    ],
+  }),
+);
+
+const subtopicBlurbsAgent = jsonAgent(
+  'subtopic-blurbs-agent',
+  'Subtopic Blurbs Agent',
+  'Return three subtopics with blurbs for the single-agent comparison test.',
+  JSON.stringify({
+    elements: [
+      { subtopic: 'Solar Power', blurb: 'Sunlight converted directly into usable electricity.' },
+      { subtopic: 'Wind Energy', blurb: 'Moving air spun into grid-ready power.' },
+      { subtopic: 'Energy Storage', blurb: 'Holding surplus generation until demand returns.' },
+    ],
+  }),
+);
+
+const blurbAgent = new Agent({
+  id: 'blurb-agent',
+  name: 'Blurb Agent',
+  instructions: 'Write a one-line blurb for foreach comparison tests.',
+  model: new MockLanguageModelV3({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: 'A concise one-line blurb.' }],
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: modelUsage,
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'blurb-agent', modelId: 'blurb-model', timestamp: new Date(0) },
+        { type: 'text-start', id: 'blurb-text' },
+        { type: 'text-delta', id: 'blurb-text', delta: 'A concise one-line blurb.' },
+        { type: 'text-end', id: 'blurb-text' },
+        { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: modelUsage },
+      ]),
+    }),
   }),
 });
 
@@ -395,6 +488,159 @@ const scenarios = [
     definition: priorityRouterDefinition('priority-support-router-normal-route'),
   },
   {
+    id: 'strict-support-answer-workflow',
+    input: { prompt: 'How do I reset my password?' },
+    expected: { response: 'Reset your password from account settings.' },
+    definition: {
+      id: 'strict-support-answer-workflow',
+      inputSchema: strictObjectSchema({ prompt: stringSchema }, ['prompt']),
+      outputSchema: strictObjectSchema({ response: stringSchema }, ['response']),
+      graph: [
+        { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
+        {
+          type: 'mapping',
+          id: 'strict-support-answer-result',
+          mapConfig: { response: fromStep('support-agent-step', 'text') },
+        },
+      ],
+    },
+  },
+  {
+    // Strict twin of mixed-support-pipeline. `create-support-ticket` needs a
+    // customerId the closed input schema does not carry, so the lookup supplies it.
+    id: 'strict-support-ticket-workflow',
+    input: { email: 'ada@example.com', summary: 'Cannot sign in' },
+    expected: {
+      agentText: 'Prepared support answer for Cannot sign in',
+      ticket: { ticketId: 'ticket-456', status: 'open' },
+    },
+    definition: {
+      id: 'strict-support-ticket-workflow',
+      inputSchema: strictObjectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
+      outputSchema: strictObjectSchema(
+        {
+          agentText: stringSchema,
+          ticket: strictObjectSchema({ ticketId: stringSchema, status: stringSchema }, ['ticketId', 'status']),
+        },
+        ['agentText', 'ticket'],
+      ),
+      graph: [
+        { type: 'mapping', id: 'lookup-input', mapConfig: { email: fromInput('email') } },
+        { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+        {
+          type: 'mapping',
+          id: 'agent-input',
+          mapConfig: { prompt: { template: 'Prepare a support answer for ${initData.summary}' } },
+        },
+        { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
+        {
+          type: 'mapping',
+          id: 'ticket-input',
+          mapConfig: {
+            customerId: fromStep('lookup-customer-step', 'customerId'),
+            summary: fromInput('summary'),
+          },
+        },
+        { type: 'tool', id: 'create-ticket-step', toolId: 'createSupportTicket' },
+        {
+          type: 'mapping',
+          id: 'strict-support-ticket-result',
+          mapConfig: {
+            agentText: fromStep('support-agent-step', 'text'),
+            ticket: fromStep('create-ticket-step', ''),
+          },
+        },
+      ],
+    },
+  },
+  {
+    // The bridge pattern: an agent with a root-level array outputSchema is the
+    // only way to hand a raw array to foreach, since a mapping cannot emit one.
+    id: 'topic-subtopics-blurbs',
+    input: { topic: 'renewable energy' },
+    expected: [
+      { text: 'A concise one-line blurb.' },
+      { text: 'A concise one-line blurb.' },
+      { text: 'A concise one-line blurb.' },
+    ],
+    definition: {
+      id: 'topic-subtopics-blurbs',
+      inputSchema: objectSchema({ topic: stringSchema }, ['topic']),
+      outputSchema: arraySchema(objectSchema({ text: stringSchema }, ['text'])),
+      graph: [
+        {
+          type: 'mapping',
+          id: 'to-subtopics-prompt',
+          mapConfig: { prompt: { template: 'Generate 3 subtopics for ${initData.topic}.' } },
+        },
+        {
+          type: 'agent',
+          id: 'generate-subtopics',
+          agentId: 'subtopics-agent',
+          // Foreach passes each element to the agent child unchanged, so every
+          // element must already be exactly the agent input shape.
+          outputSchema: arraySchema(objectSchema({ prompt: stringSchema }, ['prompt'])),
+        },
+        {
+          type: 'foreach',
+          step: { type: 'agent', id: 'write-blurb', agentId: 'blurb-agent' },
+          opts: { concurrency: 3 },
+        },
+      ],
+    },
+  },
+  {
+    // Same prompt intent, no foreach: one agent returns complete pairs and a
+    // mapping wraps them. This is the shape the live model picks unprompted.
+    id: 'topic-subtopics-blurbs-single-agent',
+    input: { topic: 'renewable energy' },
+    expected: {
+      topic: 'renewable energy',
+      items: [
+        { subtopic: 'Solar Power', blurb: 'Sunlight converted directly into usable electricity.' },
+        { subtopic: 'Wind Energy', blurb: 'Moving air spun into grid-ready power.' },
+        { subtopic: 'Energy Storage', blurb: 'Holding surplus generation until demand returns.' },
+      ],
+    },
+    definition: {
+      id: 'topic-subtopics-blurbs-single-agent',
+      inputSchema: objectSchema({ topic: stringSchema }, ['topic']),
+      outputSchema: objectSchema(
+        {
+          topic: stringSchema,
+          items: arraySchema(objectSchema({ subtopic: stringSchema, blurb: stringSchema }, ['subtopic', 'blurb'])),
+        },
+        ['topic', 'items'],
+      ),
+      graph: [
+        {
+          type: 'mapping',
+          id: 'to-subtopics-prompt',
+          mapConfig: {
+            prompt: { template: 'Generate 3 subtopics with a one-line blurb each for ${initData.topic}.' },
+          },
+        },
+        {
+          type: 'agent',
+          id: 'generate-subtopics',
+          agentId: 'subtopic-blurbs-agent',
+          outputSchema: arraySchema(
+            objectSchema({ subtopic: stringSchema, blurb: stringSchema }, ['subtopic', 'blurb']),
+          ),
+        },
+        {
+          type: 'mapping',
+          id: 'topic-blurbs-result',
+          mapConfig: {
+            topic: fromInput('topic'),
+            // Empty path addresses the whole array the agent step returned.
+            items: fromStep('generate-subtopics', ''),
+          },
+        },
+      ],
+    },
+  },
+  {
     id: 'mixed-support-pipeline',
     input: { email: 'ada@example.com', summary: 'Cannot sign in' },
     expected: {
@@ -443,7 +689,7 @@ describe('Mastra Code registry-backed Workflow Builder prompt lifecycle', () => 
       const mastra = new Mastra({
         logger: false,
         storage: new InMemoryStore({ id: `shared-prompt-${id}` }),
-        agents: { supportAgent },
+        agents: { supportAgent, subtopicsAgent, subtopicBlurbsAgent, blurbAgent },
         tools: { addNumbers, lookupCustomer, createSupportTicket },
         workflows: { greetingWorkflow },
       });

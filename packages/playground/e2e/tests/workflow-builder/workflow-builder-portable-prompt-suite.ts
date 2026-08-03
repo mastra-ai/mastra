@@ -75,7 +75,13 @@ export const portableWorkflowScenarios = promptSuite.scenarios.map(scenario => {
   }
 
   const metadata = scenarioMetadata[scenario.id];
-  if (metadata.fixture !== scenario.fixture || metadata.expectedGraphEntry !== scenario.expectedGraphEntry) {
+  // Every portable prompt names the mapping it wants, so the live matrix is
+  // always allowed to assert the graph shape for these.
+  if (
+    metadata.fixture !== scenario.fixture ||
+    metadata.expectedGraphEntry !== scenario.expectedGraphEntry ||
+    scenario.liveGraphPinned !== true
+  ) {
     throw new Error(`Portable workflow metadata drift for ${scenario.id}`);
   }
 

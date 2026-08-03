@@ -1,5 +1,11 @@
-// Live 18-workflow Studio matrix runner.
+// Live 21-workflow Studio matrix runner (8 portable + 13 registry).
 // Drives the real Studio UI and Workflow Builder model, saves via UI, executes via API.
+//
+// Every scenario comes from the two shared suites, so the live matrix and the
+// deterministic Playwright specs run the same set. The suites differ only by
+// dependency: portable needs nothing from the registry, registry needs tools,
+// agents, or workflows. Whether the real model's graph is asserted is decided
+// per scenario by `liveGraphPinned`, not by which list it came from.
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
@@ -10,24 +16,7 @@ const PORTABLE = JSON.parse(
   fs.readFileSync(path.join(REPO, 'workflow-builder-portable-prompt-suite.json'), 'utf8'),
 ).scenarios;
 const REGISTRY = JSON.parse(fs.readFileSync(path.join(REPO, 'workflow-builder-prompt-suite.json'), 'utf8')).scenarios;
-const STRICT = [
-  {
-    id: 'strict-support-answer-workflow',
-    prompt:
-      'Create a workflow named strict-support-answer-workflow with an input schema that requires exactly a prompt string and no additional properties, and an output schema that requires exactly a response string and no additional properties. Use support-agent to produce the response.',
-    runInput: { prompt: 'How do I reset my password?' },
-    expectedOutputShape: { response: 'string' },
-  },
-  {
-    id: 'strict-support-ticket-workflow',
-    prompt:
-      'Create a workflow named strict-support-ticket-workflow with an input schema that requires exactly an email string and a summary string with no additional properties, and an output schema that requires exactly an agentText string and a ticket object containing ticketId and status strings with no additional properties. Use support-agent for the agentText and create-support-ticket for the ticket.',
-    runInput: { email: 'ada@example.com', summary: 'Cannot sign in' },
-    expectedOutputShape: { agentText: 'string', ticket: { ticketId: 'string', status: 'string' } },
-  },
-];
-
-const SCENARIOS = [...PORTABLE, ...REGISTRY, ...STRICT].slice(Number(process.env.START_AT ?? 0));
+const SCENARIOS = [...PORTABLE, ...REGISTRY].slice(Number(process.env.START_AT ?? 0));
 
 function ok(actual, expected) {
   if (!expected) return true;
@@ -133,7 +122,10 @@ function collectEntryIds(graph, acc = []) {
 // Structural check: output-only assertions let a sequential graph masquerade as
 // a parallel/foreach one, which is exactly how R3 read green for weeks.
 async function checkStructure(scenario, id) {
-  if (!scenario.expectedGraphEntry) return { ok: true, note: 'no-expected-entry' };
+  // Only prompts that name the mechanism may pin the shape. Scenarios that
+  // constrain schemas (or nothing) are judged on runtime output alone, so a
+  // different-but-valid graph is a pass rather than a failure.
+  if (!scenario.liveGraphPinned || !scenario.expectedGraphEntry) return { ok: true, note: 'graph-not-pinned' };
   try {
     const def = await (await fetch(`${BASE}/api/stored/workflows/${id}`)).json();
     const ids = collectEntryIds(def?.graph);
