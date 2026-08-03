@@ -309,6 +309,7 @@ export const addItemBodySchema = z.object({
   expectedTrajectory: trajectoryExpectationSchema,
   toolMocks: toolMocksSchema,
   unmockedToolPolicy: unmockedToolPolicySchema,
+  scorerIds: z.array(z.string()).optional().describe('IDs of scorers selected for this item'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -320,6 +321,7 @@ export const updateItemBodySchema = z.object({
   expectedTrajectory: trajectoryExpectationSchema,
   toolMocks: toolMocksSchema,
   unmockedToolPolicy: unmockedToolPolicySchema,
+  scorerIds: z.array(z.string()).optional().nullable().describe('IDs of scorers selected for this item'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -385,6 +387,7 @@ export const datasetItemResponseSchema = z.object({
   expectedTrajectory: z.unknown().optional(),
   toolMocks: toolMocksSchema,
   unmockedToolPolicy: unmockedToolPolicySchema,
+  scorerIds: z.array(z.string()).optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   source: datasetItemSourceSchema,
@@ -446,6 +449,7 @@ export const experimentResultResponseSchema = z.object({
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
+  comment: z.string().nullable().optional(),
   toolMockReport: toolMockReportSchema.nullable(),
   createdAt: z.coerce.date(),
 });
@@ -453,6 +457,7 @@ export const experimentResultResponseSchema = z.object({
 export const updateExperimentResultBodySchema = z.object({
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).optional(),
+  comment: z.string().nullable().optional(),
 });
 
 // Comparison item schema (MVP shape)
@@ -569,6 +574,7 @@ export const itemVersionResponseSchema = z.object({
   expectedTrajectory: z.unknown().optional(),
   toolMocks: toolMocksSchema,
   unmockedToolPolicy: unmockedToolPolicySchema,
+  scorerIds: z.array(z.string()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
@@ -606,6 +612,7 @@ export const batchInsertItemsBodySchema = z.object({
       expectedTrajectory: trajectoryExpectationSchema,
       toolMocks: toolMocksSchema,
       unmockedToolPolicy: unmockedToolPolicySchema,
+      scorerIds: z.array(z.string()).optional(),
       requestContext: z.record(z.string(), z.unknown()).optional(),
       metadata: z.record(z.string(), z.unknown()).optional(),
       source: datasetItemSourceSchema,

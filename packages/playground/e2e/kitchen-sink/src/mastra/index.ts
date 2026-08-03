@@ -62,6 +62,7 @@ export const mastra = new Mastra({
     contentFilterProcessor,
   },
   server: {
+    ...(process.env.E2E_STUDIO_BASE_PATH ? { studioBase: process.env.E2E_STUDIO_BASE_PATH } : {}),
     apiRoutes: [
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',

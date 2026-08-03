@@ -89,6 +89,7 @@ export interface CreateOptions {
   timeout?: number;
   analytics?: PosthogAnalytics;
   resolveVersionTag?: () => Promise<string | undefined>;
+  install?: boolean;
 }
 
 type PlatformSetupResult =
@@ -218,6 +219,7 @@ function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOpti
     git: args.git ?? true,
     template: args.template,
     timeout: args.timeout ?? 60_000,
+    install: args.install ?? true,
   };
 }
 
@@ -368,16 +370,23 @@ export const create = async (args: CreateOptions): Promise<void> => {
       }
     }
 
-    if (observabilityEnabled) {
-      await installDependencies(
-        staging.projectPath,
-        packageManager,
-        options.timeout,
-        materializationController.signal,
-        true,
-      );
-    } else {
-      await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);
+    if (options.install) {
+      if (observabilityEnabled) {
+        await installDependencies(
+          staging.projectPath,
+          packageManager,
+          options.timeout,
+          materializationController.signal,
+          true,
+        );
+      } else {
+        await installDependencies(
+          staging.projectPath,
+          packageManager,
+          options.timeout,
+          materializationController.signal,
+        );
+      }
     }
     materializationController.signal.throwIfAborted();
     await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
@@ -413,7 +422,11 @@ export const create = async (args: CreateOptions): Promise<void> => {
     analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
     p.log.info('Skipping Mastra platform setup.');
   } else if (observabilityEnabled) {
-    p.log.success('Default template cloned and dependencies installed.');
+    p.log.success(
+      options.install
+        ? 'Default template cloned and dependencies installed.'
+        : 'Default template cloned. Dependency installation was skipped.',
+    );
   }
 
   const postSetup = await runPostCreateSetup({

@@ -11,6 +11,10 @@ export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
+  'issueEdited',
+  'issueCommentCreated',
+  'issueCommentEdited',
+  'issueCommentDeleted',
   'pullRequestOpened',
   'pullRequestUpdated',
   'pullRequestReviewRequested',
@@ -97,7 +101,17 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   deliveryId: string;
   factory: { createdAt: string };
   repository: { id: number; fullName: string };
-  issue?: { number: number; title: string; url: string; createdAt?: string };
+  issue?: { number: number; title: string; url: string; createdAt?: string; updatedAt?: string };
+  issueChange?: { title: boolean; body: boolean };
+  issueComment?: {
+    id: number;
+    body?: string;
+    url?: string;
+    author?: string;
+    authorType?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  };
   pullRequest?: {
     number: number;
     title: string;

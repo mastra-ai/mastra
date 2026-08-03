@@ -1970,6 +1970,7 @@ export const API_ROUTE_METADATA = {
       "threadId",
       "timestamp",
       "traceId",
+      "traceIds",
       "userId"
     ],
     "bodyParams": [],
@@ -4958,6 +4959,7 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
+      "scorerIds",
       "source",
       "toolMocks",
       "unmockedToolPolicy"
@@ -5030,6 +5032,7 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
+      "scorerIds",
       "source",
       "toolMocks",
       "unmockedToolPolicy"
@@ -5223,6 +5226,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "comment",
       "status",
       "tags"
     ],

@@ -1879,6 +1879,8 @@ type Shared_Type_80 = {
   executionSource?: string | undefined;
   /** Filter by tags (must have all specified tags) */
   tags?: string[] | undefined;
+  /** Filter by one or more trace IDs */
+  traceIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -2822,6 +2824,7 @@ type Shared_Type_122 = {
   toolMocks?: Shared_Type_120[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  scorerIds?: string[] | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -3174,6 +3177,7 @@ type Shared_Type_140 = {
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  comment?: (string | null) | undefined;
   /** Diagnostic receipt for item-level tool mocks */
   toolMockReport?: (Shared_Type_139 | undefined) | null;
   createdAt: Date;
@@ -8822,6 +8826,7 @@ export type GetObservabilityMetrics_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | unknown;
+  traceIds?: ((string[] | undefined) | undefined) | unknown;
   name?: ((string[] | undefined) | undefined) | unknown;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
@@ -17435,6 +17440,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   toolMocks?: Shared_Type_120[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  /** IDs of scorers selected for this item */
+  scorerIds?: string[] | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17488,6 +17495,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     toolMocks?: Shared_Type_120[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+    scorerIds?: string[] | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17609,6 +17617,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   toolMocks?: Shared_Type_120[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  /** IDs of scorers selected for this item */
+  scorerIds?: (string[] | undefined) | null;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17730,6 +17740,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     toolMocks?: Shared_Type_120[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+    scorerIds?: string[] | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -18059,6 +18070,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathPar
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body = {
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: string[] | undefined;
+  comment?: (string | null) | undefined;
 };
 
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_140;

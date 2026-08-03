@@ -15,6 +15,9 @@ Implement the `workflowDefinitions` storage domain for libsql, pg, mysql, mssql,
 
 ```ts
 const workflowDefinitions = await storage.getStore('workflowDefinitions');
+if (!workflowDefinitions) {
+  throw new Error('This storage adapter does not support the workflowDefinitions domain');
+}
 
 await workflowDefinitions.upsert({
   id: 'greeting-workflow',

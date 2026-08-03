@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { useThreadWorkspacePath } from '../hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../hooks/useWiderThan';
-import { DOCK_MIN_REM, cardWidthClass, chatColumnClass, reservedSpaceClass } from '../layout';
+import { DOCK_MIN_REM, cardWidthClass, reservedSpaceClass } from '../layout';
 import { WorkspaceFilesContext } from './WorkspaceFilesContext';
 
 /** Owns the box the card measures itself against, and shares its state with the session header. */
@@ -28,7 +28,6 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
         ref={chatRef}
         className={cn(
           'flex h-full min-h-0 min-w-0 flex-col',
-          chatColumnClass,
           cardWidthClass[viewingFile ? 'viewing' : 'browsing'],
           claimsSpace ? reservedSpaceClass.docked : reservedSpaceClass.none,
         )}

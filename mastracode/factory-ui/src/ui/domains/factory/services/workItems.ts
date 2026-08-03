@@ -86,19 +86,26 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   return 'manual';
 }
 
+function externalSourceTarget(
+  source: Exclude<WorkItemSource, 'manual'>,
+): Pick<ExternalWorkItemSource, 'integrationId' | 'type'> {
+  switch (source) {
+    case 'github-issue':
+      return { integrationId: 'github', type: 'issue' };
+    case 'github-pr':
+      return { integrationId: 'github', type: 'pull-request' };
+    case 'linear-issue':
+      return { integrationId: 'linear', type: 'issue' };
+    case 'slack-thread':
+      return { integrationId: 'slack', type: 'slack-thread' };
+  }
+}
+
 function toExternalSource(input: CreateWorkItemInput): ExternalWorkItemSource | undefined {
-  if (input.source === 'manual' || !input.sourceKey) return undefined;
-  const [integrationId, type] =
-    input.source === 'github-issue'
-      ? ['github', 'issue']
-      : input.source === 'github-pr'
-        ? ['github', 'pull-request']
-        : input.source === 'linear-issue'
-          ? ['linear', 'issue']
-          : ['slack', 'slack-thread'];
+  const source = input.source;
+  if (source === 'manual' || !input.sourceKey) return undefined;
   return {
-    integrationId,
-    type,
+    ...externalSourceTarget(source),
     externalId: input.sourceKey,
     ...(input.url ? { url: input.url } : {}),
   };
@@ -164,9 +171,14 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** List the org's work items for a Factory project. */
-export async function listWorkItems(baseUrl: string, factoryProjectId: string): Promise<WorkItem[]> {
+export async function listWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal?: AbortSignal,
+): Promise<WorkItem[]> {
   const data = await requestJson<{ workItems: WireWorkItem[] }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
+    { signal },
   );
   return data.workItems.map(fromWireWorkItem);
 }

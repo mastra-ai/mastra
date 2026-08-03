@@ -1,5 +1,94 @@
 # @mastra/mongodb
 
+## 1.16.0-alpha.2
+
+### Minor Changes
+
+- Stored workflow definitions now persist across restarts on every major database backend. ([#20471](https://github.com/mastra-ai/mastra/pull/20471))
+
+  Implement the `workflowDefinitions` storage domain for libsql, pg, mysql, mssql, mongodb, and spanner. Previously the stored-workflow persistence path (`POST /stored/workflows`, `Mastra.addStoredWorkflow`) only worked against `@mastra/core`'s in-memory store. Persistent adapters returned `undefined` from `storage.getStore('workflowDefinitions')` and threw when the HTTP handler tried to read/write a workflow.
+
+  ```ts
+  const workflowDefinitions = await storage.getStore('workflowDefinitions');
+  if (!workflowDefinitions) {
+    throw new Error('This storage adapter does not support the workflowDefinitions domain');
+  }
+
+  await workflowDefinitions.upsert({
+    id: 'greeting-workflow',
+    inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    outputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+    graph: [{ type: 'agent', id: 'greet', agentId: 'greeter-agent' }],
+  });
+
+  const { definitions, total } = await workflowDefinitions.list({ status: 'active' });
+  const definition = await workflowDefinitions.get('greeting-workflow');
+  await workflowDefinitions.delete('greeting-workflow');
+  ```
+
+  Each adapter now ships a `WorkflowDefinitions*` domain that:
+
+  - Creates the shared `mastra_workflow_definitions` table (or Mongo collection) from `WORKFLOW_DEFINITIONS_SCHEMA` during `init()`, plus a default index on `status`.
+  - Implements `upsert` / `get` / `list` / `delete` matching `WorkflowDefinitionsStorage` semantics (`list` supports `status` and `authorId` filters and orders by `updatedAt` desc). Partial upserts preserve unspecified fields, including `authorId` updates and `createdAt` / `updatedAt` semantics.
+  - Handles concurrent first-writes race-safely: if two callers upsert the same new id simultaneously, the losing insert detects the duplicate key, re-reads the row, and applies the partial-update path instead of failing.
+  - Round-trips the JSON columns (`inputSchema`, `outputSchema`, `stateSchema`, `requestContextSchema`, `metadata`, `graph`) through each adapter's JSON handling, so declarative workflow graphs rehydrate identically no matter which backend they were stored in. Malformed persisted JSON surfaces as an actionable error naming the row and column instead of hydrating raw strings.
+
+  Exported class names by adapter: `WorkflowDefinitionsLibSQL`, `WorkflowDefinitionsPG`, `WorkflowDefinitionsMySQL`, `WorkflowDefinitionsMSSQL`, `MongoDBWorkflowDefinitionsStore`, `WorkflowDefinitionsSpanner`. The composite stores (`LibSQLStore`, `PostgresStore`, `MySQLStore`, `MSSQLStore`, `MongoDBStore`, `SpannerStore`) auto-wire the new domain, so callers do not need to construct it manually — `storage.getStore('workflowDefinitions')` now returns a live handle.
+
+  The pg adapter reads `createdAt` / `updatedAt` from the auto-added `createdAtZ` / `updatedAtZ` `timestamptz` companion columns to avoid the naive-timestamp / local-TZ drift that a plain `TIMESTAMP` read exhibits under node-pg.
+
+  `@mastra/clickhouse` and `@mastra/cloudflare` register the new `mastra_workflow_definitions` table in their table/type maps so shared table constants stay exhaustive (no workflow-definitions domain implementation yet).
+
+### Patch Changes
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+
+## 1.16.0-alpha.1
+
+### Patch Changes
+
+- When MongoDB storage initialization fails because an existing non-unique index conflicts with Mastra's required unique index, the error now includes step-by-step migration commands instead of a generic failure message. ([#20486](https://github.com/mastra-ai/mastra/pull/20486))
+
+  **Before:** `Failed to create default index on collection "mastra_threads". Set skipDefaultIndexes to manage indexes yourself.`
+
+  **After:**
+
+  ```text
+  Index conflict on collection "mastra_threads": an existing non-unique index on { id: 1 }
+  conflicts with Mastra's required unique index.
+
+  To migrate:
+    1. Check for duplicates:  db.mastra_threads.aggregate([{ $group: { _id: "$id", n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])
+    2. Drop the old index:    db.mastra_threads.dropIndex("id_1")
+    3. Recreate as unique:    db.mastra_threads.createIndex({ id: 1 }, { unique: true })
+
+  Alternatively, set skipDefaultIndexes: true to manage indexes yourself.
+  ```
+
+- Updated dependencies [[`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64)]:
+  - @mastra/core@1.56.0-alpha.3
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added persistence for dataset item undeclared tool policies. ([#19643](https://github.com/mastra-ai/mastra/pull/19643))
+
+  ```typescript
+  await dataset.addItem({
+    input: 'What is the weather?',
+    unmockedToolPolicy: 'deny',
+  });
+  ```
+
+### Patch Changes
+
+- Added a comment column to experiment results so review comments persist. The column is added automatically and non-destructively on startup for existing databases (https://github.com/mastra-ai/mastra/issues/19857). ([#19865](https://github.com/mastra-ai/mastra/pull/19865))
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+
 ## 1.15.1
 
 ### Patch Changes

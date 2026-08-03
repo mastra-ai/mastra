@@ -2490,6 +2490,7 @@ export interface DatasetItem {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2514,6 +2515,7 @@ export interface DatasetItemRow {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2632,6 +2634,7 @@ export interface DatasetItemPayload {
   toolMocks?: DatasetItemToolMock[];
   /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2654,9 +2657,10 @@ export interface AddDatasetItemInput extends DatasetItemPayload {
  * The optional `filters` field is a tenancy read-scope for the parent dataset;
  * see {@link AddDatasetItemInput.filters}.
  */
-export interface UpdateDatasetItemInput extends Partial<Omit<DatasetItemPayload, 'externalId'>> {
+export interface UpdateDatasetItemInput extends Partial<Omit<DatasetItemPayload, 'externalId' | 'scorerIds'>> {
   id: string;
   datasetId: string;
+  scorerIds?: string[] | null;
   filters?: DatasetTenancyFilters;
 }
 
@@ -2804,6 +2808,7 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
+  comment?: string | null;
   toolMockReport?: DatasetToolMockReport | null;
   /** Multi-tenant organization/account scope. Denormalized from the parent experiment for efficient tenancy-scoped queries. */
   organizationId?: string | null;
@@ -2818,6 +2823,7 @@ export interface UpdateExperimentResultInput {
   experimentId?: string;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  comment?: string | null;
 }
 
 export interface CreateExperimentInput {
