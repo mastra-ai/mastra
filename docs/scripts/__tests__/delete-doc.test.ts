@@ -266,7 +266,7 @@ describe('deleteDocument', () => {
     expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Absolute](/docs#section)')
   })
 
-  test('dry-run performs full preflight without changing files', async () => {
+  test('dry-run validates routes and reads every candidate file without changing files', async () => {
     const before = await fixture.snapshot()
     const result = await deleteDocument('/docs/old/page', '/docs/replacement', { dryRun: true, verbose: false })
     expect(result.results[0].status).toBe('would-delete')
