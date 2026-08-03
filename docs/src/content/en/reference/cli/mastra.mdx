@@ -1,8 +1,8 @@
 ---
-title: "Reference: CLI commands | CLI"
+title: 'Reference: CLI commands | CLI'
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 packages:
-  - "mastra"
+  - 'mastra'
 ---
 
 # CLI commands
@@ -211,7 +211,7 @@ Enable debug logging during the build.
 
 ## `mastra experiment build`
 
-Builds a standalone companion worker that runs experiments without exposing an HTTP server. The worker loads your exported `Mastra` instance, accepts versioned newline-delimited JSON (NDJSON) protocol messages on standard input, and writes protocol events to standard output.
+Builds a standalone companion worker that runs experiments without exposing an HTTP server. The worker loads your exported `Mastra` instance and accepts versioned newline-delimited JSON (NDJSON) protocol messages on standard input. It writes protocol events to standard output.
 
 ```bash
 mastra experiment build [options]
@@ -230,7 +230,7 @@ The command writes the worker to `.mastra/experiment-worker` by default. The dir
 - A sorted SHA-256 digest for each artifact file.
 - A SHA-256 content digest derived from those file paths and digests.
 
-The content digest excludes `experiment-worker-manifest.json` to avoid a self-referential digest. Package the complete directory, including the manifest, and use an outer package digest when the manifest itself must be attested.
+The content digest excludes `experiment-worker-manifest.json` to avoid a self-referential digest. Package the manifest with the rest of the directory. Use an outer package digest when the manifest itself must be attested.
 
 ### Protocol contract
 
@@ -252,7 +252,7 @@ Protocol exit codes are:
 
 ### Packet field handling
 
-The worker passes target identity, ordered inline dataset items, scorer IDs, concurrency, timeout, experiment metadata, request context, tool mocks, and cancellation to `runExperiment`. Scorer versions and artifact provenance are retained as experiment metadata; scorer code provenance is enforced by artifact admission rather than runtime scorer lookup.
+The worker passes target identity, ordered inline dataset items, scorer IDs, concurrency, timeout, experiment metadata, request context, tool mocks, and cancellation to `runExperiment`. Scorer versions and artifact provenance are retained as experiment metadata. Scorer code provenance is enforced by artifact admission rather than runtime scorer lookup.
 
 Version `1` uses deterministic undeclared-tool denial. Non-empty network allowlists and secret references are rejected with a policy failure because network enforcement and secret materialization belong to the process sandbox. Dataset item source and expected-trajectory fields are provenance-only and aren't passed to `runExperiment`.
 
