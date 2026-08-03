@@ -77,6 +77,7 @@ interface MoveDocumentsOptions {
 
 interface UpdateRedirectsOptions {
   glob?: boolean
+  verbose?: boolean
 }
 
 const splitPathAndHash = (url: string): PathWithHash => {
@@ -253,7 +254,13 @@ const updateSidebarDocIds = async (oldRoute: string, newRoute: string): Promise<
   }
 }
 
-const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void> => {
+const updateMdxLinks = async (
+  oldPaths: string[],
+  newPath: string,
+  options: { verbose?: boolean } = {},
+): Promise<void> => {
+  const { verbose = true } = options
+
   const processFile = async (filePath: string): Promise<void> => {
     const content = await fs.readFile(filePath, 'utf-8')
     let updatedContent = content
@@ -309,7 +316,7 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
 
     if (content !== updatedContent) {
       await fs.writeFile(filePath, updatedContent)
-      console.log(`Updated links in ${filePath}`)
+      if (verbose) console.log(`Updated links in ${filePath}`)
     }
   }
 
@@ -420,17 +427,18 @@ const updateRedirects = async (
   newPath: string,
   options: UpdateRedirectsOptions = {},
 ): Promise<string[]> => {
+  const { glob = false, verbose = true } = options
   const config = await readRedirectConfig()
   let redirects = config.redirects.map(redirect => ({ ...redirect, permanent: true }))
 
-  if (options.glob) {
+  if (glob) {
     const sourceDynamicPattern = globToDynamicPattern(oldPath)
     const destDynamicPattern = globToDynamicPattern(newPath)
 
     if (sourceDynamicPattern !== destDynamicPattern) {
       redirects.push({ source: sourceDynamicPattern, destination: destDynamicPattern, permanent: true })
-      console.log(`Added dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
-    } else {
+      if (verbose) console.log(`Added dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
+    } else if (verbose) {
       console.log(`Skipped redundant dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
     }
 
@@ -460,7 +468,7 @@ const updateRedirects = async (
 
   if (oldPath !== newPath) {
     redirects.push({ source: oldPath, destination: newPath, permanent: true })
-  } else {
+  } else if (verbose) {
     console.log(`Skipped redundant static redirect: ${oldPath} -> ${newPath}`)
   }
 
