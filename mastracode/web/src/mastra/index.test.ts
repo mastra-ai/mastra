@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resolveFactoryGithubRule } from '@mastra/factory/rules/resolve';
 
 /**
  * Smoke test for the platform-deployable entry (`src/mastra/index.ts`).
@@ -29,6 +30,63 @@ describe('platform entry (src/mastra/index.ts)', () => {
     const apiRoutes = server?.apiRoutes ?? [];
     const paths = apiRoutes.map(r => r.path);
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
+  });
+
+  it('uses the production Factory rules to retriage linked issue updates without moving their stage', async () => {
+    const { factoryRules } = await import('./index.js');
+    const item = {
+      id: 'issue-42',
+      source: 'github-issue' as const,
+      sourceKey: 'github-issue:42',
+      parentWorkItemId: null,
+      title: 'Issue 42',
+      url: 'https://github.com/acme/repo/issues/42',
+      stages: ['planning'],
+    };
+    const base = {
+      tenant: { orgId: 'org-1', projectId: 'project-1' },
+      actor: { type: 'github' as const, login: 'contributor', trusted: true, factoryAuthored: false },
+      causalChain: [],
+      ruleSetVersion: factoryRules.version,
+      factory: { createdAt: '2030-01-01T00:00:00.000Z' },
+      repository: { id: 10, fullName: 'acme/repo' },
+      item,
+      board: 'work' as const,
+      itemRevision: 3,
+    };
+
+    const issueEdited = resolveFactoryGithubRule(factoryRules, 'issueEdited');
+    const issueCommentCreated = resolveFactoryGithubRule(factoryRules, 'issueCommentCreated');
+
+    expect(
+      issueEdited?.({
+        ...base,
+        ingress: { type: 'github', id: '7:issue-update' },
+        cause: 'github.issueEdited',
+        event: 'issueEdited',
+        deliveryId: 'issue-update',
+        issue: { number: 42, title: 'Issue 42', url: item.url },
+        issueChange: { title: false, body: true },
+      }),
+    ).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: '7:issue-update:factory-triage',
+    });
+    expect(
+      issueCommentCreated?.({
+        ...base,
+        ingress: { type: 'github', id: '7:comment-created' },
+        cause: 'github.issueCommentCreated',
+        event: 'issueCommentCreated',
+        deliveryId: 'comment-created',
+        issue: { number: 42, title: 'Issue 42', url: item.url },
+        issueComment: { id: 100, author: 'contributor', body: 'New lead' },
+      }),
+    ).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: '7:comment-created:factory-triage',
+    });
+    expect(item.stages).toEqual(['planning']);
   });
 
   // Integration env groups are all-or-nothing: setting ANY var of a group

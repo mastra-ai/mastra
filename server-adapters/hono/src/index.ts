@@ -177,7 +177,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         const reader = readableStream.getReader();
 
         stream.onAbort(() => {
-          void reader.cancel('request aborted');
+          void reader.cancel('request aborted').catch(() => {});
         });
 
         try {

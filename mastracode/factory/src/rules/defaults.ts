@@ -34,7 +34,35 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
 }
 
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
+  if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
+    return;
+  }
   return invokeIssueInvestigation(context);
+}
+
+function retriageGithubIssue(context: FactoryGithubRuleContext) {
+  if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
+  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+
+  const reason =
+    context.event === 'issueEdited'
+      ? context.issueChange?.title && context.issueChange.body
+        ? 'issue title and body edited'
+        : context.issueChange?.title
+          ? 'issue title edited'
+          : 'issue body edited'
+      : context.event === 'issueCommentDeleted'
+        ? 'comment deleted'
+        : context.event === 'issueCommentEdited'
+          ? 'comment edited'
+          : 'comment created';
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: `Re-triage GitHub issue (${context.item.url}) after ${reason}.`,
+  } as const;
 }
 
 function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
@@ -239,6 +267,10 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },
+    issueEdited: { onEvent: retriageGithubIssue },
+    issueCommentCreated: { onEvent: retriageGithubIssue },
+    issueCommentEdited: { onEvent: retriageGithubIssue },
+    issueCommentDeleted: { onEvent: retriageGithubIssue },
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },

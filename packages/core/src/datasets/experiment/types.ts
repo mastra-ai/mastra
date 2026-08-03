@@ -1,5 +1,5 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
-import type { MastraScorer } from '../../evals/base';
+import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
@@ -186,12 +186,16 @@ export interface ScorerResult {
   scorerId: string;
   /** Display name of the scorer */
   scorerName: string;
-  /** Computed score (null if scorer failed) */
+  /** Computed score, or null when no score was produced */
   score: number | null;
-  /** Reason/explanation for the score */
+  /** Reason/explanation for the score, or null when no reason was produced */
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /** Scorer stage that failed, when the scorer exposes stage context */
+  failedStep?: ScorerStepName;
+  /** Scorer stages that completed before the failure */
+  completedSteps?: ScorerStepName[];
   /**
    * Scope this score targets. Mirrors the canonical `ScorerTargetScope`
    * taxonomy from observability so consumers can differentiate span-level

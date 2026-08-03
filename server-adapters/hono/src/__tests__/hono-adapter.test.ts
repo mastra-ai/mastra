@@ -231,6 +231,39 @@ describe('Hono Server Adapter', () => {
         await reader.cancel();
       }
     });
+
+    it('handles a rejected source cancellation when the client disconnects', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+      const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'));
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/rejected-stream-cancellation',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () =>
+          new ReadableStream({
+            cancel,
+          }),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/rejected-stream-cancellation'));
+      const reader = response.body!.getReader();
+
+      await reader.read();
+      await reader.cancel();
+      await waitFor(() => cancel.mock.calls.length === 1);
+
+      expect(cancel).toHaveBeenCalledWith('request aborted');
+    });
   });
 
   describe('Stream Data Redaction', () => {

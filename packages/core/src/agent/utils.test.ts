@@ -136,6 +136,57 @@ describe('agent/utils', () => {
   });
 
   describe('tryStreamWithJsonFallback', () => {
+    it('records one stream attempt for a successful invocation', async () => {
+      const result = { object: Promise.resolve({ decision: 'done' }) };
+      const stream = vi.fn().mockResolvedValue(result);
+      const onStreamAttempt = vi.fn();
+
+      await expect(
+        tryStreamWithJsonFallback(makeStreamAgent(stream), 'prompt', {
+          ...baseOptions,
+          onStreamAttempt,
+        } as any),
+      ).resolves.toBe(result);
+
+      expect(onStreamAttempt).toHaveBeenCalledTimes(1);
+      expect(stream).toHaveBeenCalledTimes(1);
+    });
+
+    it('records both stream attempts for a structured-output fallback', async () => {
+      const fallbackResult = { object: Promise.resolve({ decision: 'continue' }) };
+      const stream = vi
+        .fn()
+        .mockRejectedValueOnce(new JSONParseError({ text: 'not json', cause: new SyntaxError('Unexpected token') }))
+        .mockResolvedValueOnce(fallbackResult);
+      const onStreamAttempt = vi.fn();
+
+      await expect(
+        tryStreamWithJsonFallback(makeStreamAgent(stream), 'prompt', {
+          ...baseOptions,
+          onStreamAttempt,
+        } as any),
+      ).resolves.toBe(fallbackResult);
+
+      expect(onStreamAttempt).toHaveBeenCalledTimes(2);
+      expect(stream).toHaveBeenCalledTimes(2);
+    });
+
+    it('records a stream attempt before the provider rejects', async () => {
+      const error = new Error('provider failed');
+      const stream = vi.fn().mockRejectedValue(error);
+      const onStreamAttempt = vi.fn();
+
+      await expect(
+        tryStreamWithJsonFallback(makeStreamAgent(stream), 'prompt', {
+          ...baseOptions,
+          onStreamAttempt,
+        } as any),
+      ).rejects.toBe(error);
+
+      expect(onStreamAttempt).toHaveBeenCalledTimes(1);
+      expect(stream).toHaveBeenCalledTimes(1);
+    });
+
     it('retries with jsonPromptInjection for a structured-output parse error', async () => {
       const fallbackResult = { object: Promise.resolve({ decision: 'continue' }) };
       const stream = vi
