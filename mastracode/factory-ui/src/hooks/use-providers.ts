@@ -34,12 +34,25 @@ function invalidateCredentialDependentQueries(queryClient: QueryClient) {
 
 export function useProvidersQuery() {
   const { client } = useApiConfig();
-  return useQuery<ProviderInfo[]>({
+  return useQuery({
     queryKey: queryKeys.providers(),
-    queryFn: async () => {
-      const body = await client.get<ProvidersResponse>('/web/config/providers');
-      return body.providers;
-    },
+    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    select: (body: ProvidersResponse): ProviderInfo[] => body.providers,
+  });
+}
+
+/**
+ * Whether the caller may write org-wide keys (tenant mode). Shares the
+ * providers cache entry — no extra request. Fails open when the server
+ * doesn't report it (older servers, local mode): the PUT handler is the
+ * authority and rejects non-admin org writes anyway.
+ */
+export function useOrgKeyAdminQuery() {
+  const { client } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.providers(),
+    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    select: (body: ProvidersResponse): boolean => body.orgKeyAdmin ?? true,
   });
 }
 

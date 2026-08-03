@@ -18,7 +18,12 @@ execFileSync(
 );
 
 // app's own pinned turbo — script must also work outside pnpm run, where .bin is not on PATH
+// keep peak memory within Vercel's preview builder limit when the full dependency graph misses cache
 const turboBin = path.join(appDir, 'node_modules', '.bin', 'turbo');
-execFileSync(turboBin, ['--cwd', repoRoot, 'build', ...linkedPackages.flatMap(name => ['--filter', name])], {
-  stdio: 'inherit',
-});
+execFileSync(
+  turboBin,
+  ['--cwd', repoRoot, 'build', '--concurrency=2', ...linkedPackages.flatMap(name => ['--filter', name])],
+  {
+    stdio: 'inherit',
+  },
+);

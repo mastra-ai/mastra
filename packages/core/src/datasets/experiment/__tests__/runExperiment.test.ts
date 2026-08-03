@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
+import { ScorerRunError } from '../../../evals/base';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
@@ -8,7 +9,7 @@ import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { createStep, createWorkflow } from '../../../workflows';
-import { runExperiment } from '../index';
+import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
 
 // Mock agent that returns predictable output
 // Note: specificationVersion must be 'v2' or 'v3' for isSupportedLanguageModel to return true
@@ -311,6 +312,8 @@ describe('runExperiment', () => {
       // Scorer error should be captured in score result
       expect(result.results[0].scores[0].error).toBe('Scorer crashed');
       expect(result.results[0].scores[0].score).toBeNull();
+      expect(result.results[0].scores[0].failedStep).toBeUndefined();
+      expect(result.results[0].scores[0].completedSteps).toBeUndefined();
     });
 
     it('failing scorer does not affect other scorers', async () => {
@@ -344,6 +347,336 @@ describe('runExperiment', () => {
       const workingScore = result.results[0].scores.find(s => s.scorerId === 'working');
       expect(workingScore?.score).toBe(1.0);
       expect(workingScore?.error).toBeNull();
+    });
+
+    it('retains completed scorer output and stage context without persisting a failed score', async () => {
+      const recoveredFailure = new ScorerRunError({
+        scorerId: 'partial-scorer',
+        steps: ['analyze', 'generateScore', 'generateReason'],
+        failedStep: 'generateReason',
+        completedSteps: ['analyze', 'generateScore'],
+        result: {
+          output: 'Response',
+          runId: 'partial-run',
+          score: 0,
+          analyzeStepResult: { relevant: true },
+          analyzePrompt: 'analyze the response',
+          generateScorePrompt: 'score the response',
+        },
+        cause: new Error('reason failed'),
+      });
+      const partialScorer = {
+        id: 'partial-scorer',
+        name: 'Partial Scorer',
+        description: 'Fails after computing a score',
+        run: vi.fn().mockRejectedValue(recoveredFailure),
+      } as unknown as MastraScorer<any, any, any, any>;
+      const emptyFailureScorer = {
+        id: 'empty-failure-scorer',
+        name: 'Empty Failure Scorer',
+        description: 'Fails before computing a score',
+        run: vi.fn().mockRejectedValue(
+          new ScorerRunError({
+            scorerId: 'empty-failure-scorer',
+            steps: ['generateScore'],
+            failedStep: 'generateScore',
+            completedSteps: [],
+            cause: new Error('score failed'),
+          }),
+        ),
+      } as unknown as MastraScorer<any, any, any, any>;
+      const workingScorer = createMockScorer('working', 'Working Scorer');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [partialScorer, emptyFailureScorer, workingScorer],
+      });
+
+      const partialResult = result.results[0].scores.find(score => score.scorerId === 'partial-scorer');
+      expect(partialResult).toMatchObject({
+        score: 0,
+        reason: null,
+        error: 'Scorer Run Failed: reason failed',
+        failedStep: 'generateReason',
+        completedSteps: ['analyze', 'generateScore'],
+        targetScope: 'span',
+      });
+      expect(result.results[0].scores.find(score => score.scorerId === 'empty-failure-scorer')).toMatchObject({
+        score: null,
+        reason: null,
+        error: 'Scorer Run Failed: score failed',
+        failedStep: 'generateScore',
+        completedSteps: [],
+      });
+      expect(result.results[0].scores.find(score => score.scorerId === 'working')).toMatchObject({
+        score: 1,
+        error: null,
+      });
+      const scoreStoreLookups = (mockStorage.getStore as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([domain]) => domain === 'scores',
+      );
+      expect(scoreStoreLookups).toHaveLength(2);
+    });
+  });
+
+  describe('scorer source precedence', () => {
+    it('uses run-level scorers instead of item and dataset scorer IDs', async () => {
+      const runScorer = createMockScorer('run', 'Run');
+      const lowerScorer = createMockScorer('lower', 'Lower');
+      const dataset = await datasetsStorage.createDataset({ name: 'Run override', scorerIds: ['lower'] });
+      await datasetsStorage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'test' },
+        scorerIds: ['missing-item-scorer'],
+      });
+      (mastra.getScorerById as ReturnType<typeof vi.fn>).mockReturnValue(lowerScorer);
+
+      const result = await runExperiment(mastra, {
+        datasetId: dataset.id,
+        task: async () => 'output',
+        scorers: [runScorer, runScorer],
+      });
+
+      expect(result.results[0].scores.map(score => score.scorerId)).toEqual(['run', 'run']);
+      expect(runScorer.run).toHaveBeenCalledTimes(2);
+      expect(lowerScorer.run).not.toHaveBeenCalled();
+      expect(mastra.getScorerById).not.toHaveBeenCalled();
+    });
+
+    it('treats an explicit run-level empty array as an override', async () => {
+      const lowerScorer = createMockScorer('lower', 'Lower');
+      const dataset = await datasetsStorage.createDataset({ name: 'Empty run override', scorerIds: ['lower'] });
+      await datasetsStorage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'test' },
+        scorerIds: ['lower'],
+      });
+      (mastra.getScorerById as ReturnType<typeof vi.fn>).mockReturnValue(lowerScorer);
+
+      const result = await runExperiment(mastra, {
+        datasetId: dataset.id,
+        task: async () => 'output',
+        scorers: [],
+      });
+
+      expect(result.results[0].scores).toEqual([]);
+      expect(lowerScorer.run).not.toHaveBeenCalled();
+      expect(mastra.getScorerById).not.toHaveBeenCalled();
+    });
+
+    it('treats an empty categorized run-level config as an override', async () => {
+      const lowerScorer = createMockScorer('lower', 'Lower');
+      (mastra.getScorerById as ReturnType<typeof vi.fn>).mockReturnValue(lowerScorer);
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: { prompt: 'test' }, scorerIds: ['lower'] }],
+        task: async () => 'output',
+        scorers: { agent: [] },
+      });
+
+      expect(result.results[0].scores).toEqual([]);
+      expect(lowerScorer.run).not.toHaveBeenCalled();
+      expect(mastra.getScorerById).not.toHaveBeenCalled();
+    });
+
+    it('uses item scorer IDs before dataset IDs and preserves empty item overrides', async () => {
+      const itemScorer = createMockScorer('item', 'Item');
+      const datasetScorer = createMockScorer('dataset', 'Dataset');
+      const sharedScorer = createMockScorer('shared', 'Shared');
+      const scorerRegistry = new Map([
+        ['item', itemScorer],
+        ['dataset', datasetScorer],
+        ['shared', sharedScorer],
+      ]);
+      (mastra.getScorerById as ReturnType<typeof vi.fn>).mockImplementation((id: string) => scorerRegistry.get(id));
+
+      const dataset = await datasetsStorage.createDataset({
+        name: 'Item precedence',
+        scorerIds: ['dataset', 'shared', 'dataset'],
+      });
+      await datasetsStorage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'item' },
+        scorerIds: ['item', 'shared', 'item'],
+      });
+      await datasetsStorage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'empty' },
+        scorerIds: [],
+      });
+      await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'dataset' } });
+
+      const result = await runExperiment(mastra, {
+        datasetId: dataset.id,
+        task: async ({ input }) => input,
+        maxConcurrency: 1,
+      });
+
+      const scorerIdsByPrompt = Object.fromEntries(
+        result.results.map(item => [
+          (item.input as { prompt: string }).prompt,
+          item.scores.map(score => score.scorerId),
+        ]),
+      );
+      expect(scorerIdsByPrompt).toEqual({
+        item: ['item', 'shared'],
+        empty: [],
+        dataset: ['dataset', 'shared'],
+      });
+      expect(itemScorer.run).toHaveBeenCalledTimes(1);
+      expect(datasetScorer.run).toHaveBeenCalledTimes(1);
+      expect(sharedScorer.run).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not resolve dataset scorer IDs when every item has an override', async () => {
+      const task = vi.fn().mockResolvedValue('output');
+      const getScorerById = vi.fn().mockImplementation(() => {
+        throw new Error('Scorer not found');
+      });
+      const localMastra = { ...mastra, getScorerById } as unknown as Mastra;
+      const dataset = await datasetsStorage.createDataset({
+        name: 'Ignored dataset scorer',
+        scorerIds: ['missing-dataset'],
+      });
+      await datasetsStorage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'disabled' },
+        scorerIds: [],
+      });
+
+      const result = await runExperiment(localMastra, { datasetId: dataset.id, task });
+
+      expect(result.status).toBe('completed');
+      expect(result.results[0].scores).toEqual([]);
+      expect(task).toHaveBeenCalledTimes(1);
+      expect(getScorerById).not.toHaveBeenCalled();
+    });
+
+    it('runs no scorers when no source is configured', async () => {
+      const result = await runExperiment(mastra, {
+        data: [{ input: { prompt: 'test' } }],
+        task: async () => 'output',
+      });
+
+      expect(result.results[0].scores).toEqual([]);
+      expect(mastra.getScorerById).not.toHaveBeenCalled();
+    });
+
+    it('supports scorer IDs on inline data', async () => {
+      const itemScorer = createMockScorer('inline-item', 'Inline Item');
+      (mastra.getScorerById as ReturnType<typeof vi.fn>).mockReturnValue(itemScorer);
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: { prompt: 'test' }, scorerIds: ['inline-item'] }],
+        task: async () => 'output',
+      });
+
+      expect(result.results[0].scores.map(score => score.scorerId)).toEqual(['inline-item']);
+    });
+
+    it('hydrates stored item scorers through Editor and caches resolution for the run', async () => {
+      const storedScorer = createMockScorer('stored', 'Stored');
+      let hydrated = false;
+      const getStoredScorer = vi.fn().mockImplementation(async () => {
+        hydrated = true;
+        return { id: 'stored' };
+      });
+      const localMastra = {
+        ...mastra,
+        getScorerById: vi.fn().mockImplementation(() => (hydrated ? storedScorer : undefined)),
+        getEditor: vi.fn().mockReturnValue({ scorer: { getById: getStoredScorer } }),
+      } as unknown as Mastra;
+
+      const result = await runExperiment(localMastra, {
+        data: [
+          { input: { prompt: 'first' }, scorerIds: ['stored'] },
+          { input: { prompt: 'second' }, scorerIds: ['stored'] },
+        ],
+        task: async () => 'output',
+      });
+
+      expect(result.results.every(item => item.scores[0]?.scorerId === 'stored')).toBe(true);
+      expect(getStoredScorer).toHaveBeenCalledTimes(1);
+      expect(storedScorer.run).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails only an item with stale scorer IDs before target execution and without retries', async () => {
+      const task = vi.fn().mockResolvedValue('output');
+      const localMastra = {
+        ...mastra,
+        getScorerById: vi.fn().mockImplementation(() => {
+          throw new Error('Scorer not found');
+        }),
+      } as unknown as Mastra;
+      const result = await runExperiment(localMastra, {
+        data: [
+          { id: 'stale-item', input: { prompt: 'stale' }, scorerIds: ['missing'] },
+          { id: 'valid-item', input: { prompt: 'valid' }, scorerIds: [] },
+        ],
+        task,
+        maxConcurrency: 1,
+        maxRetries: 2,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.completedWithErrors).toBe(true);
+      expect(result.failedCount).toBe(1);
+      expect(result.succeededCount).toBe(1);
+      expect(task).toHaveBeenCalledTimes(1);
+
+      const staleResult = result.results[0];
+      expect(staleResult.error).toEqual({
+        code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+        message: 'Item scorer configuration references unregistered scorer IDs: missing',
+      });
+      expect(staleResult.output).toBeNull();
+      expect(staleResult.retryCount).toBe(0);
+      expect(staleResult.scores).toEqual([]);
+
+      const persisted = await experimentsStorage.listExperimentResults({
+        experimentId: result.experimentId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persisted.results.find(item => item.itemId === 'stale-item')?.error).toEqual(staleResult.error);
+    });
+
+    it('rejects experiment setup when a selected run-level scorer ID is missing', async () => {
+      const task = vi.fn().mockResolvedValue('output');
+      const localMastra = {
+        ...mastra,
+        getScorerById: vi.fn().mockImplementation(() => {
+          throw new Error('Scorer not found');
+        }),
+      } as unknown as Mastra;
+
+      await expect(
+        runExperiment(localMastra, {
+          data: [{ input: { prompt: 'run' } }],
+          task,
+          scorers: ['missing-run'],
+        }),
+      ).rejects.toThrow('Scorer not found');
+      expect(task).not.toHaveBeenCalled();
+    });
+
+    it('rejects experiment setup when a selected dataset scorer ID is missing', async () => {
+      const task = vi.fn().mockResolvedValue('output');
+      const localMastra = {
+        ...mastra,
+        getScorerById: vi.fn().mockImplementation(() => {
+          throw new Error('Scorer not found');
+        }),
+      } as unknown as Mastra;
+      const dataset = await datasetsStorage.createDataset({
+        name: 'Missing dataset scorer',
+        scorerIds: ['missing-dataset'],
+      });
+      await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'dataset' } });
+
+      await expect(runExperiment(localMastra, { datasetId: dataset.id, task })).rejects.toThrow('Scorer not found');
+      expect(task).not.toHaveBeenCalled();
     });
   });
 
@@ -467,6 +800,53 @@ describe('runExperiment', () => {
       const outputs = result.results.map(r => r.output);
       expect(outputs).toEqual(expect.arrayContaining([{ text: 'echo:Hello' }, { text: 'echo:Goodbye' }]));
     }, 10_000);
+
+    it('uses categorized run-level workflow and step scorers as the winning source', async () => {
+      const inputSchema = z.object({ prompt: z.string() });
+      const outputSchema = z.object({ text: z.string() });
+      const echoStep = createStep({
+        id: 'echo',
+        inputSchema,
+        outputSchema,
+        execute: async ({ inputData }) => ({ text: `echo:${inputData.prompt}` }),
+      });
+      const workflow = createWorkflow({
+        id: 'categorized-wf',
+        inputSchema,
+        outputSchema,
+      })
+        .then(echoStep)
+        .commit();
+      (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+      (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+      const workflowScorer = createMockScorer('workflow-run', 'Workflow Run');
+      const stepScorer = createMockScorer('workflow-step', 'Workflow Step');
+      const lowerScorer = createMockScorer('lower', 'Lower');
+      const dataset = await datasetsStorage.createDataset({ name: 'Categorized', scorerIds: ['lower'] });
+      await datasetsStorage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'Hello' },
+        scorerIds: ['lower'],
+      });
+      (mastra.getScorerById as ReturnType<typeof vi.fn>).mockReturnValue(lowerScorer);
+
+      const result = await runExperiment(mastra, {
+        datasetId: dataset.id,
+        targetType: 'workflow',
+        targetId: 'categorized-wf',
+        scorers: {
+          workflow: [workflowScorer],
+          steps: { echo: [stepScorer] },
+        },
+      });
+
+      expect(result.results[0].scores.map(score => score.scorerId)).toEqual(['workflow-run', 'workflow-step']);
+      expect(result.results[0].scores[1]?.stepId).toBe('echo');
+      expect(workflowScorer.run).toHaveBeenCalledTimes(1);
+      expect(stepScorer.run).toHaveBeenCalledTimes(1);
+      expect(lowerScorer.run).not.toHaveBeenCalled();
+    });
   });
 
   describe('scorer target', () => {

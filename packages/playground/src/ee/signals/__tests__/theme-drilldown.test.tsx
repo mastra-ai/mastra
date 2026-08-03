@@ -269,7 +269,7 @@ describe('Agent Learning theme drilldown hooks', () => {
   });
 
   describe('when a drill-in starts', () => {
-    it('fetches every paths page with the opaque snapshot and ordered signals', async () => {
+    it('fetches every paths page with the opaque snapshot and ordered trace signals', async () => {
       const observedOffsets: string[] = [];
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, ({ request }) => {
@@ -413,7 +413,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(detailsRow);
 
       expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
-      expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
       expect(await screen.findByText('Users want to add a transcript to their workspace.')).not.toBeNull();
       expect(await screen.findByText('Add this transcript to my workspace.')).not.toBeNull();
       expect(await screen.findByText(/^birth$/i)).not.toBeNull();
@@ -424,7 +424,7 @@ describe('SankeySignals drill-in', () => {
   });
 
   describe('when a Noise row is selected', () => {
-    it('shows Noise for every signal and opens its definition and summary examples', async () => {
+    it('shows Noise for every trace signal and opens its definition and summary examples', async () => {
       useFlowHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {
@@ -448,7 +448,7 @@ describe('SankeySignals drill-in', () => {
       );
       renderSignals();
 
-      const distributions = await screen.findByLabelText('Signal distributions');
+      const distributions = await screen.findByLabelText('Trace signal distributions');
       for (const signalName of ['Goal', 'Outcome', 'Behavior']) {
         expect(
           within(within(distributions).getByLabelText(`${signalName} distribution`)).getByRole('button', {
@@ -462,7 +462,7 @@ describe('SankeySignals drill-in', () => {
       const dialog = await screen.findByRole('dialog', { name: 'Noise' });
       expect(
         within(dialog).getByText(
-          'Noise contains signal summaries that did not consistently match a recurring theme in this snapshot.',
+          'Noise contains trace signal summaries that did not consistently match a recurring theme in this snapshot.',
         ),
       ).not.toBeNull();
       expect(await within(dialog).findByText('2')).not.toBeNull();
@@ -608,7 +608,7 @@ describe('SankeySignals drill-in', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
 
-      expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
+      expect(await screen.findByText('Unable to load trace signal flow.')).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Clear filter' })).not.toBeNull();
     });
 
@@ -621,12 +621,12 @@ describe('SankeySignals drill-in', () => {
       );
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await screen.findByText('Unable to load signal flow.');
+      await screen.findByText('Unable to load trace signal flow.');
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
 
       expect(await screen.findByText('3 traces analyzed')).not.toBeNull();
-      expect(screen.queryByText('Unable to load signal flow.')).toBeNull();
+      expect(screen.queryByText('Unable to load trace signal flow.')).toBeNull();
     });
 
     it('stops snapshot playback after the paths request fails', async () => {
@@ -659,7 +659,7 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('button', { name: 'Retry' }, { timeout: 2000 });
       await new Promise(resolve => window.setTimeout(resolve, 1100));
 
-      expect(screen.getByText('Unable to load signal flow.')).not.toBeNull();
+      expect(screen.getByText('Unable to load trace signal flow.')).not.toBeNull();
     });
   });
 
@@ -698,8 +698,8 @@ describe('SankeySignals drill-in', () => {
         await screen.findByText(/This drill-in is unavailable for snapshots with more than 2,000 traces/),
       ).not.toBeNull();
 
-      expect(screen.queryByLabelText('Signal distributions')).toBeNull();
-      expect(screen.queryByLabelText('Signal theme flow')).toBeNull();
+      expect(screen.queryByLabelText('Trace signal distributions')).toBeNull();
+      expect(screen.queryByLabelText('Trace signal theme flow')).toBeNull();
       expect(requestedSnapshotIds).not.toContain('older-opaque-snapshot-cursor');
     });
   });

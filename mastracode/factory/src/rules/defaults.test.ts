@@ -133,6 +133,10 @@ describe('defaultFactoryRules', () => {
     expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueEdited?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueCommentCreated?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueCommentEdited?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueCommentDeleted?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
     expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
@@ -195,19 +199,63 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('starts the same investigation when a human moves an issue into Triage', async () => {
+  it.each(['issueEdited', 'issueCommentCreated', 'issueCommentEdited', 'issueCommentDeleted'] as const)(
+    're-runs investigation when %s arrives for a linked GitHub issue',
+    async event => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github[event]?.onEvent;
+      const decision = await rule?.({
+        ...githubContext(event),
+        item: { ...item, source: 'github-issue' },
+        board: 'work',
+        itemRevision: 3,
+      });
+      expect(decision).toMatchObject({
+        type: 'invokeSkill',
+        role: 'triage',
+        skillName: 'factory-triage',
+        arguments: expect.stringContaining('https://github.test/acme/repo/issues/42'),
+      });
+    },
+  );
+
+  it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
     const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'work'),
+      cause: 'linked_item_materialized',
       stage: 'triage',
       fromStage: 'intake',
       toStage: 'triage',
     } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toBeUndefined();
+    expect(await rule?.({ ...context, fromStage: 'planning' })).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'factory-triage',
+    });
+  });
+
+  it('starts investigation when a board drag or reconciliation moves an issue into Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      cause: 'board_drag',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'triage',
       skillName: 'factory-triage',
       arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
+    });
+    expect(await rule?.({ ...context, cause: 'linked_item_reconciled' })).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'factory-triage',
     });
   });
 
@@ -353,14 +401,54 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('reminds the linked Work agent after merge without transitioning to Done', async () => {
+  it('moves the merged Review card to Done and carries a session-only message', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestMerged');
+    context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
+    context.board = 'review';
+    context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
+    const decision = await rules.github.pullRequestMerged?.onEvent?.(context);
+    expect(decision).toMatchObject({
+      type: 'transition',
+      board: 'review',
+      stage: 'done',
+      message: { text: expect.stringContaining('merged') },
+    });
+  });
+
+  it('reminds the provenance-linked Work agent after merge without transitioning the Work item', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestMerged');
     context.item = item;
+    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
     const decision = await rules.github.pullRequestMerged?.onEvent?.(context);
     expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
     expect(decision).not.toMatchObject({ type: 'transition', stage: 'done' });
+  });
+
+  it('cancels the Review card when the PR is closed without merging', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestClosed');
+    context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
+    context.board = 'review';
+    context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
+    const decision = await rules.github.pullRequestClosed?.onEvent?.(context);
+    expect(decision).toMatchObject({
+      type: 'transition',
+      board: 'review',
+      stage: 'canceled',
+      message: { text: expect.stringContaining('closed without merging') },
+    });
+  });
+
+  it('leaves non-review items alone when a PR is closed without merging', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestClosed');
+    context.item = item;
+    context.board = 'work';
+    context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
+    expect(await rules.github.pullRequestClosed?.onEvent?.(context)).toBeUndefined();
   });
 
   it('replaces exact handler leaves while preserving siblings', () => {

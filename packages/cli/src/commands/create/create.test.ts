@@ -48,6 +48,7 @@ vi.mock('../../analytics/index', () => ({
 
 vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
+  LoginCancelledError: class LoginCancelledError extends Error {},
 }));
 
 vi.mock('../auth/orgs.js', () => ({
@@ -509,6 +510,10 @@ describe('managed observability', () => {
       answer: 'yes',
       selection_method: 'interactive',
     });
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'completed',
+    });
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('auth-token');
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('org-id');
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('platform-project-id');
@@ -520,6 +525,7 @@ describe('managed observability', () => {
     const observability = await import('../init/observability-provision');
     const initUtils = await import('../init/utils.js');
     const { publishStagedProject } = await import('./utils');
+    const trackEvent = vi.fn();
 
     vi.mocked(prompts.select)
       .mockResolvedValueOnce('openai')
@@ -528,13 +534,21 @@ describe('managed observability', () => {
     vi.mocked(observability.provisionObservabilityProject).mockRejectedValueOnce(new Error('platform unavailable'));
 
     await expect(
-      create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+      create({
+        projectName: 'my-project',
+        resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+        analytics: { trackEvent } as never,
+      }),
     ).resolves.toBeUndefined();
 
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(initUtils.writeObservabilityEnv).toHaveBeenCalledWith({ projectPath: path.resolve('my-project') });
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('platform unavailable'));
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('projects.mastra.ai'));
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'failed',
+    });
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 
@@ -543,16 +557,19 @@ describe('managed observability', () => {
     const prompts = await import('@clack/prompts');
     const credentials = await import('../auth/credentials.js');
     const observability = await import('../init/observability-provision');
+    const trackEvent = vi.fn();
 
     await create({
       projectName: 'my-project',
       llmProvider: 'anthropic',
       resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      analytics: { trackEvent } as never,
     });
 
     expect(prompts.select).not.toHaveBeenCalled();
     expect(credentials.getToken).not.toHaveBeenCalled();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
+    expect(trackEvent).not.toHaveBeenCalledWith('cli_observability_outcome', expect.anything());
   });
 
   it.each([
@@ -611,58 +628,49 @@ describe('managed observability', () => {
     });
   });
 
-  it('continues creation when Ctrl+C cancels platform authentication before materialization', async () => {
+  it('continues creation when any key skips platform authentication', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
     const credentials = await import('../auth/credentials.js');
     const observability = await import('../init/observability-provision');
     const { publishStagedProject } = await import('./utils');
-    let finishVersionResolution: ((tag: string) => void) | undefined;
-    let authSignal: AbortSignal | undefined;
+    const trackEvent = vi.fn();
 
     vi.mocked(prompts.select)
       .mockResolvedValueOnce('openai')
       .mockResolvedValueOnce('skip')
       .mockResolvedValueOnce('yes');
-    vi.mocked(credentials.getToken).mockImplementationOnce(
-      signal =>
-        new Promise((_resolve, reject) => {
-          authSignal = signal;
-          signal?.addEventListener('abort', () => reject(new Error('authentication aborted')), { once: true });
-        }),
-    );
+    vi.mocked(credentials.getToken).mockRejectedValueOnce(new credentials.LoginCancelledError());
 
-    const createPromise = create({
-      projectName: 'my-project',
-      resolveVersionTag: () =>
-        new Promise(resolve => {
-          finishVersionResolution = resolve;
-        }),
-    });
+    await expect(
+      create({
+        projectName: 'my-project',
+        resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+        analytics: { trackEvent } as never,
+      }),
+    ).resolves.toBeUndefined();
 
-    await vi.waitFor(() => expect(credentials.getToken).toHaveBeenCalledOnce());
-    process.emit('SIGINT');
-    expect(authSignal?.aborted).toBe(true);
-    finishVersionResolution?.('latest');
-
-    await expect(createPromise).resolves.toBeUndefined();
+    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), { skipOnInput: true });
     expect(prompts.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
     expect(prompts.cancel).not.toHaveBeenCalled();
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'skipped',
+    });
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 
-  it('continues materialization when Ctrl+C cancels Mastra platform setup', async () => {
+  it('cancels creation when Ctrl+C is pressed during Mastra platform setup', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
     const orgs = await import('../auth/orgs.js');
-    const observability = await import('../init/observability-provision');
-    const initUtils = await import('../init/utils.js');
     const skills = await import('../init/skills-install');
     const commandUtils = await import('../utils.js');
     const { installDependencies } = await import('../../utils/clone-template');
     const { publishStagedProject } = await import('./utils');
+    const trackEvent = vi.fn();
     let finishInstall: (() => void) | undefined;
 
     vi.mocked(prompts.select)
@@ -685,6 +693,7 @@ describe('managed observability', () => {
     const createPromise = create({
       projectName: 'my-project',
       resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      analytics: { trackEvent } as never,
     });
 
     await vi.waitFor(() => {
@@ -694,15 +703,16 @@ describe('managed observability', () => {
     process.emit('SIGINT');
     finishInstall?.();
 
-    await expect(createPromise).resolves.toBeUndefined();
-    expect(prompts.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
-    expect(publishStagedProject).toHaveBeenCalledOnce();
-    expect(skills.installMastraSkills).toHaveBeenCalledOnce();
-    expect(commandUtils.gitInit).toHaveBeenCalledOnce();
-    expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
-    expect(initUtils.writeObservabilityEnv).not.toHaveBeenCalled();
-    expect(prompts.cancel).not.toHaveBeenCalled();
-    expect(prompts.outro).toHaveBeenCalledOnce();
+    await expect(createPromise).rejects.toMatchObject({ name: 'CreateCancelledError' });
+    expect(prompts.cancel).toHaveBeenCalledWith('Operation cancelled');
+    expect(publishStagedProject).not.toHaveBeenCalled();
+    expect(skills.installMastraSkills).not.toHaveBeenCalled();
+    expect(commandUtils.gitInit).not.toHaveBeenCalled();
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'cancelled',
+    });
+    expect(prompts.outro).not.toHaveBeenCalled();
   });
 });
 
@@ -823,6 +833,20 @@ describe('create materialization lifecycle', () => {
     } finally {
       process.chdir(invocationCwd);
     }
+  });
+
+  it('skips dependency installation when skipInstall is true', async () => {
+    const { create } = await import('./create');
+    const { installDependencies } = await import('../../utils/clone-template');
+
+    await create({
+      projectName: 'my-project',
+      empty: true,
+      skipInstall: true,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(installDependencies).not.toHaveBeenCalled();
   });
 
   it('names the selected provider environment key in the completion note when the key is skipped', async () => {

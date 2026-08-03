@@ -7,7 +7,7 @@ packages:
 
 # Gates and verdicts
 
-Gates and verdicts add severity semantics to `runEvals`. Gates are scorers that must score 1.0 — hard requirements that block a run. Thresholds are minimum acceptable scores on tracked metrics. The verdict summarizes the outcome as `passed`, `scored`, or `failed`.
+Gates and verdicts add severity semantics to `runEvals`. Gates are scorers that must score 1.0, hard requirements that block a run. Thresholds are minimum acceptable scores on tracked metrics. The verdict summarizes the outcome as `passed`, `scored`, or `failed`.
 
 ## When to use gates and verdicts
 
@@ -86,7 +86,7 @@ const result = await runEvals({
 })
 ```
 
-You must provide at least one scorer or gate — a run with neither throws an error.
+You must provide at least one scorer or gate, a run with neither throws an error.
 
 ## Thresholds
 
@@ -94,8 +94,8 @@ Wrap a scorer in `{ scorer, threshold }` to set pass/fail bounds. The threshold 
 
 A `threshold` can be:
 
-- **A number** — implies minimum (score at or above passes): `{ scorer, threshold: 0.7 }`
-- **An object with `min` and/or `max`** — for range-based checks: `{ scorer, threshold: { max: 0.3 } }`
+- **A number**: implies minimum (score at or above passes): `{ scorer, threshold: 0.7 }`
+- **An object with `min` and/or `max`**: for range-based checks: `{ scorer, threshold: { max: 0.3 } }`
 
 Use `max` for scorers where a high score is bad (e.g., hallucination, toxicity). Use `{ min, max }` when the score should fall within a specific band.
 

@@ -25,8 +25,24 @@ class FakeSandbox implements SandboxExec {
 
 const WORKDIR = '/workspace/repo';
 
+/** The realpath containment guard script starts by assigning the target path. */
+function isContainmentCheck(script: string): boolean {
+  return script.startsWith('p=');
+}
+
+/** Containment guard output: canonicalized root on line 1, target realpath on line 2. */
+function realpathResult(real: string): SandboxCommandResult {
+  return { exitCode: 0, stdout: `${WORKDIR}\n${real}`, stderr: '' };
+}
+
 function makeFs(responder?: (script: string) => SandboxCommandResult) {
-  const sandbox = new FakeSandbox(responder);
+  const wrapped = (script: string): SandboxCommandResult => {
+    if (responder) return responder(script);
+    // Default: containment checks resolve inside the workdir, everything else succeeds.
+    if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+    return { exitCode: 0, stdout: '', stderr: '' };
+  };
+  const sandbox = new FakeSandbox(wrapped);
   const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
   return { sandbox, fs };
 }
@@ -37,7 +53,7 @@ describe('SandboxFilesystem', () => {
     const b64 = Buffer.from(content, 'utf8').toString('base64');
     const { sandbox, fs } = makeFs(script => {
       // The realpath containment check runs first; resolve it inside the workdir.
-      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/src/index.ts`, stderr: '' };
+      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/src/index.ts`);
       return { exitCode: 0, stdout: b64, stderr: '' };
     });
 
@@ -49,18 +65,30 @@ describe('SandboxFilesystem', () => {
 
   it('rejects a symlink whose realpath escapes the workspace root', async () => {
     const { fs } = makeFs(script => {
-      if (script.startsWith('readlink')) return { exitCode: 0, stdout: '/etc/passwd', stderr: '' };
+      if (isContainmentCheck(script)) return realpathResult('/etc/passwd');
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
     await expect(fs.readFile('/link')).rejects.toThrow(/escapes workspace root \(symlink\)/);
   });
 
+  it('fails closed when an existing path cannot be canonicalized', async () => {
+    // If no canonicalization tool works, skipping the check would let a
+    // symlink bypass containment — the operation must fail instead.
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return { exitCode: 1, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(fs.readFile('/link')).rejects.toThrow(/Unable to verify path stays within workspace root/);
+    expect(sandbox.calls.some(c => c.includes('base64 <'))).toBe(false);
+  });
+
   it('rejects a write whose parent directory is a symlink escaping the workspace', async () => {
     // The leaf doesn't exist yet, but its parent `evil` resolves to /etc, so
-    // readlink -f on the parent returns an out-of-root path.
+    // the containment check on the parent returns an out-of-root realpath.
     const { fs, sandbox } = makeFs(script => {
-      if (script.startsWith('readlink')) return { exitCode: 0, stdout: '/etc', stderr: '' };
+      if (isContainmentCheck(script)) return realpathResult('/etc');
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
@@ -69,9 +97,31 @@ describe('SandboxFilesystem', () => {
     expect(sandbox.calls.some(c => c.includes('base64 -d >'))).toBe(false);
   });
 
+  it('rejects deleting a file whose parent directory is a symlink escaping the workspace', async () => {
+    // `evil` is an in-workdir symlink to /etc — deleting `evil/passwd` would
+    // remove a file outside the workspace.
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult('/etc');
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(fs.deleteFile('/evil/passwd')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    expect(sandbox.calls.some(c => c.includes('rm '))).toBe(false);
+  });
+
+  it('rejects recursive rmdir whose parent directory is a symlink escaping the workspace', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult('/etc');
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(fs.rmdir('/evil/dir', { recursive: true })).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    expect(sandbox.calls.some(c => c.includes('rm -r'))).toBe(false);
+  });
+
   it('allows a write when the parent realpath stays inside the workspace', async () => {
     const { fs, sandbox } = makeFs(script => {
-      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/src`, stderr: '' };
+      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/src`);
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
@@ -106,7 +156,7 @@ describe('SandboxFilesystem', () => {
 
   it('lists a directory and parses type/name pairs', async () => {
     const { sandbox, fs } = makeFs(script => {
-      if (script.startsWith('readlink')) return { exitCode: 0, stdout: WORKDIR, stderr: '' };
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
       return { exitCode: 0, stdout: 'd\tsrc\nf\tREADME.md\n', stderr: '' };
     });
 
@@ -121,8 +171,8 @@ describe('SandboxFilesystem', () => {
 
   it('stats a file and returns parsed metadata', async () => {
     const { fs } = makeFs(script => {
-      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/a.txt`, stderr: '' };
-      return { exitCode: 0, stdout: 'regular file\t42\t1700000000\t-1\n', stderr: '' };
+      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/a.txt`);
+      return { exitCode: 0, stdout: 'regular file|42|1700000000|-1\n', stderr: '' };
     });
 
     const stat = await fs.stat('/a.txt');
@@ -133,10 +183,67 @@ describe('SandboxFilesystem', () => {
     expect(stat.path).toBe('/a.txt');
   });
 
+  it('accepts absolute paths that already live under the workdir', async () => {
+    // The agent prompt advertises the workdir as the working directory, so
+    // tools are called with fully-qualified paths. These must resolve in
+    // place instead of being re-joined onto the workdir.
+    const { sandbox, fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/notes/review.md`);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await fs.writeFile(`${WORKDIR}/notes/review.md`, 'verdict');
+
+    const writeCall = sandbox.calls.find(c => c.includes('base64 -d >'));
+    expect(writeCall).toContain(`base64 -d > '${WORKDIR}/notes/review.md'`);
+    expect(writeCall).not.toContain(`${WORKDIR}${WORKDIR}`);
+  });
+
+  it('normalizes .. segments inside an absolute workdir path', async () => {
+    const { sandbox, fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/notes.txt`);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await fs.readFile(`${WORKDIR}/src/../notes.txt`);
+    expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/notes.txt'`))).toBe(true);
+  });
+
+  it('falls back to BSD stat when GNU stat is unavailable', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/dir`);
+      // Simulate macOS: the `stat -c || stat -f` compound runs BSD output.
+      if (script.includes('stat -c')) {
+        expect(script).toContain('stat -f');
+        return { exitCode: 0, stdout: 'Directory|128|1700000000|1690000000\n', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    const stat = await fs.stat('/dir');
+    expect(stat.type).toBe('directory');
+  });
+
+  it('lists recursively without GNU find -printf', async () => {
+    const { sandbox, fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      return { exitCode: 0, stdout: `d\t${WORKDIR}/src\nf\t${WORKDIR}/src/index.ts\n`, stderr: '' };
+    });
+
+    const entries = await fs.readdir('/', { recursive: true });
+
+    expect(entries).toEqual([
+      { name: 'src', type: 'directory' },
+      { name: 'src/index.ts', type: 'file' },
+    ]);
+    const findCall = sandbox.calls.find(c => c.includes('find '));
+    expect(findCall).not.toContain('-printf');
+  });
+
   it('removes a file via rm', async () => {
     const { sandbox, fs } = makeFs();
     await fs.deleteFile('/old.txt', { force: true });
-    expect(sandbox.calls[0]).toContain(`rm -f '${WORKDIR}/old.txt'`);
+    expect(sandbox.calls.some(c => c.includes(`rm -f '${WORKDIR}/old.txt'`))).toBe(true);
   });
 
   it('reports existence from the exit code', async () => {
@@ -155,7 +262,7 @@ describe('SandboxFilesystem', () => {
   it('exposes basePath and a sandbox-derived id', () => {
     const { fs } = makeFs();
     expect(fs.basePath).toBe(WORKDIR);
-    expect(fs.id).toBe('sandbox-fs:fake-sandbox');
+    expect(fs.id).toBe(`sandbox-fs:fake-sandbox:${WORKDIR}`);
     expect(fs.getInfo().metadata).toMatchObject({ basePath: WORKDIR, sandboxId: 'fake-sandbox' });
   });
 });
