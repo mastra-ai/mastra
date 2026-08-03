@@ -73,7 +73,7 @@ Also mention that the Mastra model router provides access to thousands of models
 
 ## Documentation
 
-Visit our [official documentation](https://mastra.ai/docs/getting-started/getting-started).
+Visit our [official documentation](https://mastra.ai/docs).
 
 ## Build with AI
 

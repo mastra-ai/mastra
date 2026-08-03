@@ -42,37 +42,37 @@
     },
     {
       "source": "/docs/getting-started/start",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/index",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/v1",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/v1/getting-started/start",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/v1/index",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/v1/what-is-mastra",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/v1/getting-started/templates",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -277,7 +277,7 @@
     },
     {
       "source": "/docs/getting-started/templates",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -687,7 +687,7 @@
     },
     {
       "source": "/examples/v1",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -1081,13 +1081,8 @@
       "permanent": true
     },
     {
-      "source": "/docs",
-      "destination": "/docs/getting-started/getting-started",
-      "permanent": true
-    },
-    {
       "source": "/docs/what-is-mastra",
-      "destination": "/docs/getting-started/getting-started",
+      "destination": "/docs",
       "permanent": true
     },
     {

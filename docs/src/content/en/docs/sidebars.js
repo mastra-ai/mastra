@@ -26,7 +26,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/getting-started',
+          id: 'index',
           label: 'Get Started',
         },
         {
