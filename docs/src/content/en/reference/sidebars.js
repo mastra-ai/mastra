@@ -154,7 +154,6 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'client-js/agent-builder', label: 'Agent Builder API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
@@ -253,24 +252,6 @@ const sidebars = {
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/processor-provider', label: 'ProcessorProvider' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
-        {
-          type: 'category',
-          label: 'Agent Builder',
-          collapsed: true,
-          items: [
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/agent-builder-options',
-              label: 'AgentBuilderOptions',
-            },
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/builder-agent-defaults',
-              label: 'BuilderAgentDefaults',
-            },
-            { type: 'doc', id: 'editor/agent-builder/builder-models', label: 'Models default' },
-          ],
-        },
         {
           type: 'category',
           label: 'Browser',

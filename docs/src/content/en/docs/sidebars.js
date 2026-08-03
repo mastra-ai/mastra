@@ -284,23 +284,6 @@ const sidebars = {
             },
             {
               type: 'category',
-              label: 'Agent Builder',
-              items: [
-                { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-                { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-                { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-                { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-                { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-                { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-                { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-                { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-                { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-                { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-                { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-              ],
-            },
-            {
-              type: 'category',
               label: 'Editor',
               items: [
                 {
