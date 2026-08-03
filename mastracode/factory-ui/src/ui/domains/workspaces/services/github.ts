@@ -210,14 +210,15 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
 
 /** Validate a completed GitHub reconnect before the server clears broken state. */
 export async function confirmGithubReconnect(baseUrl: string, installationId: number): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/github/repos`, {
-    headers: {
-      Accept: 'application/json',
-      'X-Mastra-GitHub-Reconnect-Installation': String(installationId),
-    },
+  const res = await fetch(`${baseUrl}/web/github/installations/${installationId}/confirm-reconnect`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to confirm GitHub reconnect (${res.status})`);
+  if (res.ok) return;
+
+  const body = (await res.json().catch(() => null)) as { message?: string } | null;
+  throw new Error(body?.message ?? `Failed to confirm GitHub reconnect (${res.status})`);
 }
 
 /** The GitHub source-control integration id registered on the server. */

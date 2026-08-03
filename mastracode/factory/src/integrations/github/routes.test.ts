@@ -1052,17 +1052,47 @@ describe('repos route', () => {
     expect(tables.repositories).toHaveLength(1);
   });
 
-  it('confirms a completed reconnect before refreshing repositories', async () => {
-    install(7, 'octo');
-    const confirmInstallationReconnect = vi.fn().mockResolvedValue(undefined);
+  it('confirms a completed reconnect through the dedicated POST endpoint', async () => {
+    const confirmInstallationReconnect = vi.fn().mockResolvedValue(true);
 
-    const res = await buildApp({ workosId: 'u1' }, { confirmInstallationReconnect }).request('/web/github/repos', {
-      headers: { 'X-Mastra-GitHub-Reconnect-Installation': '7' },
-    });
+    const res = await buildApp({ workosId: 'u1' }, { confirmInstallationReconnect }).request(
+      '/web/github/installations/7/confirm-reconnect',
+      { method: 'POST' },
+    );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
     expect(confirmInstallationReconnect).toHaveBeenCalledWith({ orgId: 'org1', installationId: 7 });
-    expect(listInstallationRepos).toHaveBeenCalledWith(7);
+    expect(listInstallationRepos).not.toHaveBeenCalled();
+  });
+
+  it('does not confirm an installation outside the active tenant', async () => {
+    const confirmInstallationReconnect = vi.fn().mockResolvedValue(false);
+
+    const res = await buildApp({ workosId: 'u1' }, { confirmInstallationReconnect }).request(
+      '/web/github/installations/7/confirm-reconnect',
+      { method: 'POST' },
+    );
+
+    expect(res.status).toBe(404);
+    expect(confirmInstallationReconnect).toHaveBeenCalledWith({ orgId: 'org1', installationId: 7 });
+  });
+
+  it('keeps the installation broken when reconnect confirmation fails', async () => {
+    const confirmInstallationReconnect = vi
+      .fn()
+      .mockRejectedValue(new GithubInstallationBrokenError({ installationId: 7, accountLogin: 'octo', orgId: 'org1' }));
+
+    const res = await buildApp({ workosId: 'u1' }, { confirmInstallationReconnect }).request(
+      '/web/github/installations/7/confirm-reconnect',
+      { method: 'POST' },
+    );
+
+    expect(res.status).toBe(424);
+    expect(await res.json()).toMatchObject({
+      error: 'github_installation_broken',
+      installationId: 7,
+      accountLogin: 'octo',
+    });
   });
 
   it.each([404, 409])('marks dead installations broken on %s and keeps listing the rest', async status => {

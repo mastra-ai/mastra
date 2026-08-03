@@ -621,7 +621,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           this.#fetchUserConnection(tenant.userId),
         ]);
         const connectedInstallations = installations.filter(installation => installation.brokenAt === null);
-        const brokenInstallations = installations.filter(installation => installation.brokenAt !== null);
+        const connectedAccounts = new Set(
+          connectedInstallations.flatMap(installation =>
+            installation.accountName ? [installation.accountName.toLowerCase()] : [],
+          ),
+        );
+        const brokenInstallations = installations.filter(
+          installation =>
+            installation.brokenAt !== null &&
+            (!installation.accountName || !connectedAccounts.has(installation.accountName.toLowerCase())),
+        );
         return c.json({
           enabled: true,
           sandboxEnabled: ctx.fleet.enabled,
@@ -683,20 +692,40 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }: {
     orgId: string;
     installationId: number;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const installation = await this.storage.installations.findByExternalId({
       orgId,
       externalId: String(installationId),
     });
-    if (!installation || installation.brokenAt === null) return;
+    if (!installation) return false;
+    if (installation.brokenAt === null) return true;
+
+    const repositories = await this.storage.repositories.list({ orgId, installationId: installation.id });
+    const repositoryNames = repositories.map(repository => splitRepository(repository.slug).repo);
 
     try {
-      await this.#client.request<{ token: string; expiresAt?: string }>(
-        'POST',
-        `${API_PREFIX}/github-app/installations/${installationId}/token`,
-      );
+      if (repositoryNames.length === 0) {
+        await this.#client.request<{ token: string; expiresAt?: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${installationId}/token`,
+        );
+      } else {
+        for (const repositoryName of repositoryNames) {
+          await this.#client.request<{ token: string; expiresAt?: string }>(
+            'POST',
+            `${API_PREFIX}/github-app/installations/${installationId}/token`,
+            { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+          );
+        }
+      }
     } catch (error) {
-      if (isDeadInstallation(error)) return;
+      if (isDeadInstallation(error)) {
+        throw new GithubInstallationBrokenError({
+          installationId,
+          accountLogin: installation.accountName,
+          orgId,
+        });
+      }
       throw error;
     }
 
@@ -705,6 +734,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     for (const [cacheKey, cached] of this.#repositoryAccessCache) {
       if (cached.installationId === installationId) this.#repositoryAccessCache.delete(cacheKey);
     }
+    return true;
   }
 
   #connectUserRoute(ctx: IntegrationContext): ApiRoute {

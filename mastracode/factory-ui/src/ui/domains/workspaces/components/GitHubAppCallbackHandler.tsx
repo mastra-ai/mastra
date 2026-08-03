@@ -38,45 +38,54 @@ export function GitHubAppCallbackHandler() {
     const userAuthorized = searchParams.get('github_app_user_authorized') === 'true';
     const failed = searchParams.has('github_app_error');
     const installationId = Number(searchParams.get('installation_id'));
-    const refreshQueries = () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
-      ]);
 
-    if (!requested && !failed && Number.isSafeInteger(installationId) && installationId > 0) {
-      void confirmGithubReconnect(baseUrl, installationId).catch(() => undefined).then(refreshQueries);
-    } else {
-      void refreshQueries();
-    }
-
-    // The route tree mounts before the app-level Toaster sibling in main.tsx.
-    // Defer one microtask so the toaster's own passive effects subscribe before
-    // this callback emits a notification on initial page load.
-    queueMicrotask(() => {
-      if (requested) {
-        toast.success(
-          'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
-        );
-      } else if (installed) {
-        toast.success('GitHub App installed');
-      } else if (userAuthorized) {
-        toast.success('GitHub account connected');
-      } else if (failed) {
-        toast.error('GitHub connection failed');
-      }
-    });
-
-    setSearchParams(
-      prev => {
-        const next = new URLSearchParams(prev);
-        for (const name of callbackParamNames) {
-          next.delete(name);
+    const handleCallback = async () => {
+      try {
+        if (installed && Number.isSafeInteger(installationId) && installationId > 0) {
+          await confirmGithubReconnect(baseUrl, installationId);
         }
-        return next;
-      },
-      { replace: true },
-    );
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
+        ]);
+      } catch {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() });
+        queueMicrotask(() => {
+          toast.error('GitHub reconnect could not be confirmed. Try reconnecting again.');
+        });
+        return;
+      }
+
+      // The route tree mounts before the app-level Toaster sibling in main.tsx.
+      // Defer one microtask so the toaster's own passive effects subscribe before
+      // this callback emits a notification on initial page load.
+      queueMicrotask(() => {
+        if (requested) {
+          toast.success(
+            'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
+          );
+        } else if (installed) {
+          toast.success('GitHub App installed');
+        } else if (userAuthorized) {
+          toast.success('GitHub account connected');
+        } else if (failed) {
+          toast.error('GitHub connection failed');
+        }
+      });
+
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          for (const name of callbackParamNames) {
+            next.delete(name);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    };
+
+    void handleCallback();
   }, [baseUrl, queryClient, searchParams, setSearchParams]);
 
   return null;

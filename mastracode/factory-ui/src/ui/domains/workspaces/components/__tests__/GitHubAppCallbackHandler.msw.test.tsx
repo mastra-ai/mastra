@@ -50,11 +50,11 @@ describe('GitHubAppCallbackHandler', () => {
   });
 
   it('given a completed installation callback, confirms that installation before refreshing connection state', async () => {
-    let reconnectInstallation: string | null = null;
+    let reconnectConfirmed = false;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
-        reconnectInstallation = request.headers.get('x-mastra-github-reconnect-installation');
-        return HttpResponse.json({ repos: [] });
+      http.post(`${TEST_BASE_URL}/web/github/installations/123/confirm-reconnect`, () => {
+        reconnectConfirmed = true;
+        return new HttpResponse(null, { status: 204 });
       }),
     );
 
@@ -63,7 +63,26 @@ describe('GitHubAppCallbackHandler', () => {
     );
 
     expect(await screen.findByText('GitHub App installed')).toBeInTheDocument();
-    await waitFor(() => expect(reconnectInstallation).toBe('123'));
+    expect(reconnectConfirmed).toBe(true);
     await waitFor(() => expect(router.state.location.search).toBe('?keep=1'));
+  });
+
+  it('given reconnect confirmation fails, shows an error and preserves callback params for retry', async () => {
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/installations/124/confirm-reconnect`, () =>
+        HttpResponse.json({ error: 'github_installation_broken', message: 'Repository access is still unavailable.' }, { status: 424 }),
+      ),
+    );
+
+    const router = renderCallback(
+      '/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=124&setup_action=update&keep=1',
+    );
+
+    expect(
+      await screen.findByText('GitHub reconnect could not be confirmed. Try reconnecting again.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('GitHub App installed')).not.toBeInTheDocument();
+    expect(router.state.location.search).toContain('github_app_installed=true');
+    expect(router.state.location.search).toContain('installation_id=124');
   });
 });

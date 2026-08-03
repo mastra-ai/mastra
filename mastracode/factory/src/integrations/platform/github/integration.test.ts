@@ -1010,11 +1010,24 @@ describe('PlatformGithubIntegration', () => {
       accountName: 'other-org',
       accountType: 'Organization',
     });
+    await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '101',
+        slug: 'acme/app',
+        defaultBranch: 'main',
+        providerMetadata: {},
+      },
+    });
     let installationIsLive = false;
+    let repositoryAccessRestored = false;
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/github-app/installations/7/token')) {
-        return json({ token: 'ghs_reconnected', expiresAt: '2026-08-03T18:00:00Z' });
+        return repositoryAccessRestored
+          ? json({ token: 'ghs_reconnected', expiresAt: '2026-08-03T18:00:00Z' })
+          : json({ error: 'Installation unavailable' }, 404);
       }
       if (url.includes('/github-app/installations/7/repositories')) {
         return json({
@@ -1130,9 +1143,38 @@ describe('PlatformGithubIntegration', () => {
       brokenAt: expect.any(Number),
     });
 
-    const callbackRefresh = await app.request('/web/github/repos', {
-      headers: { 'X-Mastra-GitHub-Reconnect-Installation': '7' },
+    const otherTenantApp = new Hono();
+    const otherTenantContext = {
+      ...context,
+      auth: fakeAuth({ orgId: 'org-2', userId: 'user-2' }),
+    } as unknown as IntegrationContext;
+    mountApiRoutes(otherTenantApp as never, integration.routes(otherTenantContext));
+    const otherTenantConfirmation = await otherTenantApp.request(
+      '/web/github/installations/7/confirm-reconnect',
+      { method: 'POST' },
+    );
+    expect(otherTenantConfirmation.status).toBe(404);
+
+    const failedConfirmation = await app.request('/web/github/installations/7/confirm-reconnect', {
+      method: 'POST',
     });
+    expect(failedConfirmation.status).toBe(424);
+    await expect(failedConfirmation.json()).resolves.toMatchObject({
+      error: 'github_installation_broken',
+      installationId: 7,
+      accountLogin: 'acme',
+    });
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
+      brokenAt: expect.any(Number),
+    });
+
+    repositoryAccessRestored = true;
+    const confirmedReconnect = await app.request('/web/github/installations/7/confirm-reconnect', {
+      method: 'POST',
+    });
+    expect(confirmedReconnect.status).toBe(204);
+
+    const callbackRefresh = await app.request('/web/github/repos');
     expect(callbackRefresh.status).toBe(200);
     await expect(callbackRefresh.json()).resolves.toMatchObject({ repos: [{ fullName: 'acme/app' }] });
 
@@ -1185,6 +1227,86 @@ describe('PlatformGithubIntegration', () => {
       ],
     });
     upsertSpy.mockRestore();
+  });
+
+  it('retains but does not surface a broken installation superseded by a healthy same-account replacement', async () => {
+    const seed = await createPlatformStorageForTests();
+    const sourceControl = seed.sourceControl.forIntegration('github');
+    const oldInstallation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '7',
+      accountName: 'acme',
+      accountType: 'Organization',
+    });
+    await sourceControl.installations.markBroken({
+      orgId: 'org-1',
+      id: oldInstallation.id,
+      brokenAt: 1_700_000_000_000,
+    });
+    await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '456',
+      accountName: 'acme',
+      accountType: 'Organization',
+    });
+
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/github-app/installations')) {
+        return json({
+          installations: [
+            {
+              installationId: 456,
+              accountLogin: 'acme',
+              accountType: 'Organization',
+              suspendedAt: null,
+              usable: true,
+            },
+          ],
+          pendingRequests: [],
+        });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({ connected: false, githubUsername: null });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      fleet: { enabled: true },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl,
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic });
+    integration.versionControl.initialize({ storage: sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+
+    await expect(status.json()).resolves.toMatchObject({
+      connected: true,
+      installations: [{ installationId: 456, accountLogin: 'acme' }],
+      brokenInstallations: [],
+      reason: 'ready',
+    });
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: oldInstallation.id })).resolves.toMatchObject({
+      brokenAt: 1_700_000_000_000,
+    });
   });
 
   it('logs the user-connection verification failure reason', async () => {
@@ -1637,6 +1759,23 @@ describe('PlatformGithubIntegration', () => {
         'https://platform.example.com/v1/server/github-app/installations/456/token',
         expect.anything(),
       );
+    });
+
+    it('does not mint against either installation when both same-account candidates are already broken', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldInstallation, oldRepository, newInstallation } = await seedReinstalledOrg(storage);
+      await storage.installations.markBroken({ orgId: 'org-1', id: oldInstallation.id, brokenAt: Date.now() });
+      await storage.installations.markBroken({ orgId: 'org-1', id: newInstallation.id, brokenAt: Date.now() });
+
+      const fetchImpl = vi.fn<typeof fetch>();
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).rejects.toMatchObject({ code: 'github_installation_broken', installationId: 7 });
+      expect(fetchImpl).not.toHaveBeenCalled();
     });
 
     it('leaves the repository alone when the mint fails for a transient reason', async () => {

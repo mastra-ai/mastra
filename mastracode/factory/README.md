@@ -16,6 +16,7 @@ Factory reports removed or suspended GitHub App installations through its existi
 
 - `POST /web/github/projects/:id/ensure` and `GET /web/github/projects/:id/issues` return HTTP `424` with `error: "github_installation_broken"`. The response also includes `message`, `installationId`, and `accountLogin`. The server-sent events form of `/ensure` emits the same error code and context in its `error` event.
 - `GET /web/github/status` returns healthy installations in `installations` and removed or suspended installations in `brokenInstallations`. Each broken entry includes `installationId`, `accountLogin`, `accountType`, and `brokenAt`, where `brokenAt` is a Unix timestamp in milliseconds.
+- After a completed GitHub reconnect callback, clients call `POST /web/github/installations/:id/confirm-reconnect`. Factory verifies access to repositories already linked to that installation before clearing its durable broken state. Failed confirmation returns HTTP `424` with `error: "github_installation_broken"` and leaves the installation broken.
 
 Clients should direct users to the existing GitHub connection-management flow when either contract reports a broken installation.
 

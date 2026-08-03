@@ -125,7 +125,7 @@ export interface MountGithubRoutesOptions {
   /** Run seam used by GitHub webhooks and manual Intake triage. */
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   /** Validate a Platform reconnect callback before clearing persisted broken state. */
-  confirmInstallationReconnect?: (input: { orgId: string; installationId: number }) => Promise<void>;
+  confirmInstallationReconnect?: (input: { orgId: string; installationId: number }) => Promise<boolean>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
@@ -636,6 +636,51 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
+  // ── Confirm a completed reconnect before clearing durable broken state ──
+  routes.push(
+    registerApiRoute('/web/github/installations/:id/confirm-reconnect', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        const installationId = Number(c.req.param('id'));
+        if (!Number.isSafeInteger(installationId) || installationId <= 0) {
+          return c.json({ error: 'invalid_installation_id' }, 400);
+        }
+        if (!options.confirmInstallationReconnect) {
+          return c.json({ error: 'not_found' }, 404);
+        }
+
+        try {
+          const confirmed = await options.confirmInstallationReconnect({
+            orgId: resolved.tenant.orgId,
+            installationId,
+          });
+          if (!confirmed) return c.json({ error: 'not_found' }, 404);
+          return c.body(null, 204);
+        } catch (error) {
+          if (error instanceof GithubInstallationBrokenError) {
+            return c.json(
+              {
+                error: error.code,
+                message: error.message,
+                installationId: error.installationId,
+                accountLogin: error.accountLogin,
+              },
+              424,
+            );
+          }
+          return c.json(
+            { error: 'github_fetch_failed', message: error instanceof Error ? error.message : String(error) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
   // ── List repos across the org's installations ───────────────────────────
   routes.push(
     registerApiRoute('/web/github/repos', {
@@ -646,10 +691,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if ('response' in resolved) return resolved.response;
 
         const orgId = resolved.tenant.orgId;
-        const reconnectInstallationId = Number(c.req.header('x-mastra-github-reconnect-installation'));
-        if (Number.isSafeInteger(reconnectInstallationId) && reconnectInstallationId > 0) {
-          await options.confirmInstallationReconnect?.({ orgId, installationId: reconnectInstallationId });
-        }
         const installs = await github.sourceControlStorage.installations.list({ orgId });
 
         const query = (c.req.query('q') ?? '').toLowerCase();
