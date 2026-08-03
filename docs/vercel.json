@@ -57,12 +57,12 @@
     },
     {
       "source": "/docs/getting-started/start",
-      "destination": "/docs",
+      "destination": "/docs/getting-started/getting-started",
       "permanent": true
     },
     {
       "source": "/docs/index",
-      "destination": "/docs",
+      "destination": "/docs/getting-started/getting-started",
       "permanent": true
     },
     {
@@ -232,7 +232,7 @@
     },
     {
       "source": "/docs/getting-started/templates",
-      "destination": "/docs",
+      "destination": "/docs/getting-started/getting-started",
       "permanent": true
     },
     {
@@ -642,7 +642,7 @@
     },
     {
       "source": "/examples/v1",
-      "destination": "/docs",
+      "destination": "/docs/getting-started/getting-started",
       "permanent": true
     },
     {
@@ -672,7 +672,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
       "permanent": true
     },
     {
@@ -827,12 +827,12 @@
     },
     {
       "source": "/docs/build-with-ai/skills",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
       "permanent": true
     },
     {
@@ -957,7 +957,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/getting-started/file-based-agents",
+      "destination": "/docs/getting-started/develop",
       "permanent": true
     },
     {
@@ -1036,6 +1036,26 @@
       "permanent": true
     },
     {
+      "source": "/docs",
+      "destination": "/docs/getting-started/getting-started",
+      "permanent": true
+    },
+    {
+      "source": "/docs/what-is-mastra",
+      "destination": "/docs/getting-started/getting-started",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/file-based-agents",
+      "destination": "/docs/getting-started/develop",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/workspace/llms.txt",
       "destination": "/docs/mastra-platform/workspaces/llms.txt",
       "permanent": true
@@ -1077,12 +1097,12 @@
     },
     {
       "source": "/docs/getting-started/start/llms.txt",
-      "destination": "/docs/llms.txt",
+      "destination": "/docs/getting-started/getting-started/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/index/llms.txt",
-      "destination": "/docs/llms.txt",
+      "destination": "/docs/getting-started/getting-started/llms.txt",
       "permanent": true
     },
     {
@@ -1222,7 +1242,7 @@
     },
     {
       "source": "/docs/getting-started/templates/llms.txt",
-      "destination": "/docs/llms.txt",
+      "destination": "/docs/getting-started/getting-started/llms.txt",
       "permanent": true
     },
     {
@@ -1472,7 +1492,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
       "permanent": true
     },
     {
@@ -1592,12 +1612,12 @@
     },
     {
       "source": "/docs/build-with-ai/skills/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
       "permanent": true
     },
     {
@@ -1712,7 +1732,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents/llms.txt",
-      "destination": "/docs/getting-started/file-based-agents/llms.txt",
+      "destination": "/docs/getting-started/develop/llms.txt",
       "permanent": true
     },
     {
@@ -1788,6 +1808,26 @@
     {
       "source": "/docs/getting-started/manual-install/llms.txt",
       "destination": "/guides/getting-started/manual-install/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/llms.txt",
+      "destination": "/docs/getting-started/getting-started/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/what-is-mastra/llms.txt",
+      "destination": "/docs/getting-started/getting-started/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/file-based-agents/llms.txt",
+      "destination": "/docs/getting-started/develop/llms.txt",
       "permanent": true
     }
   ]

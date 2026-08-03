@@ -1,0 +1,42 @@
+---
+title: "Develop | Getting Started"
+description: Develop and test Mastra agents locally with the development server, Studio, and AI-assisted tools.
+packages:
+  - "@mastra/core"
+---
+
+# Develop
+
+After creating a Mastra project, you can run it locally, test your agents, and connect them to your application. Mastra provides a development server and Studio so you can move between editing code and trying it out.
+
+## Develop locally
+
+Start the local development server with `mastra dev`:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+The server automatically restarts when your files change. It exposes endpoints for your agents, tools, and workflows, which lets your application connect to them while you develop. See the [`mastra dev` reference](/reference/cli/mastra#mastra-dev) for available options and endpoints.
+
+The same command starts [Mastra Studio](/docs/studio/overview), an interactive environment where you can test agents and inspect their runs without wiring up an application first. Open Studio at [`http://localhost:4111`](http://localhost:4111) while the server is running.
+
+{/* TODO: Add a screenshot of Mastra Studio running locally. */}
+
+## Build with AI
+
+AI-assisted development can help you explore Mastra APIs and make changes without leaving your coding workflow. The [Mastra skill](/reference/build-with-ai#mastra-skills) gives supported coding agents current setup instructions, patterns, and documentation for the code they are working on.
+
+The [Mastra CLI](/reference/build-with-ai#mastra-cli) lets a coding agent interact with your running project. It can call agents, run workflows and tools, inspect memory, and query traces or logs while it works.
+
+## Understand your project
+
+Projects created with `create-mastra` keep Mastra code under `src/mastra/`. The default layout separates agents, tools, workflows, and scorers, with `src/mastra/index.ts` as the central place where you configure and register them.
+
+This structure is a useful starting point rather than a requirement. You can adapt it as your application grows. See the [project structure reference](https://mastra.ai/reference/project-structure) for the default layout and recommended conventions.
+
+## Try file-based agents
+
+File-based agents let you define an agent through a directory of files such as `config.ts`, `instructions.md`, and `tools/`. This can make an agent's configuration and capabilities easier to scan, especially for coding agents working in the project.
+
+This convention is currently in beta and isn't the default way to define Mastra agents. You can try it for a new agent or use it alongside agents registered in code. Start with the [`config.ts` reference](/reference/file-based-agents/config), then follow the linked reference pages for instructions, tools, memory, and other supported files.

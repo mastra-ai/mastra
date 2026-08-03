@@ -70,16 +70,22 @@ Instead, each documentation page has its own `llms.txt` file. These files are st
 
 Add `/llms.txt` to any Mastra docs URL to access it. You can also request it by adding a `.md` extension to the end of the URL.
 
-Examples for the [introduction page](/docs):
+Examples for the [introduction page](/docs/getting-started/getting-started):
 
-- [`/docs/llms.txt`](https://mastra.ai/docs/llms.txt)
-- [`/docs.md`](https://mastra.ai/docs.md)
+- [`/docs/getting-started/getting-started/llms.txt`](https://mastra.ai/docs/getting-started/getting-started/llms.txt)
+- [`/docs/getting-started/getting-started.md`](https://mastra.ai/docs/getting-started/getting-started.md)
 
 ## Mastra's documentation
 
 In addition to the [context files](#context-files) each documentation page also features a "Copy markdown" button at the top of the page. It'll copy the streamlined markdown version to your clipboard. Beside it, you'll find a dropdown menu to open the page on GitHub, in ChatGPT, Claude, and others.
 
 ## MCP docs server
+
+:::warning
+
+For everyday development, use the [Mastra skill](#mastra-skills) instead. It's more up to date and has proven to perform better.
+
+:::
 
 The `@mastra/mcp-docs-server` package provides direct local access to Mastra’s full documentation via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
 
@@ -297,7 +303,7 @@ Once configured, you can ask your AI tool questions about Mastra or instruct it 
 - "How does working memory behave in Mastra and how can I use it to do `[task]`? It doesn't seem to work the way I expect."
 - "I saw there are new workflow features, explain them to me and then update `[workflow]` to use them."
 
-#### Troubleshooting
+### Troubleshooting
 
 1. **Server Not Starting**
    - Ensure [npx](https://docs.npmjs.com/cli/v11/commands/npx) is installed and working.
