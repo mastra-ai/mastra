@@ -848,6 +848,75 @@ describe('createGithubPullRequestReconciler', () => {
     expect(row?.status).toBe(expected);
   });
 
+  it('retires an open subscription whose review card already reached done', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 24, stages: ['done'] });
+    const subscription = await context.subscriptionStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: changeRequestTargetKey({
+        installationExternalId: '7',
+        repositoryExternalId: '10',
+        changeRequestId: '24',
+      }),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      status: 'open',
+      data: {},
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(24));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 24 });
+    const [row] = await context.subscriptionStorage.subscriptions.listByTarget(subscription.targetKey);
+    expect(row?.status).toBe('merged');
+  });
+
+  it('ignores subscriptions belonging to another repository', async () => {
+    const context = await setup('read');
+    await context.subscriptionStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: changeRequestTargetKey({
+        installationExternalId: '7',
+        repositoryExternalId: '11',
+        changeRequestId: '25',
+      }),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      status: 'open',
+      data: {},
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(25));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    expect(fetchPullRequest).not.toHaveBeenCalled();
+  });
+
+  it('stops checking a subscription once it has been retired', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 26, stages: ['done'] });
+    await context.subscriptionStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: changeRequestTargetKey({
+        installationExternalId: '7',
+        repositoryExternalId: '10',
+        changeRequestId: '26',
+      }),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      status: 'open',
+      data: {},
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(26));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+  });
+
   it('never checks a card whose URL points at a different repository', async () => {
     const context = await setup('read');
     await createCard(context, { number: 19, url: 'https://github.com/other/repo/pull/19' });

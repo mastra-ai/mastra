@@ -149,6 +149,8 @@ export interface IntegrationStorageHandle<
     listByTarget(targetKey: string, opts?: { status?: string }): Promise<IntegrationSubscription<TSubscription>[]>;
     listBySession(sessionId: string): Promise<IntegrationSubscription<TSubscription>[]>;
     listByThread(resourceId: string, threadId: string): Promise<IntegrationSubscription<TSubscription>[]>;
+    /** Every subscription in one status, across targets (reconcile sweeps). */
+    listByStatus(status: string): Promise<IntegrationSubscription<TSubscription>[]>;
     updateStatus(id: string, status: string): Promise<void>;
     delete(id: string): Promise<boolean>;
     /** Targeted cleanup, always org-scoped. Returns the number of rows deleted. */
@@ -339,6 +341,14 @@ export class IntegrationStorage extends FactoryStorageDomain {
           const rows = await db().findMany<SubscriptionRow>(
             'integration_subscriptions',
             { ...scoped, resource_id: resourceId, thread_id: threadId },
+            { orderBy: [['created_at', 'asc']] },
+          );
+          return rows.map(mapSubscription);
+        },
+        listByStatus: async status => {
+          const rows = await db().findMany<SubscriptionRow>(
+            'integration_subscriptions',
+            { ...scoped, status },
             { orderBy: [['created_at', 'asc']] },
           );
           return rows.map(mapSubscription);

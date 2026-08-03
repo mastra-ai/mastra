@@ -53,9 +53,38 @@ export interface PullRequestSubscriptionTarget {
 }
 
 export type GithubWebhookPullRequestTarget = Omit<PullRequestSubscriptionTarget, 'orgId'>;
+export type GithubRepositoryTarget = Omit<GithubWebhookPullRequestTarget, 'changeRequestId'>;
+
+function changeRequestTargetPrefix(input: GithubRepositoryTarget): string {
+  return `change-request:${input.installationExternalId}:${input.repositoryExternalId}:`;
+}
 
 export function changeRequestTargetKey(input: GithubWebhookPullRequestTarget): string {
-  return `change-request:${input.installationExternalId}:${input.repositoryExternalId}:${input.changeRequestId}`;
+  return `${changeRequestTargetPrefix(input)}${input.changeRequestId}`;
+}
+
+/**
+ * Pull requests one repository still has an open subscription for.
+ *
+ * The reconcile sweep is otherwise card-driven, and a review card reaches
+ * `done` the moment the review pass ends — usually well before a human merges
+ * the pull request. Sweeping the cards alone would leave those subscriptions
+ * open forever whenever the merge webhook is missed.
+ */
+export async function listSubscribedPullRequestNumbers(
+  repository: GithubRepositoryTarget,
+  // Only the target keys are read, so both the typed and the generic handle fit.
+  storage: { subscriptions: { listByStatus(status: string): Promise<{ targetKey: string }[]> } },
+): Promise<number[]> {
+  const prefix = changeRequestTargetPrefix(repository);
+  const rows = await storage.subscriptions.listByStatus('open');
+  const numbers = new Set<number>();
+  for (const row of rows) {
+    if (!row.targetKey.startsWith(prefix)) continue;
+    const pullRequestNumber = Number(row.targetKey.slice(prefix.length));
+    if (Number.isInteger(pullRequestNumber) && pullRequestNumber > 0) numbers.add(pullRequestNumber);
+  }
+  return [...numbers];
 }
 
 function sameSession(row: GithubSignalSubscriptionRow, input: SubscribeToPullRequestInput): boolean {

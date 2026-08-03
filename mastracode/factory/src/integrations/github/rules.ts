@@ -16,7 +16,7 @@ import type {
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubRepositoryPermission } from './integration.js';
-import { changeRequestTargetKey } from './subscriptions.js';
+import { changeRequestTargetKey, listSubscribedPullRequestNumbers } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
@@ -505,8 +505,9 @@ async function retireReconciledSubscriptions(
 /**
  * State-based safety net for merge signals: webhooks and event-log tailing
  * can miss a merge (cursor gaps, downtime, terminally failed decisions), so
- * this sweep compares still-open PR cards against actual GitHub state and
- * replays the merge through the normal rules ingress when they disagree.
+ * this sweep compares still-open PR cards and still-open subscriptions against
+ * actual GitHub state and replays the merge through the normal rules ingress
+ * when they disagree.
  */
 export function createGithubPullRequestReconciler(
   options: GithubRulesOptions,
@@ -560,6 +561,14 @@ export function createGithubPullRequestReconciler(
             if (pullRequestNumber) numbers.add(pullRequestNumber);
           }
         }
+        const subscribed = await listSubscribedPullRequestNumbers(
+          {
+            installationExternalId: String(repository.installationId),
+            repositoryExternalId: String(repository.id),
+          },
+          options.integrationStorage,
+        );
+        for (const pullRequestNumber of subscribed) numbers.add(pullRequestNumber);
       } catch (error) {
         recordFailure(repository, error);
         continue;
