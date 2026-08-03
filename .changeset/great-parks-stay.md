@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed request context propagation for subscribed agent-controller runs.
+Fixed subscribed agent-controller runs so dynamic workspaces use the identity from the request that started the run.
