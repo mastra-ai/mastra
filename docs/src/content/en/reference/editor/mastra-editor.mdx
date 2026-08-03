@@ -10,14 +10,14 @@ packages:
 
 The `MastraEditor` class sets up the editor system. Pass it to the `Mastra` constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers.
 
-See the [Editor overview](/docs/editor/overview) for an introduction to what the editor does.
+See [Editor](/docs/editor/overview) for an introduction to what the editor does.
 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
-import { ComposioToolProvider } from '@mastra/editor/providers/composio'
+import { ComposioToolProvider } from '@mastra/editor/composio'
 
 export const mastra = new Mastra({
   agents: {/* your agents */},
@@ -100,7 +100,7 @@ export const mastra = new Mastra({
     name: 'source',
     type: "'code' | 'db'",
     description:
-      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See the Editor overview for the difference.",
+      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See Editor for the difference.",
     isOptional: true,
     defaultValue: "'db'",
   },
@@ -427,6 +427,35 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
 ]}
 />
 
+### Agent namespace examples
+
+Create a stored override for an existing code-defined agent:
+
+```typescript title="src/scripts/seed-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.create({
+  id: 'support-agent',
+  instructions: 'You are a friendly support agent for Acme.',
+  tools: {
+    search_kb: { description: 'Search the Acme knowledge base' },
+  },
+})
+```
+
+Update its instructions:
+
+```typescript title="src/scripts/update-agent.ts"
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: "You are a friendly support agent for Acme. Respond in the user's language.",
+})
+```
+
+`editor.agent.update()` creates a version and assigns it to `activeVersionId`. This differs from the stored-agent REST `PATCH` route, which creates an inactive draft unless `autoPublish` is enabled. See [Editor versioning](/reference/editor/versioning#database-lifecycle).
+
 ## Methods
 
 ### Provider access
@@ -474,3 +503,11 @@ const source = mastra.getEditor()?.getSource()
 ```
 
 Returns: `'code' | 'db' | undefined`
+
+When `source` is omitted, Editor uses the configured database storage even though `getSource()` returns `undefined`.
+
+With `source: 'code'`, active agent overrides are written as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`. The initial stored agent is published when it's created, while later server updates are written to the file when their version becomes active.
+
+Studio reads recent Git revisions of each file as read-only versions. The default scan includes up to 50 commits and skips consecutive commits with the same parsed JSON snapshot. Git manages rollback and release for code-backed overrides.
+
+See [Editor versioning](/reference/editor/versioning#code-source) for the complete code-source lifecycle.

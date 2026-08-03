@@ -16,6 +16,16 @@
   ],
   "redirects": [
     {
+      "source": "/docs/editor/prompts",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/tools",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/workspace",
       "destination": "/docs/mastra-platform/workspaces",
       "permanent": true
@@ -1033,6 +1043,16 @@
     {
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/prompts/llms.txt",
+      "destination": "/docs/editor/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/tools/llms.txt",
+      "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
     },
     {

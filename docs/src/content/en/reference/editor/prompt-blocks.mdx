@@ -1,0 +1,120 @@
+---
+title: "Reference: Prompt blocks | Editor"
+description: "Reference for Editor prompt block types, template values, display conditions, versions, and APIs."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Prompt blocks
+
+Prompt blocks are reusable instruction templates managed by Editor. An agent's instructions can combine inline text, embedded prompt blocks, and references to independently versioned prompt blocks.
+
+See [Editor](/docs/editor/overview#edit-instructions) for the Studio workflow and common uses.
+
+## Block types
+
+| Type | Description |
+| - | - |
+| `text` | Free-form text stored only in the agent version |
+| `prompt_block` | A prompt block embedded in the agent version |
+| `prompt_block_ref` | A reference to an independently stored and versioned prompt block |
+
+Referenced blocks resolve at runtime. A missing or unpublished reference is omitted from the final instructions. Resolved nonempty blocks are joined with two newlines.
+
+The following example attaches a stored block and inline text to an agent:
+
+```typescript title="src/scripts/attach-prompt.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: [
+    { type: 'prompt_block_ref', id: 'brand-voice' },
+    { type: 'text', content: 'Answer only questions about Acme products.' },
+  ],
+})
+```
+
+## Template values
+
+Templates resolve values from the request context at runtime.
+
+```text
+You are helping {{user.name}} with their {{task || 'request'}}.
+```
+
+- <code>{'{{variableName}}'}</code>: Resolves a top-level request-context value.
+- <code>{'{{nested.path.value}}'}</code>: Resolves a value by dot path.
+- <code>{"{{variable || 'default'}}"}</code>: Uses a quoted string when the value is `null`, `undefined`, or missing.
+
+Variable names must begin with a letter or underscore. Fallbacks must be single-quoted or double-quoted strings. Unresolved placeholders without a fallback remain unchanged. Objects and arrays are serialized as JSON. Other values are converted to strings.
+
+Pass values through [request context](/docs/server/request-context). Editor doesn't read a separate agent `variables` field.
+
+## Display conditions
+
+A prompt block can include a rule group that controls whether it's included in the final instructions. Rules read values from request context and support nested `AND` and `OR` groups.
+
+| Operator | Behavior |
+| - | - |
+| `equals` / `not_equals` | Uses strict equality |
+| `contains` / `not_contains` | Checks string inclusion or array membership |
+| `greater_than` / `less_than` | Compares two numbers without coercion |
+| `greater_than_or_equal` / `less_than_or_equal` | Compares two numbers and includes equality |
+| `in` / `not_in` | Checks whether the context value occurs in the rule's array |
+| `exists` / `not_exists` | Checks whether the value is neither `null` nor `undefined` |
+
+Dot paths are supported. An empty group evaluates to `true`, and an unknown operator evaluates to `false`. The storage type supports up to three nested group levels.
+
+Blocks without conditions are always included.
+
+## Programmatic API
+
+Access prompt blocks through `mastra.getEditor().prompt`. See the [`prompt` namespace](/reference/editor/mastra-editor#namespaces) for complete method signatures.
+
+Create a prompt block:
+
+```typescript title="src/scripts/seed-prompts.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.prompt.create({
+  id: 'brand-voice',
+  name: 'Brand voice',
+  description: 'Acme tone and style guidelines',
+  content: 'Write in a friendly, concise tone. Address the user as {{userName || "there"}}.',
+})
+```
+
+Update an existing block:
+
+```typescript title="src/scripts/update-prompt.ts"
+await editor.prompt.update({
+  id: 'brand-voice',
+  content: 'Write in a friendly, concise tone. Greet the user by name when available.',
+})
+```
+
+`update()` creates a new draft when the content changes. Use `list()` to paginate through stored blocks, `getById()` to fetch one block, and `preview(blocks, context)` to resolve templates and conditions with draft references.
+
+## REST API
+
+The default Mastra server prefix is `/api`. A custom server prefix changes the paths below.
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/stored/prompt-blocks` | List stored prompt blocks |
+| `POST` | `/api/stored/prompt-blocks` | Create a stored prompt block |
+| `GET` | `/api/stored/prompt-blocks/:storedPromptBlockId` | Get a stored prompt block |
+| `PATCH` | `/api/stored/prompt-blocks/:storedPromptBlockId` | Update a stored prompt block |
+| `DELETE` | `/api/stored/prompt-blocks/:storedPromptBlockId` | Delete a stored prompt block |
+
+## Version resolution
+
+Prompt blocks use the same draft and publish lifecycle as agents. Runtime references resolve the active published block. Editor previews resolve the latest draft, which lets authors test a change before it affects agents that reference the block.
+
+Restoring a historical prompt version creates a new draft. It doesn't replace the active version until that draft is published. See [Editor versioning](/reference/editor/versioning) for the shared lifecycle.

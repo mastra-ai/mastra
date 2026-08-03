@@ -14,7 +14,7 @@ The Agent Builder is part of the Mastra Enterprise Edition. Production deploymen
 
 Tool providers let Builder-created agents call tools from third-party apps such as Gmail, Slack, or GitHub. The Builder reuses the same tool providers as the editor, so any provider registered on `MastraEditor` is available in the Builder.
 
-This page covers Builder-specific connection setup, scope selection, and management. To register a provider and enable its toolkits, see [Tools](/docs/editor/tools).
+This page covers Builder-specific connection setup, scope selection, and management. To register a provider and enable its toolkits, see [Editor tool configuration](/reference/editor/tools#integration-providers).
 
 ## Setup at a glance
 
@@ -57,7 +57,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Each provider's toolkits become available in the Builder once it's registered. Use `allowedToolkits` to restrict which toolkits the provider exposes, by slug, such as `gmail` or `googlecalendar`. Omit it to expose every toolkit the provider offers. To add another provider, import it and add another entry to `toolProviders`. For the full list of providers and their options, see [Tools, Integration providers](/docs/editor/tools#integration-providers).
+Each provider's toolkits become available in the Builder once it's registered. Use `allowedToolkits` to restrict which toolkits the provider exposes, by slug, such as `gmail` or `googlecalendar`. Omit it to expose every toolkit the provider offers. To add another provider, import it and add another entry to `toolProviders`. For provider setup and options, see [Editor integration providers](/reference/editor/tools#integration-providers).
 
 `ComposioToolProvider` needs a Composio **project** API key (the `x-api-key` type from a project's settings in the [Composio dashboard](https://dashboard.composio.dev)). Store it in an environment variable, as shown with `COMPOSIO_API_KEY` above.
 
@@ -121,7 +121,7 @@ When a `caller-supplied` connection runs without a `resourceId`, every tenant fa
 
 ## Related
 
-- [Tools](/docs/editor/tools): Register providers and browse toolkits in the editor.
+- [Editor tool configuration](/reference/editor/tools): Register providers and browse toolkits in Editor.
 - [ToolProvider reference](/reference/editor/tool-provider): Provider API details.
 - [Agent Builder API reference](/reference/client-js/agent-builder): Manage connections programmatically with the `@mastra/client-js` SDK.
 - [Agent Builder overview](/docs/agent-builder/overview)
