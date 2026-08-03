@@ -591,46 +591,49 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('marks an installation broken and evicts its repository cache when token minting returns 404', async () => {
-    const { sourceControl } = await createPlatformStorageForTests();
-    const storage = sourceControl.forIntegration('github');
-    const installation = await storage.installations.upsert({
-      orgId: 'org-1',
-      connectedByUserId: 'user-1',
-      externalId: '7',
-      accountName: 'acme',
-      accountType: 'Organization',
-    });
-    const repositories = {
-      repositories: [
-        { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
-      ],
-    };
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(json(repositories))
-      .mockResolvedValueOnce(json({ error: 'Installation not found' }, 404))
-      .mockResolvedValueOnce(json(repositories));
-    const integration = createIntegration(fetchImpl);
-    integration.versionControl.initialize({ storage });
+  it.each([404, 409])(
+    'marks an installation broken and evicts its repository cache when token minting returns %s',
+    async status => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const installation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      const repositories = {
+        repositories: [
+          { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+        ],
+      };
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json(repositories))
+        .mockResolvedValueOnce(json({ error: 'Installation unavailable' }, status))
+        .mockResolvedValueOnce(json(repositories));
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
 
-    await integration.listInstallationRepos(7);
-    const error = await integration.mintInstallationToken(7, 'org-1').catch(err => err);
+      await integration.listInstallationRepos(7);
+      const error = await integration.mintInstallationToken(7, 'org-1').catch(err => err);
 
-    expect(error).toBeInstanceOf(GithubInstallationBrokenError);
-    expect(error).toMatchObject({
-      code: 'github_installation_broken',
-      installationId: 7,
-      accountLogin: 'acme',
-      orgId: 'org-1',
-    });
-    await expect(storage.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
-      brokenAt: expect.any(Number),
-    });
+      expect(error).toBeInstanceOf(GithubInstallationBrokenError);
+      expect(error).toMatchObject({
+        code: 'github_installation_broken',
+        installationId: 7,
+        accountLogin: 'acme',
+        orgId: 'org-1',
+      });
+      await expect(storage.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
+        brokenAt: expect.any(Number),
+      });
 
-    await integration.listInstallationRepos(7);
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
-  });
+      await integration.listInstallationRepos(7);
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    },
+  );
 
   it('reuses installation repository listings within the cache TTL', async () => {
     vi.useFakeTimers();

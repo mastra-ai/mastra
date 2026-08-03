@@ -865,7 +865,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return repos;
   }
 
-  async mintInstallationToken(installationId: number, orgId?: string): Promise<string> {
+  async mintInstallationToken(installationId: number, orgId: string): Promise<string> {
     const repositories = await this.listInstallationRepos(installationId);
     if (repositories.length === 0 || repositories.length > 10) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');
@@ -882,19 +882,17 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       if (!isDeadInstallation(err)) throw err;
 
       this.#installationReposCache.delete(installationId);
-      const installation = orgId
-        ? await this.storage.installations.findByExternalId({
-            orgId,
-            externalId: String(installationId),
-          })
-        : null;
-      if (installation && orgId) {
+      const installation = await this.storage.installations.findByExternalId({
+        orgId,
+        externalId: String(installationId),
+      });
+      if (installation) {
         await this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt: Date.now() });
       }
       throw new GithubInstallationBrokenError({
         installationId,
         accountLogin: installation?.accountName ?? null,
-        orgId: orgId ?? '',
+        orgId,
       });
     }
   }
