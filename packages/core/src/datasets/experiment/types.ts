@@ -1,9 +1,9 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
-import type { MastraScorer } from '../../evals/base';
+import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
-import type { ItemToolMock, ToolMockReport } from './tool-mocks';
+import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
 /**
  * A single data item for inline experiment data.
@@ -20,6 +20,12 @@ export interface DataItem<I = unknown, E = unknown> {
   metadata?: Record<string, unknown>;
   /** Per-item request context merged over the global request context (item takes precedence) */
   requestContext?: Record<string, unknown>;
+  /**
+   * Scorer IDs that override dataset-attached scorers for this item when run-level
+   * `config.scorers` is absent. Run-level scorers, including an empty configuration,
+   * take precedence. An empty array explicitly disables scoring for the item.
+   */
+  scorerIds?: string[];
   /**
    * Resume data for suspended workflow steps, keyed by step ID.
    * When a workflow suspends during experiment execution, the executor
@@ -48,6 +54,8 @@ export interface DataItem<I = unknown, E = unknown> {
    * real tool; calling a mocked tool with non-matching args fails the item.
    */
   toolMocks?: ItemToolMock[];
+  /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
 }
 
 /**
@@ -95,6 +103,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
+  /** Default handling for agent tool calls not declared in an item's `toolMocks` (default: `allow`). */
+  unmockedToolPolicy?: UnmockedToolPolicy;
   /** Pre-created experiment ID (for async trigger — skips experiment creation). */
   experimentId?: string;
   /** Experiment name (used for display / grouping) */
@@ -176,12 +186,16 @@ export interface ScorerResult {
   scorerId: string;
   /** Display name of the scorer */
   scorerName: string;
-  /** Computed score (null if scorer failed) */
+  /** Computed score, or null when no score was produced */
   score: number | null;
-  /** Reason/explanation for the score */
+  /** Reason/explanation for the score, or null when no reason was produced */
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /** Scorer stage that failed, when the scorer exposes stage context */
+  failedStep?: ScorerStepName;
+  /** Scorer stages that completed before the failure */
+  completedSteps?: ScorerStepName[];
   /**
    * Scope this score targets. Mirrors the canonical `ScorerTargetScope`
    * taxonomy from observability so consumers can differentiate span-level

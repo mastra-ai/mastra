@@ -23,6 +23,7 @@ import type {
   ToolProviderConnectionsStorage,
   NotificationsStorage,
   ThreadStateStorage,
+  WorkflowDefinitionsStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
@@ -30,6 +31,7 @@ import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy }
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
   workflows?: WorkflowsStorage;
+  workflowDefinitions?: WorkflowDefinitionsStorage;
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
@@ -369,6 +371,7 @@ export class MastraCompositeStore extends MastraBase {
       this.stores = {
         memory: resolve('memory'),
         workflows: resolve('workflows'),
+        workflowDefinitions: resolve('workflowDefinitions'),
         scores: resolve('scores'),
         observability: resolve('observability'),
         agents: resolve('agents'),
@@ -515,13 +518,24 @@ export class MastraCompositeStore extends MastraBase {
    * cover, so we never double-init the same domain instance.
    */
   async init(): Promise<void> {
-    // to prevent race conditions, await any current init
-    if (this.shouldCacheInit && (await this.hasInitialized)) {
+    if (!this.shouldCacheInit) {
+      await this.#runInit();
       return;
     }
 
-    this.hasInitialized = this.#runInit();
-    await this.hasInitialized;
+    if (this.hasInitialized) {
+      await this.hasInitialized;
+      return;
+    }
+
+    const initPromise = this.#runInit().catch(error => {
+      if (this.hasInitialized === initPromise) {
+        this.hasInitialized = null;
+      }
+      throw error;
+    });
+    this.hasInitialized = initPromise;
+    await initPromise;
   }
 
   async #runInit(): Promise<boolean> {
@@ -558,6 +572,7 @@ export class MastraCompositeStore extends MastraBase {
     if (this.stores) {
       maybeInit(this.stores.memory);
       maybeInit(this.stores.workflows);
+      maybeInit(this.stores.workflowDefinitions);
       maybeInit(this.stores.scores);
       maybeInit(this.stores.observability);
       maybeInit(this.stores.agents);

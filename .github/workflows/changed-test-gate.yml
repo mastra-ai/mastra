@@ -96,7 +96,9 @@ jobs:
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
 
-          vitest_args=(run --passWithNoTests --reporter=dot --silent)
+          # --silent=true: in Vitest 4, a bare --silent consumes the following
+          # positional test-file argument and errors out, false-greening the gate.
+          vitest_args=(run --passWithNoTests --reporter=dot --silent=true)
           root_test_files=()
           test_status=0
 

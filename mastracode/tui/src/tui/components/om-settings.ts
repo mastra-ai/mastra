@@ -259,14 +259,13 @@ export class OMSettingsComponent extends Box implements Focusable {
       },
       {
         id: 'obs-threshold',
-        label: 'Observation threshold',
+        label: 'Messages before observation',
         description:
-          'Token count before triggering observation. ' +
-          'Lower = more frequent, higher = more context before observing',
+          'Message tokens before the Observer runs. ' + 'More means a larger message window per observation.',
         currentValue: formatTokens(config.observationThreshold),
         submenu: (_currentValue, done) =>
           new ThresholdSubmenu(
-            'Observation Threshold',
+            'Messages Before Observation',
             config.observationThreshold,
             OBSERVATION_THRESHOLDS,
             value => {
@@ -279,14 +278,14 @@ export class OMSettingsComponent extends Box implements Focusable {
       },
       {
         id: 'ref-threshold',
-        label: 'Reflection threshold',
+        label: 'Observations before reflection',
         description:
-          'Token count of observations before triggering compression. ' +
-          'Lower = more frequent, higher = more observations before compressing',
+          'Accumulated observation tokens before the Reflector compresses them. ' +
+          'More means less frequent compression.',
         currentValue: formatTokens(config.reflectionThreshold),
         submenu: (_currentValue, done) =>
           new ThresholdSubmenu(
-            'Reflection Threshold',
+            'Observations Before Reflection',
             config.reflectionThreshold,
             REFLECTION_THRESHOLDS,
             value => {

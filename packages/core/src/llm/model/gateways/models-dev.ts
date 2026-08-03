@@ -1,18 +1,18 @@
 import { createAlibaba } from '@ai-sdk/alibaba-v6';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
-import { createCerebras } from '@ai-sdk/cerebras-v5';
-import { createDeepInfra } from '@ai-sdk/deepinfra-v5';
-import { createDeepSeek } from '@ai-sdk/deepseek-v5';
+import { createCerebras } from '@ai-sdk/cerebras-v6';
+import { createDeepInfra } from '@ai-sdk/deepinfra-v6';
+import { createDeepSeek } from '@ai-sdk/deepseek-v6';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
 import { createGroq } from '@ai-sdk/groq-v6';
 import { createMistral } from '@ai-sdk/mistral-v6';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
-import { createPerplexity } from '@ai-sdk/perplexity-v5';
-import { createTogetherAI } from '@ai-sdk/togetherai-v5';
+import { createPerplexity } from '@ai-sdk/perplexity-v6';
+import { createTogetherAI } from '@ai-sdk/togetherai-v6';
 import { createXai } from '@ai-sdk/xai-v6';
 import { createGateway } from '@internal/ai-v6';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type {
@@ -20,6 +20,7 @@ import type {
   GatewayLanguageModel,
   ModelProviderOverride,
   ProviderConfig,
+  StructuredOutputCapabilities,
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
@@ -31,6 +32,7 @@ interface ModelsDevModelInfo {
   modalities?: { input?: string[]; output?: string[] };
   attachment?: boolean;
   temperature?: boolean;
+  structured_output?: boolean;
   // Per-model endpoint/shape/SDK override (models.dev model `provider` block).
   provider?: { api?: string; shape?: 'responses' | 'completions'; npm?: string };
   [key: string]: unknown;
@@ -120,6 +122,7 @@ export class ModelsDevGateway extends MastraModelGateway {
   private providerConfigs: Record<string, ProviderConfig> = {};
   private attachmentCapabilities: AttachmentCapabilities = {};
   private temperatureCapabilities: TemperatureCapabilities = {};
+  private structuredOutputCapabilities: StructuredOutputCapabilities = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -137,6 +140,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     // Reset capability maps so removed providers/models are not retained across syncs
     this.attachmentCapabilities = {};
     this.temperatureCapabilities = {};
+    this.structuredOutputCapabilities = {};
 
     const providerConfigs: Record<string, ProviderConfig> = {};
 
@@ -162,22 +166,37 @@ export class ModelsDevGateway extends MastraModelGateway {
       const hasApiAndEnv = providerInfo.api && providerInfo.env && providerInfo.env.length > 0;
 
       if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
-        // Get model IDs from the models object
-        // Filter out deprecated models before collecting model IDs
-        const activeModels = Object.entries(providerInfo.models).filter(
-          ([, modelInfo]) => modelInfo?.status !== 'deprecated',
-        );
-        const modelIds = activeModels.map(([modelId]) => modelId).sort();
+        // Get model IDs from the models object.
+        //
+        // Deprecated models are retained rather than dropped. On models.dev,
+        // `status: 'deprecated'` means "still served, scheduled for retirement" —
+        // not "removed". Filtering them out here would break existing users: the
+        // generated model-id union would stop type-checking their configured model,
+        // and the model would silently lose its capability flags and per-model
+        // endpoint/shape overrides (i.e. it would route with provider defaults).
+        // They are reported separately via `deprecatedModels` so surfaces that
+        // offer models for *new* selection can hide or mark them.
+        const allModels = Object.entries(providerInfo.models);
+        const modelIds = allModels.map(([modelId]) => modelId).sort();
+        const deprecatedModelIds = allModels
+          .filter(([, modelInfo]) => modelInfo?.status === 'deprecated')
+          .map(([modelId]) => modelId)
+          .sort();
 
         // Collect model IDs that support attachments
-        const attachmentModels = activeModels
+        const attachmentModels = allModels
           .filter(([, modelInfo]) => modelInfo?.attachment === true)
           .map(([modelId]) => modelId)
           .sort();
 
         // Collect model IDs that support temperature sampling
-        const temperatureModels = activeModels
+        const temperatureModels = allModels
           .filter(([, modelInfo]) => modelInfo?.temperature === true)
+          .map(([modelId]) => modelId)
+          .sort();
+
+        const structuredOutputModels = allModels
+          .filter(([, modelInfo]) => modelInfo?.structured_output === true)
           .map(([modelId]) => modelId)
           .sort();
 
@@ -185,7 +204,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         // individual models over a different endpoint or request shape than the
         // provider default (e.g. OpenAI Responses vs chat-completions).
         const modelOverrides: Record<string, ModelProviderOverride> = {};
-        for (const [modelId, modelInfo] of activeModels) {
+        for (const [modelId, modelInfo] of allModels) {
           const ov = modelInfo?.provider;
           if (ov && (ov.api || ov.shape || ov.npm)) {
             modelOverrides[modelId] = { api: ov.api, shape: ov.shape, npm: ov.npm };
@@ -231,12 +250,16 @@ export class ModelsDevGateway extends MastraModelGateway {
               ? providerInfo.npm
               : undefined),
           modelOverrides: Object.keys(modelOverrides).length > 0 ? modelOverrides : undefined,
+          deprecatedModels: deprecatedModelIds.length > 0 ? deprecatedModelIds : undefined,
         };
         if (attachmentModels.length > 0) {
           this.attachmentCapabilities[normalizedId] = attachmentModels;
         }
         if (temperatureModels.length > 0) {
           this.temperatureCapabilities[normalizedId] = temperatureModels;
+        }
+        if (structuredOutputModels.length > 0) {
+          this.structuredOutputCapabilities[normalizedId] = structuredOutputModels;
         }
       }
     }
@@ -257,6 +280,10 @@ export class ModelsDevGateway extends MastraModelGateway {
 
   getTemperatureCapabilities(): TemperatureCapabilities {
     return this.temperatureCapabilities;
+  }
+
+  getStructuredOutputCapabilities(): StructuredOutputCapabilities {
+    return this.structuredOutputCapabilities;
   }
 
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {
@@ -341,7 +368,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           modelId,
         ) as unknown as GatewayLanguageModel;
       case 'xai':
-        return createXai({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+        return createXai({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'deepseek':
         return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'perplexity':

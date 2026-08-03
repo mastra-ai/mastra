@@ -66,5 +66,18 @@ describe('AgentPlaygroundConfig', () => {
       expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
+
+    it('shows variable syntax help as a tooltip from the underlined text', async () => {
+      render(<AgentPlaygroundConfigHarness />);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'System Prompt' }));
+
+      const variableHelpTrigger = screen.getByRole('button', { name: 'use variables' });
+      fireEvent.focus(variableHelpTrigger);
+
+      expect((await screen.findByRole('tooltip')).textContent).toBe(
+        'Use {{variableName}} syntax to insert dynamic values into your instruction blocks.',
+      );
+    });
   });
 });

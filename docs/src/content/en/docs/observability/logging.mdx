@@ -12,6 +12,10 @@ Mastra's logging system captures function execution, input data, and output resp
 
 When deploying to the Mastra platform, logs are shown in the dashboard. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
+<Inject>
+  **For AI agents:** Run `npx mastra api log list '{"level":"error","page":0,"perPage":50}'` to inspect recent error logs directly instead of opening Studio or writing a temporary script. The command requires a running Mastra server with observability logging configured; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api log list --schema` before constructing different filters. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
+
 ## Configuring logs with `PinoLogger`
 
 When [initializing a new Mastra project](/guides/getting-started/quickstart) using the CLI, `PinoLogger` is included by default.
@@ -93,7 +97,7 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 
 ### Logging from workflow steps
 
-Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step's execution.
+Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. You can log messages relevant to the step's execution.
 
 ```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";

@@ -8,6 +8,7 @@ import { useCredentialsLogin } from '../hooks/use-credentials-login';
 import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
 import type { SSOConfig } from '../types';
 import { LoginLayout } from './login-layout';
+import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export type LoginPageProps = {
   /** URL to redirect to after successful login */
@@ -55,7 +56,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   if (isLoadingCapabilities) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface1">
+      <div className="bg-surface1 flex min-h-screen items-center justify-center">
         <div className="text-neutral3">Loading...</div>
       </div>
     );
@@ -63,7 +64,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   if (!capabilities?.enabled || !capabilities?.login) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface1">
+      <div className="bg-surface1 flex min-h-screen items-center justify-center">
         <div className="text-neutral3">Authentication is not configured</div>
       </div>
     );
@@ -85,7 +86,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
     } else if (redirectUri) {
       window.location.href = redirectUri;
     } else {
-      window.location.href = '/';
+      window.location.href = withStudioBasePath('/');
     }
   };
 
@@ -115,9 +116,9 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   };
 
   const description = login.description ? (
-    <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface1 p-3">
-      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
-      <p className="text-sm text-neutral3">{login.description}</p>
+    <div className="border-border1 bg-surface1 flex items-start gap-2.5 rounded-md border p-3">
+      <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
+      <p className="text-neutral3 text-sm">{login.description}</p>
     </div>
   ) : null;
 
@@ -135,7 +136,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
         <form onSubmit={handleCredentialsSubmit} className="space-y-4">
           {!isSignIn && (
             <div className="space-y-2">
-              <label htmlFor="name" className="block text-sm text-neutral4">
+              <label htmlFor="name" className="text-neutral4 block text-sm">
                 Name
               </label>
               <Input
@@ -151,7 +152,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           )}
 
           <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm text-neutral4">
+            <label htmlFor="email" className="text-neutral4 block text-sm">
               Email
             </label>
             <Input
@@ -167,7 +168,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="block text-sm text-neutral4">
+            <label htmlFor="password" className="text-neutral4 block text-sm">
               Password
             </label>
             <Input
@@ -204,10 +205,10 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       {hasSSO && hasCredentials && (
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border1" />
+            <div className="border-border1 w-full border-t" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="bg-surface1 px-2 text-neutral3">or continue with</span>
+            <span className="bg-surface1 text-neutral3 px-2">or continue with</span>
           </div>
         </div>
       )}

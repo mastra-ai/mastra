@@ -1,0 +1,32 @@
+---
+extends: existence
+message: "AI despite-formula: '%s'. Engage with the challenges substantively or remove the hedge."
+level: error
+ignorecase: true
+tokens:
+  - despite its challenges
+  - despite these challenges
+  - despite the challenges
+  - despite this challenge
+  - despite these limitations
+  - despite its limitations
+  - despite the limitations
+  - despite these drawbacks
+  - despite its drawbacks
+  - despite these obstacles
+  - despite its obstacles
+  - despite these hurdles
+  - despite its hurdles
+  - despite these setbacks
+  - despite its setbacks
+  - despite these concerns
+  - despite its concerns
+  - despite facing challenges
+  - despite facing numerous
+  - despite facing significant
+  - while challenges remain
+  - while these challenges
+  - while significant challenges
+  - challenges notwithstanding
+  - obstacles notwithstanding
+  - limitations notwithstanding

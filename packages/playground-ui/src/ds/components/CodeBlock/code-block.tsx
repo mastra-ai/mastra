@@ -73,13 +73,13 @@ export function CodeBlock({
                 ))}
               </TabList>
             </div>
-            {actions && <div className="flex shrink-0 items-center border-b border-border1 pr-2 pl-3">{actions}</div>}
+            {actions && <div className="border-border1 flex shrink-0 items-center border-b pr-2 pl-3">{actions}</div>}
           </div>
         </Tabs>
       )}
 
       {useSelect && options && (
-        <div className="flex items-center border-b border-border2/40 px-2 py-1.5">
+        <div className="border-border2/40 flex items-center border-b px-2 py-1.5">
           <Select value={activeValue} onValueChange={onValueChange}>
             <SelectTrigger size="sm" variant="ghost">
               <SelectValue />
@@ -97,14 +97,14 @@ export function CodeBlock({
       )}
 
       {!hasOptions && fileName && (
-        <div className="flex items-center border-b border-border2/40 px-4 py-2">
-          <figcaption className="font-mono text-ui-sm text-neutral4">{fileName}</figcaption>
+        <div className="border-border2/40 flex items-center border-b px-4 py-2">
+          <figcaption className="text-ui-sm text-neutral4 font-mono">{fileName}</figcaption>
           {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
       )}
 
       {!hasOptions && !fileName && actions && (
-        <div className="flex items-center justify-end border-b border-border2/40 px-2 py-1.5">{actions}</div>
+        <div className="border-border2/40 flex items-center justify-end border-b px-2 py-1.5">{actions}</div>
       )}
 
       <div className="relative">
@@ -113,7 +113,7 @@ export function CodeBlock({
           lang={lang}
           className={cn(
             'px-4 py-3 font-mono text-ui-sm text-neutral5',
-            overflow === 'scroll' ? 'overflow-x-auto whitespace-pre' : 'whitespace-pre-wrap break-all',
+            overflow === 'scroll' ? 'overflow-x-auto whitespace-pre' : 'break-all whitespace-pre-wrap',
           )}
         />
         <CopyButton
@@ -122,7 +122,7 @@ export function CodeBlock({
           tooltip={copyTooltip}
           size="sm"
           className={cn(
-            'absolute top-2 right-2 opacity-100 pointer-fine:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+            'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
             transitions.opacity,
           )}
         />

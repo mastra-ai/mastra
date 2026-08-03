@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
+import { isPathWithinRoot } from './path-security.js';
 
 /**
  * Metadata for a slash command
@@ -104,21 +105,47 @@ export function extractCommandName(filePath: string, baseDir: string): string {
  * @param rootDir - Original root commands directory (used for namespace derivation).
  *                  When omitted the first call sets it to dirPath.
  */
-export async function scanCommandDirectory(dirPath: string, rootDir?: string): Promise<SlashCommandMetadata[]> {
+export interface ScanCommandDirectoryOptions {
+  allowedRoot?: string;
+  visitedDirectories?: Set<string>;
+}
+
+export async function scanCommandDirectory(
+  dirPath: string,
+  rootDir?: string,
+  options: ScanCommandDirectoryOptions = {},
+): Promise<SlashCommandMetadata[]> {
   const baseDir = rootDir ?? dirPath;
   const commands: SlashCommandMetadata[] = [];
+  const visitedDirectories = options.visitedDirectories ?? new Set<string>();
 
   try {
+    const realDirectory = await fs.realpath(dirPath);
+    const realAllowedRoot = options.allowedRoot ? await fs.realpath(options.allowedRoot) : undefined;
+    if (realAllowedRoot && !isPathWithinRoot(realDirectory, realAllowedRoot)) return commands;
+    if (visitedDirectories.has(realDirectory)) return commands;
+    visitedDirectories.add(realDirectory);
+
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
+      const stats = entry.isSymbolicLink() ? await fs.stat(fullPath).catch(() => null) : entry;
+      if (!stats) continue;
 
-      if (entry.isDirectory()) {
+      if (stats.isDirectory()) {
         // Recursively scan subdirectories, preserving the root directory for namespace derivation
-        const subCommands = await scanCommandDirectory(fullPath, baseDir);
+        const subCommands = await scanCommandDirectory(fullPath, baseDir, {
+          ...options,
+          visitedDirectories,
+        });
         commands.push(...subCommands);
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      } else if (entry.name.endsWith('.md') && stats.isFile()) {
+        if (realAllowedRoot) {
+          const realFile = await fs.realpath(fullPath).catch(() => null);
+          if (!realFile || !isPathWithinRoot(realFile, realAllowedRoot)) continue;
+        }
+
         // Parse markdown command files, passing the root commands dir as baseDir for name derivation
         const command = await parseCommandFile(fullPath, baseDir);
         if (command) {
@@ -176,27 +203,33 @@ export async function loadCustomCommands(
   // 4. Load from opencode project directory .opencode/command
   if (projectDir) {
     const opencodeProjectDir = path.join(projectDir, '.opencode', 'command');
-    const opencodeProjectCommands = await scanCommandDirectory(opencodeProjectDir);
+    const opencodeProjectCommands = await scanCommandDirectory(opencodeProjectDir, undefined, {
+      allowedRoot: projectDir,
+    });
     addCommands(opencodeProjectCommands);
   }
 
   // 5. Load from claude project directory .claude/commands (Claude Code compat)
   if (projectDir) {
     const claudeProjectDir = path.join(projectDir, '.claude', 'commands');
-    const claudeProjectCommands = await scanCommandDirectory(claudeProjectDir);
+    const claudeProjectCommands = await scanCommandDirectory(claudeProjectDir, undefined, {
+      allowedRoot: projectDir,
+    });
     addCommands(claudeProjectCommands);
   }
 
   // 6. Load from mastra project directory <configDirName>/commands
   if (projectDir) {
     const mastraProjectDir = path.join(projectDir, configDirName, 'commands');
-    const mastraProjectCommands = await scanCommandDirectory(mastraProjectDir);
+    const mastraProjectCommands = await scanCommandDirectory(mastraProjectDir, undefined, {
+      allowedRoot: projectDir,
+    });
     addCommands(mastraProjectCommands);
   }
 
   // 7. Load from active plugin command directories (highest priority)
   for (const commandsDir of extraCommandDirs) {
-    addCommands(await scanCommandDirectory(commandsDir));
+    addCommands(await scanCommandDirectory(commandsDir, undefined, { allowedRoot: commandsDir }));
   }
 
   return Array.from(commandMap.values());

@@ -76,7 +76,7 @@ export async function resolveScope(
 
 /**
  * Build the ephemeral user-prompt text that tells the LLM which tool-call
- * IDs just completed. The directive stops the LLM from (a) re-processing
+ * IDs just completed / failed / canceled. The directive stops the LLM from (a) re-processing
  * results already handled on a prior continuation and (b) mimicking the
  * prior assistant ack text ("I'm running it in the background") and
  * re-dispatching the same tool.
@@ -86,6 +86,7 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
     .map(chunk => {
       const payload = (chunk as { payload?: Record<string, unknown> }).payload ?? {};
       return {
+        type: (chunk as { type?: string }).type,
         toolCallId: payload.toolCallId as string | undefined,
         toolName: payload.toolName as string | undefined,
         isSuspended: !!payload.suspendedAt,
@@ -93,25 +94,53 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
     })
     .filter(e => !!e.toolCallId);
 
-  const idList = entries
-    .filter(e => !e.isSuspended)
-    .map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId))
-    .join(', ');
-
   // Suspend payloads are tool-controlled and may carry secrets, PII, or
   // large opaque blobs — never serialize them into the continuation
   // prompt. Just name the suspended tool-call IDs.
-  const suspendedIdList = entries
-    .filter(e => e.isSuspended)
-    .map(e => `${e.toolCallId} (${e.toolName})`)
+  const formatEntry = (e: (typeof entries)[number]) => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId!);
+
+  const completedIdList = entries
+    .filter(e => e.type === 'background-task-completed' && !e.isSuspended)
+    .map(formatEntry)
     .join(', ');
 
-  let directive =
-    `Background task(s) you previously dispatched have completed. ` +
-    `Process ONLY these tool-call IDs (their results are now in the conversation): ${idList}. ` +
-    `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
-    `and do NOT call the same tool again — the result is already available. ` +
-    `Use these result(s) to answer the user's original question.`;
+  const failedIdList = entries
+    .filter(e => e.type === 'background-task-failed' && !e.isSuspended)
+    .map(formatEntry)
+    .join(', ');
+
+  const cancelledIdList = entries
+    .filter(e => e.type === 'background-task-cancelled' && !e.isSuspended)
+    .map(formatEntry)
+    .join(', ');
+
+  const suspendedIdList = entries
+    .filter(e => e.isSuspended)
+    .map(formatEntry)
+    .join(', ');
+
+  let directive = '';
+
+  if (completedIdList) {
+    directive +=
+      ` IMPORTANT: The following tool-call IDs completed successfully: ${completedIdList}. ` +
+      `Their results are now in the conversation. ` +
+      `Do not call the same tool again — the result is already available. `;
+  }
+
+  if (failedIdList) {
+    directive +=
+      ` IMPORTANT: The following tool-call IDs failed: ${failedIdList}. ` +
+      `Their failure information is now in the conversation. ` +
+      `Do not retry these tools unless the user explicitly requests it. `;
+  }
+
+  if (cancelledIdList) {
+    directive +=
+      ` IMPORTANT: The following tool-call IDs were cancelled by the user before completion: ${cancelledIdList}. ` +
+      `These tasks do not have results. ` +
+      `Do not treat them as completed and do not call the same tool again unless the user explicitly requests it. `;
+  }
 
   if (suspendedIdList) {
     directive +=
@@ -119,7 +148,7 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
       `Do not attempt to resume them; let the user know they are waiting for explicit resume input.`;
   }
 
-  return directive;
+  return directive.trim();
 }
 
 /**

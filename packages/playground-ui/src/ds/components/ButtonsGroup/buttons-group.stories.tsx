@@ -193,7 +193,7 @@ export const SearchWithDropdown: Story = {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState('recent');
     return (
-      <ButtonsGroup spacing="close" className="w-[420px]">
+      <ButtonsGroup spacing="close" className="w-105">
         <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />

@@ -17,7 +17,7 @@ A new `mastra migrate` command helps run database migrations when upgrading Mast
 npx mastra migrate
 ```
 
-The command bundles your project, connects to your configured storage, and runs any necessary migrations. Currently supports migrating duplicate spans entries that may prevent unique constraint creation.
+The command bundles your project and connects to your configured storage before running any necessary migrations. It currently supports migrating duplicate span entries that may prevent unique constraint creation.
 
 See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when this migration is needed.
 

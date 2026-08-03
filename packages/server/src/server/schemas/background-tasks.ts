@@ -67,4 +67,4 @@ export const listBackgroundTaskResponseSchema = z.object({
   total: z.number(),
 });
 
-export const backgroundTaskStreamResponseSchema = z.any();
+export const backgroundTaskStreamResponseSchema = z.unknown();

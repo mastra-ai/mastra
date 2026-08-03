@@ -54,7 +54,7 @@ export function TimelineExpandCol({
 
   return (
     <div
-      className={cn('flex items-center justify-end h-full px-1.5', {
+      className={cn('flex h-full items-center justify-end px-1.5', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
         'bg-surface4': isSelected,
       })}
@@ -121,9 +121,9 @@ function ExpandButton({ onClick, children, className, tooltip }: ExpandButtonPro
         <button onClick={onClick} className={cn('h-full shrink-0 cursor-pointer', className)} aria-label={tooltip}>
           <div
             className={cn(
-              'flex items-center gap-[0.1rem] rounded-md transition-all p-1',
+              'flex items-center gap-[0.1rem] rounded-md p-1 transition-all',
               'hover:bg-surface5',
-              '[&>svg]:shrink-0 [&>svg]:opacity-50 [&:hover>svg]:opacity-100 [&>svg]:w-4 [&>svg]:h-4 [&>svg]:transition-all',
+              '[&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-50 [&>svg]:transition-all',
             )}
           >
             {children}

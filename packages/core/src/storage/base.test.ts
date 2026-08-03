@@ -168,6 +168,40 @@ describe('MastraCompositeStore — disabled domains (`false` override)', () => {
   });
 });
 
+describe('MastraCompositeStore init caching', () => {
+  it('retries init after a rejected attempt', async () => {
+    const inner = new InMemoryStore({ id: 'retry-inner' });
+    const innerInitSpy = vi
+      .spyOn(inner, 'init')
+      .mockRejectedValueOnce(new Error('transient init failure'))
+      .mockResolvedValueOnce(undefined);
+    const composite = new MastraCompositeStore({ id: 'retry-outer', default: inner });
+
+    await expect(composite.init()).rejects.toThrow('transient init failure');
+    await composite.init();
+    await composite.init();
+
+    expect(innerInitSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces concurrent failed attempts before allowing a retry', async () => {
+    const inner = new InMemoryStore({ id: 'concurrent-retry-inner' });
+    const innerInitSpy = vi
+      .spyOn(inner, 'init')
+      .mockRejectedValueOnce(new Error('shared init failure'))
+      .mockResolvedValueOnce(undefined);
+    const composite = new MastraCompositeStore({ id: 'concurrent-retry-outer', default: inner });
+
+    const results = await Promise.allSettled([composite.init(), composite.init(), composite.init()]);
+
+    expect(results.every(result => result.status === 'rejected')).toBe(true);
+    expect(innerInitSpy).toHaveBeenCalledTimes(1);
+
+    await composite.init();
+    expect(innerInitSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('MastraCompositeStore.__registerMastra', () => {
   const mastra: StorageMastraRef = { getAgentById: () => undefined };
 

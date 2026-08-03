@@ -168,8 +168,8 @@ async function emitAgentEntry(
  * 5. re-exports everything from the user's entry so this module is a drop-in
  *    replacement for the original `#mastra` target.
  *
- * `instructions.md` contents are inlined at codegen time so no markdown loader
- * plugin is required in the bundler graph.
+ * `instructions.md` is read into the generated wrapper. In dev, the CLI watcher
+ * regenerates that wrapper when the markdown file changes.
  *
  * @param userEntry slash-normalized absolute path to the user's mastra entry.
  * @param agents discovered fs-routed agents (absolute, slash-normalized paths).

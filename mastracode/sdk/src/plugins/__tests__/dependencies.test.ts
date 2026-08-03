@@ -14,6 +14,7 @@ let tempDir: string | undefined;
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
@@ -30,6 +31,16 @@ function writePackageJson(pluginRoot: string, packageJson: Record<string, unknow
   fs.writeFileSync(path.join(pluginRoot, 'package.json'), JSON.stringify(packageJson));
 }
 
+function expectedCorepackArgs(version: string, frozen = false): unknown[] {
+  return [
+    `pnpm@${version}`,
+    'install',
+    '--ignore-workspace',
+    ...(frozen ? ['--frozen-lockfile'] : []),
+    '--ignore-scripts',
+  ];
+}
+
 describe('installPluginDependencies', () => {
   it('does not run a package manager when package.json is absent', async () => {
     const pluginRoot = makePluginRoot();
@@ -39,90 +50,97 @@ describe('installPluginDependencies', () => {
     expect(execaMock).not.toHaveBeenCalled();
   });
 
-  it('uses pnpm with version mismatch checks disabled when packageManager declares pnpm', async () => {
+  it.each(['pnpm@10.24.0', 'pnpm@11.8.0'])('accepts an exact declaration: %s', async packageManager => {
     const pluginRoot = makePluginRoot();
-    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
+    writePackageJson(pluginRoot, { packageManager });
 
     await expect(installPluginDependencies(pluginRoot)).resolves.toBe(true);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
+      'corepack',
+      expectedCorepackArgs(packageManager.slice('pnpm@'.length)),
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
 
-  it('uses pnpm when pnpm-lock.yaml is present', async () => {
+  it.each([
+    ['absent', undefined],
+    ['non-string', 10],
+    ['npm', 'npm@11.0.0'],
+    ['Yarn', 'yarn@4.0.0'],
+    ['Bun', 'bun@1.0.0'],
+    ['unknown manager', 'definitely-missing-pm@1.0.0'],
+    ['missing version', 'pnpm'],
+    ['whitespace', ' pnpm@10.0.0'],
+    ['major only', 'pnpm@10'],
+    ['major and minor only', 'pnpm@10.0'],
+    ['range', 'pnpm@^10.0.0'],
+    ['tag', 'pnpm@latest'],
+    ['prerelease', 'pnpm@10.0.0-rc.1'],
+    ['build metadata', 'pnpm@10.0.0+build.1'],
+    ['malformed version', 'pnpm@10.x.0'],
+  ])('rejects an %s packageManager declaration', async (_label, packageManager) => {
     const pluginRoot = makePluginRoot();
-    writePackageJson(pluginRoot);
+    writePackageJson(pluginRoot, packageManager === undefined ? {} : { packageManager });
+
+    await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(
+      `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
+    );
+    expect(execaMock).not.toHaveBeenCalled();
+  });
+
+  it('does not inject an isolated Corepack cache into production execution', async () => {
+    const pluginRoot = makePluginRoot();
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
+
+    await installPluginDependencies(pluginRoot);
+
+    const executionOptions = execaMock.mock.calls[0]?.[2] as { env?: NodeJS.ProcessEnv } | undefined;
+    expect(executionOptions?.env?.COREPACK_HOME).toBe(process.env.COREPACK_HOME);
+  });
+
+  it('uses a frozen install when the dependency root has pnpm-lock.yaml', async () => {
+    const pluginRoot = makePluginRoot();
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
     fs.writeFileSync(path.join(pluginRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
 
     await installPluginDependencies(pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
+      'corepack',
+      expectedCorepackArgs('10.24.0', true),
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
 
-  it('uses npm ci when npm packageManager has a lockfile', async () => {
+  it('ignores other lockfile formats when an exact pnpm version is declared', async () => {
     const pluginRoot = makePluginRoot();
-    writePackageJson(pluginRoot, { packageManager: 'npm@11.0.0' });
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.8.0' });
     fs.writeFileSync(path.join(pluginRoot, 'package-lock.json'), '{}');
+    fs.writeFileSync(path.join(pluginRoot, 'yarn.lock'), '');
 
     await installPluginDependencies(pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'npm',
-      ['ci', '--ignore-scripts'],
+      'corepack',
+      expectedCorepackArgs('11.8.0'),
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
 
-  it('prefers packageManager over conflicting lockfiles', async () => {
-    const pluginRoot = makePluginRoot();
-    writePackageJson(pluginRoot, { packageManager: 'npm@11.0.0' });
-    fs.writeFileSync(path.join(pluginRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
-
-    await installPluginDependencies(pluginRoot);
-
-    expect(execaMock).toHaveBeenCalledWith(
-      'npm',
-      ['install', '--ignore-scripts'],
-      expect.objectContaining({ cwd: pluginRoot }),
-    );
-  });
-
-  it('falls back to npm install when only package.json is present', async () => {
-    const pluginRoot = makePluginRoot();
-    writePackageJson(pluginRoot);
-
-    await installPluginDependencies(pluginRoot);
-
-    expect(execaMock).toHaveBeenCalledWith(
-      'npm',
-      ['install', '--ignore-scripts'],
-      expect.objectContaining({
-        cwd: pluginRoot,
-        env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
-        stdout: 'ignore',
-        stderr: 'ignore',
-      }),
-    );
-  });
-
-  it('streams package manager output when requested', async () => {
+  it('streams output and forwards cancellation while preserving non-interactive execution', async () => {
     const pluginRoot = makePluginRoot();
     const stdout = new EventEmitter();
     const stderr = new EventEmitter();
     const output: string[] = [];
-    writePackageJson(pluginRoot);
+    const signal = new AbortController().signal;
+    vi.stubEnv('PATH', '/isolated/plugin-install-bin');
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
     execaMock.mockReturnValueOnce(Object.assign(Promise.resolve({}), { stdout, stderr }));
 
     const install = installPluginDependencies(pluginRoot, pluginRoot, {
       onOutput: chunk => output.push(chunk.toString()),
-      signal: new AbortController().signal,
+      signal,
     });
     stdout.emit('data', 'stdout line\n');
     stderr.emit('data', 'stderr line\n');
@@ -130,54 +148,46 @@ describe('installPluginDependencies', () => {
 
     expect(output).toEqual(['stdout line\n', 'stderr line\n']);
     expect(execaMock).toHaveBeenCalledWith(
-      'npm',
-      ['install', '--ignore-scripts'],
-      expect.objectContaining({ stdout: 'pipe', stderr: 'pipe', cancelSignal: expect.any(AbortSignal) }),
+      'corepack',
+      expectedCorepackArgs('10.24.0'),
+      expect.objectContaining({
+        env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0', PATH: '/isolated/plugin-install-bin' }),
+        stdout: 'pipe',
+        stderr: 'pipe',
+        cancelSignal: signal,
+      }),
     );
   });
 
-  it('surfaces package manager failures', async () => {
+  it('surfaces install failures', async () => {
     const pluginRoot = makePluginRoot();
     const error = new Error('install failed');
-    writePackageJson(pluginRoot);
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
     execaMock.mockRejectedValueOnce(error);
 
     await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(error);
   });
 
-  it('explains when the selected package manager is not installed', async () => {
+  it('throws an actionable error when Corepack is unavailable', async () => {
     const pluginRoot = makePluginRoot();
-    const error = Object.assign(new Error('spawn pnpm ENOENT'), { code: 'ENOENT' });
-    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
+    const error = Object.assign(new Error('spawn corepack ENOENT'), { code: 'ENOENT' });
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
     execaMock.mockRejectedValueOnce(error);
 
     await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(
-      `This plugin uses pnpm, but pnpm is not installed. Install pnpm and try again. Plugin path: ${pluginRoot}`,
+      'Mastra Code requires Corepack to install GitHub plugin dependencies. Install it with "npm install --global corepack" and try again.',
     );
   });
 
-  it('disables package manager lifecycle scripts during install', async () => {
+  it('disables lifecycle scripts during install', async () => {
     const pluginRoot = makePluginRoot();
-    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.8.0' });
 
     await installPluginDependencies(pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
-      expect.objectContaining({ cwd: pluginRoot }),
-    );
-  });
-
-  it('uses packageManager names that are not known lockfile managers', async () => {
-    const pluginRoot = makePluginRoot();
-    writePackageJson(pluginRoot, { packageManager: 'definitely-missing-pm@1.0.0' });
-
-    await installPluginDependencies(pluginRoot);
-
-    expect(execaMock).toHaveBeenCalledWith(
-      'definitely-missing-pm',
-      ['install', '--ignore-scripts'],
+      'corepack',
+      expectedCorepackArgs('11.8.0'),
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -185,9 +195,9 @@ describe('installPluginDependencies', () => {
   it('finds dependency roots for nested entry packages', () => {
     const pluginRoot = makePluginRoot();
     const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');
-    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
     fs.mkdirSync(path.join(nestedRoot, 'src'), { recursive: true });
-    writePackageJson(nestedRoot);
+    writePackageJson(nestedRoot, { packageManager: 'pnpm@11.8.0' });
 
     expect(getPluginDependencyRoots(pluginRoot, '.mastracode/plugins/sources/local/alexandria/src/index.ts')).toEqual([
       pluginRoot,
@@ -198,27 +208,55 @@ describe('installPluginDependencies', () => {
     );
   });
 
-  it('inherits the checkout package manager for nested entry packages', async () => {
+  it('inherits the checkout declaration for nested entry packages', async () => {
     const pluginRoot = makePluginRoot();
     const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');
-    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.5.1' });
-    fs.writeFileSync(path.join(pluginRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.8.0' });
     fs.mkdirSync(path.join(nestedRoot, 'src'), { recursive: true });
     writePackageJson(nestedRoot);
 
     await installPluginDependencies(nestedRoot, pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
+      'corepack',
+      expectedCorepackArgs('11.8.0'),
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });
 
-  it('uses frozen install for nested entry packages with their own lockfile', async () => {
+  it('rejects an explicit invalid dependency-root declaration instead of inheriting', async () => {
+    const pluginRoot = makePluginRoot();
+    const nestedRoot = path.join(pluginRoot, 'nested');
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.8.0' });
+    fs.mkdirSync(nestedRoot);
+    writePackageJson(nestedRoot, { packageManager: null });
+
+    await expect(installPluginDependencies(nestedRoot, pluginRoot)).rejects.toThrow(
+      `Plugin at ${nestedRoot} must declare an exact pnpm version`,
+    );
+    expect(execaMock).not.toHaveBeenCalled();
+  });
+
+  it('prefers the dependency-root declaration over the checkout declaration', async () => {
+    const pluginRoot = makePluginRoot();
+    const nestedRoot = path.join(pluginRoot, 'nested');
+    writePackageJson(pluginRoot, { packageManager: 'npm@11.0.0' });
+    fs.mkdirSync(nestedRoot);
+    writePackageJson(nestedRoot, { packageManager: 'pnpm@10.24.0' });
+
+    await installPluginDependencies(nestedRoot, pluginRoot);
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'corepack',
+      expectedCorepackArgs('10.24.0'),
+      expect.objectContaining({ cwd: nestedRoot }),
+    );
+  });
+
+  it('uses a frozen install for nested entry packages with their own lockfile', async () => {
     const pluginRoot = makePluginRoot();
     const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');
-    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.5.1' });
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.8.0' });
     fs.mkdirSync(nestedRoot, { recursive: true });
     writePackageJson(nestedRoot);
     fs.writeFileSync(path.join(nestedRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
@@ -226,8 +264,8 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(nestedRoot, pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
+      'corepack',
+      expectedCorepackArgs('11.8.0', true),
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });

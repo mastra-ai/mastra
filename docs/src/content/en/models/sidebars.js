@@ -118,8 +118,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai-router',
+          label: 'AI-ROUTER',
+        },
+        {
+          type: 'doc',
+          id: 'providers/aiand',
+          label: 'ai&',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
+        },
+        {
+          type: 'doc',
+          id: 'providers/aki-io',
+          label: 'AKI.IO',
         },
         {
           type: 'doc',
@@ -198,8 +213,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/blueclaw',
+          label: 'Blue Claw',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hyper',
+          label: 'Charm Hyper',
         },
         {
           type: 'doc',
@@ -215,6 +240,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/claudinio',
           label: 'Claudinio',
+        },
+        {
+          type: 'doc',
+          id: 'providers/cline-pass',
+          label: 'ClinePass',
         },
         {
           type: 'doc',
@@ -258,6 +288,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/daoxe',
+          label: 'DaoXE',
+        },
+        {
+          type: 'doc',
           id: 'providers/databricks',
           label: 'Databricks',
         },
@@ -275,6 +310,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ebcloud',
+          label: 'EBCloud',
         },
         {
           type: 'doc',
@@ -328,8 +368,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/greenpt',
+          label: 'GreenPT',
+        },
+        {
+          type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hetzner',
+          label: 'Hetzner',
         },
         {
           type: 'doc',
@@ -433,6 +483,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lynkr',
+          label: 'Lynkr',
+        },
+        {
+          type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
         },
@@ -470,6 +525,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/modal',
+          label: 'Modal',
         },
         {
           type: 'doc',
@@ -535,6 +595,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nvidia',
           label: 'Nvidia',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ofox',
+          label: 'Ofox',
         },
         {
           type: 'doc',
@@ -659,12 +724,22 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/stepfun',
-          label: 'StepFun',
+          label: 'StepFun (China)',
         },
         {
           type: 'doc',
           id: 'providers/stepfun-ai',
-          label: 'StepFun AI',
+          label: 'StepFun (Global)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-step-plan',
+          label: 'StepFun Step Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-ai-step-plan',
+          label: 'StepFun Step Plan (Global)',
         },
         {
           type: 'doc',
@@ -700,6 +775,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/the-grid-ai',
           label: 'The Grid AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/thinkingmachines',
+          label: 'Thinking Machines',
         },
         {
           type: 'doc',

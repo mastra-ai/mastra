@@ -13,7 +13,7 @@ export function ItemListPagination({ currentPage, hasMore, onNextPage, onPrevPag
   const showNavigation = (typeof currentPage === 'number' && currentPage > 0) || hasMore;
 
   return (
-    <div className={cn('flex pt-6 items-center justify-center text-neutral3 text-ui-md gap-8')}>
+    <div className={cn('flex items-center justify-center gap-8 pt-6 text-ui-md text-neutral3')}>
       <span>
         Page <b>{currentPage ? currentPage + 1 : '1'}</b>
       </span>
@@ -21,8 +21,8 @@ export function ItemListPagination({ currentPage, hasMore, onNextPage, onPrevPag
         <div
           className={cn(
             'flex gap-4',
-            '[&>button]:flex [&>button]:items-center [&>button]:gap-2 [&>button]:text-neutral4 [&>button:hover]:text-neutral5 [&>button]:transition-colors [&>button]:border [&>button]:border-border1 [&>button]:p-1 [&>button]:px-2 [&>button]:rounded-md',
-            '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3',
+            '[&>button]:flex [&>button]:items-center [&>button]:gap-2 [&>button]:rounded-md [&>button]:border [&>button]:border-border1 [&>button]:p-1 [&>button]:px-2 [&>button]:text-neutral4 [&>button]:transition-colors [&>button:hover]:text-neutral5',
+            '[&_svg]:size-[1em] [&_svg]:text-neutral3',
           )}
         >
           {typeof currentPage === 'number' && currentPage > 0 && (

@@ -51,6 +51,7 @@ const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, 'llm' | 'tool' | 'chain'>> 
   [SpanType.MODEL_GENERATION]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
+  [SpanType.PROVIDER_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'chain',
   [SpanType.WORKFLOW_WAIT_EVENT]: 'chain',
 };

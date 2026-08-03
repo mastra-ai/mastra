@@ -1,0 +1,5 @@
+{
+  "attachment": ["Qwen/Qwen3.6-35B-A3B-FP8"],
+  "temperature": ["Qwen/Qwen3.6-35B-A3B-FP8"],
+  "structuredOutput": ["Qwen/Qwen3.6-35B-A3B-FP8"]
+}

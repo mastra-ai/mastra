@@ -10,7 +10,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
-import { createEventedWorkflow, createWorkflow as createDirectWorkflow } from '../../../workflows/create';
+import { createWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -173,15 +173,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     runScope,
   });
 
-  // Internal toggle: the default is direct (in-process) execution which avoids
-  // the requestContext serialisation cycle (toJSON → reconstruct) that drops
-  // non-serialisable values (functions, circular-ref objects like the controller
-  // context). Set MASTRA_EVENTED_EXECUTION=true to opt in to the evented
-  // workflow engine for cross-process coordination via pubsub.
-  const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
-  const factory = useEventedExecution ? createEventedWorkflow : createDirectWorkflow;
-
-  return factory({
+  return createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),

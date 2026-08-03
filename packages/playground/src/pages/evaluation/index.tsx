@@ -1,10 +1,12 @@
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
@@ -13,9 +15,12 @@ import { ExperimentStatusCard } from '@/domains/experiments';
 import { ReviewPipelineCard, useReviewSummary } from '@/domains/review';
 import { computeReviewTotals } from '@/domains/review/review-maps';
 import { useScoreMetrics, useScorers } from '@/domains/scores';
+import type { ScoreMetricsDateRange } from '@/domains/scores';
 import { ScoresOverTimeCard } from '@/domains/scores/components/scores-over-time-card';
 
 export default function Evaluation() {
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
+  const [dateRange, setDateRange] = useState<ScoreMetricsDateRange>({});
   const { data: scorers, isLoading: isLoadingScorers, error: errorScorers } = useScorers();
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
@@ -24,7 +29,7 @@ export default function Evaluation() {
     isLoading: isLoadingScores,
     isError: isErrorScores,
     error: errorScores,
-  } = useScoreMetrics();
+  } = useScoreMetrics(dateRange);
   const {
     data: reviewSummary,
     isLoading: isLoadingReview,
@@ -65,6 +70,21 @@ export default function Evaluation() {
 
   return (
     <PageLayout width="wide" height="full">
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <DateTimeRangePicker
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              dateFrom={dateRange.start}
+              dateTo={dateRange.end}
+              onDateChange={(value, type) =>
+                setDateRange(current => (type === 'from' ? { ...current, start: value } : { ...current, end: value }))
+              }
+            />
+          </PageLayout.Column>
+        </PageLayout.Row>
+      </PageLayout.TopArea>
       <div className="flex flex-col gap-6">
         <MetricsFlexGrid>
           <EvaluationKpiCards

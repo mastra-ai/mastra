@@ -1,0 +1,75 @@
+name: Announce GitHub Release on Discord
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: 'Release name shown in the test notification'
+        required: true
+        type: string
+        default: 'Mastra test release'
+      release_tag:
+        description: 'Release tag shown in the test notification'
+        required: true
+        type: string
+        default: 'v0.0.0-test'
+      release_url:
+        description: 'Optional URL opened from the notification title'
+        required: false
+        type: string
+      release_notes:
+        description: 'Release notes shown in the test notification'
+        required: true
+        type: string
+        default: |-
+          ## Test release
+
+          This is a preview of a Mastra release announcement.
+      deliver:
+        description: 'Send this test notification to Discord instead of only previewing its payload'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    if: ${{ github.repository == 'mastra-ai/mastra' && (github.event_name == 'workflow_dispatch' || !github.event.release.prerelease) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout notification script
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts/discord-release.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Preview test notification
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.deliver }}
+        env:
+          RELEASE_NAME: ${{ inputs.release_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_URL: ${{ inputs.release_url }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_IS_TEST: 'true'
+          RELEASE_PREVIEW: 'true'
+        run: node .github/scripts/discord-release.mjs
+
+      - name: Send release notification
+        if: ${{ github.event_name == 'release' || inputs.deliver }}
+        env:
+          DISCORD_RELEASE_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
+          RELEASE_NAME: ${{ github.event.release.name || inputs.release_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          RELEASE_URL: ${{ github.event.release.html_url || inputs.release_url }}
+          RELEASE_NOTES: ${{ github.event.release.body || inputs.release_notes }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_TIMESTAMP: ${{ github.event.release.published_at }}
+          RELEASE_IS_TEST: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node .github/scripts/discord-release.mjs

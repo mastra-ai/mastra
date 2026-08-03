@@ -53,6 +53,7 @@ interface SpanTypeMap {
   MODEL_CHUNK: ModelChunkAttributes
   TOOL_CALL: ToolCallAttributes
   CLIENT_TOOL_CALL: ClientToolCallAttributes
+  PROVIDER_TOOL_CALL: ProviderToolCallAttributes
   MCP_TOOL_CALL: MCPToolCallAttributes
   PROCESSOR_RUN: ProcessorRunAttributes
   WORKFLOW_STEP: WorkflowStepAttributes
@@ -451,6 +452,14 @@ enum SpanType {
    */
   CLIENT_TOOL_CALL = 'client_tool_call',
 
+  /**
+   * Provider-executed (server-side) tool span. Reconstructed from
+   * tool-call and tool-result stream chunks for tools the model
+   * provider executes (e.g. Anthropic code execution, server-side
+   * web search). Opened on tool-call chunk, closed on tool-result.
+   */
+  PROVIDER_TOOL_CALL = 'provider_tool_call',
+
   /** Workflow run - root span for workflow processes */
   WORKFLOW_RUN = 'workflow_run',
 
@@ -601,6 +610,7 @@ interface ToolCallAttributes {
   toolId?: string
   toolType?: string
   toolDescription?: string
+  toolCallId?: string
   success?: boolean
 }
 ```
@@ -622,6 +632,8 @@ interface MCPToolCallAttributes {
 
   /** Tool description */
   toolDescription?: string
+
+  toolCallId?: string
 
   /** Whether tool execution was successful */
   success?: boolean
@@ -931,7 +943,7 @@ interface CustomSamplerOptions {
 
 ### `ConfigSelector`
 
-Function to select which observability instance to use for a given span.
+Function to select which observability instance to use for a span.
 
 ```typescript
 type ConfigSelector = (

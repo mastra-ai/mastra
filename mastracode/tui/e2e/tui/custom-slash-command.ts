@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
@@ -17,11 +17,14 @@ export const customSlashCommandScenario: McE2eScenario = {
   aimockFixture: 'custom-slash-command.json',
   prepare({ projectDir }) {
     const commandsDir = join(projectDir, '.mastracode', 'commands');
+    const commandSourcesDir = join(projectDir, '.mastracode', 'command-sources');
     mkdirSync(commandsDir, { recursive: true });
+    mkdirSync(commandSourcesDir, { recursive: true });
     writeFileSync(
-      join(commandsDir, 'deploy.md'),
+      join(commandSourcesDir, 'deploy.md'),
       `---\ndescription: Deploy checklist\n---\nDeploy using the standard checklist.\n`,
     );
+    symlinkSync(join(commandSourcesDir, 'deploy.md'), join(commandsDir, 'deploy.md'));
     writeFileSync(join(commandsDir, 'review.md'), `---\ndescription: Review changed files\n---\nReview $1+\n`);
   },
   async run({ terminal, runtime }) {
