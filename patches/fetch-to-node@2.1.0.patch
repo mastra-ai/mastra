@@ -1,5 +1,5 @@
 diff --git a/dist/fetch-to-node/http-server.js b/dist/fetch-to-node/http-server.js
-index d29281cd05bfa88150c3c7c9be8c66b3ccb99391..8b09548c7f5ccab83e27c5b65df1a36add335596 100644
+index d29281cd05bfa88150c3c7c9be8c66b3ccb99391..1b7ace8e6709a426cdceae36e5067a18168ac174 100644
 --- a/dist/fetch-to-node/http-server.js
 +++ b/dist/fetch-to-node/http-server.js
 @@ -317,6 +317,7 @@ export class FetchServerResponse extends FetchOutgoingMessage {
@@ -10,7 +10,7 @@ index d29281cd05bfa88150c3c7c9be8c66b3ccb99391..8b09548c7f5ccab83e27c5b65df1a36a
          let body = this._hasBody
              ? new ReadableStream({
                  start(controller) {
-@@ -328,18 +329,22 @@ export class FetchServerResponse extends FetchOutgoingMessage {
+@@ -328,18 +329,24 @@ export class FetchServerResponse extends FetchOutgoingMessage {
                      }
                      else {
                          _this.on("finish", () => {
@@ -32,6 +32,8 @@ index d29281cd05bfa88150c3c7c9be8c66b3ccb99391..8b09548c7f5ccab83e27c5b65df1a36a
                  },
 +                cancel() {
 +                    cancelled = true;
++                    // Propagate cancel to nested Node bridges (MCP SSE keepalive).
++                    _this.emit("close");
 +                },
              })
              : null;

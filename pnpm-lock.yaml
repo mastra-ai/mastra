@@ -187,6 +187,7 @@ packageExtensionsChecksum: sha256-xGYNP5bHLPlbBT+RiHXWlNCiUtPhW6W9ntBiVM/duy4=
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
   '@earendil-works/pi-tui@0.80.6': 88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b
+  fetch-to-node@2.1.0: a1bf6459123fc3b9bede346d5c5457a2cbc5f3194686cfe497ce9eab19fefd80
 
 importers:
 
@@ -4734,7 +4735,7 @@ importers:
         version: 10.7.0(jiti@2.7.0)
       fetch-to-node:
         specifier: ^2.1.0
-        version: 2.1.0
+        version: 2.1.0(patch_hash=a1bf6459123fc3b9bede346d5c5457a2cbc5f3194686cfe497ce9eab19fefd80)
       hono-openapi:
         specifier: ^1.3.1
         version: 1.3.1(@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.30)(openapi-types@12.1.3)
@@ -6319,7 +6320,7 @@ importers:
         version: link:../../packages/server
       fetch-to-node:
         specifier: ^2.1.0
-        version: 2.1.0
+        version: 2.1.0(patch_hash=a1bf6459123fc3b9bede346d5c5457a2cbc5f3194686cfe497ce9eab19fefd80)
       ws:
         specifier: ^8.21.0
         version: 8.21.0(bufferutil@4.1.0)
@@ -48372,7 +48373,7 @@ snapshots:
       to-arraybuffer: 1.0.1
       tough-cookie: 4.1.4
 
-  fetch-to-node@2.1.0: {}
+  fetch-to-node@2.1.0(patch_hash=a1bf6459123fc3b9bede346d5c5457a2cbc5f3194686cfe497ce9eab19fefd80): {}
 
   fflate@0.4.8: {}
 
