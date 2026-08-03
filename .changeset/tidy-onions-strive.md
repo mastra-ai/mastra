@@ -12,4 +12,4 @@ import { ComposerBox, ComposerRing } from '@mastra/playground-ui/components/Comp
 </ComposerRing>;
 ```
 
-The ring must wrap the box rather than decorate it: `ComposerBox` clips its overflow and would cut the arc off.
+Wrap `ComposerBox` with it and pass `busy` — the ring becomes the composer's edge, so the box no longer needs a border of its own.
