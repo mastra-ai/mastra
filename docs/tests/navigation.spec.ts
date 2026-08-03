@@ -182,9 +182,7 @@ test.describe('Sidebar navigation', () => {
     await expect(mobileSidebar).toBeVisible()
 
     // Find a navigation link in the mobile sidebar (exclude category headers)
-    const mobileLink = mobileSidebar
-      .locator('a.menu__link:not(.menu__link--active):not(.menu__link--sublist)[href]')
-      .first()
+    const mobileLink = mobileSidebar.locator('a.menu__link:not(.menu__link--sublist)').first()
     const href = await mobileLink.getAttribute('href')
     expect(href).toBeTruthy()
 
