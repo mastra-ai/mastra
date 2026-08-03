@@ -117,23 +117,31 @@ function renderThreadRoute(path: string) {
 
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 
-/** jsdom reports every box as 0×0, so the rail threshold needs a width to measure against. */
-function stubScrollerWidth(width: number) {
-  HTMLElement.prototype.getBoundingClientRect = () => ({
-    width,
-    height: 800,
-    top: 0,
-    left: 0,
-    right: width,
-    bottom: 800,
-    x: 0,
-    y: 0,
-    toJSON: () => ({}),
-  });
+const rect = (width: number) => ({
+  width,
+  height: 800,
+  top: 0,
+  left: 0,
+  right: width,
+  bottom: 800,
+  x: 0,
+  y: 0,
+  toJSON: () => ({}),
+});
+
+/**
+ * jsdom reports every box as 0×0, so the rail threshold needs a width to measure against.
+ * Shell and scroller are stubbed apart: the rail must read the scroller the card's inset
+ * has already narrowed, so a threshold read off the shell has to fail here.
+ */
+function stubWidths({ shell, scroller }: { shell: number; scroller: number }) {
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    return rect(this.closest('[data-slot="chat-shell-track"]') ? scroller : shell);
+  };
 }
 
 beforeEach(() => {
-  stubScrollerWidth(1200);
+  stubWidths({ shell: 1200, scroller: 1200 });
 });
 
 afterEach(() => {
@@ -154,9 +162,9 @@ describe('ThreadPage conversation rail', () => {
 
   describe('when the docked workspace card leaves no room beside the column', () => {
     it('does not render conversation navigation', async () => {
-      // 704px = the 44rem column with zero gutter, what the scroller is left with
-      // once the workspace card claims its inset.
-      stubScrollerWidth(704);
+      // Shell stays wide enough to dock the card; the scroller it pads is left with
+      // 704px — the 44rem column and no gutter.
+      stubWidths({ shell: 1200, scroller: 704 });
       stubThreadRoute(threadRailMessages);
       renderThreadRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
 
@@ -221,6 +229,7 @@ describe('ThreadPage conversation rail', () => {
         fireEvent.click(firstTurn);
 
         expect(scrollTo).toHaveBeenCalledTimes(1);
+        expect(scrollTo.mock.instances[0]).toBe(document.querySelector('[data-slot="message-scroller-viewport"]'));
       } finally {
         if (originalScrollTo) {
           Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalScrollTo);
