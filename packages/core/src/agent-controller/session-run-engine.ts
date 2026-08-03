@@ -1034,7 +1034,7 @@ export class SessionRunEngine {
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
-    const requestContext = await this.#machinery.buildRequestContext();
+    let requestContext!: RequestContext;
     let currentRun: StreamState | undefined;
 
     try {
@@ -1050,6 +1050,7 @@ export class SessionRunEngine {
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
           this.#session.run.setTraceId({ traceId: null });
+          requestContext = await this.#machinery.buildRequestContext(this.#session.run.getRequestContext());
           this.#session.emit({ type: 'agent_start' });
         }
 

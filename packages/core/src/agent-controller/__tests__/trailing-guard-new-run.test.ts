@@ -14,6 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Agent } from '../../agent';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
 import type { Session } from '../session';
@@ -92,5 +93,37 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     // The null-runId chunks from run B must have been processed, not skipped.
     expect(processedChunkTypes).toContain('data-user-message');
     expect(processedChunkTypes).toContain('data-om-status');
+  });
+
+  it('uses the context staged for each subscribed run and clears it after completion', async () => {
+    const controller = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const firstContext = new RequestContext();
+    firstContext.set('user', { id: 'first-user' });
+    const deliveredContext = new RequestContext();
+    deliveredContext.set('user', { id: 'delivered-user' });
+    expect(session.run.stageRequestContext(firstContext)).toBe(true);
+    expect(session.run.stageRequestContext(deliveredContext)).toBe(false);
+
+    const users: unknown[] = [];
+    const origProcessStreamChunk = session.runEngine.processStreamChunk.bind(session.runEngine);
+    session.runEngine.processStreamChunk = async (state: any, chunk: any, requestContext: any) => {
+      users.push(requestContext.get('user'));
+      return origProcessStreamChunk(state, chunk, requestContext);
+    };
+
+    await processSubscribedChunks(session, [
+      { type: 'start', runId: 'run-a' },
+      { type: 'data-user-message', data: { content: 'First run' } },
+      { type: 'finish', runId: 'run-a', payload: { stepResult: { reason: 'stop' } } },
+      { type: 'start', runId: 'run-b' },
+      { type: 'data-user-message', data: { content: 'Second run' } },
+      { type: 'finish', runId: 'run-b', payload: { stepResult: { reason: 'stop' } } },
+    ]);
+
+    expect(users).toContainEqual({ id: 'first-user' });
+    expect(users.at(-1)).toBeUndefined();
+    expect(session.run.getRequestContext()).toBeUndefined();
   });
 });
