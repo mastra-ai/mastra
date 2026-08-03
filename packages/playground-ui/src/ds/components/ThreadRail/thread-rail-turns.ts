@@ -1,8 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraDBMessageMetadata } from '@mastra/react';
 
 const SUMMARY_MAX_LENGTH = 120;
 const FILE_PREVIEW_LIMIT = 2;
-const CLIENT_MESSAGE_ID_KEY = 'clientMessageId';
+// Inlined, not imported: the value export sits behind a barrel this browser bundle must not pull.
+const CLIENT_MESSAGE_ID_KEY = 'clientMessageId' satisfies keyof MastraDBMessageMetadata;
 
 export interface ThreadRailTurn {
   key: string;

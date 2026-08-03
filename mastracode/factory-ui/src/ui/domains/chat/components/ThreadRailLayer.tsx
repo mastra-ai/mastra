@@ -2,7 +2,6 @@ import { buildThreadRailTurns, ThreadRail } from '@mastra/playground-ui/componen
 
 import { useChatTranscript } from '../context/useChatTranscript';
 
-/** Positions the shared conversation rail without owning its presentation or interaction behavior. */
 export function ThreadRailLayer() {
   const { transcript } = useChatTranscript();
   const messages = transcript.entries.flatMap(entry => (entry.kind === 'message' ? [entry.message] : []));
