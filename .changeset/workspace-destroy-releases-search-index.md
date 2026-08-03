@@ -2,8 +2,9 @@
 '@mastra/core': patch
 ---
 
-`Workspace.destroy()` now releases indexed content.
+Fixed destroyed workspaces holding on to their indexed documents and loaded skills. Long-running apps that create a workspace per session no longer grow in memory as sessions come and go.
 
-Previously `destroy()` tore down the LSP, browser, sandbox and filesystem but left `_searchEngine` and `_skills` populated, so every document indexed into a workspace's BM25 index — and the source of every loaded skill version — stayed reachable for the lifetime of the process, even after `mastra.removeWorkspace(id, { destroy: true })`.
+**Also in this change**
 
-The search index and the skills registry are now cleared in a `finally` block, so they are released even when one of the resources above fails to shut down.
+- Cleanup now runs even when another part of the workspace fails to shut down.
+- Indexing into a workspace that is being torn down now throws `WorkspaceNotReadyError` instead of quietly repopulating it.

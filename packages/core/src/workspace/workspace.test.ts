@@ -11,6 +11,7 @@ import {
   FilesystemNotAvailableError,
   SandboxNotAvailableError,
   SearchNotAvailableError,
+  WorkspaceNotReadyError,
 } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import { LSPManager } from './lsp';
@@ -536,6 +537,37 @@ Line 3 conclusion`;
       vi.spyOn(filesystem as any, '_destroy').mockRejectedValueOnce(new Error('fs teardown failed'));
       await expect(workspace.destroy()).rejects.toThrow('fs teardown failed');
 
+      expect(await workspace.search('lazy')).toEqual([]);
+    });
+
+    it('should release loaded skills on destroy', async () => {
+      await createSkillFixtures(tempDir);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem, skills: ['/skills'] });
+
+      expect(workspace.skills).toBeDefined();
+      await workspace.skills!.list();
+
+      await workspace.destroy();
+
+      // The loaded skill sources must not stay reachable through the workspace.
+      expect((workspace as any)._skills).toBeUndefined();
+    });
+
+    it('should reject search writes once the workspace is destroyed', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+      });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+      await workspace.destroy();
+
+      // Without this guard a late caller could repopulate the index that
+      // destroy() just released.
+      await expect(workspace.index('/doc2.txt', 'a lazy cat sleeps all day')).rejects.toThrow(WorkspaceNotReadyError);
       expect(await workspace.search('lazy')).toEqual([]);
     });
   });

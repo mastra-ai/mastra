@@ -37,7 +37,7 @@ import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
-import { WorkspaceError, SearchNotAvailableError } from './errors';
+import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
@@ -1010,6 +1010,7 @@ export class Workspace<
       startLineOffset?: number;
     },
   ): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine) {
       throw new SearchNotAvailableError();
     }
@@ -1054,6 +1055,7 @@ export class Workspace<
    * indexed directly, directory matches are recursed.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
     }
@@ -1277,6 +1279,16 @@ export class Workspace<
     } catch (error) {
       this._status = 'error';
       throw error;
+    }
+  }
+
+  /**
+   * Reject search writes once teardown has begun, so that a late caller cannot
+   * repopulate an index that `destroy()` has already released.
+   */
+  private assertSearchWritable(): void {
+    if (this._status === 'destroying' || this._status === 'destroyed') {
+      throw new WorkspaceNotReadyError(this.id, this._status);
     }
   }
 
