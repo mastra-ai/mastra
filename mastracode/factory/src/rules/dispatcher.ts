@@ -24,10 +24,22 @@ const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
 const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
+const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 10 * 60_000;
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 2;
+
+function waitForAgentEndOrTimeout(agentEnd: Promise<void>): Promise<boolean> {
+  return new Promise(resolve => {
+    const timeout = setTimeout(() => resolve(false), SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS);
+    timeout.unref?.();
+    void agentEnd.then(() => {
+      clearTimeout(timeout);
+      resolve(true);
+    });
+  });
+}
 
 interface DispatcherSession extends SkillSession {
   thread: {
@@ -386,7 +398,13 @@ export class FactoryDecisionDispatcher {
             throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
           }
           if (settled.action === 'wake') {
-            await agentEnd;
+            const observed = await waitForAgentEndOrTimeout(agentEnd);
+            if (!observed) {
+              console.warn('Factory skill run terminal event was not observed before timeout', {
+                decisionId: record.id,
+                runId: settled.runId,
+              });
+            }
           }
         } finally {
           unsubscribe();
@@ -648,6 +666,7 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   maxAttempts: MAX_ATTEMPTS,
   maxErrorLength: MAX_ERROR_LENGTH,
   maxBackoffMs: MAX_BACKOFF_MS,
+  skillCompletionObservationTimeoutMs: SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
   maxInFlight: MAX_IN_FLIGHT,
   stages: FACTORY_RULE_STAGES,
 } as const;
