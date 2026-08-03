@@ -60,8 +60,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       createdAt: now,
       updatedAt: now,
     };
-    this.db.experiments.set(experiment.id, experiment);
-    return experiment;
+    this.db.experiments.set(experiment.id, structuredClone(experiment));
+    return structuredClone(experiment);
   }
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
@@ -83,8 +83,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       metadata: input.metadata ?? existing.metadata,
       updatedAt: new Date(),
     };
-    this.db.experiments.set(input.id, updated);
-    return updated;
+    this.db.experiments.set(input.id, structuredClone(updated));
+    return structuredClone(updated);
   }
 
   async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
@@ -96,7 +96,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
       return null;
     }
-    return row;
+    return structuredClone(row);
   }
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
@@ -146,7 +146,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const end = perPageInput === false ? experiments.length : start + perPage;
 
     return {
-      experiments: experiments.slice(start, end),
+      experiments: experiments.slice(start, end).map(experiment => structuredClone(experiment)),
       pagination: {
         total: experiments.length,
         page,

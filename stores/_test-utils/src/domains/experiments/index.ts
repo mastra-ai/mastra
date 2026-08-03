@@ -96,6 +96,24 @@ export function createExperimentsTests({
           trialIndex: 0,
         });
 
+        expect(exp).toMatchObject({
+          provenance: {
+            source: 'github',
+            sourceId: 'mastra-ai/mastra',
+            sourceVersion: 'abc123',
+            metadata: { pullRequest: 42, nested: { branch: 'feature/provenance' } },
+          },
+          runnerAttestation: {
+            runnerId: 'runner-1',
+            invocationId: 'invocation-1',
+            runnerVersion: '1.0.0',
+          },
+          experimentSetId: 'set-1',
+          comparisonId: 'comparison-1',
+          variantId: 'variant-a',
+          trialIndex: 0,
+        });
+
         const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
 
         expect(fetched).toMatchObject({

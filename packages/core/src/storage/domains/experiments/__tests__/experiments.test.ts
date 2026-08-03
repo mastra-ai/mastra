@@ -112,6 +112,44 @@ describe('ExperimentsInMemory', () => {
         trialIndex: 0,
       });
     });
+
+    it('isolates stored records from input and returned object mutations', async () => {
+      const metadata = { nested: { value: 'original' } };
+      const provenance = { source: 'github', metadata: { branch: 'main' } };
+      const created = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        metadata,
+        provenance,
+      });
+
+      metadata.nested.value = 'mutated-input';
+      provenance.metadata.branch = 'mutated-input';
+      (created.metadata as typeof metadata).nested.value = 'mutated-return';
+      created.provenance!.metadata!.branch = 'mutated-return';
+
+      const fetched = await storage.getExperimentById({ id: created.id });
+      expect(fetched?.metadata).toEqual({ nested: { value: 'original' } });
+      expect(fetched?.provenance).toEqual({ source: 'github', metadata: { branch: 'main' } });
+
+      (fetched!.metadata as typeof metadata).nested.value = 'mutated-fetch';
+      const listed = await storage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+      (listed.experiments[0]!.metadata as typeof metadata).nested.value = 'mutated-list';
+
+      const afterReads = await storage.getExperimentById({ id: created.id });
+      expect(afterReads?.metadata).toEqual({ nested: { value: 'original' } });
+
+      const updateMetadata = { nested: { value: 'updated' } };
+      const updated = await storage.updateExperiment({ id: created.id, metadata: updateMetadata });
+      updateMetadata.nested.value = 'mutated-update-input';
+      (updated.metadata as typeof updateMetadata).nested.value = 'mutated-update-return';
+
+      const afterUpdate = await storage.getExperimentById({ id: created.id });
+      expect(afterUpdate?.metadata).toEqual({ nested: { value: 'updated' } });
+    });
   });
 
   describe('updateExperiment', () => {
