@@ -414,207 +414,208 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     await pMap(
       items.map((item, idx) => ({ item, idx })),
       async ({ item, idx }) => {
-        // Check for cancellation
-        if (executionSignal?.aborted) {
-          if (eventDispatcher?.failure) return;
-          throw new DOMException('Aborted', 'AbortError');
-        }
+        if (eventDispatcher?.failure) return;
 
-        const itemStartedAt = new Date();
-        let itemScorers: MastraScorer<any, any, any, any>[];
-        let itemStepScorers = {} as ReturnType<typeof resolveStepScorers>;
-        let scorerConfigError: ExecutionResult['error'] = null;
-
-        if (hasRunLevelScorers) {
-          itemScorers = runLevelScorers;
-          itemStepScorers = runLevelStepScorers;
-        } else if (item.scorerIds !== undefined) {
-          const resolution = await resolveItemScorers(item.scorerIds);
-          itemScorers = resolution.scorers;
-          if (resolution.missingIds.length > 0) {
-            scorerConfigError = {
-              code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
-              message: `Item scorer configuration references unregistered scorer IDs: ${resolution.missingIds.join(', ')}`,
-            };
-          }
-        } else {
-          itemScorers = datasetScorers;
-        }
-
-        // Compose per-item signal (timeout + run-level abort)
-        let itemSignal: AbortSignal | undefined = executionSignal;
-        if (itemTimeout) {
-          const timeoutSignal = AbortSignal.timeout(itemTimeout);
-          itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
-        }
-
-        // Resolve item scorer configuration before executing the target. Invalid item
-        // references are deterministic and therefore skip both target execution and retries.
-        let retryCount = 0;
-        let execResult: ExecutionResult = scorerConfigError
-          ? { output: null, error: scorerConfigError, traceId: null }
-          : await execFn(item, itemSignal);
-
-        while (execResult.error && !scorerConfigError && retryCount < maxRetries) {
-          // Don't retry abort errors
-          if (execResult.error.message.toLowerCase().includes('abort')) break;
-
-          // Don't retry deterministic tool-mock failures — the matcher state cannot
-          // change between attempts, so retrying would always fail identically.
-          if (
-            execResult.error.code === TOOL_MOCK_MISMATCH ||
-            execResult.error.code === TOOL_MOCK_EXHAUSTED ||
-            execResult.error.code === TOOL_MOCK_NOT_DECLARED
-          ) {
-            break;
-          }
-
-          retryCount++;
-          const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
-          const jitter = delay * 0.2 * Math.random();
-          await new Promise(r => setTimeout(r, delay + jitter));
-
-          // Re-check cancellation before retry
+        try {
+          // Check for cancellation
           if (executionSignal?.aborted) {
             throw new DOMException('Aborted', 'AbortError');
           }
 
-          execResult = await execFn(item, itemSignal);
-        }
+          const itemStartedAt = new Date();
+          let itemScorers: MastraScorer<any, any, any, any>[];
+          let itemStepScorers = {} as ReturnType<typeof resolveStepScorers>;
+          let scorerConfigError: ExecutionResult['error'] = null;
 
-        const itemCompletedAt = new Date();
-
-        // Track success/failure
-        if (execResult.error) {
-          failedCount++;
-        } else {
-          succeededCount++;
-        }
-
-        // Build item result. `persistenceError` starts null and is set below
-        // if `addExperimentResult` throws so callers can detect rows that
-        // never landed in storage.
-        const itemResult: ItemResult = {
-          itemId: item.id,
-          itemVersion: item.datasetVersion ?? 0,
-          input: item.input,
-          output: execResult.output,
-          groundTruth: item.groundTruth ?? null,
-          error: execResult.error,
-          startedAt: itemStartedAt,
-          completedAt: itemCompletedAt,
-          retryCount,
-          persistenceError: null,
-          ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
-        };
-
-        // Run scorers (inline, after target completes). A scorer-configuration
-        // failure skips scoring because the selected source could not be resolved fully.
-        let itemScores: Awaited<ReturnType<typeof runScorersForItem>> = [];
-        if (!scorerConfigError) {
-          const workflowData =
-            execResult.stepResults || execResult.stepExecutionPath
-              ? {
-                  stepResults: execResult.stepResults,
-                  stepExecutionPath: execResult.stepExecutionPath,
-                  spanId: execResult.spanId,
-                }
-              : undefined;
-
-          const flatScores = await runScorersForItem(
-            itemScorers,
-            item,
-            execResult.output,
-            storage ?? null,
-            experimentId,
-            targetType ?? 'agent',
-            targetId ?? 'inline',
-            item.id,
-            execResult.scorerInput,
-            execResult.scorerOutput,
-            execResult.traceId ?? undefined,
-            workflowData,
-          );
-
-          const stepScores = await runStepScorersForItem(
-            itemStepScorers,
-            item,
-            workflowData,
-            storage ?? null,
-            experimentId,
-            targetType ?? 'agent',
-            targetId ?? 'inline',
-            item.id,
-            execResult.traceId ?? undefined,
-          );
-
-          itemScores = [...flatScores, ...stepScores];
-        }
-
-        // Persist result with scores (if storage available). A throw here does
-        // NOT abort the run — persistence is best-effort and the target run's
-        // outcome is already recorded in `itemResult`. Instead we surface the
-        // failure on the item (`persistenceError`) and bump the run-level
-        // `persistenceFailures` counter so callers can detect rows that never
-        // landed in `mastra_experiment_results`.
-        if (experimentsStore) {
-          try {
-            await experimentsStore.addExperimentResult({
-              experimentId,
-              itemId: item.id,
-              itemDatasetVersion: item.datasetVersion,
-              input: item.input,
-              output: execResult.output,
-              groundTruth: item.groundTruth ?? null,
-              error: execResult.error,
-              startedAt: itemStartedAt,
-              completedAt: itemCompletedAt,
-              retryCount,
-              traceId: execResult.traceId,
-              organizationId: datasetRecord?.organizationId ?? null,
-              projectId: datasetRecord?.projectId ?? null,
-              ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
-            });
-          } catch (persistError) {
-            persistenceFailures++;
-            itemResult.persistenceError = {
-              message: persistError instanceof Error ? persistError.message : String(persistError),
-            };
-            // Log the raw error (including stack) internally, but do NOT attach the
-            // stack to the returned `persistenceError` — the summary can cross a
-            // trust boundary (e.g. UIs, API responses) and stacks leak internal paths.
-            mastra
-              .getLogger()
-              ?.error(
-                `Failed to persist experiment result for item ${item.id} in experiment ${experimentId}: ${itemResult.persistenceError.message}`,
-                { error: persistError },
-              );
+          if (hasRunLevelScorers) {
+            itemScorers = runLevelScorers;
+            itemStepScorers = runLevelStepScorers;
+          } else if (item.scorerIds !== undefined) {
+            const resolution = await resolveItemScorers(item.scorerIds);
+            itemScorers = resolution.scorers;
+            if (resolution.missingIds.length > 0) {
+              scorerConfigError = {
+                code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+                message: `Item scorer configuration references unregistered scorer IDs: ${resolution.missingIds.join(', ')}`,
+              };
+            }
+          } else {
+            itemScorers = datasetScorers;
           }
 
-          // Throttled progress update
-          const now = Date.now();
-          if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
-            lastProgressUpdate = now;
+          // Compose per-item signal (timeout + run-level abort)
+          let itemSignal: AbortSignal | undefined = executionSignal;
+          if (itemTimeout) {
+            const timeoutSignal = AbortSignal.timeout(itemTimeout);
+            itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
+          }
+
+          // Resolve item scorer configuration before executing the target. Invalid item
+          // references are deterministic and therefore skip both target execution and retries.
+          let retryCount = 0;
+          let execResult: ExecutionResult = scorerConfigError
+            ? { output: null, error: scorerConfigError, traceId: null }
+            : await execFn(item, itemSignal);
+
+          while (execResult.error && !scorerConfigError && retryCount < maxRetries) {
+            // Don't retry abort errors
+            if (execResult.error.message.toLowerCase().includes('abort')) break;
+
+            // Don't retry deterministic tool-mock failures — the matcher state cannot
+            // change between attempts, so retrying would always fail identically.
+            if (
+              execResult.error.code === TOOL_MOCK_MISMATCH ||
+              execResult.error.code === TOOL_MOCK_EXHAUSTED ||
+              execResult.error.code === TOOL_MOCK_NOT_DECLARED
+            ) {
+              break;
+            }
+
+            retryCount++;
+            const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+            const jitter = delay * 0.2 * Math.random();
+            await new Promise(r => setTimeout(r, delay + jitter));
+
+            // Re-check cancellation before retry
+            if (executionSignal?.aborted) {
+              throw new DOMException('Aborted', 'AbortError');
+            }
+
+            execResult = await execFn(item, itemSignal);
+          }
+
+          const itemCompletedAt = new Date();
+
+          // Track success/failure
+          if (execResult.error) {
+            failedCount++;
+          } else {
+            succeededCount++;
+          }
+
+          // Build item result. `persistenceError` starts null and is set below
+          // if `addExperimentResult` throws so callers can detect rows that
+          // never landed in storage.
+          const itemResult: ItemResult = {
+            itemId: item.id,
+            itemVersion: item.datasetVersion ?? 0,
+            input: item.input,
+            output: execResult.output,
+            groundTruth: item.groundTruth ?? null,
+            error: execResult.error,
+            startedAt: itemStartedAt,
+            completedAt: itemCompletedAt,
+            retryCount,
+            persistenceError: null,
+            ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
+          };
+
+          // Run scorers (inline, after target completes). A scorer-configuration
+          // failure skips scoring because the selected source could not be resolved fully.
+          let itemScores: Awaited<ReturnType<typeof runScorersForItem>> = [];
+          if (!scorerConfigError) {
+            const workflowData =
+              execResult.stepResults || execResult.stepExecutionPath
+                ? {
+                    stepResults: execResult.stepResults,
+                    stepExecutionPath: execResult.stepExecutionPath,
+                    spanId: execResult.spanId,
+                  }
+                : undefined;
+
+            const flatScores = await runScorersForItem(
+              itemScorers,
+              item,
+              execResult.output,
+              storage ?? null,
+              experimentId,
+              targetType ?? 'agent',
+              targetId ?? 'inline',
+              item.id,
+              execResult.scorerInput,
+              execResult.scorerOutput,
+              execResult.traceId ?? undefined,
+              workflowData,
+            );
+
+            const stepScores = await runStepScorersForItem(
+              itemStepScorers,
+              item,
+              workflowData,
+              storage ?? null,
+              experimentId,
+              targetType ?? 'agent',
+              targetId ?? 'inline',
+              item.id,
+              execResult.traceId ?? undefined,
+            );
+
+            itemScores = [...flatScores, ...stepScores];
+          }
+
+          // Persist result with scores (if storage available). A throw here does
+          // NOT abort the run — persistence is best-effort and the target run's
+          // outcome is already recorded in `itemResult`. Instead we surface the
+          // failure on the item (`persistenceError`) and bump the run-level
+          // `persistenceFailures` counter so callers can detect rows that never
+          // landed in `mastra_experiment_results`.
+          if (experimentsStore) {
             try {
-              await experimentsStore.updateExperiment({
-                id: experimentId,
-                succeededCount,
-                failedCount,
+              await experimentsStore.addExperimentResult({
+                experimentId,
+                itemId: item.id,
+                itemDatasetVersion: item.datasetVersion,
+                input: item.input,
+                output: execResult.output,
+                groundTruth: item.groundTruth ?? null,
+                error: execResult.error,
+                startedAt: itemStartedAt,
+                completedAt: itemCompletedAt,
+                retryCount,
+                traceId: execResult.traceId,
+                organizationId: datasetRecord?.organizationId ?? null,
+                projectId: datasetRecord?.projectId ?? null,
+                ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
               });
-            } catch {
-              // Non-fatal — progress updates are best-effort
+            } catch (persistError) {
+              persistenceFailures++;
+              itemResult.persistenceError = {
+                message: persistError instanceof Error ? persistError.message : String(persistError),
+              };
+              // Log the raw error (including stack) internally, but do NOT attach the
+              // stack to the returned `persistenceError` — the summary can cross a
+              // trust boundary (e.g. UIs, API responses) and stacks leak internal paths.
+              mastra
+                .getLogger()
+                ?.error(
+                  `Failed to persist experiment result for item ${item.id} in experiment ${experimentId}: ${itemResult.persistenceError.message}`,
+                  { error: persistError },
+                );
+            }
+
+            // Throttled progress update
+            const now = Date.now();
+            if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
+              lastProgressUpdate = now;
+              try {
+                await experimentsStore.updateExperiment({
+                  id: experimentId,
+                  succeededCount,
+                  failedCount,
+                });
+              } catch {
+                // Non-fatal — progress updates are best-effort
+              }
             }
           }
-        }
 
-        // Store at original index for deterministic ordering
-        results[idx] = {
-          ...itemResult,
-          scores: itemScores,
-        };
+          // Store at original index for deterministic ordering
+          results[idx] = {
+            ...itemResult,
+            scores: itemScores,
+          };
 
-        if (eventDispatcher) {
-          try {
+          if (eventDispatcher) {
             await eventDispatcher.emit(
               createItemCompletedEvent(
                 { experimentId, target: eventTarget },
@@ -623,9 +624,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                 execResult.traceId ?? null,
               ),
             );
-          } catch (error) {
-            if (!eventDispatcher.failure) throw error;
           }
+        } catch (error) {
+          if (eventDispatcher?.failure) return;
+          throw error;
         }
       },
       { concurrency: maxConcurrency },

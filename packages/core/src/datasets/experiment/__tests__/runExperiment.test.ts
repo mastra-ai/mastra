@@ -1383,6 +1383,75 @@ describe('runExperiment', () => {
       expect(eventTypes).not.toContain('experiment.run.finished');
     });
 
+    it('drains other active mapper errors after an observer failure', async () => {
+      let observerRejected = false;
+      let activeScorerFailed = false;
+      let notifyObserverRejected!: () => void;
+      let releaseSlowItem!: () => void;
+      let slowItemFinished = false;
+      const observerRejectionGate = new Promise<void>(resolve => {
+        notifyObserverRejected = resolve;
+      });
+      const slowItemGate = new Promise<void>(resolve => {
+        releaseSlowItem = resolve;
+      });
+      const scorer = createMockScorer('throwing-scorer', 'Throwing scorer');
+      Object.defineProperty(scorer, 'type', {
+        get() {
+          if (observerRejected) {
+            activeScorerFailed = true;
+            throw new Error('active scorer failed');
+          }
+          return undefined;
+        },
+      });
+      const task = vi.fn(async ({ input }) => {
+        if (input === 'active-error') {
+          await observerRejectionGate;
+          await new Promise(resolve => setTimeout(resolve, 0));
+        } else if (input === 'slow') {
+          await slowItemGate;
+          slowItemFinished = true;
+        }
+        return input;
+      });
+
+      const run = runExperiment(mastra, {
+        data: [
+          { id: 'fast-item', input: 'fast' },
+          { id: 'error-item', input: 'active-error' },
+          { id: 'slow-item', input: 'slow' },
+        ],
+        task,
+        scorers: [scorer],
+        maxConcurrency: 3,
+        onEvent: event => {
+          if (event.type === 'experiment.item.completed') {
+            observerRejected = true;
+            notifyObserverRejected();
+            throw new Error('observer unavailable');
+          }
+        },
+      });
+      const rejection = expect(run).rejects.toMatchObject({ id: 'EXPERIMENT_EVENT_OBSERVER_FAILED' });
+
+      await observerRejectionGate;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      let settled = false;
+      void run.catch(() => {
+        settled = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(settled).toBe(false);
+
+      releaseSlowItem();
+      await rejection;
+
+      expect(activeScorerFailed).toBe(true);
+      expect(slowItemFinished).toBe(true);
+      expect(task).toHaveBeenCalledTimes(3);
+    });
+
     it('preserves fail-fast behavior for non-observer mapper failures when an observer is present', async () => {
       const unserializableOutput = new Proxy(
         {},
