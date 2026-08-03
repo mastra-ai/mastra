@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { useMobileDrawer } from './main-sidebar-context';
+import { MainSidebarNavHeader } from './main-sidebar-nav-header';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { MainSidebarProvider } from './main-sidebar-provider';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
@@ -57,20 +58,21 @@ afterEach(() => cleanup());
 //     producing an arrow stranded in the middle of empty space.
 
 describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
-  it('does not re-render when only the mobile drawer state changes', () => {
+  it('does not re-render navigation rows when only the mobile drawer state changes', () => {
     const Link = vi.fn(({ children, ...props }: LinkComponentProps) => <a {...props}>{children}</a>);
     render(
       <MainSidebarProvider LinkComponent={Link}>
         <DrawerToggle />
+        <MainSidebarNavHeader href="/workspace">Workspace</MainSidebarNavHeader>
         <ul>
           <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />
         </ul>
       </MainSidebarProvider>,
     );
 
-    expect(Link).toHaveBeenCalledTimes(1);
+    expect(Link).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole('button', { name: 'Toggle drawer' }));
-    expect(Link).toHaveBeenCalledTimes(1);
+    expect(Link).toHaveBeenCalledTimes(2);
   });
 
   it('applies a pointer cursor to sidebar nav items', () => {

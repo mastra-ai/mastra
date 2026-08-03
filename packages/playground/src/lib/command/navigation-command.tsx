@@ -9,7 +9,7 @@ import {
   CommandPaletteResults,
   CommandPaletteScope,
 } from '@mastra/playground-ui/components/CommandPalette';
-import { useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useMaybeSidebarState } from '@mastra/playground-ui/components/MainSidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -71,7 +71,7 @@ type NavigationSection = {
 };
 
 type NavigationPaths = ReturnType<typeof useLinkComponent>['paths'];
-type SidebarContextValue = NonNullable<ReturnType<typeof useMaybeSidebar>>;
+type SidebarContextValue = NonNullable<ReturnType<typeof useMaybeSidebarState>>;
 type HandleSelect = (path: string) => void;
 type AgentEntry = [string, { name: string }];
 type WorkflowEntry = [string, { name: string }];
@@ -466,7 +466,7 @@ export const NavigationCommand = () => {
   const { open, setOpen } = useNavigationCommand();
   const { navigate, paths } = useLinkComponent();
   const { isMastraPlatform } = useMastraPlatform();
-  const sidebar = useMaybeSidebar();
+  const sidebar = useMaybeSidebarState();
   const [activeScope, setActiveScope] = React.useState<CommandScope>('all');
 
   const { data: agents = {} } = useAgents();

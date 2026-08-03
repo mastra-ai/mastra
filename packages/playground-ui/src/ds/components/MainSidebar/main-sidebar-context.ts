@@ -23,21 +23,20 @@ type MainSidebarContextValue = {
   LinkComponent?: LinkComponent;
 };
 
-// Split: drawer open-state lives in its own context so NavLink/NavLabel
+// Split: drawer open-state lives in its own context so navigation rows
 // do not re-render when the mobile drawer toggles.
 export type MobileDrawerContextValue = {
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
 };
 
-export const MainSidebarContext = React.createContext<Omit<
-  MainSidebarContextValue,
-  'openMobile' | 'setOpenMobile'
-> | null>(null);
+export type MainSidebarStateContextValue = Omit<MainSidebarContextValue, 'openMobile' | 'setOpenMobile'>;
+
+export const MainSidebarContext = React.createContext<MainSidebarStateContextValue | null>(null);
 export const MobileDrawerContext = React.createContext<MobileDrawerContextValue | null>(null);
 
 /** Reads sidebar state and actions without subscribing to mobile drawer state. */
-export function useMaybeSidebarState(): Omit<MainSidebarContextValue, 'openMobile' | 'setOpenMobile'> | null {
+export function useMaybeSidebarState(): MainSidebarStateContextValue | null {
   return React.useContext(MainSidebarContext);
 }
 
