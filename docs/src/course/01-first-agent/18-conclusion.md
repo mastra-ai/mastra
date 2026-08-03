@@ -13,7 +13,7 @@ This is just the beginning of what you can do with Mastra. Here are some ways yo
 - Create a workflow that combines multiple agents
 - Deploy your agent to a production environment
 
-For more information and advanced features, check out the [Mastra documentation](https://mastra.ai/docs).
+For more information and advanced features, check out the [Mastra documentation](https://mastra.ai/docs/getting-started/getting-started).
 
 ## Next Steps
 

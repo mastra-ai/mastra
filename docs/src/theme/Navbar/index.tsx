@@ -12,7 +12,7 @@ function NavbarContentDesktop() {
   return (
     <div className="@container mx-auto flex h-(--ifm-navbar-height) w-full items-center justify-between px-4">
       <div className="flex items-center gap-2">
-        <Link href="/docs" aria-label="mastra.ai, Back to docs homepage">
+        <Link href="/docs/getting-started/getting-started" aria-label="mastra.ai, Back to docs homepage">
           <Logo />
         </Link>
         <div className="hidden lg:block">

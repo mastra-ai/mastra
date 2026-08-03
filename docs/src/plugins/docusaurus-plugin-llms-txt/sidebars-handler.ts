@@ -52,7 +52,7 @@ export type SidebarsConfig = {
  */
 export function getBaseUrl(sectionId: string): string {
   const baseUrls: Record<string, string> = {
-    Docs: 'https://mastra.ai/docs',
+    Docs: 'https://mastra.ai/docs/getting-started/getting-started',
     Models: 'https://mastra.ai/models',
     Guides: 'https://mastra.ai/guides',
     Reference: 'https://mastra.ai/reference',

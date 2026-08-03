@@ -58,7 +58,7 @@ test.describe('Tab switcher navigation', () => {
 
     const getErrors = trackJsErrors(page)
 
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/getting-started/getting-started', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
     // The tab bar with aria-label="Documentation tabs"
@@ -96,7 +96,7 @@ test.describe('Mobile docs dropdown', () => {
 
     const getErrors = trackJsErrors(page)
 
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/getting-started/getting-started', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
     // Open hamburger menu
@@ -139,7 +139,7 @@ test.describe('Sidebar navigation', () => {
 
     const getErrors = trackJsErrors(page)
 
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/getting-started/getting-started', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
     // Verify sidebar is visible
@@ -169,7 +169,7 @@ test.describe('Sidebar navigation', () => {
 
     const getErrors = trackJsErrors(page)
 
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/getting-started/getting-started', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
     // Open hamburger menu
@@ -182,7 +182,9 @@ test.describe('Sidebar navigation', () => {
     await expect(mobileSidebar).toBeVisible()
 
     // Find a navigation link in the mobile sidebar (exclude category headers)
-    const mobileLink = mobileSidebar.locator('a.menu__link:not(.menu__link--sublist)').first()
+    const mobileLink = mobileSidebar
+      .locator('a.menu__link:not(.menu__link--active):not(.menu__link--sublist)[href]')
+      .first()
     const href = await mobileLink.getAttribute('href')
     expect(href).toBeTruthy()
 
@@ -345,7 +347,7 @@ test.describe('AI chat sidebar', () => {
 
     const getErrors = trackJsErrors(page)
 
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/getting-started/getting-started', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
     // Desktop toggle is the navbar "Ask AI" button (the floating action

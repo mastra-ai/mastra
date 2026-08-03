@@ -51,6 +51,66 @@
       "permanent": true
     },
     {
+      "source": "/docs/v1",
+      "destination": "/docs/getting-started/getting-started",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/start",
+      "destination": "/docs/getting-started/getting-started",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/index",
+      "destination": "/docs/getting-started/getting-started",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/what-is-mastra",
+      "destination": "/docs/getting-started/getting-started",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/templates",
+      "destination": "/docs/getting-started/getting-started",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/mcp-docs-server",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/build-with-ai/skills",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/build-with-ai/mcp-docs-server",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/file-based-agents",
+      "destination": "/docs/getting-started/develop",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/agents/file-based-agents",
+      "destination": "/docs/getting-started/develop",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/:path*",
       "destination": "/docs/:path*",
       "permanent": true
