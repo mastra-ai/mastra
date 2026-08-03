@@ -9,6 +9,7 @@ import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { createStep, createWorkflow } from '../../../workflows';
+import type { ExperimentEvent } from '../index';
 import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -1218,6 +1219,172 @@ describe('runExperiment', () => {
         pagination: { page: 0, perPage: 10 },
       });
       expect(result.experiments.length).toBe(0);
+    });
+  });
+
+  describe('semantic event observer', () => {
+    it('awaits run start before executing items and emits ordered JSON-safe events with stable item identity', async () => {
+      const events: ExperimentEvent[] = [];
+      let releaseStart!: () => void;
+      const startGate = new Promise<void>(resolve => {
+        releaseStart = resolve;
+      });
+      const mockAgent = createMockAgent('Response');
+      const mockScorer = createMockScorer('event-score', 'Event Score');
+      const localMastra = {
+        ...mastra,
+        getAgent: vi.fn().mockReturnValue(mockAgent),
+        getAgentById: vi.fn().mockReturnValue(mockAgent),
+      } as unknown as Mastra;
+
+      const run = runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [mockScorer],
+        onEvent: async event => {
+          events.push(event);
+          if (event.type === 'experiment.run.started') await startGate;
+        },
+      });
+
+      await vi.waitFor(() => expect(events).toHaveLength(1));
+      expect(mockAgent.generate).not.toHaveBeenCalled();
+      releaseStart();
+
+      const summary = await run;
+      expect(events.map(event => event.type)).toEqual([
+        'experiment.run.started',
+        'experiment.item.completed',
+        'experiment.item.completed',
+        'experiment.run.finished',
+      ]);
+      expect(events.map(event => event.sequence)).toEqual([1, 2, 3, 4]);
+      expect(() => JSON.stringify(events)).not.toThrow();
+
+      const itemEvents = events.filter(event => event.type === 'experiment.item.completed');
+      expect(itemEvents.map(event => event.itemIndex).sort()).toEqual([0, 1]);
+      for (const event of itemEvents) {
+        expect(event.itemId).toBe(summary.results[event.itemIndex]?.itemId);
+        expect(event.scores).toEqual([expect.objectContaining({ scorerId: 'event-score', score: 1 })]);
+      }
+    });
+
+    it('serializes observer delivery while item execution remains concurrent', async () => {
+      let activeObservers = 0;
+      let maxActiveObservers = 0;
+      const generate = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return { text: 'Response' };
+      });
+      const localMastra = {
+        ...mastra,
+        getAgentById: vi.fn().mockReturnValue({
+          ...createMockAgent('Response'),
+          generate,
+        }),
+      } as unknown as Mastra;
+
+      await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 2,
+        onEvent: async () => {
+          activeObservers++;
+          maxActiveObservers = Math.max(maxActiveObservers, activeObservers);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          activeObservers--;
+        },
+      });
+
+      expect(maxActiveObservers).toBe(1);
+      expect(generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws a typed fatal error and emits no terminal event when the observer rejects', async () => {
+      const eventTypes: string[] = [];
+
+      await expect(
+        runExperiment(mastra, {
+          datasetId,
+          targetType: 'agent',
+          targetId: 'test-agent',
+          maxConcurrency: 1,
+          onEvent: event => {
+            eventTypes.push(event.type);
+            if (event.type === 'experiment.item.completed') throw new Error('observer unavailable');
+          },
+        }),
+      ).rejects.toMatchObject({
+        id: 'EXPERIMENT_EVENT_OBSERVER_FAILED',
+        details: {
+          eventType: 'experiment.item.completed',
+          eventSequence: 2,
+        },
+      });
+
+      expect(eventTypes).toEqual(['experiment.run.started', 'experiment.item.completed']);
+    });
+
+    it('emits item failures and a completed-with-errors terminal outcome', async () => {
+      let callCount = 0;
+      const flakyAgent = createMockAgent('Response');
+      flakyAgent.generate.mockImplementation(async () => {
+        if (callCount++ === 0) throw new Error('first item failed');
+        return { text: 'Response' };
+      });
+      const localMastra = {
+        ...mastra,
+        getAgentById: vi.fn().mockReturnValue(flakyAgent),
+      } as unknown as Mastra;
+      const events: ExperimentEvent[] = [];
+
+      const summary = await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 1,
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      const itemEvents = events.filter(event => event.type === 'experiment.item.completed');
+      expect(itemEvents.map(event => event.status)).toEqual(['failed', 'succeeded']);
+      expect(itemEvents[0]?.error).toMatchObject({ message: 'first item failed' });
+      expect(events.at(-1)).toMatchObject({
+        type: 'experiment.run.finished',
+        status: 'completed',
+        completedWithErrors: true,
+      });
+      expect(summary.completedWithErrors).toBe(true);
+    });
+
+    it('emits cancellation as a terminal failed outcome before final persistence', async () => {
+      const controller = new AbortController();
+      const events: ExperimentEvent[] = [];
+      let storedStatusAtTerminal: string | undefined;
+
+      const summary = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        signal: controller.signal,
+        onEvent: async event => {
+          events.push(event);
+          if (event.type === 'experiment.run.started') controller.abort();
+          if (event.type === 'experiment.run.finished') {
+            storedStatusAtTerminal = (await experimentsStorage.getExperimentById({ id: event.experimentId }))?.status;
+          }
+        },
+      });
+
+      expect(summary.status).toBe('failed');
+      expect(events.map(event => event.type)).toEqual(['experiment.run.started', 'experiment.run.finished']);
+      expect(events.at(-1)).toMatchObject({ outcome: 'cancelled', error: { name: 'AbortError' } });
+      expect(storedStatusAtTerminal).toBe('running');
+      expect((await experimentsStorage.getExperimentById({ id: summary.experimentId }))?.status).toBe('failed');
     });
   });
 

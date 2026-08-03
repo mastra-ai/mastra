@@ -2,6 +2,7 @@ import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
+import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import {
@@ -46,6 +47,14 @@ export type {
   ScorerResult,
   StartExperimentConfig,
 } from './types';
+export type {
+  ExperimentEvent,
+  ExperimentEventObserver,
+  ExperimentItemCompletedEvent,
+  ExperimentJsonValue,
+  ExperimentRunFinishedEvent,
+  ExperimentRunStartedEvent,
+} from './events';
 export { executeTarget, type Target, type ExecutionResult } from './executor';
 export { EXPERIMENT_ITEM_SCORER_NOT_FOUND, resolveScorers, runScorersForItem } from './scorer';
 export {
@@ -96,6 +105,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     version,
     maxConcurrency = 5,
     signal,
+    onEvent,
     itemTimeout,
     maxRetries = 0,
     experimentId: providedExperimentId,
@@ -110,6 +120,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const startedAt = new Date();
   // Use provided experimentId (async trigger) or generate new one
   const experimentId = providedExperimentId ?? crypto.randomUUID();
+  const eventDispatcher = onEvent ? new ExperimentEventDispatcher(experimentId, onEvent) : undefined;
+  const executionSignal = eventDispatcher
+    ? signal
+      ? AbortSignal.any([signal, eventDispatcher.abortController.signal])
+      : eventDispatcher.abortController.signal
+    : signal;
+  const eventTarget = {
+    type: targetType ?? ('task' as const),
+    id: targetId ?? 'inline',
+  };
 
   // 1. Get storage and resolve components
   const storage = mastra.getStorage();
@@ -344,6 +364,36 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     });
   }
 
+  if (eventDispatcher) {
+    try {
+      await eventDispatcher.emit({
+        type: 'experiment.run.started',
+        experimentId,
+        target: eventTarget,
+        status: 'running',
+        datasetId: datasetRecord?.id ?? null,
+        datasetVersion: datasetRecord?.version ?? null,
+        totalItems: items.length,
+      });
+    } catch (observerError) {
+      if (experimentsStore) {
+        try {
+          await experimentsStore.updateExperiment({
+            id: experimentId,
+            status: 'failed',
+            succeededCount: 0,
+            failedCount: 0,
+            skippedCount: items.length,
+            completedAt: new Date(),
+          });
+        } catch {
+          // Preserve the observer failure as the fatal error.
+        }
+      }
+      throw observerError;
+    }
+  }
+
   // 6. Execute items with p-map
   let succeededCount = 0;
   let failedCount = 0;
@@ -365,7 +415,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       items.map((item, idx) => ({ item, idx })),
       async ({ item, idx }) => {
         // Check for cancellation
-        if (signal?.aborted) {
+        if (executionSignal?.aborted) {
           throw new DOMException('Aborted', 'AbortError');
         }
 
@@ -391,10 +441,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         }
 
         // Compose per-item signal (timeout + run-level abort)
-        let itemSignal: AbortSignal | undefined = signal;
+        let itemSignal: AbortSignal | undefined = executionSignal;
         if (itemTimeout) {
           const timeoutSignal = AbortSignal.timeout(itemTimeout);
-          itemSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+          itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
         }
 
         // Resolve item scorer configuration before executing the target. Invalid item
@@ -424,7 +474,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           await new Promise(r => setTimeout(r, delay + jitter));
 
           // Re-check cancellation before retry
-          if (signal?.aborted) {
+          if (executionSignal?.aborted) {
             throw new DOMException('Aborted', 'AbortError');
           }
 
@@ -561,26 +611,44 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           ...itemResult,
           scores: itemScores,
         };
+
+        if (eventDispatcher) {
+          await eventDispatcher.emit(
+            createItemCompletedEvent(
+              { experimentId, target: eventTarget },
+              idx,
+              results[idx]!,
+              execResult.traceId ?? null,
+            ),
+          );
+        }
       },
       { concurrency: maxConcurrency },
     );
-  } catch {
-    // Handle abort or other fatal errors — return partial summary instead of throwing
+  } catch (error) {
     const completedAt = new Date();
     const skippedCount = items.length - succeededCount - failedCount;
 
-    if (experimentsStore) {
-      await experimentsStore.updateExperiment({
-        id: experimentId,
-        status: 'failed',
-        succeededCount,
-        failedCount,
-        skippedCount,
-        completedAt,
-      });
+    const observerError = error as MastraError;
+    if (error instanceof MastraError && observerError.id === 'EXPERIMENT_EVENT_OBSERVER_FAILED') {
+      if (experimentsStore) {
+        try {
+          await experimentsStore.updateExperiment({
+            id: experimentId,
+            status: 'failed',
+            succeededCount,
+            failedCount,
+            skippedCount,
+            completedAt,
+          });
+        } catch {
+          // Preserve the observer failure as the fatal error.
+        }
+      }
+      throw error;
     }
 
-    return {
+    const summary: ExperimentSummary = {
       experimentId,
       status: 'failed' as const,
       totalItems: items.length,
@@ -593,26 +661,64 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       completedAt,
       results: results.filter(Boolean),
     };
+
+    if (eventDispatcher) {
+      try {
+        await eventDispatcher.emit({
+          type: 'experiment.run.finished',
+          experimentId,
+          target: eventTarget,
+          status: 'failed',
+          outcome: executionSignal?.aborted ? 'cancelled' : 'failed',
+          error: toExperimentJsonValue(error),
+          totalItems: summary.totalItems,
+          succeededCount,
+          failedCount,
+          skippedCount,
+          persistenceFailures,
+          completedWithErrors: false,
+          startedAt: startedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+        });
+      } catch (observerError) {
+        if (experimentsStore) {
+          try {
+            await experimentsStore.updateExperiment({
+              id: experimentId,
+              status: 'failed',
+              succeededCount,
+              failedCount,
+              skippedCount,
+              completedAt,
+            });
+          } catch {
+            // Preserve the observer failure as the fatal error.
+          }
+        }
+        throw observerError;
+      }
+    }
+
+    if (experimentsStore) {
+      await experimentsStore.updateExperiment({
+        id: experimentId,
+        status: 'failed',
+        succeededCount,
+        failedCount,
+        skippedCount,
+        completedAt,
+      });
+    }
+
+    return summary;
   }
 
   // 7. Finalize experiment record
   const completedAt = new Date();
   const status = failedCount === items.length ? 'failed' : 'completed';
   const completedWithErrors = status === 'completed' && failedCount > 0;
-
   const skippedCount = items.length - succeededCount - failedCount;
-  if (experimentsStore) {
-    await experimentsStore.updateExperiment({
-      id: experimentId,
-      status,
-      succeededCount,
-      failedCount,
-      skippedCount,
-      completedAt,
-    });
-  }
-
-  return {
+  const summary: ExperimentSummary = {
     experimentId,
     status,
     totalItems: items.length,
@@ -625,6 +731,56 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     completedAt,
     results,
   };
+
+  if (eventDispatcher) {
+    try {
+      await eventDispatcher.emit({
+        type: 'experiment.run.finished',
+        experimentId,
+        target: eventTarget,
+        status,
+        outcome: status,
+        error: null,
+        totalItems: items.length,
+        succeededCount,
+        failedCount,
+        skippedCount,
+        persistenceFailures,
+        completedWithErrors,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+      });
+    } catch (observerError) {
+      if (experimentsStore) {
+        try {
+          await experimentsStore.updateExperiment({
+            id: experimentId,
+            status: 'failed',
+            succeededCount,
+            failedCount,
+            skippedCount,
+            completedAt,
+          });
+        } catch {
+          // Preserve the observer failure as the fatal error.
+        }
+      }
+      throw observerError;
+    }
+  }
+
+  if (experimentsStore) {
+    await experimentsStore.updateExperiment({
+      id: experimentId,
+      status,
+      succeededCount,
+      failedCount,
+      skippedCount,
+      completedAt,
+    });
+  }
+
+  return summary;
 }
 
 /**
