@@ -61,6 +61,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           accountName: input.accountName ?? null,
           accountType: input.accountType ?? null,
           providerMetadata: input.providerMetadata ?? {},
+          // Re-registration clears the broken flag.
+          brokenAt: null,
         });
         return existing;
       }
@@ -74,6 +76,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         accountType: input.accountType ?? null,
         providerMetadata: input.providerMetadata ?? {},
         createdAt: new Date(),
+        brokenAt: null,
       };
       this.installationsRows.push(created);
       return created;
@@ -83,6 +86,26 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       if (index < 0) return false;
       this.installationsRows.splice(index, 1);
       return true;
+    },
+    markBroken: async ({
+      orgId,
+      id,
+      brokenAt,
+    }: {
+      orgId: string;
+      id: string;
+      brokenAt: number;
+    }): Promise<SourceControlInstallation | null> => {
+      const row = this.installationsRows.find(candidate => candidate.orgId === orgId && candidate.id === id);
+      if (!row) return null;
+      if (row.brokenAt === null) row.brokenAt = brokenAt;
+      return row;
+    },
+    clearBroken: async ({ orgId, id }: { orgId: string; id: string }): Promise<SourceControlInstallation | null> => {
+      const row = this.installationsRows.find(candidate => candidate.orgId === orgId && candidate.id === id);
+      if (!row) return null;
+      row.brokenAt = null;
+      return row;
     },
   };
 

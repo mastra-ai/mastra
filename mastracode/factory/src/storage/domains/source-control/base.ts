@@ -24,6 +24,11 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       account_type: { type: 'text', nullable: true },
       provider_metadata: { type: 'json' },
       created_at: { type: 'timestamp' },
+      // Unix ms when the installation was first observed dead (Platform 404/409
+      // on token mint, or missing from Platform's live list). `null` while
+      // healthy; a persistent installation-broken signal that survives
+      // process restarts and is cleared by re-registration (`upsert`).
+      broken_at: { type: 'bigint', nullable: true },
     },
     uniqueIndexes: [
       {
@@ -205,6 +210,12 @@ export interface SourceControlInstallation {
   accountType: string | null;
   providerMetadata: SourceControlProviderMetadata;
   createdAt: Date;
+  /**
+   * Unix ms when the installation was first observed dead. `null` while
+   * healthy. Set by `markBroken` (mint 404/409, or sync reconciliation);
+   * cleared by `clearBroken` and by `upsert` (re-registration).
+   */
+  brokenAt: number | null;
 }
 
 export interface UpsertSourceControlInstallationInput {
@@ -381,6 +392,21 @@ export interface SourceControlStorageHandle {
     findByExternalId(args: { orgId: string; externalId: string }): Promise<SourceControlInstallation | null>;
     upsert(args: UpsertSourceControlInstallationInput): Promise<SourceControlInstallation>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
+    /**
+     * Set `brokenAt` on this installation, but only if it is currently `null`
+     * (a broken installation retains its original `brokenAt`). Called from the
+     * two mint call sites on Platform 404/409, and from the sync reconciler
+     * when an installation drops out of Platform's live list. Idempotent under
+     * concurrent callers. Returns the resulting installation, or `null` if it
+     * doesn't exist.
+     */
+    markBroken(args: { orgId: string; id: string; brokenAt: number }): Promise<SourceControlInstallation | null>;
+    /**
+     * Clear `brokenAt` back to `null`. Called from sync reconciliation when
+     * an installation reappears in Platform's live list; also called
+     * implicitly by `upsert` on re-registration.
+     */
+    clearBroken(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
   };
   readonly repositories: {
     list(args: { orgId: string; installationId: string }): Promise<SourceControlRepository[]>;
@@ -485,6 +511,7 @@ interface InstallationDbRow extends Record<string, unknown> {
   account_type: string | null;
   provider_metadata: SourceControlProviderMetadata;
   created_at: Date;
+  broken_at: number | null;
 }
 
 interface RepositoryDbRow extends Record<string, unknown> {
@@ -576,6 +603,7 @@ function toInstallation(row: InstallationDbRow): SourceControlInstallation {
     accountType: row.account_type,
     providerMetadata: row.provider_metadata,
     createdAt: row.created_at,
+    brokenAt: row.broken_at,
   };
 }
 
@@ -810,6 +838,9 @@ export class SourceControlStorage extends FactoryStorageDomain {
               account_type: input.accountType ?? null,
               provider_metadata: input.providerMetadata ?? {},
               created_at: new Date(),
+              // Re-registration clears the broken flag — a freshly (re)connected
+              // installation is by definition not broken.
+              broken_at: null,
             },
           );
           return toInstallation(row);
@@ -819,6 +850,26 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (!installation) return false;
           await db().deleteMany(INSTALLATIONS, { id, integration_id: integrationId, org_id: orgId });
           return true;
+        },
+        markBroken: async ({ orgId, id, brokenAt }) => {
+          // Atomic "set only if null" — a broken installation keeps its
+          // earliest brokenAt across concurrent markers. Returning null from
+          // the callback aborts the write; updateAtomic still returns the
+          // unmodified row so we can hand back the current state either way.
+          const row = await db().updateAtomic<InstallationDbRow>(
+            INSTALLATIONS,
+            { id, integration_id: integrationId, org_id: orgId },
+            current => (current.broken_at === null ? { broken_at: brokenAt } : null),
+          );
+          return row ? toInstallation(row) : null;
+        },
+        clearBroken: async ({ orgId, id }) => {
+          const row = await db().updateAtomic<InstallationDbRow>(
+            INSTALLATIONS,
+            { id, integration_id: integrationId, org_id: orgId },
+            () => ({ broken_at: null }),
+          );
+          return row ? toInstallation(row) : null;
         },
       },
       repositories: {

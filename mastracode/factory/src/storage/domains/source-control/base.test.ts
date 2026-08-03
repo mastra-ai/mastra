@@ -404,6 +404,100 @@ describe('SourceControlStorage', () => {
     ).rejects.toThrow(/does not belong to the connection installation/);
   });
 
+  describe('installation broken state', () => {
+    it('starts null and is returned by list/get/findByExternalId', async () => {
+      const installation = await createInstallation(github, { externalId: 'install-broken-1' });
+      expect(installation.brokenAt).toBeNull();
+
+      const list = await github.installations.list({ orgId: 'org-1' });
+      expect(list.find(row => row.id === installation.id)?.brokenAt).toBeNull();
+
+      const got = await github.installations.get({ orgId: 'org-1', id: installation.id });
+      expect(got?.brokenAt).toBeNull();
+
+      const found = await github.installations.findByExternalId({ orgId: 'org-1', externalId: 'install-broken-1' });
+      expect(found?.brokenAt).toBeNull();
+    });
+
+    it('markBroken sets brokenAt and is returned by subsequent reads', async () => {
+      const installation = await createInstallation(github, { externalId: 'install-broken-2' });
+      const now = 1_700_000_000_000;
+      const marked = await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt: now });
+      expect(marked?.brokenAt).toBe(now);
+
+      const reread = await github.installations.get({ orgId: 'org-1', id: installation.id });
+      expect(reread?.brokenAt).toBe(now);
+    });
+
+    it('markBroken is idempotent — a second call keeps the earliest brokenAt', async () => {
+      const installation = await createInstallation(github, { externalId: 'install-broken-3' });
+      const earliest = 1_700_000_000_000;
+      const later = earliest + 5_000;
+      await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt: earliest });
+      const remarked = await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt: later });
+      expect(remarked?.brokenAt).toBe(earliest);
+
+      const reread = await github.installations.get({ orgId: 'org-1', id: installation.id });
+      expect(reread?.brokenAt).toBe(earliest);
+    });
+
+    it('clearBroken sets brokenAt back to null', async () => {
+      const installation = await createInstallation(github, { externalId: 'install-broken-4' });
+      await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt: 1_700_000_000_000 });
+      const cleared = await github.installations.clearBroken({ orgId: 'org-1', id: installation.id });
+      expect(cleared?.brokenAt).toBeNull();
+
+      const reread = await github.installations.get({ orgId: 'org-1', id: installation.id });
+      expect(reread?.brokenAt).toBeNull();
+    });
+
+    it('upsert clears brokenAt on re-registration', async () => {
+      const installation = await createInstallation(github, { externalId: 'install-broken-5' });
+      await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt: 1_700_000_000_000 });
+
+      // Re-registering the same externalId (typical after the user reconnects
+      // the GitHub App on the same account) clears the broken flag.
+      const reupserted = await github.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: 'install-broken-5',
+        accountName: 'mastra-ai',
+        accountType: 'organization',
+      });
+      expect(reupserted.id).toBe(installation.id);
+      expect(reupserted.brokenAt).toBeNull();
+
+      const reread = await github.installations.get({ orgId: 'org-1', id: installation.id });
+      expect(reread?.brokenAt).toBeNull();
+    });
+
+    it('markBroken and clearBroken return null when the installation does not exist', async () => {
+      const missing = '00000000-0000-0000-0000-000000000000';
+      expect(await github.installations.markBroken({ orgId: 'org-1', id: missing, brokenAt: 1 })).toBeNull();
+      expect(await github.installations.clearBroken({ orgId: 'org-1', id: missing })).toBeNull();
+    });
+
+    it('scopes broken state per integration and per org', async () => {
+      const githubInstallation = await createInstallation(github, { externalId: 'install-broken-6' });
+      const gitlabInstallation = await createInstallation(gitlab, { externalId: 'install-broken-6' });
+      await github.installations.markBroken({
+        orgId: 'org-1',
+        id: githubInstallation.id,
+        brokenAt: 1_700_000_000_000,
+      });
+      expect((await github.installations.get({ orgId: 'org-1', id: githubInstallation.id }))?.brokenAt).toBe(
+        1_700_000_000_000,
+      );
+      expect((await gitlab.installations.get({ orgId: 'org-1', id: gitlabInstallation.id }))?.brokenAt).toBeNull();
+
+      // markBroken on the gitlab handle must not touch the github row.
+      await gitlab.installations.markBroken({ orgId: 'org-1', id: gitlabInstallation.id, brokenAt: 2_000_000_000_000 });
+      expect((await github.installations.get({ orgId: 'org-1', id: githubInstallation.id }))?.brokenAt).toBe(
+        1_700_000_000_000,
+      );
+    });
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
