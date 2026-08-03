@@ -1328,15 +1328,14 @@ describe('runExperiment', () => {
     });
 
     it('drains active item work before persisting observer failure counters', async () => {
-      let callCount = 0;
       let releaseSlowItem!: () => void;
       let slowItemFinished = false;
       const slowItemGate = new Promise<void>(resolve => {
         releaseSlowItem = resolve;
       });
       const eventTypes: string[] = [];
-      const task = vi.fn().mockImplementation(async () => {
-        if (callCount++ === 0) return 'fast response';
+      const task = vi.fn(async ({ input }) => {
+        if (input === 'fast') return 'fast response';
         await slowItemGate;
         slowItemFinished = true;
         return 'slow response';

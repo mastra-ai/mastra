@@ -136,6 +136,24 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const datasetsStore = await storage?.getStore('datasets');
   const experimentsStore = await storage?.getStore('experiments');
 
+  const markFailedForObserverError = async (counts: {
+    succeededCount: number;
+    failedCount: number;
+    skippedCount: number;
+    completedAt: Date;
+  }) => {
+    if (!experimentsStore) return;
+    try {
+      await experimentsStore.updateExperiment({
+        id: experimentId,
+        status: 'failed',
+        ...counts,
+      });
+    } catch {
+      // Preserve the observer failure as the fatal error.
+    }
+  };
+
   // Helper: if the experiment record was pre-created (async path) and we fail
   // during setup (Phase A/B), mark the experiment as failed so it doesn't stay stuck in 'pending'.
   const markFailedOnSetupError = async (err: unknown) => {
@@ -376,20 +394,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         totalItems: items.length,
       });
     } catch (observerError) {
-      if (experimentsStore) {
-        try {
-          await experimentsStore.updateExperiment({
-            id: experimentId,
-            status: 'failed',
-            succeededCount: 0,
-            failedCount: 0,
-            skippedCount: items.length,
-            completedAt: new Date(),
-          });
-        } catch {
-          // Preserve the observer failure as the fatal error.
-        }
-      }
+      await markFailedForObserverError({
+        succeededCount: 0,
+        failedCount: 0,
+        skippedCount: items.length,
+        completedAt: new Date(),
+      });
       throw observerError;
     }
   }
@@ -640,20 +650,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     const observerError = eventDispatcher?.failure;
 
     if (observerError) {
-      if (experimentsStore) {
-        try {
-          await experimentsStore.updateExperiment({
-            id: experimentId,
-            status: 'failed',
-            succeededCount,
-            failedCount,
-            skippedCount,
-            completedAt,
-          });
-        } catch {
-          // Preserve the observer failure as the fatal error.
-        }
-      }
+      await markFailedForObserverError({ succeededCount, failedCount, skippedCount, completedAt });
       throw observerError;
     }
 
@@ -691,20 +688,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           completedAt: completedAt.toISOString(),
         });
       } catch (observerError) {
-        if (experimentsStore) {
-          try {
-            await experimentsStore.updateExperiment({
-              id: experimentId,
-              status: 'failed',
-              succeededCount,
-              failedCount,
-              skippedCount,
-              completedAt,
-            });
-          } catch {
-            // Preserve the observer failure as the fatal error.
-          }
-        }
+        await markFailedForObserverError({ succeededCount, failedCount, skippedCount, completedAt });
         throw observerError;
       }
     }
@@ -761,20 +745,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         completedAt: completedAt.toISOString(),
       });
     } catch (observerError) {
-      if (experimentsStore) {
-        try {
-          await experimentsStore.updateExperiment({
-            id: experimentId,
-            status: 'failed',
-            succeededCount,
-            failedCount,
-            skippedCount,
-            completedAt,
-          });
-        } catch {
-          // Preserve the observer failure as the fatal error.
-        }
-      }
+      await markFailedForObserverError({ succeededCount, failedCount, skippedCount, completedAt });
       throw observerError;
     }
   }

@@ -104,6 +104,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
    * Awaited observer for versioned, JSON-safe semantic lifecycle events.
    * Delivery is serialized and applies run-wide backpressure. A rejected
    * observer aborts the run and rejects `runExperiment` with a typed error.
+   * The terminal event is delivered before terminal status is persisted, so
+   * consumers must not treat it as a read-after-write signal for storage.
    */
   onEvent?: ExperimentEventObserver;
   /** Per-item execution timeout in milliseconds */
