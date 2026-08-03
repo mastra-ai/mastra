@@ -4,14 +4,21 @@ import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { useMobileDrawer } from './main-sidebar-context';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { MainSidebarProvider } from './main-sidebar-provider';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
+import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const getTooltipPopup = () => {
   const popup = document.querySelector<HTMLElement>('.bg-surface3');
   assert(popup, 'Expected tooltip popup');
   return popup;
+};
+
+const DrawerToggle = () => {
+  const { openMobile, setOpenMobile } = useMobileDrawer();
+  return <button onClick={() => setOpenMobile(!openMobile)}>Toggle drawer</button>;
 };
 
 // MainSidebarProvider reads matchMedia at mount to decide mobile vs desktop.
@@ -50,6 +57,22 @@ afterEach(() => cleanup());
 //     producing an arrow stranded in the middle of empty space.
 
 describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
+  it('does not re-render when only the mobile drawer state changes', () => {
+    const Link = vi.fn(({ children, ...props }: LinkComponentProps) => <a {...props}>{children}</a>);
+    render(
+      <MainSidebarProvider LinkComponent={Link}>
+        <DrawerToggle />
+        <ul>
+          <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />
+        </ul>
+      </MainSidebarProvider>,
+    );
+
+    expect(Link).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle drawer' }));
+    expect(Link).toHaveBeenCalledTimes(1);
+  });
+
   it('applies a pointer cursor to sidebar nav items', () => {
     render(
       <ul>
