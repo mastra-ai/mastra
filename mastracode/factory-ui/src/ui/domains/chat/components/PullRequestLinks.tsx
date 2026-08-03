@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { GitMerge, GitPullRequest, GitPullRequestClosed } from 'lucide-react';
 
+import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { usePullRequestSubscriptions } from '../hooks/usePullRequestSubscriptions';
-import type { PullRequestSubscription } from '../services/pullRequestSubscriptions';
 
 function PullRequestIcon({ status }: { status: PullRequestSubscription['status'] }) {
   const className = statusIconColor(status);

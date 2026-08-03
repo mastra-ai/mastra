@@ -64,6 +64,28 @@ describe('extractSuspendedToolsFromMessages', () => {
     expect((result[0] as { toolName: string }).toolName).toBe('fooTool');
   });
 
+  it('surfaces delegatedRunId as runId so auto-resume targets the inner suspended run', () => {
+    // Persisted metadata stores the OUTER resumable runId (for refresh/restart
+    // resume) with the inner suspended run as `delegatedRunId`. The auto-resume
+    // directive tells the model to echo `runId` back as `suspendedToolRunId`,
+    // which must be the INNER run — so extraction swaps it in.
+    const pending = {
+      'tc-1': { toolCallId: 'tc-1', toolName: 'agent-subAgent', runId: 'outer-run', delegatedRunId: 'inner-run' },
+    };
+    const messages = [makeAssistantMessage({ metadata: { pendingToolApprovals: pending } })];
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([
+      { toolCallId: 'tc-1', toolName: 'agent-subAgent', runId: 'inner-run' },
+    ]);
+  });
+
+  it('keeps runId untouched for non-delegated entries', () => {
+    const pending = { 'tc-2': { toolCallId: 'tc-2', toolName: 'directTool', runId: 'run-1' } };
+    const messages = [makeAssistantMessage({ metadata: { pendingToolApprovals: pending } })];
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([
+      { toolCallId: 'tc-2', toolName: 'directTool', runId: 'run-1' },
+    ]);
+  });
+
   it('walks assistant messages newest-to-oldest', () => {
     const newerSuspended = { newer: { toolName: 'newer' } };
     const messages = [

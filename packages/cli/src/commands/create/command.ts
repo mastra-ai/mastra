@@ -20,6 +20,7 @@ export interface CreateCommandOptions {
   git: boolean;
   template?: string | boolean;
   timeout: number;
+  skipInstall?: boolean;
 }
 
 export interface NormalizedCreateOptions {
@@ -31,6 +32,7 @@ export interface NormalizedCreateOptions {
   git: boolean;
   template?: string | boolean;
   timeout: number;
+  skipInstall: boolean;
 }
 
 export function parseCreateLLMProvider(value: string): CreateLLMProvider {
@@ -73,7 +75,8 @@ export function configureCreateCommand(command: Command) {
       '-t, --template [template]',
       'Create from a template slug or public GitHub URL, or select interactively when omitted',
     )
-    .option('--timeout <milliseconds>', 'Package installation timeout in milliseconds', parseCreateTimeout, 60_000);
+    .option('--timeout <milliseconds>', 'Package installation timeout in milliseconds', parseCreateTimeout, 60_000)
+    .option('--skip-install', 'Skip installing dependencies');
 }
 
 export function normalizeCreateCommandOptions(
@@ -89,6 +92,7 @@ export function normalizeCreateCommandOptions(
     git: options.git,
     template: options.template,
     timeout: options.timeout,
+    skipInstall: options.skipInstall ?? false,
   };
 }
 
