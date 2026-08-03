@@ -200,6 +200,7 @@ export async function runScorersForItem(
         targetCorrelationContext,
         scorer.type === 'trajectory' ? trajectoryOutput : undefined,
         workflowData,
+        persistScores,
       );
 
       // Persist only scores from successful scorer runs.
@@ -313,6 +314,7 @@ async function runScorerSafe(
   targetCorrelationContext?: CorrelationContext,
   trajectoryOutput?: Trajectory,
   workflowData?: WorkflowScorerData,
+  persistScores: boolean = true,
 ): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
     const effectiveOutput = trajectoryOutput ?? scorerOutput ?? output;
@@ -341,6 +343,7 @@ async function runScorerSafe(
       ...(workflowData?.spanId ? { targetSpanId: workflowData.spanId } : {}),
       ...(targetCorrelationContext ? { targetCorrelationContext } : {}),
       ...(targetMetadata ? { targetMetadata } : {}),
+      _internal: { emitObservabilityScore: persistScores },
     });
 
     // Extract fields with typeof guards — scorer run result types use complex
@@ -496,6 +499,7 @@ export async function runStepScorersForItem(
             targetEntityType: EntityType.WORKFLOW_STEP,
             targetTraceId: traceId,
             ...(targetCorrelationContext ? { targetCorrelationContext } : {}),
+            _internal: { emitObservabilityScore: persistScores },
           });
 
           if (typeof scoreResult !== 'object' || scoreResult === null) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
-import { ScorerRunError } from '../../../evals/base';
+import { createScorer, ScorerRunError } from '../../../evals/base';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
@@ -8,6 +8,7 @@ import type { MastraCompositeStore, StorageDomains } from '../../../storage/base
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
+import { ObservabilityInMemory } from '../../../storage/domains/observability/inmemory';
 import { ScoresInMemory } from '../../../storage/domains/scores/inmemory';
 import { createStep, createWorkflow } from '../../../workflows';
 import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
@@ -740,6 +741,69 @@ describe('runExperiment', () => {
       expect(db.experimentResults.size).toBe(2);
       expect(db.scores.size).toBe(0);
       expect(mockStorage.getStore).not.toHaveBeenCalledWith('scores');
+    });
+
+    it('suppresses observability score records from real scorers while retaining in-memory results', async () => {
+      const scorer = createScorer({
+        id: 'real-persistence-scorer',
+        description: 'Exercises real scorer persistence',
+      }).generateScore(() => 0.75);
+      const observabilityStorage = new ObservabilityInMemory({ db });
+      const addScore = vi.fn(async ({ traceId, spanId, score }) => {
+        await observabilityStorage.createScore({
+          score: {
+            ...score,
+            scoreId: crypto.randomUUID(),
+            traceId: traceId ?? null,
+            spanId: spanId ?? null,
+            timestamp: new Date(),
+          },
+        });
+      });
+      const localMastra = {
+        ...mastra,
+        observability: {
+          addScore,
+          getSelectedInstance: vi.fn().mockReturnValue(undefined),
+        },
+        getLogger: vi.fn().mockReturnValue({
+          debug: vi.fn(),
+          error: vi.fn(),
+          warn: vi.fn(),
+          trackException: vi.fn(),
+        }),
+      } as unknown as Mastra;
+      scorer.__registerMastra(localMastra);
+
+      const defaultResult = await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [scorer],
+      });
+
+      expect(defaultResult.results.map(item => item.scores)).toEqual([
+        [expect.objectContaining({ score: 0.75 })],
+        [expect.objectContaining({ score: 0.75 })],
+      ]);
+      expect((await observabilityStorage.listScores({})).scores).toHaveLength(2);
+
+      db.scoreRecords.length = 0;
+      db.scores.clear();
+      addScore.mockClear();
+
+      const suppressedResult = await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [scorer],
+        persistence: { scores: 'none' },
+      });
+
+      expect(suppressedResult.results.every(item => item.scores[0]?.score === 0.75)).toBe(true);
+      expect(addScore).not.toHaveBeenCalled();
+      expect((await observabilityStorage.listScores({})).scores).toHaveLength(0);
+      expect(db.scores.size).toBe(0);
     });
 
     it('performs no selected-domain writes when a run is cancelled', async () => {

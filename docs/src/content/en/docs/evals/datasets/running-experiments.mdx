@@ -1,12 +1,12 @@
 ---
-title: "Running experiments | Datasets"
-description: "Run experiments against agents or workflows, with scoring and result tracking."
+title: 'Running experiments | Datasets'
+description: 'Run experiments against agents or workflows, with scoring and result tracking.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Running experiments
 
@@ -163,7 +163,7 @@ The target and scorers still run, and `startExperiment()` still returns the item
 
 Omitted settings default to `'default'`, which preserves the standard storage behavior. This policy only controls experiment and score records created by the run. It doesn't disable storage used by the target, such as agent memory, vectors, observability, or custom tool storage.
 
-When `startExperimentAsync()` runs with `experiments: 'none'`, it doesn't create a pollable experiment record. Without an experiment event observer, the run is fire-and-forget. The experiment API can't report whether the run completed or failed. It also can't retrieve item results or scores.
+When `startExperimentAsync()` runs with `experiments: 'none'`, it doesn't persist an experiment record, progress updates, or item results. Score persistence remains controlled separately by `persistence.scores`. Without an experiment event observer, the run is fire-and-forget, and the experiment API can't report whether it completed or failed.
 
 Use synchronous `startExperiment()` when the caller needs the returned summary. An experiment event observer can receive lifecycle events and the terminal summary.
 
