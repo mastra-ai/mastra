@@ -115,8 +115,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     requestContext: globalRequestContext,
     agentVersion,
     versions,
+    persistence,
   } = config;
 
+  const persistExperiments = persistence?.experiments !== 'none';
+  const persistScores = persistence?.scores !== 'none';
   const startedAt = new Date();
   // Use provided experimentId (async trigger) or generate new one
   const experimentId = providedExperimentId ?? crypto.randomUUID();
@@ -134,7 +137,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // 1. Get storage and resolve components
   const storage = mastra.getStorage();
   const datasetsStore = await storage?.getStore('datasets');
-  const experimentsStore = await storage?.getStore('experiments');
+  const experimentsStore = persistExperiments ? await storage?.getStore('experiments') : undefined;
 
   const markFailedForObserverError = async (counts: {
     succeededCount: number;
@@ -539,6 +542,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               execResult.scorerOutput,
               execResult.traceId ?? undefined,
               workflowData,
+              persistScores,
             );
 
             const stepScores = await runStepScorersForItem(
@@ -551,6 +555,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               targetId ?? 'inline',
               item.id,
               execResult.traceId ?? undefined,
+              persistScores,
             );
 
             itemScores = [...flatScores, ...stepScores];
