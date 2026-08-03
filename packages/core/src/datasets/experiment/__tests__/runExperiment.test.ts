@@ -1370,6 +1370,31 @@ describe('runExperiment', () => {
   });
 
   describe('semantic event observer', () => {
+    it('reports the pinned dataset version used for execution', async () => {
+      const versionedDataset = await datasetsStorage.createDataset({ name: 'Versioned Dataset' });
+      await datasetsStorage.addItem({ datasetId: versionedDataset.id, input: 'version 1' });
+      await datasetsStorage.addItem({ datasetId: versionedDataset.id, input: 'version 2' });
+      const events: ExperimentEvent[] = [];
+
+      const summary = await runExperiment(mastra, {
+        datasetId: versionedDataset.id,
+        version: 1,
+        task: async ({ input }) => input,
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      expect(summary.totalItems).toBe(1);
+      expect(summary.results[0]?.input).toBe('version 1');
+      expect(events[0]).toMatchObject({
+        type: 'experiment.run.started',
+        datasetId: versionedDataset.id,
+        datasetVersion: 1,
+        totalItems: 1,
+      });
+    });
+
     it('awaits run start before executing items and emits ordered JSON-safe events with stable item identity', async () => {
       const events: ExperimentEvent[] = [];
       let releaseStart!: () => void;
