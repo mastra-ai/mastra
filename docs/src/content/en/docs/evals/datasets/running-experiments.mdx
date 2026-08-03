@@ -163,7 +163,9 @@ The target and scorers still run, and `startExperiment()` still returns the item
 
 Omitted settings default to `'default'`, which preserves the standard storage behavior. This policy only controls experiment and score records created by the run. It doesn't disable storage used by the target, such as agent memory, vectors, observability, or custom tool storage.
 
-When `startExperimentAsync()` runs with `experiments: 'none'`, the returned experiment ID isn't stored and can't be used to poll the experiment with `getExperiment()`.
+When `startExperimentAsync()` runs with `experiments: 'none'`, it doesn't create a pollable experiment record. Without an experiment event observer, the run is fire-and-forget. The experiment API can't report whether the run completed or failed. It also can't retrieve item results or scores.
+
+Use synchronous `startExperiment()` when the caller needs the returned summary. An experiment event observer can receive lifecycle events and the terminal summary.
 
 ## Tool mocks
 
