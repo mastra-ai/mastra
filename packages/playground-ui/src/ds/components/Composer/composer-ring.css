@@ -54,6 +54,7 @@
 
 .composer-ring[data-busy='true'] {
   --composer-ring-strength: 0.65;
+
   animation: composer-ring-spin 2.4s linear infinite;
   box-shadow: 0 4px 20px -4px color-mix(in oklab, var(--composer-ring-color) 12%, transparent);
 }
