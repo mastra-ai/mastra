@@ -40,6 +40,7 @@ type ExperimentItem = {
 export type {
   DataItem,
   ExperimentConfig,
+  ExperimentPersistencePolicy,
   ExperimentSummary,
   ItemWithScores,
   ItemResult,
@@ -70,6 +71,12 @@ export * from './analytics';
  * Executes all items in the dataset concurrently (up to maxConcurrency) against
  * the specified target (agent or workflow). Optionally applies scorers to each
  * result and persists both results and scores to storage.
+ *
+ * Persistence is controlled per run and per domain via `config.persistence`. Selecting
+ * `none` for a domain skips its writes entirely while execution, scoring, and the
+ * returned summary stay identical. This governs experiment bookkeeping only — it does
+ * not disable other storage the target itself touches (agent memory, vectors,
+ * observability traces) and is not a sandbox.
  *
  * @param mastra - Mastra instance for storage and target resolution
  * @param config - Experiment configuration
@@ -105,16 +112,27 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     requestContext: globalRequestContext,
     agentVersion,
     versions,
+    persistence,
   } = config;
 
   const startedAt = new Date();
   // Use provided experimentId (async trigger) or generate new one
   const experimentId = providedExperimentId ?? crypto.randomUUID();
 
+  // Per-run persistence policy. Each domain is independent and defaults to
+  // `default`, so an omitted (or partially specified) policy preserves the
+  // pre-policy behavior exactly.
+  const persistExperiments = persistence?.experiments !== 'none';
+  const persistScores = persistence?.scores !== 'none';
+
   // 1. Get storage and resolve components
   const storage = mastra.getStorage();
   const datasetsStore = await storage?.getStore('datasets');
-  const experimentsStore = await storage?.getStore('experiments');
+  // Under `experiments: 'none'` the store is never resolved, so every write site
+  // below — creation, progress, per-item results, and both terminal updates — is
+  // suppressed by the same guard that already handles "no storage configured".
+  // Dataset reads and scorer trajectory reads are unaffected: they use `storage`.
+  const experimentsStore = persistExperiments ? await storage?.getStore('experiments') : undefined;
 
   // Helper: if the experiment record was pre-created (async path) and we fail
   // during setup (Phase A/B), mark the experiment as failed so it doesn't stay stuck in 'pending'.
@@ -483,6 +501,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             execResult.scorerOutput,
             execResult.traceId ?? undefined,
             workflowData,
+            persistScores,
           );
 
           const stepScores = await runStepScorersForItem(
@@ -495,6 +514,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             targetId ?? 'inline',
             item.id,
             execResult.traceId ?? undefined,
+            persistScores,
           );
 
           itemScores = [...flatScores, ...stepScores];

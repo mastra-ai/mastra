@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
-import { ScorerRunError } from '../../../evals/base';
+import { createScorer, ScorerRunError } from '../../../evals/base';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
@@ -8,6 +8,8 @@ import type { MastraCompositeStore, StorageDomains } from '../../../storage/base
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
+import { ObservabilityInMemory } from '../../../storage/domains/observability/inmemory';
+import { ScoresInMemory } from '../../../storage/domains/scores/inmemory';
 import { createStep, createWorkflow } from '../../../workflows';
 import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
 
@@ -40,6 +42,7 @@ describe('runExperiment', () => {
   let db: InMemoryDB;
   let datasetsStorage: DatasetsInMemory;
   let experimentsStorage: ExperimentsInMemory;
+  let scoresStorage: ScoresInMemory;
   let mockStorage: MastraCompositeStore;
   let mastra: Mastra;
   let datasetId: string;
@@ -49,6 +52,7 @@ describe('runExperiment', () => {
     db = new InMemoryDB();
     datasetsStorage = new DatasetsInMemory({ db });
     experimentsStorage = new ExperimentsInMemory({ db });
+    scoresStorage = new ScoresInMemory({ db });
 
     // Create test dataset with items
     const dataset = await datasetsStorage.createDataset({
@@ -74,10 +78,12 @@ describe('runExperiment', () => {
       stores: {
         datasets: datasetsStorage,
         experiments: experimentsStorage,
+        scores: scoresStorage,
       } as unknown as StorageDomains,
       getStore: vi.fn().mockImplementation(async (name: keyof StorageDomains) => {
         if (name === 'datasets') return datasetsStorage;
         if (name === 'experiments') return experimentsStorage;
+        if (name === 'scores') return scoresStorage;
         return undefined;
       }),
     } as unknown as MastraCompositeStore;
@@ -677,6 +683,147 @@ describe('runExperiment', () => {
 
       await expect(runExperiment(localMastra, { datasetId: dataset.id, task })).rejects.toThrow('Scorer not found');
       expect(task).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('persistence policy', () => {
+    it('preserves experiment and score persistence by default', async () => {
+      const scorer = createMockScorer('default-scorer', 'Default Scorer');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [scorer],
+      });
+
+      expect(result.results).toHaveLength(2);
+      expect(result.results.every(item => item.scores[0]?.score === 1)).toBe(true);
+      expect(db.experiments.size).toBe(1);
+      expect(db.experimentResults.size).toBe(2);
+      expect(db.scores.size).toBe(2);
+    });
+
+    it('suppresses experiment writes independently while still persisting scores', async () => {
+      const scorer = createMockScorer('score-only', 'Score Only');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [scorer],
+        persistence: { experiments: 'none' },
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.persistenceFailures).toBe(0);
+      expect(result.results.every(item => item.scores[0]?.score === 1)).toBe(true);
+      expect(db.experiments.size).toBe(0);
+      expect(db.experimentResults.size).toBe(0);
+      expect(db.scores.size).toBe(2);
+      expect(mockStorage.getStore).not.toHaveBeenCalledWith('experiments');
+    });
+
+    it('suppresses score writes independently while still returning scores and persisting experiment results', async () => {
+      const scorer = createMockScorer('in-memory-only', 'In-memory Only');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [scorer],
+        persistence: { scores: 'none' },
+      });
+
+      expect(scorer.run).toHaveBeenCalledTimes(2);
+      expect(result.results.every(item => item.scores[0]?.score === 1)).toBe(true);
+      expect(db.experiments.size).toBe(1);
+      expect(db.experimentResults.size).toBe(2);
+      expect(db.scores.size).toBe(0);
+      expect(mockStorage.getStore).not.toHaveBeenCalledWith('scores');
+    });
+
+    it('suppresses observability score records from real scorers while retaining in-memory results', async () => {
+      const scorer = createScorer({
+        id: 'real-persistence-scorer',
+        description: 'Exercises real scorer persistence',
+      }).generateScore(() => 0.75);
+      const observabilityStorage = new ObservabilityInMemory({ db });
+      const addScore = vi.fn(async ({ traceId, spanId, score }) => {
+        await observabilityStorage.createScore({
+          score: {
+            ...score,
+            scoreId: crypto.randomUUID(),
+            traceId: traceId ?? null,
+            spanId: spanId ?? null,
+            timestamp: new Date(),
+          },
+        });
+      });
+      const localMastra = {
+        ...mastra,
+        observability: {
+          addScore,
+          getSelectedInstance: vi.fn().mockReturnValue(undefined),
+        },
+        getLogger: vi.fn().mockReturnValue({
+          debug: vi.fn(),
+          error: vi.fn(),
+          warn: vi.fn(),
+          trackException: vi.fn(),
+        }),
+      } as unknown as Mastra;
+      scorer.__registerMastra(localMastra);
+
+      const defaultResult = await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [scorer],
+      });
+
+      expect(defaultResult.results.map(item => item.scores)).toEqual([
+        [expect.objectContaining({ score: 0.75 })],
+        [expect.objectContaining({ score: 0.75 })],
+      ]);
+      expect((await observabilityStorage.listScores({})).scores).toHaveLength(2);
+
+      db.scoreRecords.length = 0;
+      db.scores.clear();
+      addScore.mockClear();
+
+      const suppressedResult = await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [scorer],
+        persistence: { scores: 'none' },
+      });
+
+      expect(suppressedResult.results.every(item => item.scores[0]?.score === 0.75)).toBe(true);
+      expect(addScore).not.toHaveBeenCalled();
+      expect((await observabilityStorage.listScores({})).scores).toHaveLength(0);
+      expect(db.scores.size).toBe(0);
+    });
+
+    it('performs no selected-domain writes when a run is cancelled', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [createMockScorer('cancelled', 'Cancelled')],
+        signal: controller.signal,
+        persistence: { experiments: 'none', scores: 'none' },
+      });
+
+      expect(result.status).toBe('failed');
+      expect(result.results).toHaveLength(0);
+      expect(db.experiments.size).toBe(0);
+      expect(db.experimentResults.size).toBe(0);
+      expect(db.scores.size).toBe(0);
     });
   });
 
