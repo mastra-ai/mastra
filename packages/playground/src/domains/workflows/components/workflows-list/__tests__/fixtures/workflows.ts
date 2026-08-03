@@ -103,6 +103,22 @@ export const workflowsFixture: Record<string, GetWorkflowResponse> = {
   },
 };
 
+/**
+ * Origin variants for the Stored badge: one workflow from code, one registered
+ * via the stored-workflows API, and one legacy entry without the field (older
+ * server). Kept separate from the main roster so badge queries can't collide.
+ */
+export const originWorkflowsFixture: Record<string, GetWorkflowResponse> = {
+  codeWf: { ...workflowBase('code-wf', 'Defined in code'), origin: 'code', steps: {}, allSteps: {} },
+  storedWf: {
+    ...workflowBase('stored-wf', 'From the stored-workflows API'),
+    origin: 'stored',
+    steps: {},
+    allSteps: {},
+  },
+  legacyWf: { ...workflowBase('legacy-wf', 'No origin field'), steps: {}, allSteps: {} },
+};
+
 /** Server-aggregated counts, keyed by registry key — mirrors GET /workflows/run-counts. */
 export const runCountsFixture: ListWorkflowRunCountsResponse = {
   prdShipProduct: { running: 0, suspended: 0 },

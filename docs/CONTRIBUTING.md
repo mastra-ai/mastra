@@ -52,11 +52,25 @@ Before submitting a PR, make sure to:
    pnpm run serve
    ```
 
-3. **Check for broken links** - The build process will warn you about broken links.
+3. **Check for broken links**: The build process will warn you about broken links.
 
-4. **Verify code examples** - If you've added code examples, test them if possible to ensure they work.
+4. **Verify code examples**: If you've added code examples, test them if possible to ensure they work.
 
-5. **Run linters**:
+5. **Run linters**: Install Vale and `mdx2vast`, then run the linting and validation commands.
+
+   Download Vale:
+
+   ```bash
+   pnpm run vale:download
+   ```
+
+   Install `mdx2vast` globally:
+
+   ```bash
+   npm install -g mdx2vast
+   ```
+
+   Run the validation scripts:
 
    ```shell
    pnpm run lint:prose && pnpm run validate
@@ -149,14 +163,14 @@ function add(a: number, b: number) {
 ```
 ````
 
-#### Prettier formatting
+#### oxfmt-mdx formatting
 
-By default, Prettier will format code blocks in all Markdown/MDX files. If you want to disable Prettier for a specific code block, add `prettier:false` to the code block's metadata.
+By default, oxfmt-mdx will format code blocks in all Markdown/MDX files. If you want to disable oxfmt-mdx for a specific code block, add `oxfmt:false` to the code block's metadata.
 
-**Important:** This is an anti-pattern! This is an escape hatch for edge cases where Prettier's formatting produces undesirable results. In general, you should strive to write code that can be formatted by Prettier to maintain a consistent style across the documentation.
+**Important:** This is an anti-pattern! This is an escape hatch for edge cases where oxfmt-mdx's formatting produces undesirable results. In general, you should strive to write code that can be formatted by oxfmt-mdx to maintain a consistent style across the documentation.
 
 ````md
-```typescript prettier:false
+```typescript oxfmt:false
 function add(a: number, b: number) {
   return a + b
 }

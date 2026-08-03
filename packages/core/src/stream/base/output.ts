@@ -880,7 +880,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               controller.terminate();
               return;
             case 'finish':
-              self.#status = 'success';
+              // 'suspended' is not terminal: a resume leg rehydrates the persisted 'suspended'
+              // status and must be able to finish as 'success'. Only 'failed' and 'canceled'
+              // block the success transition.
+              if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                self.#status = 'success';
+              }
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
@@ -985,14 +990,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  self.messageList = await self.processorRunner.runOutputProcessors(
-                    self.messageList,
-                    resolveObservabilityContext(options),
-                    self.#options.requestContext,
-                    0,
-                    outputResultWriter,
-                    outputResult,
-                  );
+                  if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                    self.messageList = await self.processorRunner.runOutputProcessors(
+                      self.messageList,
+                      resolveObservabilityContext(options),
+                      self.#options.requestContext,
+                      0,
+                      outputResultWriter,
+                      outputResult,
+                    );
+                  }
 
                   // Get text from the latest response message (the last assistant message)
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
@@ -1888,6 +1895,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #createEventedStream() {
     const self = this;
+    // Holds this subscriber's own detach function once start() registers its
+    // listeners. cancel() must only remove this subscriber's handlers — the
+    // emitter is shared across every concurrent consumer of this output, so
+    // removeAllListeners() here would silently kill every other subscriber
+    // (see #19743).
+    let detach: (() => void) | undefined;
 
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
@@ -1915,6 +1928,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
         self.#emitter.on('chunk', chunkHandler);
         self.#emitter.on('finish', finishHandler);
+
+        detach = () => {
+          self.#emitter.off('chunk', chunkHandler);
+          self.#emitter.off('finish', finishHandler);
+        };
       },
 
       pull(_controller) {
@@ -1925,8 +1943,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       },
 
       cancel() {
-        // Stream was cancelled, clean up
-        self.#emitter.removeAllListeners();
+        // Only detach this subscriber's own listeners — never the whole emitter.
+        detach?.();
       },
     });
   }

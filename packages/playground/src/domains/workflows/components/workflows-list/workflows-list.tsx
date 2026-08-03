@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
@@ -189,6 +190,11 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
                 <span className="flex items-center gap-1.5">
                   {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
                   <span className="truncate">{name}</span>
+                  {wf.origin === 'stored' ? (
+                    <Badge size="xs" variant="info" title="Registered via the stored-workflows API">
+                      Stored
+                    </Badge>
+                  ) : null}
                   {hasNested ? (
                     <span
                       title={`Nested workflows: ${nestedIds.join(', ')}`}

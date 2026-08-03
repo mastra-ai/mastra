@@ -645,6 +645,24 @@ export type ListWorkflowRunCountsResponse = Record<string, WorkflowRunCounts>;
 
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
+export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+type StoredWorkflowDefinitionField =
+  | 'description'
+  | 'inputSchema'
+  | 'outputSchema'
+  | 'stateSchema'
+  | 'requestContextSchema'
+  | 'graph';
+export type StoredWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
+  StoredWorkflowDefinitionField
+> &
+  Pick<UpsertStoredWorkflowParams, StoredWorkflowDefinitionField>;
+export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
+
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
@@ -682,6 +700,12 @@ export interface GetWorkflowResponse {
   requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
+  /**
+   * How this workflow got into the live registry. `'code'` for statically
+   * authored or `addWorkflow()`-added workflows, `'stored'` for anything
+   * hydrated or added via `addStoredWorkflow()`. Absent on older servers.
+   */
+  origin?: 'code' | 'stored';
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
@@ -2654,6 +2678,7 @@ export interface DatasetItem {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2772,6 +2797,7 @@ export interface AddDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2784,6 +2810,7 @@ export interface UpdateDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[] | null;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2797,6 +2824,7 @@ export interface BatchInsertDatasetItemsParams {
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
     toolMocks?: DatasetItemToolMock[];
+    scorerIds?: string[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2857,6 +2885,7 @@ export interface DatasetItemVersionResponse {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;

@@ -5,7 +5,7 @@ import { forwardRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { WorkflowsList } from '../workflows-list';
-import { runCountsFixture, workflowsFixture } from './fixtures/workflows';
+import { originWorkflowsFixture, runCountsFixture, workflowsFixture } from './fixtures/workflows';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
@@ -247,6 +247,24 @@ describe('WorkflowsList', () => {
       const { queryClient } = renderList({ search: 'zzz-no-such-workflow' });
 
       expect(screen.getByText('No Workflows match your search')).not.toBeNull();
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when workflows carry an origin field', () => {
+    it("shows the Stored badge only for origin: 'stored'", async () => {
+      useRunCountsHandler();
+      const { queryClient } = renderList({ workflows: originWorkflowsFixture });
+
+      expect(screen.getByText('code-wf')).not.toBeNull();
+      expect(screen.getByText('stored-wf')).not.toBeNull();
+      expect(screen.getByText('legacy-wf')).not.toBeNull();
+
+      expect(screen.getAllByText('Stored')).toHaveLength(1);
+      expect(rowFor('stored-wf').getByText('Stored')).not.toBeNull();
+      expect(rowFor('code-wf').queryByText('Stored')).toBeNull();
+      expect(rowFor('legacy-wf').queryByText('Stored')).toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });

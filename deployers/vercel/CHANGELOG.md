@@ -1,5 +1,32 @@
 # @mastra/deployer-vercel
 
+## 1.2.13-alpha.1
+
+### Patch Changes
+
+- Fixed custom API routes being unreachable when deploying to Vercel with `studio: true`. ([#20517](https://github.com/mastra-ai/mastra/pull/20517))
+
+  Routes registered with `registerApiRoute()` are mounted at the root of the server, but the generated Vercel route table only forwarded `/api/*` and `/health` to your app. Every other path fell through to Studio's `index.html`, so a request to a custom route returned the Studio HTML page and the handler never ran. Moving the route under `/api` was not an option either, since that prefix is reserved for built-in routes.
+
+  The route table now serves the paths Studio owns from the CDN and sends everything else to your server, so custom routes behave the same as they do with `mastra dev` and `studio: false`. Studio and its assets are still served as static files with no function invocations.
+
+  ```ts
+  export const mastra = new Mastra({
+    deployer: new VercelDeployer({ studio: true }),
+    server: {
+      apiRoutes: [registerApiRoute('/my/webhook', { method: 'POST', handler: c => c.json({ ok: true }) })],
+    },
+  });
+  ```
+
+  `POST /my/webhook` now returns `{"ok":true}` instead of Studio's `index.html`.
+
+  Requests to a custom `server.apiPrefix` now reach your server too, instead of being answered with the Studio page. Studio's own UI still calls `/api`, so pointing Studio at a custom prefix is not supported yet.
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`b1abe41`](https://github.com/mastra-ai/mastra/commit/b1abe41fbb5060b864aaa79e0ac3b5afcd414513), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+  - @mastra/deployer@1.56.0-alpha.4
+
 ## 1.2.13-alpha.0
 
 ### Patch Changes

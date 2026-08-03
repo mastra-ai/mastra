@@ -309,6 +309,7 @@
                     "attributes": {
                       "toolDescription": "Executes a workflow",
                       "toolType": "tool",
+                      "toolCallId": "call-workflow-1",
                       "success": true
                     },
                     "metadata": {
