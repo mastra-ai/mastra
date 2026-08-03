@@ -483,7 +483,7 @@ describe('SourceControlStorage', () => {
 
     it('upsert clears brokenAt on explicit re-registration', async () => {
       const installation = await createInstallation(github, { externalId: 'install-broken-5' });
-      await github.installations.markBroken({
+      const marked = await github.installations.markBroken({
         orgId: 'org-1',
         id: installation.id,
         brokenAt: 1_700_000_000_000,
@@ -498,12 +498,13 @@ describe('SourceControlStorage', () => {
       });
       expect(reupserted.id).toBe(installation.id);
       expect(reupserted.brokenAt).toBeNull();
+      expect(reupserted.healthRevision).toBe((marked?.healthRevision ?? 0) + 1);
     });
 
     it('upsert atomically preserves brokenAt during passive reconciliation', async () => {
       const installation = await createInstallation(github, { externalId: 'install-broken-atomic' });
       const brokenAt = 1_700_000_000_000;
-      await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt });
+      const marked = await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt });
 
       const reupserted = await github.installations.upsert({
         orgId: 'org-1',
@@ -515,6 +516,7 @@ describe('SourceControlStorage', () => {
       });
       expect(reupserted.id).toBe(installation.id);
       expect(reupserted.brokenAt).toBe(brokenAt);
+      expect(reupserted.healthRevision).toBe(marked?.healthRevision);
     });
 
     it('markBroken and clearBroken return null when the installation does not exist', async () => {

@@ -698,6 +698,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       externalId: String(installationId),
     });
     if (!installation) return false;
+    const expectedHealthRevision = installation.healthRevision;
 
     const linkedRepositoryIds = new Set(
       (await this.storage.projectRepositories.listConfiguredExternalKeys())
@@ -732,9 +733,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const cleared = await this.storage.installations.clearBroken({
       orgId,
       id: installation.id,
-      expectedHealthRevision: installation.healthRevision,
+      expectedHealthRevision,
     });
-    if (!cleared || cleared.brokenAt !== null || cleared.healthRevision !== installation.healthRevision + 1) {
+    if (!cleared || cleared.brokenAt !== null || cleared.healthRevision !== expectedHealthRevision + 1) {
       throw new GithubInstallationBrokenError({
         installationId,
         accountLogin: installation.accountName,
