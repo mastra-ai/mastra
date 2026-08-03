@@ -13,6 +13,10 @@ interface ChainInfo {
   label: string;
   rpcUrl: string;
   networks: string[];
+  // Native USDC contract on this chain, as published in the Circle CLI's own chain registry.
+  // `circle wallet transfer` sends the chain's native token when `--token` is omitted, so a
+  // USDC transfer has to name this address explicitly.
+  usdc: string;
 }
 
 const CHAINS: Record<Chain, ChainInfo> = {
@@ -21,6 +25,7 @@ const CHAINS: Record<Chain, ChainInfo> = {
     label: 'Base',
     rpcUrl: 'https://mainnet.base.org',
     networks: ['eip155:8453', 'base'],
+    usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   },
   POLYGON: {
     // The CLI still calls Polygon MATIC. `networks` lists the x402 `accepts[].network`
@@ -29,6 +34,8 @@ const CHAINS: Record<Chain, ChainInfo> = {
     label: 'Polygon',
     rpcUrl: 'https://polygon-rpc.com',
     networks: ['eip155:137', 'polygon', 'matic'],
+    // Native USDC, not the bridged USDC.e at 0x2791...4174.
+    usdc: '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
   },
 };
 
@@ -45,6 +52,10 @@ export function chainLabel(chain: Chain): string {
 
 export function chainRpcUrl(chain: Chain): string {
   return CHAINS[chain].rpcUrl;
+}
+
+export function chainUsdcAddress(chain: Chain): string {
+  return CHAINS[chain].usdc;
 }
 
 export function chainFromNetwork(network: string): Chain | null {

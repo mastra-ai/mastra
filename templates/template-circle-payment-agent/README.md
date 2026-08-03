@@ -10,8 +10,8 @@ Agents hit walls that have nothing to do with reasoning: a paywall, a missing AP
 
 It is also a practical use of Mastra primitives that are hard to show off with a read-only agent:
 
-- **Tools that spend real money.** Sixteen tools wrapping the Circle CLI: wallet creation and deployment, balances, Gateway deposits, fiat top-ups, service discovery, and paid calls.
-- **Suspend and resume as an approval gate.** The two tools that move USDC are marked `requireApproval`, so Mastra suspends the run before either one executes and Studio shows you the pending call to approve or decline.
+- **Tools that spend real money.** Seventeen tools wrapping the Circle CLI: wallet creation and deployment, balances, Gateway deposits, fiat top-ups, USDC transfers, service discovery, and paid calls.
+- **Suspend and resume as an approval gate.** The three tools that move USDC are marked `requireApproval`, so Mastra suspends the run before any of them executes and Studio shows you the pending call to approve or decline.
 - **Instructions fetched at runtime.** The agent's own instructions are a bootstrap plus two house rules: never authenticate as the user, never spend outside the approval gate. There is no authored playbook. On its first turn it fetches Circle's own [setup skill](https://agents.circle.com/skills/setup.md) and follows that, so the template keeps working as the marketplace changes underneath it.
 
 ## Demo
@@ -44,6 +44,7 @@ Ask for what you want in plain language:
 - `what services are available for weather data?`
 - `check flight WN2417 with FlightAware`
 - `top up my wallet with testnet USDC`
+- `send 5 USDC on Base to 0x…`
 
 The agent finds a candidate service, inspects its price, and picks a payment chain. When it is ready to spend, the run pauses: Studio shows the suspended call with the service, the chain, and the exact amount, and nothing is charged until you resume it. Decline and the agent goes looking for another way.
 

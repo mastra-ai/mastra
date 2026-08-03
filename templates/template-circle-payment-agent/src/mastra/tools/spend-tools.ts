@@ -2,24 +2,27 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { requireSession } from '../circle/auth';
-import { chainLabel, CHAIN_VALUES } from '../circle/chains';
+import { chainLabel, CHAIN_VALUES, DEFAULT_CHAIN } from '../circle/chains';
 import { gatewayDeposit } from '../circle/gateway';
 import {
   ensureDeployed,
+  ensureUsdcBalance,
   parsePayload,
   selectDepositMethod,
   selectGatewayChain,
   selectPayChain,
 } from '../circle/preflight';
 import { payService } from '../circle/services';
-import { ADDRESS_DESCRIPTION, SERVICE_URL_DESCRIPTION } from './circle-tools';
+import { transferUsdc } from '../circle/wallet';
+import { ADDRESS_DESCRIPTION, CHAIN_DESCRIPTION, SERVICE_URL_DESCRIPTION } from './circle-tools';
 
-// The two tools that move USDC. Both carry `requireApproval`, so Mastra suspends the run before
+// The three tools that move USDC. All carry `requireApproval`, so Mastra suspends the run before
 // `execute` is entered and Studio shows the pending call for the user to approve or decline.
 //
-// The chain is not the model's to choose: each tool reads the seller's published x402 options and
-// settles on one this agent supports, so a hallucinated chain cannot send a payment somewhere the
-// seller does not accept.
+// For the two service-bound tools the chain is not the model's to choose: each reads the seller's
+// published x402 options and settles on one this agent supports, so a hallucinated chain cannot
+// send a payment somewhere the seller does not accept. A plain transfer has no seller to read, so
+// there the chain is an argument — and one the approval prompt shows before anything moves.
 
 const HTTP_METHOD_VALUES = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
 const methodEnum = z.enum(HTTP_METHOD_VALUES);
@@ -132,7 +135,48 @@ export const circleGatewayDepositTool = createTool({
   },
 });
 
+export const circleTransferUsdcTool = createTool({
+  id: 'circle-transfer-usdc',
+  description:
+    "Send USDC from one of this agent's wallets to any address. Settles on a single chain and " +
+    'does not bridge: the recipient must control `to` on the chosen chain, and USDC sent to an ' +
+    'address that does not exist there is gone. Unlike circle-pay-service this buys nothing and ' +
+    'has no seller to verify the destination against, so the address comes from the user. Spends ' +
+    'real USDC and requires the user to approve the call first.',
+  inputSchema: z.object({
+    address: z.string().describe(ADDRESS_DESCRIPTION),
+    to: z
+      .string()
+      .describe(
+        'Destination address (0x-prefixed, 40 hex characters), exactly as the user gave it. Never ' +
+          'guess or complete a partial address.',
+      ),
+    amount: z.number().positive().describe('USDC amount to send, in whole units (e.g. 2.5 for $2.50).'),
+    chain: chainEnum.optional().describe(CHAIN_DESCRIPTION),
+  }),
+  outputSchema: z.object({
+    from: z.string(),
+    to: z.string(),
+    amount: z.string().describe('USDC amount sent.'),
+    chain: chainEnum,
+    chainLabel: z.string(),
+    txId: z.string().optional().describe('Circle transaction id, or an on-chain hash when one is returned.'),
+  }),
+  requireApproval: true,
+  execute: async ({ address, to, amount, chain }) => {
+    await requireSession();
+
+    const target = chain ?? DEFAULT_CHAIN;
+    const funded = await ensureUsdcBalance(address, target, amount);
+    if (!funded.ok) throw new Error(funded.message);
+
+    const result = await transferUsdc({ address, to, amount, chain: target });
+    return { ...result, chainLabel: chainLabel(target) };
+  },
+});
+
 export const circleSpendTools = {
   'circle-pay-service': circlePayServiceTool,
   'circle-gateway-deposit': circleGatewayDepositTool,
+  'circle-transfer-usdc': circleTransferUsdcTool,
 };

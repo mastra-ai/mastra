@@ -3,12 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { runCircle, runCircleJson } from './cli';
-import { chainCli, chainRpcUrl, DEFAULT_CHAIN, type Chain } from './chains';
+import { chainCli, chainRpcUrl, chainUsdcAddress, DEFAULT_CHAIN, type Chain } from './chains';
 import type { AgentWallet, TokenBalance, WalletBalance } from './types';
 
 // Agent wallets share one address across every EVM chain, so listing on Base is enough.
 const WALLET_LIST_CHAIN = chainCli(DEFAULT_CHAIN);
 const EVM_ADDRESS_REGEX = /0x[a-fA-F0-9]{40}/;
+const EVM_ADDRESS_EXACT = /^0x[a-fA-F0-9]{40}$/;
+const USDC_DECIMALS = 6;
 const TX_HASH_REGEX = /0x[a-fA-F0-9]{64}/;
 const HTTPS_URL_REGEX = /https?:\/\/[^\s"']+/;
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -52,6 +54,25 @@ export interface FundFiatResult {
   token: FundToken;
   // The Transak on-ramp URL. Generating it moves no money on its own.
   url: string;
+}
+
+export interface TransferUsdcInput {
+  // Source wallet, which must be one of this agent's own wallets.
+  address: string;
+  to: string;
+  amount: number | string;
+  chain?: Chain;
+  // Passed to the CLI so a resubmission of the same intent settles once. Optional: the CLI
+  // generates one per call when it is omitted, which is the right default for a fresh transfer.
+  idempotencyKey?: string;
+}
+
+export interface TransferUsdcResult {
+  from: string;
+  to: string;
+  amount: string;
+  chain: Chain;
+  txId?: string;
 }
 
 export interface DeployWalletResult {
@@ -272,4 +293,66 @@ export async function deployWallet(input: DeployWalletInput): Promise<DeployWall
   }
 
   return { address, deployed, alreadyDeployed: false, txId };
+}
+
+// The CLI takes the amount as a decimal string in whole USDC. `toFixed` is what keeps a small
+// amount out of exponent notation: `String(1e-7)` is "1e-7", which would reach the API verbatim.
+function formatUsdcAmount(amount: number | string): string {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Transfer amount must be a positive number of USDC, got "${String(amount)}".`);
+  }
+  const fixed = value.toFixed(USDC_DECIMALS);
+  if (Number(fixed) !== value) {
+    throw new Error(
+      `USDC carries ${USDC_DECIMALS} decimal places and "${String(amount)}" is finer than that. ` +
+        'Round the amount and retry.',
+    );
+  }
+  return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+}
+
+// Send USDC from one of the agent's wallets to any address on the same chain.
+//
+// `--token` is always passed: `circle wallet transfer` sends the chain's *native* token when it is
+// omitted, so leaving it off would send ETH or POL rather than USDC. The chain is the caller's
+// choice and this does not bridge — `to` must be an address that exists on `chain`, and USDC sent
+// to an address the recipient does not control on that chain is not recoverable.
+//
+// No deploy check: this is an outbound transaction, so it deploys the Smart Contract Account on
+// the way out exactly as `deployWallet`'s zero-value self-transfer does.
+//
+// Mutating, so retries stay at 0 and a dropped connection never double-sends.
+export async function transferUsdc(input: TransferUsdcInput): Promise<TransferUsdcResult> {
+  const chain = input.chain ?? DEFAULT_CHAIN;
+  const amount = formatUsdcAmount(input.amount);
+
+  for (const [label, value] of [
+    ['Source address', input.address],
+    ['Destination address', input.to],
+  ] as const) {
+    if (!EVM_ADDRESS_EXACT.test(value)) {
+      throw new Error(`${label} "${value}" is not a valid EVM address (0x followed by 40 hex characters).`);
+    }
+  }
+
+  const args = [
+    'wallet',
+    'transfer',
+    input.to,
+    '--amount',
+    amount,
+    '--token',
+    chainUsdcAddress(chain),
+    '--address',
+    input.address,
+    '--chain',
+    chainCli(chain),
+    '--output',
+    'json',
+  ];
+  if (input.idempotencyKey) args.push('--idempotency-key', input.idempotencyKey);
+
+  const out = await runCircle(args);
+  return { from: input.address, to: input.to, amount, chain, txId: extractTxId(out) };
 }

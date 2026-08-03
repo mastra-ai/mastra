@@ -5,7 +5,7 @@
 import { chainLabel, type Chain } from './chains';
 import type { GatewayDepositMethod } from './gateway';
 import { chooseChain, getServiceAccepts, preferredChain, sellerRequiresGateway } from './services';
-import { isWalletDeployed } from './wallet';
+import { getBalance, isWalletDeployed } from './wallet';
 
 // Checks that run before USDC moves. Each returns its failure as a message rather than throwing,
 // so a refusal reaches the model as a readable tool result it can act on.
@@ -82,6 +82,25 @@ export async function ensureDeployed(address: string, chain: Chain): Promise<Pre
     return { ok: true };
   } catch {
     // Detection failed on a flaky RPC; do not block a payment that may well work.
+    return { ok: true };
+  }
+}
+
+// A transfer names its own amount, so an underfunded wallet can be caught before the call rather
+// than read back as an opaque CLI failure.
+export async function ensureUsdcBalance(address: string, chain: Chain, amount: number): Promise<PreflightCheck> {
+  try {
+    const balance = await getBalance({ address, chain });
+    const held = Number(balance.tokens.find(t => t.symbol === 'USDC')?.amount ?? '0');
+    if (!Number.isFinite(held) || held >= amount) return { ok: true };
+    return {
+      ok: false,
+      message:
+        `Wallet ${address} holds ${held} USDC on ${chainLabel(chain)}, short of the ${amount} USDC ` +
+        'this transfer would send. NO USDC WAS SENT. Fund the wallet or lower the amount, then retry.',
+    };
+  } catch {
+    // Balance read failed on a flaky call; do not block a transfer that may well work.
     return { ok: true };
   }
 }
