@@ -29,6 +29,7 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { queueThreadPageKickoff } from '../services/threadPageReadiness';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
 import { useComposerSpotlight } from './useComposerSpotlight';
@@ -63,6 +64,10 @@ let pendingImageSeq = 0;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 /** Aggregate cap across all pending images on a single message. */
 const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+// A first message typed while the session comes online waits for a sandbox
+// provision, repo clone and setup command — minutes, not the 60s a navigation
+// handoff needs.
+const PREPARING_SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -78,12 +83,12 @@ function readFileAsBase64(file: File): Promise<string> {
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset } = useChatTranscript();
+  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
@@ -99,6 +104,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+
+  // Opening a session waits on its workspace being prepared. Rather than sit
+  // behind a dead composer, take the first message now and let the thread page
+  // dispatch it once the session is online.
+  const queueing = !onDraftComposer && Boolean(routeThreadId) && sessionEnabled && status === 'connecting';
 
   const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,6 +206,19 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
+    // Images are unreachable here (the attach button follows `status`), and a
+    // queued kickoff carries text only.
+    if (queueing && routeThreadId && outgoing.length === 0) {
+      localUser(text, false);
+      void queueThreadPageKickoff({ resourceId, projectPath, threadId: routeThreadId }, text, {
+        echoed: true,
+        timeoutMs: PREPARING_SESSION_TIMEOUT_MS,
+      }).catch(error => {
+        clearPending();
+        pushNotice(error instanceof Error ? error.message : 'Failed to send message', 'error');
+      });
+      return;
+    }
     if (onDraftComposer) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
@@ -281,6 +304,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    // Only a message can wait for the session; commands act on it live.
+    if (queueing && text.startsWith('/')) {
+      updateDraft(text);
+      pushNotice('Commands run once the session is ready.');
+      return;
+    }
     if (await runComposerCommand(text)) return;
     // Steering is text-only; attached images stay pending until the next send.
     if (busy) {
@@ -298,7 +327,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   }
 
-  const disabled = status !== 'ready';
+  const attachDisabled = status !== 'ready';
+  const disabled = attachDisabled && !queueing;
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
@@ -378,7 +408,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               type="button"
               variant="outline"
               size="icon-sm"
-              disabled={disabled}
+              disabled={attachDisabled}
               onClick={() => fileInputRef.current?.click()}
               aria-label="Attach image"
             >

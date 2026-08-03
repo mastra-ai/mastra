@@ -75,6 +75,25 @@ export function removeCachedSession(
   });
 }
 
+/**
+ * Show a freshly created session in the cached list right away, so the sidebar
+ * row and the thread page it navigates to appear together instead of one
+ * refetch apart. Same in-flight-fetch caution as {@link removeCachedSession},
+ * mirrored: a listing issued before the create committed would drop it again.
+ */
+export function addCachedSession(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectRepositoryId: string | undefined,
+  session: FactoryUserSession,
+) {
+  void queryClient.cancelQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+  queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(projectRepositoryId), current => {
+    if (!current) return current;
+    const all = [...current.workspaces, ...current.userSessions];
+    return all.some(cached => cached.sessionId === session.sessionId) ? current : splitSessions([...all, session]);
+  });
+}
+
 function invalidateSessionQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   projectRepositoryId: string | undefined,

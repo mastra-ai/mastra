@@ -28,6 +28,12 @@ export interface ChatSessionContextApi {
    * of binding to a fresh random-id thread the route can never find.
    */
   sessionThreadId?: string;
+  /**
+   * The session's workspace has never been materialized, so bringing it online
+   * provisions a sandbox and clones the repository — minutes, where an already
+   * materialized session only reconnects.
+   */
+  workspacePending?: boolean;
   factorySessionState?: FactorySessionState;
   baseUrl: string;
   /**

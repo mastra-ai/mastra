@@ -26,7 +26,7 @@ export function useThreadPageKickoffs(): void {
     if (status !== 'ready' || !routeThreadId || activeThreadId !== routeThreadId) return;
     const kickoffs = claimThreadPageKickoffs({ resourceId, projectPath, threadId: routeThreadId });
     for (const kickoff of kickoffs) {
-      localUser(kickoff.message);
+      if (!kickoff.echoed) localUser(kickoff.message);
       pendingKickoffs.current += 1;
       void sendMessage.mutateAsync(kickoff.message).then(
         () => {

@@ -87,6 +87,7 @@ export function ChatSessionConfigProvider({
     retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
+    workspacePending: Boolean(storedSession) && !storedSession?.materializedAt,
     factorySessionState:
       factory && repository
         ? {
