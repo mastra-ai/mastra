@@ -4,7 +4,7 @@ When working check src/content/en/docs/ and src/content/en/reference/ update exi
 @CONTRIBUTING.md for setup, local development, and components / frontmatter
 When adding model name/ID to docs, use placeholder token from src/plugins/remark-model-tokens/models.ts
 When moving doc, use scripts/move-doc.ts
-When deleting a doc, use `pnpm tsx scripts/delete-doc.ts <source> <replacement>`; pass `--dry-run` to preview. Run `pnpm run generate-vercel-redirects` and commit the generated `vercel.json` update
+When deleting a doc, use scripts/delete-doc.ts. Run pnpm run generate-vercel-redirects afterwards
 
 main documentation src/content/en/docs
 step by step guides src/content/en/guides
