@@ -16,4 +16,4 @@ await runExperiment(mastra, {
 });
 ```
 
-Observer failures now stop the run with an `EXPERIMENT_EVENT_OBSERVER_FAILED` error so external workers can distinguish delivery failures from partial experiment results.
+Terminal events are delivered before final experiment status persistence, allowing external workers to treat the ordered event stream as authoritative. Observer failures stop the run with an `EXPERIMENT_EVENT_OBSERVER_FAILED` error so workers can distinguish delivery failures from partial experiment results.
