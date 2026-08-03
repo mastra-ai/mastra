@@ -41,6 +41,7 @@ jobs:
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
+          permission-pull-requests: write
 
       - name: Re-checkout with app token
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -116,27 +117,43 @@ jobs:
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
+        env:
+          # main is protected by a ruleset that rejects direct pushes (#20609),
+          # so this pushes to a dedicated bot branch and opens/updates a PR
+          # instead of pushing straight to main. The branch is force-pushed
+          # fresh from the just-checked-out main tip on every run, so it never
+          # accumulates history or needs a rebase, and reusing the same branch
+          # name means a still-open PR is simply updated in place rather than
+          # spawning a new PR every 6 hours.
+          GH_TOKEN: ${{ steps.app-auth.outputs.token }}
         run: |
+          BRANCH="automated/regenerate-providers-docs"
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
           # The generator rewrites and adds per-provider capability files. These
           # must be staged too; otherwise they linger as unstaged/untracked
-          # changes that abort the rebase below and never make it onto main.
+          # changes.
           git add packages/core/src/llm/model/capabilities/
           git add docs/src/content/en/models/
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
-          git commit -m "chore: regenerate providers and docs [skip ci]"
-          # Use --autostash as a safeguard so any unexpected leftover unstaged
-          # changes don't abort the rebase with "cannot pull with rebase: You
-          # have unstaged changes." Autostash safely stashes and restores them.
-          git pull --rebase --autostash
-          git push
+          git commit -m "chore: regenerate providers and docs"
+          git push --force origin "HEAD:${BRANCH}"
+
+          if [ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]; then
+            echo "Existing PR for ${BRANCH} updated by the force-push above."
+          else
+            gh pr create \
+              --title "chore: regenerate providers and docs" \
+              --body "Automated update to the provider registry and generated model documentation from models.dev. This branch is force-pushed with a fresh snapshot every 6 hours, so this PR is updated in place rather than duplicated on each run." \
+              --base main \
+              --head "${BRANCH}"
+          fi
 
       - name: Log summary
         if: steps.git-check.outputs.changed == 'true'
-        run: echo "✅ Providers and documentation updated with changeset and committed to main"
+        run: echo "✅ Providers and documentation updated with changeset; opened/updated PR against main"
 
       - name: Log no changes
         if: steps.git-check.outputs.changed != 'true'
