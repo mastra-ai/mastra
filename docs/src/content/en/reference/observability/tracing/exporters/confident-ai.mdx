@@ -1,6 +1,6 @@
 ---
 title: "Reference: DeepEvalExporter | Observability"
-description: DeepEval exporter for Tracing
+description: Confident AI exporter for Tracing
 packages:
   - "@mastra/deepeval"
 ---
@@ -9,7 +9,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # DeepEvalExporter
 
-Sends Tracing data to DeepEval and Confident AI for evaluation and observability.
+Sends Tracing data to [Confident AI](https://www.confident-ai.com/) for evaluation and observability. Exported by `@mastra/deepeval`, which builds on the DeepEval SDK.
+
+See [Confident AI exporter](/docs/observability/integrations/exporters/confident-ai) for setup and usage.
 
 ## Constructor
 
@@ -105,7 +107,7 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'prompt',
     type: 'Prompt',
-    description: 'DeepEval prompt linkage attached to LLM spans.',
+    description: 'Confident AI managed prompt linkage attached to LLM spans.',
     required: false,
   },
   {
@@ -131,7 +133,7 @@ Extends `BaseExporterConfig`, which includes:
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Exports a tracing event to DeepEval. Builds the DeepEval trace tree from the Mastra span stream and posts the trace when the root span ends.
+Exports a tracing event to Confident AI. Builds the trace tree from the Mastra span stream and posts the trace when the root span ends.
 
 ### `flush`
 
@@ -173,12 +175,12 @@ const exporter = new DeepEvalExporter({
 
 ## Span type mapping
 
-| Mastra span type                                                       | DeepEval span type |
-| ---------------------------------------------------------------------- | ------------------ |
-| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`            |
-| `MODEL_GENERATION`                                                     | `LLM`              |
-| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`             |
-| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`        |
-| All others                                                             | `CUSTOM`           |
+| Mastra span type                                                       | Confident AI span type |
+| ---------------------------------------------------------------------- | ---------------------- |
+| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`                |
+| `MODEL_GENERATION`                                                     | `LLM`                  |
+| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`                 |
+| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`            |
+| All others                                                             | `CUSTOM`               |
 
 Event spans (for example `MODEL_CHUNK`) are dropped.

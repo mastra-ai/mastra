@@ -1,14 +1,16 @@
 ---
-title: "DeepEval exporter | Integrations | Observability"
-description: "Send traces to DeepEval and Confident AI for evaluation and monitoring"
+title: "Confident AI exporter | Integrations | Observability"
+description: "Trace and evaluate your Mastra agents using Confident AI"
 packages:
   - "@mastra/deepeval"
   - "@mastra/observability"
 ---
 
-# DeepEval exporter
+# Confident AI exporter
 
-[DeepEval](https://www.confident-ai.com/) (Confident AI) is an evaluation and monitoring platform for LLM applications. The DeepEval exporter sends your traces to Confident AI, where you can run metrics, review traces, and track quality over time.
+[Confident AI](https://www.confident-ai.com/) is an LLM observability and evaluation platform for teams to build reliable AI applications in both development and production.
+
+The `@mastra/deepeval` package sends your Mastra traces to Confident AI, where you can run metrics against them and track quality over time. It builds on [DeepEval](https://www.confident-ai.com/docs), the open source evaluation SDK behind the platform.
 
 ## Installation
 
@@ -80,7 +82,7 @@ export const mastra = new Mastra({
 
 ### Metric collections
 
-Attach DeepEval metric collections at the trace level or per span type. Trace-level metrics run against the whole trace, and per-type metrics run against matching spans.
+Confident AI evaluates incoming traces against metric collections defined in your project. Attach them at the trace level or per span type. Trace-level metrics run against the whole trace, and per-type metrics run against matching spans.
 
 ```typescript title="src/mastra/index.ts"
 new DeepEvalExporter({
@@ -107,18 +109,19 @@ new DeepEvalExporter({
 
 ## Span type mapping
 
-Mastra spans map to DeepEval's span types:
+Mastra spans map to the span types shown in Confident AI:
 
-| Mastra span type                                                       | DeepEval span type |
-| ---------------------------------------------------------------------- | ------------------ |
-| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`            |
-| `MODEL_GENERATION`                                                     | `LLM`              |
-| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`             |
-| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`        |
-| All others                                                             | `CUSTOM`           |
+| Mastra span type                                                       | Confident AI span type |
+| ---------------------------------------------------------------------- | ---------------------- |
+| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`                |
+| `MODEL_GENERATION`                                                     | `LLM`                  |
+| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`                 |
+| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`            |
+| All others                                                             | `CUSTOM`               |
 
 
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [DeepEval Documentation](https://www.confident-ai.com/docs)
+- [DeepEvalExporter reference](/reference/observability/tracing/exporters/confident-ai)
+- [Confident AI documentation](https://www.confident-ai.com/docs)

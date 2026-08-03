@@ -866,13 +866,13 @@ const sidebars = {
                     },
                     {
                       type: 'doc',
-                      id: 'observability/integrations/exporters/datadog',
-                      label: 'Datadog',
+                      id: 'observability/integrations/exporters/confident-ai',
+                      label: 'Confident AI',
                     },
                     {
                       type: 'doc',
-                      id: 'observability/integrations/exporters/deepeval',
-                      label: 'DeepEval',
+                      id: 'observability/integrations/exporters/datadog',
+                      label: 'Datadog',
                     },
                     {
                       type: 'doc',
