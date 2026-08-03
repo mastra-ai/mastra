@@ -197,12 +197,7 @@
     },
     {
       "source": "/guides/guide/manual-install",
-      "destination": "/docs/getting-started/manual-install",
-      "permanent": true
-    },
-    {
-      "source": "/guides/getting-started/manual-install",
-      "destination": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
       "permanent": true
     },
     {
@@ -1018,6 +1013,11 @@
     {
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
       "permanent": true
     }
   ]

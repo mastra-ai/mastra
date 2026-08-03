@@ -212,12 +212,7 @@
     },
     {
       "source": "/guides/guide/manual-install",
-      "destination": "/docs/getting-started/manual-install",
-      "permanent": true
-    },
-    {
-      "source": "/guides/getting-started/manual-install",
-      "destination": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
       "permanent": true
     },
     {
@@ -1036,6 +1031,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/workspace/llms.txt",
       "destination": "/docs/mastra-platform/workspaces/llms.txt",
       "permanent": true
@@ -1202,12 +1202,7 @@
     },
     {
       "source": "/guides/guide/manual-install/llms.txt",
-      "destination": "/docs/getting-started/manual-install/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/guides/getting-started/manual-install/llms.txt",
-      "destination": "/docs/getting-started/manual-install/llms.txt",
+      "destination": "/guides/getting-started/manual-install/llms.txt",
       "permanent": true
     },
     {
@@ -1788,6 +1783,11 @@
     {
       "source": "/docs/guide/tools/llms.txt",
       "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/manual-install/llms.txt",
+      "destination": "/guides/getting-started/manual-install/llms.txt",
       "permanent": true
     }
   ]

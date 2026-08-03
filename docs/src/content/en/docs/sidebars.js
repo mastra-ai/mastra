@@ -36,11 +36,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/build-with-ai',
           label: 'Build with AI',
         },
