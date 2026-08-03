@@ -1,5 +1,5 @@
 import { glob as globby } from 'tinyglobby';
-import { it, describe, expect } from 'vitest';
+import { it, describe, expect, beforeAll } from 'vitest';
 import * as customResolve from 'resolve.exports';
 import { resolve } from 'node:path';
 import { join, relative, dirname, extname } from 'node:path/posix';
@@ -152,12 +152,13 @@ describe('@mastra/core runtime-only dependencies', () => {
 
   const runtimeOnlyDeps = ['execa', '@ast-grep/napi'];
 
-  // Shared across the per-dependency test cases so dist is globbed and read once.
-  let distFiles: Promise<[file: string, content: string][]> | undefined;
-  const readDistFiles = () =>
-    (distFiles ??= globby(join(coreDistDir, '**/*.{js,cjs}')).then(files =>
-      Promise.all(files.map(async (file): Promise<[string, string]> => [file, await readFile(file, 'utf-8')])),
-    ));
+  // Read dist once, shared by the per-dependency test cases below.
+  let distFiles: { file: string; content: string }[] = [];
+
+  beforeAll(async () => {
+    const jsFiles = await globby(join(coreDistDir, '**/*.{js,cjs}'));
+    distFiles = await Promise.all(jsFiles.map(async file => ({ file, content: await readFile(file, 'utf-8') })));
+  });
 
   it.for(runtimeOnlyDeps.map(dep => [dep]))('%s should stay behind a non-literal dynamic import', async ([dep]) => {
     const escapedDependency = escapeRegExp(dep);
@@ -180,7 +181,7 @@ describe('@mastra/core runtime-only dependencies', () => {
 
     const filesWithRuntimeLoader: string[] = [];
 
-    for (const [file, content] of await readDistFiles()) {
+    for (const { file, content } of distFiles) {
       if (!content.includes(dep)) continue;
 
       expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
