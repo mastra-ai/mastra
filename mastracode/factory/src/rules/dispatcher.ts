@@ -28,7 +28,7 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 10 * 60_000;
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
-const MAX_IN_FLIGHT = 2;
+const MAX_IN_FLIGHT = 25;
 
 function waitForAgentEndOrTimeout(agentEnd: Promise<void>): Promise<boolean> {
   return new Promise(resolve => {
