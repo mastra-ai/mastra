@@ -189,6 +189,8 @@ async function prepareFactoryRuleBinding(
         metadata: input.item.metadata,
       },
     },
+    ...(input.invocation ? { invocation: input.invocation } : {}),
+    ...(input.defaultModelId ? { defaultModelId: input.defaultModelId } : {}),
   });
 }
 

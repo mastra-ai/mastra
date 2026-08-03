@@ -1388,6 +1388,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ).map(toPendingStart);
   }
 
+  async hasPendingStartForKickoff(orgId: string, factoryProjectId: string, kickoffKey: string): Promise<boolean> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_pending_starts', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      kickoff_key: kickoffKey,
+    });
+    return row !== null;
+  }
+
   async claimPendingStarts(input: FactoryLeaseClaimInput): Promise<FactoryPendingStartRecord[]> {
     return this.#claimLeases('factory_pending_starts', input, toPendingStart);
   }
