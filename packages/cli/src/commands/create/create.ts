@@ -89,7 +89,7 @@ export interface CreateOptions {
   timeout?: number;
   analytics?: PosthogAnalytics;
   resolveVersionTag?: () => Promise<string | undefined>;
-  skipInstall?: boolean;
+  install?: boolean;
 }
 
 type PlatformSetupResult =
@@ -219,7 +219,7 @@ function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOpti
     git: args.git ?? true,
     template: args.template,
     timeout: args.timeout ?? 60_000,
-    skipInstall: args.skipInstall ?? false,
+    install: args.install ?? true,
   };
 }
 
@@ -370,7 +370,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
       }
     }
 
-    if (!options.skipInstall) {
+    if (options.install) {
       if (observabilityEnabled) {
         await installDependencies(
           staging.projectPath,
@@ -423,9 +423,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
     p.log.info('Skipping Mastra platform setup.');
   } else if (observabilityEnabled) {
     p.log.success(
-      options.skipInstall
-        ? 'Default template cloned. Dependency installation was skipped.'
-        : 'Default template cloned and dependencies installed.',
+      options.install
+        ? 'Default template cloned and dependencies installed.'
+        : 'Default template cloned. Dependency installation was skipped.',
     );
   }
 
