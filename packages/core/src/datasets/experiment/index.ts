@@ -416,6 +416,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       async ({ item, idx }) => {
         // Check for cancellation
         if (executionSignal?.aborted) {
+          if (eventDispatcher?.failure) return;
           throw new DOMException('Aborted', 'AbortError');
         }
 
@@ -613,18 +614,24 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         };
 
         if (eventDispatcher) {
-          await eventDispatcher.emit(
-            createItemCompletedEvent(
-              { experimentId, target: eventTarget },
-              idx,
-              results[idx]!,
-              execResult.traceId ?? null,
-            ),
-          );
+          try {
+            await eventDispatcher.emit(
+              createItemCompletedEvent(
+                { experimentId, target: eventTarget },
+                idx,
+                results[idx]!,
+                execResult.traceId ?? null,
+              ),
+            );
+          } catch (error) {
+            if (!eventDispatcher.failure) throw error;
+          }
         }
       },
-      { concurrency: maxConcurrency, stopOnError: eventDispatcher ? false : true },
+      { concurrency: maxConcurrency },
     );
+
+    if (eventDispatcher?.failure) throw eventDispatcher.failure;
   } catch (error) {
     const completedAt = new Date();
     const skippedCount = items.length - succeededCount - failedCount;

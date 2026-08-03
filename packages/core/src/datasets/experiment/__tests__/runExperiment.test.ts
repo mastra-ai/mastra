@@ -1383,6 +1383,44 @@ describe('runExperiment', () => {
       expect(eventTypes).not.toContain('experiment.run.finished');
     });
 
+    it('preserves fail-fast behavior for non-observer mapper failures when an observer is present', async () => {
+      const unserializableOutput = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('output serialization failed');
+          },
+        },
+      );
+      const task = vi.fn(async ({ input }) => (input === 'first' ? unserializableOutput : 'done'));
+      const events: ExperimentEvent[] = [];
+
+      const summary = await runExperiment(mastra, {
+        data: [
+          { id: 'broken-item', input: 'first' },
+          { id: 'later-item', input: 'second' },
+        ],
+        task,
+        maxConcurrency: 1,
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      expect(summary).toMatchObject({
+        status: 'failed',
+        succeededCount: 1,
+        failedCount: 0,
+        skippedCount: 1,
+      });
+      expect(task).toHaveBeenCalledTimes(1);
+      expect(events.map(event => event.type)).toEqual(['experiment.run.started', 'experiment.run.finished']);
+      expect(events.at(-1)).toMatchObject({
+        status: 'failed',
+        error: { message: 'output serialization failed' },
+      });
+    });
+
     it('normalizes invalid dates and reports inline task identity in events', async () => {
       const events: ExperimentEvent[] = [];
 
