@@ -2678,7 +2678,7 @@ export class Session<TState = unknown> {
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
 
-    if (workspace && !(workspace instanceof Workspace)) {
+    if (workspace !== undefined && !(workspace instanceof Workspace)) {
       throw new Error(`A session requires a valid workspace instance.`);
     }
 
