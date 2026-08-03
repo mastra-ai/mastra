@@ -628,7 +628,22 @@ export class MastraCompositeStore extends MastraBase {
 
     collect(this.parentDefault, 'default');
     collect(this.parentEditor, 'editor');
+
+    // Domains that came from a parent are the parent's to close — closing
+    // them here too could double-close a shared client. Mirrors the
+    // already-initialized bookkeeping in #runInit().
+    const parentOwned = new Set<unknown>();
+    const addParentDomains = (parent?: MastraCompositeStore) => {
+      if (!parent?.stores) return;
+      for (const domain of Object.values(parent.stores)) {
+        if (domain) parentOwned.add(domain);
+      }
+    };
+    addParentDomains(this.parentDefault);
+    addParentDomains(this.parentEditor);
+
     for (const [domainKey, domain] of Object.entries(this.stores ?? {})) {
+      if (parentOwned.has(domain)) continue;
       collect(domain, `domain "${domainKey}"`);
     }
 

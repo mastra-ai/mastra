@@ -260,6 +260,23 @@ describe('MastraCompositeStore — close() forwarding', () => {
     expect(domainClose).toHaveBeenCalledTimes(1);
   });
 
+  it('closes a domain inherited from the default parent once, via the parent', async () => {
+    // A parent's domains share the parent's client; the parent's own close()
+    // is responsible for them. Closing such a domain directly as well would
+    // double-close the shared client.
+    const inner = new InMemoryStore({ id: 'inner' });
+    const domainClose = vi.fn().mockResolvedValue(undefined);
+    (inner.stores!.memory as unknown as { close: () => Promise<void> }).close = domainClose;
+    const innerCloseSpy = vi.spyOn(inner, 'close');
+
+    const composite = new MastraCompositeStore({ id: 'outer-inherited', default: inner });
+
+    await composite.close();
+
+    expect(innerCloseSpy).toHaveBeenCalledTimes(1);
+    expect(domainClose).toHaveBeenCalledTimes(1);
+  });
+
   it('logs and skips a failing store so the rest are still released', async () => {
     const failing = new InMemoryStore({ id: 'failing-inner' });
     const editor = new InMemoryStore({ id: 'editor-inner' });

@@ -307,6 +307,16 @@ process.on('SIGTERM', async () => {
 A store you construct only to supply a domain isn't reachable through the composite. Keep a reference to it and close it yourself:
 
 ```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { ClickhouseStore } from '@mastra/clickhouse'
+import { PostgresStore } from '@mastra/pg'
+import { Mastra } from '@mastra/core'
+
+const pgStore = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+})
+
 const clickhouseStore = new ClickhouseStore({
   id: 'clickhouse-storage',
   url: process.env.CLICKHOUSE_URL,
