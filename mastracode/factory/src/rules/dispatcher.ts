@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentController } from '@mastra/core/agent-controller';
+import type { AgentController, AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
 import { resolveSkillInvocation } from '../skills/service.js';
@@ -24,10 +24,10 @@ const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
 const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
-// Dispatches can legitimately run for minutes (skill kickoffs consume the
-// agent's run stream; binding preparation clones repositories), so they run
-// detached from the poll loop under this concurrency cap.
-const MAX_IN_FLIGHT = 25;
+// Dispatches can legitimately run for minutes. Woken skill invocations hold
+// capacity until their agent run reaches a terminal state; binding preparation
+// also runs detached from the poll loop under this concurrency cap.
+const MAX_IN_FLIGHT = 2;
 
 interface DispatcherSession extends SkillSession {
   thread: {
@@ -38,6 +38,7 @@ interface DispatcherSession extends SkillSession {
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
+  subscribe(listener: AgentControllerEventListener): () => void;
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -353,25 +354,42 @@ export class FactoryDecisionDispatcher {
             ),
           );
         }
-        const result = session.sendSignal(
-          {
-            id: record.id,
-            type: 'user',
-            tagName: 'user',
-            contents: resolved.message,
-          },
-          // Without `requireDelivery` the session resolves `accepted` on the
-          // next tick and swallows wake failures, so a kickoff that never
-          // reached the agent would be marked succeeded and the thread would
-          // stay empty forever.
-          { requestContext, requireDelivery: true },
-        );
-        const settled = await result.accepted;
-        if (settled.action !== 'wake' && settled.action !== 'deliver') {
-          // An undefined action means the session did not verify delivery at
-          // all — with `requireDelivery` set that is a contract violation, not
-          // a success.
-          throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
+        let resolveAgentEnd!: () => void;
+        const agentEnd = new Promise<void>(resolve => {
+          resolveAgentEnd = resolve;
+        });
+        const unsubscribe = session.subscribe(event => {
+          if (event.type === 'agent_end') {
+            resolveAgentEnd();
+          }
+        });
+
+        try {
+          const result = session.sendSignal(
+            {
+              id: record.id,
+              type: 'user',
+              tagName: 'user',
+              contents: resolved.message,
+            },
+            // Without `requireDelivery` the session resolves `accepted` on the
+            // next tick and swallows wake failures, so a kickoff that never
+            // reached the agent would be marked succeeded and the thread would
+            // stay empty forever.
+            { requestContext, requireDelivery: true },
+          );
+          const settled = await result.accepted;
+          if (settled.action !== 'wake' && settled.action !== 'deliver') {
+            // An undefined action means the session did not verify delivery at
+            // all — with `requireDelivery` set that is a contract violation, not
+            // a success.
+            throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
+          }
+          if (settled.action === 'wake') {
+            await agentEnd;
+          }
+        } finally {
+          unsubscribe();
         }
         return;
       }
