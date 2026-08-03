@@ -1174,6 +1174,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
+  readonly #pollingThreadGenerations = new Map<string, number>();
   #pollingGeneration = 0;
   readonly #permissionCache = new Map<string, { permission: GithubPermission; expiresAt: number }>();
   #agent?: GithubSignalAgent;
@@ -1269,6 +1270,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     const key = this.#pollingKey(input);
     for (const [pollingKey, state] of this.#polling.entries()) {
       if (pollingKey === key) continue;
+      this.#invalidatePollingThread(pollingKey);
       clearInterval(state.timer);
       this.#polling.delete(pollingKey);
     }
@@ -1291,6 +1293,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   stopPollingForThread(input: GithubPollingThread): void {
     const key = this.#pollingKey(input);
+    this.#invalidatePollingThread(key);
     const state = this.#polling.get(key);
     if (!state) return;
     clearInterval(state.timer);
@@ -1311,6 +1314,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   stopAllPolling(): void {
     this.#pollingGeneration++;
+    this.#pollingThreadGenerations.clear();
     for (const state of this.#polling.values()) clearInterval(state.timer);
     this.#polling.clear();
   }
@@ -1528,6 +1532,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return `${input.resourceId}:${input.threadId}`;
   }
 
+  #invalidatePollingThread(key: string): void {
+    this.#pollingThreadGenerations.set(key, (this.#pollingThreadGenerations.get(key) ?? 0) + 1);
+  }
+
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
     if (this.#agent) return this.#agent;
     const agentId = _input?.agentId ?? this.#options.agentId;
@@ -1554,7 +1562,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       return 0;
     }
     const generation = this.#pollingGeneration;
-    const isCurrentGeneration = () => this.#pollingGeneration === generation;
+    const threadGeneration = this.#pollingThreadGenerations.get(key) ?? 0;
+    const isCurrentGeneration = () =>
+      this.#pollingGeneration === generation &&
+      (this.#pollingThreadGenerations.get(key) ?? 0) === threadGeneration;
     if (state) state.running = true;
     this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: true });
 
@@ -1691,8 +1702,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       this.#notifySubscriptionsChanged({ threadId: input.threadId, resourceId: input.resourceId, subscriptions });
       if (subscriptions.length === 0) this.stopPollingForThread(input);
       return subscriptions.length;
-    } catch (error) {
-      throw error;
     } finally {
       const latestState = this.#polling.get(key);
       if (isCurrentGeneration()) {
@@ -1869,16 +1878,15 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     if (!comments.some(comment => comment.body || comment.url || comment.updatedAt)) return snapshot;
 
     for (const comment of comments) {
+      if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
       if (
         !(await this.#isAuthorizedAuthor(owner, repo, comment.author, {
           authorType: comment.authorType,
           isBot: comment.isBot,
         }, isCurrentGeneration))
       ) {
-        if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
         continue;
       }
-      if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
       return {
         ...snapshot,
         latestCommentAuthor: comment.author,

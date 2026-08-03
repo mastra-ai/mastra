@@ -2,4 +2,4 @@
 '@mastra/github-signals': patch
 ---
 
-Fixed `stopAllPolling()` allowing in-flight polls to persist state and send notifications.
+Fixed GitHub polling so stopping a poll prevents in-flight work from sending notifications or writing subscription state.

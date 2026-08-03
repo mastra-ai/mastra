@@ -3109,8 +3109,9 @@ describe('GithubSignals', () => {
     const restartedSyncBlocked = new Promise<void>(resolve => {
       resolveRestartedSync = resolve;
     });
-    syncClient.syncPullRequest.mockReset();
-    syncClient.syncPullRequest.mockImplementation(async () => {
+    const restartedSyncPullRequest = vi.mocked(syncClient.syncPullRequest);
+    restartedSyncPullRequest.mockReset();
+    restartedSyncPullRequest.mockImplementation(async () => {
       await restartedSyncBlocked;
       return { ok: true };
     });
@@ -3193,8 +3194,7 @@ describe('GithubSignals', () => {
     } as any);
 
     const poll = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
-    for (let i = 0; i < 10 && permissionResolver.getPermission.mock.calls.length === 0; i++) await Promise.resolve();
-    expect(permissionResolver.getPermission).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(permissionResolver.getPermission).toHaveBeenCalledTimes(1));
 
     processor.stopAllPolling();
     resolvePermission();
@@ -3260,8 +3260,7 @@ describe('GithubSignals', () => {
     } as any);
 
     const poll = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
-    for (let i = 0; i < 10 && getNotificationStreamOptions.mock.calls.length === 0; i++) await Promise.resolve();
-    expect(getNotificationStreamOptions).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(getNotificationStreamOptions).toHaveBeenCalledTimes(1));
 
     processor.stopAllPolling();
     resolveStreamOptions();
@@ -3320,8 +3319,7 @@ describe('GithubSignals', () => {
     processor.onSubscriptionsChanged(onSubscriptionsChanged);
 
     const poll = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
-    for (let i = 0; i < 10 && threadStore.saveThread.mock.calls.length === 0; i++) await Promise.resolve();
-    expect(threadStore.saveThread).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(threadStore.saveThread).toHaveBeenCalledTimes(1));
 
     processor.stopAllPolling();
     resolveSave();
@@ -3329,5 +3327,130 @@ describe('GithubSignals', () => {
 
     expect(threadStore.saveThread).toHaveBeenCalledTimes(1);
     expect(onSubscriptionsChanged).not.toHaveBeenCalled();
+  });
+
+  it('stopPollingForThread cancels an in-flight poll for that thread', async () => {
+    vi.useFakeTimers();
+    const thread: StorageThreadType = {
+      id: 'thread-stop-single',
+      resourceId: 'resource-stop-single',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 104,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-stop-single',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let resolveSync!: () => void;
+    const syncBlocked = new Promise<void>(resolve => {
+      resolveSync = resolve;
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => {
+        await syncBlocked;
+        return { ok: true };
+      }),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Single-thread stop race',
+        state: 'closed',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: 'new-hash',
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+    const polling = { threadId: thread.id, resourceId: thread.resourceId };
+
+    await processor.startPollingForThread(polling);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+
+    processor.stopPollingForThread(polling);
+    expect(processor.isPollingThread(polling)).toBe(false);
+    resolveSync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+  });
+
+  it('evicting a thread polling entry cancels its in-flight poll', async () => {
+    vi.useFakeTimers();
+    const createThread = (id: string, resourceId: string, number: number): StorageThreadType => ({
+      id,
+      resourceId,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: `signal-evict-${number}`,
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    });
+    const firstThread = createThread('thread-evict-first', 'resource-evict-first', 105);
+    const secondThread = createThread('thread-evict-second', 'resource-evict-second', 106);
+    const threadStore: GithubSignalsThreadStore = {
+      getThreadById: vi.fn(async ({ threadId }) => (threadId === firstThread.id ? firstThread : secondThread)),
+      saveThread: vi.fn(async ({ thread: nextThread }) => nextThread),
+    };
+    let resolveFirstSync!: () => void;
+    const firstSyncBlocked = new Promise<void>(resolve => {
+      resolveFirstSync = resolve;
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async input => {
+        if (input.number === 105) {
+          await firstSyncBlocked;
+        }
+        return { ok: true };
+      }),
+      getPullRequestSnapshot: vi.fn(async input => ({
+        title: `Eviction race ${input.number}`,
+        state: 'closed',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: `new-hash-${input.number}`,
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+    const firstPolling = { threadId: firstThread.id, resourceId: firstThread.resourceId };
+    const secondPolling = { threadId: secondThread.id, resourceId: secondThread.resourceId };
+
+    await processor.startPollingForThread(firstPolling);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+
+    await processor.startPollingForThread(secondPolling);
+    expect(processor.isPollingThread(firstPolling)).toBe(false);
+    expect(processor.isPollingThread(secondPolling)).toBe(true);
+
+    resolveFirstSync();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
   });
 });
