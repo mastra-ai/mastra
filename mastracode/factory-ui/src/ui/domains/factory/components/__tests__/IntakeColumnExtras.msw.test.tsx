@@ -13,12 +13,26 @@ const ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/issues`;
 const PULLS_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/prs`;
 const STATUS_URL = `${TEST_BASE_URL}/web/github/status`;
 
-function IntakeColumnExtrasHarness({ source = 'github' }: { source?: 'github' | 'github-prs' }) {
+function IntakeColumnExtrasHarness({
+  source = 'github',
+  accountLogin = 'acme',
+}: {
+  source?: 'github' | 'github-prs';
+  accountLogin?: string;
+}) {
   const issues = useProjectIssuesQuery(source === 'github' ? PROJECT_ID : undefined);
   const pulls = useProjectPullRequestsQuery(source === 'github-prs' ? PROJECT_ID : undefined);
   const linearIssues = useLinearIssuesQuery(undefined);
 
-  return <IntakeColumnExtras source={source} issues={issues} pulls={pulls} linearIssues={linearIssues} />;
+  return (
+    <IntakeColumnExtras
+      source={source}
+      issues={issues}
+      pulls={pulls}
+      linearIssues={linearIssues}
+      accountLogin={accountLogin}
+    />
+  );
 }
 
 describe('IntakeColumnExtras GitHub installation health', () => {
@@ -85,5 +99,32 @@ describe('IntakeColumnExtras GitHub installation health', () => {
     ).toBeInTheDocument();
     expect(statusRequests).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole('button', { name: 'Reconnect GitHub' })).toBeInTheDocument();
+  });
+
+  it('does not show a PR reconnect banner when a different installation is broken', async () => {
+    let statusRequests = 0;
+    server.use(
+      http.get(STATUS_URL, () => {
+        statusRequests += 1;
+        return HttpResponse.json({
+          enabled: true,
+          connected: true,
+          installations: [{ installationId: 7, accountLogin: 'healthy-org', accountType: 'Organization' }],
+          brokenInstallations: [
+            { installationId: 42, accountLogin: 'other-org', accountType: 'Organization', brokenAt: Date.now() },
+          ],
+        });
+      }),
+      http.get(PULLS_URL, () =>
+        HttpResponse.json({ error: 'github_fetch_failed', message: 'Temporary GitHub failure' }, { status: 502 }),
+      ),
+    );
+
+    renderWithProviders(<IntakeColumnExtrasHarness source="github-prs" accountLogin="healthy-org" />);
+
+    await waitFor(() => expect(statusRequests).toBeGreaterThanOrEqual(2));
+    expect(
+      screen.queryByText('GitHub installation removed. Reconnect to keep syncing pull requests.'),
+    ).not.toBeInTheDocument();
   });
 });

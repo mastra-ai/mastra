@@ -580,6 +580,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
+        confirmInstallationReconnect: input => this.#confirmInstallationReconnect(input),
         runIssueTriage:
           this.#runIssueTriage ??
           (ctx.controller ? input => runGithubIssueTriage({ controller: ctx.controller!, input }) : undefined),
@@ -671,23 +672,39 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           'GET',
           `${API_PREFIX}/github-app/install-url?${query}`,
         );
-        const brokenInstallations = (await this.storage.installations.list({ orgId })).filter(
-          installation => installation.brokenAt !== null,
-        );
-        await Promise.all(
-          brokenInstallations.map(async installation => {
-            await this.storage.installations.clearBroken({ orgId, id: installation.id });
-            const installationId = parsePositiveInteger(installation.externalId);
-            if (installationId === null) return;
-            this.#installationReposCache.delete(installationId);
-            for (const [cacheKey, cached] of this.#repositoryAccessCache) {
-              if (cached.installationId === installationId) this.#repositoryAccessCache.delete(cacheKey);
-            }
-          }),
-        );
         return c.redirect(url);
       },
     });
+  }
+
+  async #confirmInstallationReconnect({
+    orgId,
+    installationId,
+  }: {
+    orgId: string;
+    installationId: number;
+  }): Promise<void> {
+    const installation = await this.storage.installations.findByExternalId({
+      orgId,
+      externalId: String(installationId),
+    });
+    if (!installation || installation.brokenAt === null) return;
+
+    try {
+      await this.#client.request<{ token: string; expiresAt?: string }>(
+        'POST',
+        `${API_PREFIX}/github-app/installations/${installationId}/token`,
+      );
+    } catch (error) {
+      if (isDeadInstallation(error)) return;
+      throw error;
+    }
+
+    await this.storage.installations.clearBroken({ orgId, id: installation.id });
+    this.#installationReposCache.delete(installationId);
+    for (const [cacheKey, cached] of this.#repositoryAccessCache) {
+      if (cached.installationId === installationId) this.#repositoryAccessCache.delete(cacheKey);
+    }
   }
 
   #connectUserRoute(ctx: IntegrationContext): ApiRoute {

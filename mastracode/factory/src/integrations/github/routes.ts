@@ -124,6 +124,8 @@ export interface MountGithubRoutesOptions {
   controller?: MountedMastraCode['controller'];
   /** Run seam used by GitHub webhooks and manual Intake triage. */
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
+  /** Validate a Platform reconnect callback before clearing persisted broken state. */
+  confirmInstallationReconnect?: (input: { orgId: string; installationId: number }) => Promise<void>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
@@ -644,6 +646,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if ('response' in resolved) return resolved.response;
 
         const orgId = resolved.tenant.orgId;
+        const reconnectInstallationId = Number(c.req.header('x-mastra-github-reconnect-installation'));
+        if (Number.isSafeInteger(reconnectInstallationId) && reconnectInstallationId > 0) {
+          await options.confirmInstallationReconnect?.({ orgId, installationId: reconnectInstallationId });
+        }
         const installs = await github.sourceControlStorage.installations.list({ orgId });
 
         const query = (c.req.query('q') ?? '').toLowerCase();
@@ -798,6 +804,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           );
         }
         try {
+          await github.versionControl.getRepositoryAccess({
+            orgId: loaded.orgId,
+            repositoryId: loaded.project.repository.id,
+          });
           const { issues, nextCursor } = await github.intake.listIssues({
             connection: {
               type: 'app-installation',
@@ -826,32 +836,19 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
-          let responseError = err;
-          if (!(err instanceof GithubInstallationBrokenError) && isDeadGithubInstallationError(err)) {
-            await github.sourceControlStorage.installations.markBroken({
-              orgId: loaded.orgId,
-              id: loaded.project.installation.id,
-              brokenAt: Date.now(),
-            });
-            responseError = new GithubInstallationBrokenError({
-              installationId,
-              accountLogin: loaded.project.installation.accountName,
-              orgId: loaded.orgId,
-            });
-          }
-          if (responseError instanceof GithubInstallationBrokenError) {
+          if (err instanceof GithubInstallationBrokenError) {
             return c.json(
               {
-                error: responseError.code,
-                message: responseError.message,
-                installationId: responseError.installationId,
-                accountLogin: responseError.accountLogin,
+                error: err.code,
+                message: err.message,
+                installationId: err.installationId,
+                accountLogin: err.accountLogin,
               },
               424,
             );
           }
           return c.json(
-            { error: 'github_fetch_failed', message: responseError instanceof Error ? responseError.message : String(responseError) },
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
             502,
           );
         }
@@ -951,6 +948,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           );
         }
         try {
+          await github.versionControl.getRepositoryAccess({
+            orgId: loaded.orgId,
+            repositoryId: loaded.project.repository.id,
+          });
           const { pullRequests, nextCursor } = await github.versionControl.listPullRequests({
             connection: {
               type: 'app-installation',
@@ -979,20 +980,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
-          let message = err instanceof Error ? err.message : String(err);
-          if (isDeadGithubInstallationError(err)) {
-            await github.sourceControlStorage.installations.markBroken({
-              orgId: loaded.orgId,
-              id: loaded.project.installation.id,
-              brokenAt: Date.now(),
-            });
-            message = new GithubInstallationBrokenError({
-              installationId,
-              accountLogin: loaded.project.installation.accountName,
-              orgId: loaded.orgId,
-            }).message;
-          }
-          return c.json({ error: 'github_fetch_failed', message }, 502);
+          return c.json({ error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) }, 502);
         }
       },
     }),

@@ -21,11 +21,13 @@ export function IntakeColumnExtras({
   issues,
   pulls,
   linearIssues,
+  accountLogin,
 }: {
   source?: IntakeSource;
   issues: ReturnType<typeof useProjectIssuesQuery>;
   pulls: ReturnType<typeof useProjectPullRequestsQuery>;
   linearIssues: ReturnType<typeof useLinearIssuesQuery>;
+  accountLogin?: string;
 }) {
   const { baseUrl } = useApiConfig();
   const githubSourceActive = source === 'github' || source === 'github-prs';
@@ -35,10 +37,14 @@ export function IntakeColumnExtras({
   }, [githubStatus.refetch, pulls.error, pulls.isError, source]);
   if (source === undefined) return null;
   const feed = source === 'github' ? issues : source === 'github-prs' ? pulls : linearIssues;
+  const statusHasMatchingBrokenInstallation = githubStatus.data?.brokenInstallations?.some(
+    installation => installation.accountLogin?.toLowerCase() === accountLogin?.toLowerCase(),
+  );
   const githubInstallationBroken =
     githubSourceActive &&
-    ((feed.isError && isGithubInstallationBrokenError(feed.error)) ||
-      Boolean(githubStatus.data?.brokenInstallations?.length));
+    feed.isError &&
+    (isGithubInstallationBrokenError(feed.error) ||
+      (source === 'github-prs' && statusHasMatchingBrokenInstallation === true));
 
   return (
     <>

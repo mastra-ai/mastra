@@ -244,6 +244,7 @@ function BoardContent({
                     issues={intake.issues}
                     pulls={intake.pulls}
                     linearIssues={intake.linearIssues}
+                    accountLogin={repository.slug.split('/')[0]}
                   />
                 )}
               </BoardColumn>

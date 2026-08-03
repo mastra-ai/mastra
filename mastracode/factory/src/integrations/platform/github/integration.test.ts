@@ -827,6 +827,7 @@ describe('PlatformGithubIntegration', () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
+      if (url.includes('/github-app/installations/7/token')) return json({ token: 'ghs_rules' });
       if (url.includes('/issues?')) return json({ issues: [issue] });
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -992,7 +993,7 @@ describe('PlatformGithubIntegration', () => {
     );
   });
 
-  it('preserves broken state while an installation remains live and clears it when reconnect starts', async () => {
+  it('preserves broken state until the completed reconnect callback confirms the installation', async () => {
     const seed = await createPlatformStorageForTests();
     const sourceControl = seed.sourceControl.forIntegration('github');
     const installation = await sourceControl.installations.upsert({
@@ -1002,10 +1003,35 @@ describe('PlatformGithubIntegration', () => {
       accountName: 'acme',
       accountType: 'Organization',
     });
+    const otherInstallation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '8',
+      accountName: 'other-org',
+      accountType: 'Organization',
+    });
     let installationIsLive = false;
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/github-app/installations')) {
+      if (url.includes('/github-app/installations/7/token')) {
+        return json({ token: 'ghs_reconnected', expiresAt: '2026-08-03T18:00:00Z' });
+      }
+      if (url.includes('/github-app/installations/7/repositories')) {
+        return json({
+          repositories: [
+            {
+              id: 101,
+              fullName: 'acme/app',
+              private: true,
+              defaultBranch: 'main',
+              htmlUrl: 'https://github.com/acme/app',
+              owner: 'acme',
+              name: 'app',
+            },
+          ],
+        });
+      }
+      if (url.endsWith('/github-app/installations')) {
         return json({
           installations: installationIsLive
             ? [
@@ -1032,7 +1058,11 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      fleet: {
+        enabled: true,
+        provider: 'local',
+        computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+      },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl,
@@ -1063,6 +1093,12 @@ describe('PlatformGithubIntegration', () => {
           accountType: 'Organization',
           brokenAt: expect.any(Number),
         },
+        {
+          installationId: 8,
+          accountLogin: 'other-org',
+          accountType: 'Organization',
+          brokenAt: expect.any(Number),
+        },
       ],
       reason: 'not_connected',
     });
@@ -1075,7 +1111,10 @@ describe('PlatformGithubIntegration', () => {
     await expect(stillBrokenStatus.json()).resolves.toMatchObject({
       connected: false,
       installations: [],
-      brokenInstallations: [{ installationId: 7, accountLogin: 'acme', brokenAt: expect.any(Number) }],
+      brokenInstallations: [
+        { installationId: 7, accountLogin: 'acme', brokenAt: expect.any(Number) },
+        { installationId: 8, accountLogin: 'other-org', brokenAt: expect.any(Number) },
+      ],
       reason: 'not_connected',
     });
 
@@ -1084,15 +1123,31 @@ describe('PlatformGithubIntegration', () => {
     expect(reconnect.headers.get('location')).toBe(
       'https://github.com/apps/mastra/installations/new?state=platform-state',
     );
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
+      brokenAt: expect.any(Number),
+    });
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: otherInstallation.id })).resolves.toMatchObject({
+      brokenAt: expect.any(Number),
+    });
+
+    const callbackRefresh = await app.request('/web/github/repos', {
+      headers: { 'X-Mastra-GitHub-Reconnect-Installation': '7' },
+    });
+    expect(callbackRefresh.status).toBe(200);
+    await expect(callbackRefresh.json()).resolves.toMatchObject({ repos: [{ fullName: 'acme/app' }] });
+
     const recoveredStatus = await app.request('/web/github/status');
     await expect(recoveredStatus.json()).resolves.toMatchObject({
       connected: true,
       installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }],
-      brokenInstallations: [],
+      brokenInstallations: [{ installationId: 8, accountLogin: 'other-org', brokenAt: expect.any(Number) }],
       reason: 'ready',
     });
     await expect(sourceControl.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
       brokenAt: null,
+    });
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: otherInstallation.id })).resolves.toMatchObject({
+      brokenAt: expect.any(Number),
     });
 
     let releasePassiveUpsert: () => void = () => {};
@@ -1124,7 +1179,10 @@ describe('PlatformGithubIntegration', () => {
     await expect((await racingStatus).json()).resolves.toMatchObject({
       connected: false,
       installations: [],
-      brokenInstallations: [{ installationId: 7, accountLogin: 'acme', brokenAt: 1_700_000_000_000 }],
+      brokenInstallations: [
+        { installationId: 7, accountLogin: 'acme', brokenAt: 1_700_000_000_000 },
+        { installationId: 8, accountLogin: 'other-org', brokenAt: expect.any(Number) },
+      ],
     });
     upsertSpy.mockRestore();
   });

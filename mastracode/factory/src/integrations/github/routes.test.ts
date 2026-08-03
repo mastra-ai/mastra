@@ -588,6 +588,9 @@ function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
+    confirmInstallationReconnect?: NonNullable<
+      Parameters<typeof buildGithubRoutes>[0]
+    >['confirmInstallationReconnect'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
     stateSigner?: typeof stateSigner | null;
   } = {},
@@ -1047,6 +1050,19 @@ describe('repos route', () => {
     expect(json.repos).toHaveLength(1);
     expect(json.repos[0].fullName).toBe('octo/hello');
     expect(tables.repositories).toHaveLength(1);
+  });
+
+  it('confirms a completed reconnect before refreshing repositories', async () => {
+    install(7, 'octo');
+    const confirmInstallationReconnect = vi.fn().mockResolvedValue(undefined);
+
+    const res = await buildApp({ workosId: 'u1' }, { confirmInstallationReconnect }).request('/web/github/repos', {
+      headers: { 'X-Mastra-GitHub-Reconnect-Installation': '7' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(confirmInstallationReconnect).toHaveBeenCalledWith({ orgId: 'org1', installationId: 7 });
+    expect(listInstallationRepos).toHaveBeenCalledWith(7);
   });
 
   it.each([404, 409])('marks dead installations broken on %s and keeps listing the rest', async status => {
@@ -1576,9 +1592,12 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
-  it.each([404, 409])('returns 424 and stops refetching when the GitHub installation fails with %s', async status => {
+  it('returns 424 and stops refetching when repository access detects a broken installation', async () => {
     seedMaterializedProject();
-    listRepoOpenIssues.mockRejectedValue(Object.assign(new Error('Installation unavailable'), { status }));
+    githubStub.versionControl.getRepositoryAccess.mockImplementationOnce(async () => {
+      tables.installations[0]!.brokenAt = Date.now();
+      throw new GithubInstallationBrokenError({ installationId: 7, accountLogin: 'octo', orgId: 'org1' });
+    });
     const app = buildApp({ workosId: 'u1' });
 
     const first = await app.request('/web/github/projects/p1/issues');
@@ -1590,10 +1609,12 @@ describe('issues route', () => {
       accountLogin: 'octo',
     });
     expect(tables.installations[0]).toMatchObject({ brokenAt: expect.any(Number) });
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
 
     const second = await app.request('/web/github/projects/p1/issues');
     expect(second.status).toBe(424);
-    expect(listRepoOpenIssues).toHaveBeenCalledTimes(1);
+    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledTimes(1);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('502s when GitHub is unavailable', async () => {
@@ -1763,9 +1784,12 @@ describe('prs route', () => {
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
   });
 
-  it.each([404, 409])('marks the installation broken on PR fetch %s without changing the PR contract', async status => {
+  it('detects broken repository access without changing the PR error contract', async () => {
     seedMaterializedProject();
-    listRepoOpenPullRequests.mockRejectedValue(Object.assign(new Error('Installation unavailable'), { status }));
+    githubStub.versionControl.getRepositoryAccess.mockImplementationOnce(async () => {
+      tables.installations[0]!.brokenAt = Date.now();
+      throw new GithubInstallationBrokenError({ installationId: 7, accountLogin: 'octo', orgId: 'org1' });
+    });
     const app = buildApp({ workosId: 'u1' });
 
     const first = await app.request('/web/github/projects/p1/prs');
@@ -1775,10 +1799,12 @@ describe('prs route', () => {
       message: 'GitHub installation for @octo is unavailable. Reconnect GitHub to continue.',
     });
     expect(tables.installations[0]).toMatchObject({ brokenAt: expect.any(Number) });
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
 
     const second = await app.request('/web/github/projects/p1/prs');
     expect(second.status).toBe(502);
-    expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(1);
+    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledTimes(1);
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
   });
 });
 

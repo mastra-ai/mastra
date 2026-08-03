@@ -3,7 +3,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { confirmGithubReconnect } from '../services/github';
 
 const handledCallbackKeys = new Set<string>();
 const callbackParamNames = [
@@ -22,6 +24,7 @@ function hasGitHubAppCallback(searchParams: URLSearchParams): boolean {
 export function GitHubAppCallbackHandler() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { baseUrl } = useApiConfig();
 
   useEffect(() => {
     if (!hasGitHubAppCallback(searchParams)) return;
@@ -34,9 +37,18 @@ export function GitHubAppCallbackHandler() {
     const installed = searchParams.get('github_app_installed') === 'true';
     const userAuthorized = searchParams.get('github_app_user_authorized') === 'true';
     const failed = searchParams.has('github_app_error');
+    const installationId = Number(searchParams.get('installation_id'));
+    const refreshQueries = () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
+      ]);
 
-    void queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+    if (!requested && !failed && Number.isSafeInteger(installationId) && installationId > 0) {
+      void confirmGithubReconnect(baseUrl, installationId).catch(() => undefined).then(refreshQueries);
+    } else {
+      void refreshQueries();
+    }
 
     // The route tree mounts before the app-level Toaster sibling in main.tsx.
     // Defer one microtask so the toaster's own passive effects subscribe before
@@ -65,7 +77,7 @@ export function GitHubAppCallbackHandler() {
       },
       { replace: true },
     );
-  }, [queryClient, searchParams, setSearchParams]);
+  }, [baseUrl, queryClient, searchParams, setSearchParams]);
 
   return null;
 }
