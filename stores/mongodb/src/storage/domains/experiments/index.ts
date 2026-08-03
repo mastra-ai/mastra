@@ -299,34 +299,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
       await collection.insertOne(doc);
 
-      return {
-        id,
-        name: input.name,
-        description: input.description,
-        metadata: input.metadata,
-        provenance: input.provenance ?? null,
-        runnerAttestation: input.runnerAttestation ?? null,
-        experimentSetId: input.experimentSetId ?? null,
-        comparisonId: input.comparisonId ?? null,
-        variantId: input.variantId ?? null,
-        trialIndex: input.trialIndex ?? null,
-        datasetId: input.datasetId ?? null,
-        datasetVersion: input.datasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        status: 'pending',
-        totalItems: input.totalItems,
-        succeededCount: 0,
-        failedCount: 0,
-        skippedCount: 0,
-        agentVersion: input.agentVersion ?? null,
-        startedAt: null,
-        completedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
+      return transformExperimentRow(structuredClone(doc));
     } catch (error) {
       throw new MastraError(
         {

@@ -110,6 +110,17 @@ describe('Datasets Handlers', () => {
       );
     });
 
+    it('accepts trial index 0', () => {
+      expect(listExperimentsQuerySchema.safeParse({ trialIndex: 0 }).success).toBe(true);
+      expect(
+        triggerExperimentBodySchema.safeParse({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          grouping: { trialIndex: 0 },
+        }).success,
+      ).toBe(true);
+    });
+
     it.each([-1, 1.5])('rejects invalid trial index %s', trialIndex => {
       expect(listExperimentsQuerySchema.safeParse({ trialIndex }).success).toBe(false);
       expect(

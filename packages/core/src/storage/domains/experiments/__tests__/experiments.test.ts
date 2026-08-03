@@ -136,11 +136,14 @@ describe('ExperimentsInMemory', () => {
       expect(fetched?.provenance).toEqual({ source: 'github', metadata: { branch: 'main' } });
 
       (fetched!.metadata as typeof metadata).nested.value = 'mutated-fetch';
+      fetched!.provenance!.metadata!.branch = 'mutated-fetch';
       const listed = await storage.listExperiments({ pagination: { page: 0, perPage: 10 } });
       (listed.experiments[0]!.metadata as typeof metadata).nested.value = 'mutated-list';
+      listed.experiments[0]!.provenance!.metadata!.branch = 'mutated-list';
 
       const afterReads = await storage.getExperimentById({ id: created.id });
       expect(afterReads?.metadata).toEqual({ nested: { value: 'original' } });
+      expect(afterReads?.provenance).toEqual({ source: 'github', metadata: { branch: 'main' } });
 
       const updateMetadata = { nested: { value: 'updated' } };
       const updated = await storage.updateExperiment({ id: created.id, metadata: updateMetadata });
