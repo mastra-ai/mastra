@@ -10,7 +10,7 @@ packages:
 
 [Confident AI](https://www.confident-ai.com/) is an LLM observability and evaluation platform for teams to build reliable AI applications in both development and production.
 
-The `@mastra/deepeval` package sends your Mastra traces to Confident AI, where you can run metrics against them and track quality over time. It builds on [DeepEval](https://www.confident-ai.com/docs), the open source evaluation SDK behind the platform.
+The `@mastra/deepeval` package sends your Mastra traces to Confident AI, where you can run metrics against them and track quality over time. It builds on [DeepEval](https://www.confident-ai.com/docs), the open-source evaluation SDK behind the platform.
 
 ## Installation
 
@@ -117,7 +117,7 @@ Mastra spans map to the span types shown in Confident AI:
 | `MODEL_GENERATION`                                                     | `LLM`                  |
 | `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`                 |
 | `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`            |
-| All others                                                             | `CUSTOM`               |
+| All other exported span types                                          | `CUSTOM`               |
 
 
 ## Related
