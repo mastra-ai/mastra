@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
+import { ScorerRunError } from '../../../evals/base';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
@@ -311,6 +312,8 @@ describe('runExperiment', () => {
       // Scorer error should be captured in score result
       expect(result.results[0].scores[0].error).toBe('Scorer crashed');
       expect(result.results[0].scores[0].score).toBeNull();
+      expect(result.results[0].scores[0].failedStep).toBeUndefined();
+      expect(result.results[0].scores[0].completedSteps).toBeUndefined();
     });
 
     it('failing scorer does not affect other scorers', async () => {
@@ -344,6 +347,77 @@ describe('runExperiment', () => {
       const workingScore = result.results[0].scores.find(s => s.scorerId === 'working');
       expect(workingScore?.score).toBe(1.0);
       expect(workingScore?.error).toBeNull();
+    });
+
+    it('retains completed scorer output and stage context without persisting a failed score', async () => {
+      const recoveredFailure = new ScorerRunError({
+        scorerId: 'partial-scorer',
+        steps: ['analyze', 'generateScore', 'generateReason'],
+        failedStep: 'generateReason',
+        completedSteps: ['analyze', 'generateScore'],
+        result: {
+          output: 'Response',
+          runId: 'partial-run',
+          score: 0,
+          analyzeStepResult: { relevant: true },
+          analyzePrompt: 'analyze the response',
+          generateScorePrompt: 'score the response',
+        },
+        cause: new Error('reason failed'),
+      });
+      const partialScorer = {
+        id: 'partial-scorer',
+        name: 'Partial Scorer',
+        description: 'Fails after computing a score',
+        run: vi.fn().mockRejectedValue(recoveredFailure),
+      } as unknown as MastraScorer<any, any, any, any>;
+      const emptyFailureScorer = {
+        id: 'empty-failure-scorer',
+        name: 'Empty Failure Scorer',
+        description: 'Fails before computing a score',
+        run: vi.fn().mockRejectedValue(
+          new ScorerRunError({
+            scorerId: 'empty-failure-scorer',
+            steps: ['generateScore'],
+            failedStep: 'generateScore',
+            completedSteps: [],
+            cause: new Error('score failed'),
+          }),
+        ),
+      } as unknown as MastraScorer<any, any, any, any>;
+      const workingScorer = createMockScorer('working', 'Working Scorer');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [partialScorer, emptyFailureScorer, workingScorer],
+      });
+
+      const partialResult = result.results[0].scores.find(score => score.scorerId === 'partial-scorer');
+      expect(partialResult).toMatchObject({
+        score: 0,
+        reason: null,
+        error: 'Scorer Run Failed: reason failed',
+        failedStep: 'generateReason',
+        completedSteps: ['analyze', 'generateScore'],
+        targetScope: 'span',
+      });
+      expect(result.results[0].scores.find(score => score.scorerId === 'empty-failure-scorer')).toMatchObject({
+        score: null,
+        reason: null,
+        error: 'Scorer Run Failed: score failed',
+        failedStep: 'generateScore',
+        completedSteps: [],
+      });
+      expect(result.results[0].scores.find(score => score.scorerId === 'working')).toMatchObject({
+        score: 1,
+        error: null,
+      });
+      const scoreStoreLookups = (mockStorage.getStore as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([domain]) => domain === 'scores',
+      );
+      expect(scoreStoreLookups).toHaveLength(2);
     });
   });
 

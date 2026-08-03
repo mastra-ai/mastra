@@ -1,6 +1,7 @@
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import type { ReactNode } from 'react';
+import { useRef } from 'react';
 import { useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
@@ -8,7 +9,8 @@ import { ChatLayout } from '../layouts/ChatLayout';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
-import { chatColumnClass } from '../domains/workspace-viewer/layout';
+import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
+import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
@@ -19,6 +21,7 @@ import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
+import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { WorkingIndicator } from '../domains/chat/components/WorkingIndicator';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
@@ -68,6 +71,8 @@ function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }
   useGlobalShortcuts();
   useRouteThreadSync();
   useThreadPageKickoffs();
+  const railBoxRef = useRef<HTMLDivElement>(null);
+  const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
     <ThreadShell workspacePath={workspacePath}>
@@ -79,23 +84,26 @@ function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }
       </ChatShell.Bar>
       <ChatShell.Stage>
         <ChatShell.Viewport>
-          <ChatShell.Content className="gap-0 pt-6">
-            <ChatShell.Column className="flex-1">
-              <ConnectionNotice />
-              <ChatMessageBoundary>
-                <ThreadTranscript />
-              </ChatMessageBoundary>
-            </ChatShell.Column>
-          </ChatShell.Content>
-          <ChatShell.Dock>
-            <ChatShell.ScrollButton aria-label="Jump to latest message" />
-            <ChatShell.Column className="gap-2">
-              <TaskPanel />
-              <div role="region" aria-label="Thread composer">
-                <ComposerPanel />
-              </div>
-            </ChatShell.Column>
-          </ChatShell.Dock>
+          <div ref={railBoxRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
+            {railFits && <ThreadRailLayer />}
+            <ChatShell.Content className="gap-0 pt-6">
+              <ChatShell.Column className="flex-1">
+                <ConnectionNotice />
+                <ChatMessageBoundary>
+                  <ThreadTranscript />
+                </ChatMessageBoundary>
+              </ChatShell.Column>
+            </ChatShell.Content>
+            <ChatShell.Dock>
+              <ChatShell.ScrollButton aria-label="Jump to latest message" />
+              <ChatShell.Column className="gap-2">
+                <TaskPanel />
+                <div role="region" aria-label="Thread composer">
+                  <ComposerPanel />
+                </div>
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </div>
         </ChatShell.Viewport>
         <WorkspaceFilesSurface />
       </ChatShell.Stage>

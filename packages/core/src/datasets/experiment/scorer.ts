@@ -1,3 +1,4 @@
+import { ScorerRunError } from '../../evals/base';
 import type { MastraScorer } from '../../evals/base';
 import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '../../evals/types';
@@ -195,8 +196,8 @@ export async function runScorersForItem(
         workflowData,
       );
 
-      // Persist score if storage available and score was computed
-      if (storage && result.score !== null) {
+      // Persist only scores from successful scorer runs.
+      if (storage && result.error === null && result.score !== null) {
         try {
           // Legacy score-store emission. This path is being deprecated.
           await validateAndSaveScore(storage, {
@@ -256,6 +257,37 @@ interface ScorerPromptMetadata {
   preprocessPrompt?: string;
   analyzeStepResult?: Record<string, unknown>;
   analyzePrompt?: string;
+}
+
+function extractScorerRunFields(scoreResult: unknown): {
+  score: number | null;
+  reason: string | null;
+  promptMetadata: ScorerPromptMetadata;
+} {
+  if (typeof scoreResult !== 'object' || scoreResult === null) {
+    return { score: null, reason: null, promptMetadata: {} };
+  }
+
+  const fields = scoreResult as Record<string, unknown>;
+  const str = (key: string): string | undefined =>
+    typeof fields[key] === 'string' ? (fields[key] as string) : undefined;
+  const obj = (key: string): Record<string, unknown> | undefined => {
+    const value = fields[key];
+    return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+  };
+
+  return {
+    score: typeof fields.score === 'number' ? fields.score : null,
+    reason: typeof fields.reason === 'string' ? fields.reason : null,
+    promptMetadata: {
+      generateScorePrompt: str('generateScorePrompt'),
+      generateReasonPrompt: str('generateReasonPrompt'),
+      preprocessStepResult: obj('preprocessStepResult'),
+      preprocessPrompt: str('preprocessPrompt'),
+      analyzeStepResult: obj('analyzeStepResult'),
+      analyzePrompt: str('analyzePrompt'),
+    },
+  };
 }
 
 /**
@@ -320,16 +352,7 @@ async function runScorerSafe(
       };
     }
 
-    const fields = scoreResult as Record<string, unknown>;
-    const score = typeof fields.score === 'number' ? fields.score : null;
-    const reason = typeof fields.reason === 'string' ? fields.reason : null;
-
-    const str = (key: string): string | undefined =>
-      typeof fields[key] === 'string' ? (fields[key] as string) : undefined;
-    const obj = (key: string): Record<string, unknown> | undefined => {
-      const val = fields[key];
-      return typeof val === 'object' && val !== null ? (val as Record<string, unknown>) : undefined;
-    };
+    const { score, reason, promptMetadata } = extractScorerRunFields(scoreResult);
 
     return {
       result: {
@@ -340,16 +363,26 @@ async function runScorerSafe(
         error: null,
         targetScope: effectiveScope,
       },
-      promptMetadata: {
-        generateScorePrompt: str('generateScorePrompt'),
-        generateReasonPrompt: str('generateReasonPrompt'),
-        preprocessStepResult: obj('preprocessStepResult'),
-        preprocessPrompt: str('preprocessPrompt'),
-        analyzeStepResult: obj('analyzeStepResult'),
-        analyzePrompt: str('analyzePrompt'),
-      },
+      promptMetadata,
     };
   } catch (error) {
+    if (error instanceof ScorerRunError) {
+      const { score, reason, promptMetadata } = extractScorerRunFields(error.result);
+      return {
+        result: {
+          scorerId: scorer.id,
+          scorerName: scorer.name,
+          score,
+          reason,
+          error: error.message,
+          failedStep: error.failedStep,
+          completedSteps: error.completedSteps,
+          targetScope: trajectoryOutput ? 'trajectory' : 'span',
+        },
+        promptMetadata,
+      };
+    }
+
     return {
       result: {
         scorerId: scorer.id,
@@ -514,6 +547,21 @@ export async function runStepScorersForItem(
             stepId,
           };
         } catch (error) {
+          if (error instanceof ScorerRunError) {
+            const { score, reason } = extractScorerRunFields(error.result);
+            return {
+              scorerId: scorer.id,
+              scorerName: scorer.name,
+              score,
+              reason,
+              error: error.message,
+              failedStep: error.failedStep,
+              completedSteps: error.completedSteps,
+              targetScope: 'span' as const,
+              stepId,
+            };
+          }
+
           return {
             scorerId: scorer.id,
             scorerName: scorer.name,
