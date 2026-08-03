@@ -41,11 +41,15 @@ export function GitHubAppCallbackHandler() {
 
     const handleCallback = async () => {
       try {
-        if (installed && Number.isSafeInteger(installationId) && installationId > 0) {
+        if (installed) {
+          if (!Number.isSafeInteger(installationId) || installationId <= 0) {
+            throw new Error('GitHub reconnect callback did not include a valid installation ID.');
+          }
           await confirmGithubReconnect(baseUrl, installationId);
         }
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.githubReposAll() }),
           queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
         ]);
       } catch {

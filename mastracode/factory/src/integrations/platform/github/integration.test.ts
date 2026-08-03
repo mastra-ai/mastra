@@ -1020,28 +1020,31 @@ describe('PlatformGithubIntegration', () => {
         providerMetadata: {},
       },
     });
+    await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '102',
+        slug: 'acme/api',
+        defaultBranch: 'main',
+        providerMetadata: {},
+      },
+    });
     let installationIsLive = false;
-    let repositoryAccessRestored = false;
+    let accessibleRepositoryNames: string[] = [];
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/github-app/installations/7/token')) {
-        return repositoryAccessRestored
-          ? json({ token: 'ghs_reconnected', expiresAt: '2026-08-03T18:00:00Z' })
-          : json({ error: 'Installation unavailable' }, 404);
-      }
       if (url.includes('/github-app/installations/7/repositories')) {
         return json({
-          repositories: [
-            {
-              id: 101,
-              fullName: 'acme/app',
-              private: true,
-              defaultBranch: 'main',
-              htmlUrl: 'https://github.com/acme/app',
-              owner: 'acme',
-              name: 'app',
-            },
-          ],
+          repositories: accessibleRepositoryNames.map((name, index) => ({
+            id: 101 + index,
+            fullName: `acme/${name}`,
+            private: true,
+            defaultBranch: 'main',
+            htmlUrl: `https://github.com/acme/${name}`,
+            owner: 'acme',
+            name,
+          })),
         });
       }
       if (url.endsWith('/github-app/installations')) {
@@ -1168,7 +1171,16 @@ describe('PlatformGithubIntegration', () => {
       brokenAt: expect.any(Number),
     });
 
-    repositoryAccessRestored = true;
+    accessibleRepositoryNames = ['app'];
+    const partiallyRestoredConfirmation = await app.request('/web/github/installations/7/confirm-reconnect', {
+      method: 'POST',
+    });
+    expect(partiallyRestoredConfirmation.status).toBe(424);
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
+      brokenAt: expect.any(Number),
+    });
+
+    accessibleRepositoryNames = ['app', 'api'];
     const confirmedReconnect = await app.request('/web/github/installations/7/confirm-reconnect', {
       method: 'POST',
     });
@@ -1176,7 +1188,9 @@ describe('PlatformGithubIntegration', () => {
 
     const callbackRefresh = await app.request('/web/github/repos');
     expect(callbackRefresh.status).toBe(200);
-    await expect(callbackRefresh.json()).resolves.toMatchObject({ repos: [{ fullName: 'acme/app' }] });
+    await expect(callbackRefresh.json()).resolves.toMatchObject({
+      repos: [{ fullName: 'acme/app' }, { fullName: 'acme/api' }],
+    });
 
     const recoveredStatus = await app.request('/web/github/status');
     await expect(recoveredStatus.json()).resolves.toMatchObject({

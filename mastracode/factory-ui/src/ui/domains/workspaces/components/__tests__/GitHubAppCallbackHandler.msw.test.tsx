@@ -85,4 +85,21 @@ describe('GitHubAppCallbackHandler', () => {
     expect(router.state.location.search).toContain('github_app_installed=true');
     expect(router.state.location.search).toContain('installation_id=124');
   });
+
+  it.each([
+    ['missing', '/factories/fp-1/settings/repositories?github_app_installed=true&keep=missing'],
+    ['nonnumeric', '/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=nope&keep=nonnumeric'],
+    [
+      'unsafe',
+      '/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=9007199254740992&keep=unsafe',
+    ],
+  ])('given a completed callback with a %s installation ID, shows an error and preserves callback params', async (_, url) => {
+    const router = renderCallback(url);
+
+    expect(
+      await screen.findByText('GitHub reconnect could not be confirmed. Try reconnecting again.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('GitHub App installed')).not.toBeInTheDocument();
+    expect(router.state.location.search).toContain('github_app_installed=true');
+  });
 });
