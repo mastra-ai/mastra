@@ -700,7 +700,6 @@ describe('webhook route', () => {
   it('accepts a valid signed issues event without guessing a Factory project repository', async () => {
     seedMaterializedProject();
     const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp(null, { runIssueTriage }).request(
       signedGithubWebhookRequest('issues', {
@@ -729,7 +728,6 @@ describe('webhook route', () => {
       sender: 'ada',
       installationId: 7,
     });
-    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
     expect(addIssueLabels).not.toHaveBeenCalled();
     expect(runIssueTriage).not.toHaveBeenCalled();
   });

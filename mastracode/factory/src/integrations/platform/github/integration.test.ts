@@ -1007,6 +1007,11 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
+  it('exposes an explicitly configured GitHub App slug to webhook rules', () => {
+    expect(new PlatformGithubIntegration({ slug: 'factory-app' }).slug).toBe('factory-app');
+    expect(new PlatformGithubIntegration().slug).toBeUndefined();
+  });
+
   it('can disable polling and resolves collaborator permissions through the platform API', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '9000');
