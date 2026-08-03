@@ -1,6 +1,6 @@
 # @mastra/deepeval
 
-DeepEval (Confident AI) observability exporter for Mastra applications.
+[Confident AI](https://www.confident-ai.com/) observability exporter for Mastra applications. Sends your Mastra traces to Confident AI for evaluation and monitoring, built on the DeepEval SDK.
 
 ## Installation
 
@@ -84,8 +84,8 @@ const mastra = new Mastra({
 
 ### Tracing
 
-- **Native DeepEval spans**: Mastra spans become DeepEval `LLM`, `TOOL`, `RETRIEVER`, `AGENT`, and `CUSTOM` spans
+- **Native Confident AI spans**: Mastra spans become `LLM`, `TOOL`, `RETRIEVER`, `AGENT`, and `CUSTOM` spans
 - **Type-specific fields**: Extracts model, token counts, tool calls, and per-type metadata
 - **Error tracking**: Automatic error status and message tracking
 - **Hierarchical traces**: Maintains parent-child relationships and posts the trace once the root span ends
-- **Metric collections**: Attach DeepEval metric collections at the trace and per-span-type level
+- **Metric collections**: Attach Confident AI metric collections at the trace and per-span-type level
