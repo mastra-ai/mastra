@@ -584,6 +584,8 @@ export class Workspace<
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  /** Set as soon as `destroy()` begins, and never cleared. */
+  private _teardownStarted = false;
   private _lsp?: LSPManager;
   private _logger?: IMastraLogger;
 
@@ -1285,9 +1287,13 @@ export class Workspace<
   /**
    * Reject search writes once teardown has begun, so that a late caller cannot
    * repopulate an index that `destroy()` has already released.
+   *
+   * Keyed off `_teardownStarted` rather than `_status`: a failed teardown ends
+   * in `'error'`, which is also the status of a failed `init()`, and the index
+   * has been released either way once `destroy()` has run.
    */
   private assertSearchWritable(): void {
-    if (this._status === 'destroying' || this._status === 'destroyed') {
+    if (this._teardownStarted) {
       throw new WorkspaceNotReadyError(this.id, this._status);
     }
   }
@@ -1303,6 +1309,7 @@ export class Workspace<
       return await this._destroyPromise;
     }
 
+    this._teardownStarted = true;
     this._status = 'destroying';
     this._destroyPromise = this._performDestroy();
 

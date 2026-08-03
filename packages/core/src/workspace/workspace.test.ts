@@ -570,6 +570,24 @@ Line 3 conclusion`;
       await expect(workspace.index('/doc2.txt', 'a lazy cat sleeps all day')).rejects.toThrow(WorkspaceNotReadyError);
       expect(await workspace.search('lazy')).toEqual([]);
     });
+
+    it('should keep rejecting search writes after a failed destroy', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+      });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+
+      vi.spyOn(filesystem as any, '_destroy').mockRejectedValueOnce(new Error('fs teardown failed'));
+      await expect(workspace.destroy()).rejects.toThrow('fs teardown failed');
+
+      // A failed teardown leaves status 'error', but the index has already been
+      // released — writes must stay blocked rather than repopulating it.
+      await expect(workspace.index('/doc2.txt', 'a lazy cat sleeps all day')).rejects.toThrow(WorkspaceNotReadyError);
+      expect(await workspace.search('lazy')).toEqual([]);
+    });
   });
 
   // ===========================================================================
