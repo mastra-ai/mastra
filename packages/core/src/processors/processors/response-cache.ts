@@ -528,9 +528,12 @@ function isPlainObject(value: object): boolean {
 }
 
 /**
+ * Takes `unknown` rather than `object`: both checks are runtime-safe on any
+ * value, so callers don't need to prove it's an object first.
+ *
  * @internal
  */
-function isBinary(value: object): value is ArrayBufferView | ArrayBuffer {
+function isBinary(value: unknown): value is ArrayBufferView | ArrayBuffer {
   return ArrayBuffer.isView(value) || value instanceof ArrayBuffer;
 }
 
