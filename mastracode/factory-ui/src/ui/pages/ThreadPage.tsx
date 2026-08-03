@@ -19,6 +19,7 @@ import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
+import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { WorkingIndicator } from '../domains/chat/components/WorkingIndicator';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
@@ -79,23 +80,26 @@ function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }
       </ChatShell.Bar>
       <ChatShell.Stage>
         <ChatShell.Viewport>
-          <ChatShell.Content className="gap-0 pt-6">
-            <ChatShell.Column className="flex-1">
-              <ConnectionNotice />
-              <ChatMessageBoundary>
-                <ThreadTranscript />
-              </ChatMessageBoundary>
-            </ChatShell.Column>
-          </ChatShell.Content>
-          <ChatShell.Dock>
-            <ChatShell.ScrollButton aria-label="Jump to latest message" />
-            <ChatShell.Column className="gap-2">
-              <TaskPanel />
-              <div role="region" aria-label="Thread composer">
-                <ComposerPanel />
-              </div>
-            </ChatShell.Column>
-          </ChatShell.Dock>
+          <div className="relative flex min-h-full min-w-0 flex-1 flex-col">
+            <ThreadRailLayer />
+            <ChatShell.Content className="gap-0 pt-6">
+              <ChatShell.Column className="flex-1">
+                <ConnectionNotice />
+                <ChatMessageBoundary>
+                  <ThreadTranscript />
+                </ChatMessageBoundary>
+              </ChatShell.Column>
+            </ChatShell.Content>
+            <ChatShell.Dock>
+              <ChatShell.ScrollButton aria-label="Jump to latest message" />
+              <ChatShell.Column className="gap-2">
+                <TaskPanel />
+                <div role="region" aria-label="Thread composer">
+                  <ComposerPanel />
+                </div>
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </div>
         </ChatShell.Viewport>
         <WorkspaceFilesSurface />
       </ChatShell.Stage>

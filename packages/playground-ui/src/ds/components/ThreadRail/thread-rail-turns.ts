@@ -1,8 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { CLIENT_MESSAGE_ID_KEY } from '@mastra/react';
 
 const SUMMARY_MAX_LENGTH = 120;
 const FILE_PREVIEW_LIMIT = 2;
+const CLIENT_MESSAGE_ID_KEY = 'clientMessageId';
 
 export interface ThreadRailTurn {
   key: string;

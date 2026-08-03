@@ -64,6 +64,14 @@ const visibilityMatches = (left: MessageScrollerVisibility, right: MessageScroll
   left.visibleMessageIds.length === right.visibleMessageIds.length &&
   left.visibleMessageIds.every((messageId, index) => messageId === right.visibleMessageIds[index]);
 
+const orderItemsByDocumentPosition = (items: Array<readonly [string, MessageScrollerItemRecord]>) =>
+  items.sort(([, left], [, right]) => {
+    const position = left.element.compareDocumentPosition(right.element);
+    if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+    if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+    return 0;
+  });
+
 const getContentPadding = (contentElement: HTMLElement | null) => {
   if (!contentElement) return { start: 0, end: 0 };
   const styles = window.getComputedStyle(contentElement);
@@ -249,7 +257,10 @@ export function MessageScrollerProvider({
   }, [publishScrollable, scrollEdgeThreshold, viewportElement]);
 
   const updateVisibility = React.useCallback(() => {
-    const items = Array.from(itemsRegistry.entries());
+    // Items are registered in mount order, which differs from document order
+    // after older history is prepended. Anchor tracking must follow the rendered
+    // transcript or a newly prepended oldest item can incorrectly stay active.
+    const items = orderItemsByDocumentPosition(Array.from(itemsRegistry.entries()));
     const fallbackAnchorId = items.filter(([, item]) => item.scrollAnchor).at(-1)?.[0] ?? items.at(-1)?.[0];
 
     if (items.length === 0) {
