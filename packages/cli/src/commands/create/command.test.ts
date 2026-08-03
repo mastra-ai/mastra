@@ -23,7 +23,7 @@ function createOptions(overrides: Partial<NormalizedCreateOptions> = {}): Normal
     git: true,
     template: undefined,
     timeout: 60_000,
-    skipInstall: false,
+    install: true,
     ...overrides,
   };
 }
@@ -158,7 +158,7 @@ describe('shared create Commander wiring', () => {
       git: true,
       template: undefined,
       timeout: 60_000,
-      skipInstall: false,
+      install: true,
     });
   });
 
@@ -189,14 +189,14 @@ describe('shared create Commander wiring', () => {
       git: false,
       template: undefined,
       timeout: 12_345,
-      skipInstall: false,
+      install: true,
     });
     expect(subAction.mock.calls[0]?.[0]).toEqual(rootAction.mock.calls[0]?.[0]);
   });
 
-  it('parses --skip-install option', async () => {
+  it('parses --no-install option', async () => {
     const action = vi.fn();
-    await parseRoot(['project', '--skip-install'], action);
+    await parseRoot(['project', '--no-install'], action);
 
     expect(action).toHaveBeenCalledWith({
       projectName: 'project',
@@ -207,7 +207,7 @@ describe('shared create Commander wiring', () => {
       git: true,
       template: undefined,
       timeout: 60_000,
-      skipInstall: true,
+      install: false,
     });
   });
 });
