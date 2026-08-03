@@ -72,6 +72,13 @@ const normalizeRoute = (route: string): NormalizedRoute => {
   const routePath = hashIndex === -1 ? route : route.slice(0, hashIndex)
   const hash = hashIndex === -1 ? '' : route.slice(hashIndex)
   const normalizedPath = routePath.length > 1 ? routePath.replace(/\/+$/, '') : routePath
+  const segments = normalizedPath.split('/')
+  if (segments.some(segment => segment === '.' || segment === '..')) {
+    throw new Error(`Route must not contain dot segments: ${route}`)
+  }
+  if (segments.slice(1).some(segment => segment === '')) {
+    throw new Error(`Route must not contain repeated slashes: ${route}`)
+  }
   return { path: normalizedPath, hash, full: `${normalizedPath}${hash}` }
 }
 
@@ -311,9 +318,14 @@ const readOptionalFile = async (filePath: string): Promise<string | null> => {
   }
 }
 
-const restoreSnapshots = async (snapshots: Map<string, string>): Promise<string[]> => {
+const restoreSnapshots = async (snapshots: Map<string, string>, mutationOrder: string[]): Promise<string[]> => {
   const failures: string[] = []
-  const paths = [...snapshots.keys()].sort().reverse()
+  const orderedPaths = [...mutationOrder].reverse()
+  const remainingPaths = [...snapshots.keys()]
+    .filter(filePath => !mutationOrder.includes(filePath))
+    .sort()
+    .reverse()
+  const paths = [...new Set([...orderedPaths, ...remainingPaths])]
 
   for (const filePath of paths) {
     try {
@@ -340,6 +352,7 @@ export async function deleteDocument(
   let normalizedSource = source
   let normalizedDestination = destination
   const snapshots = new Map<string, string>()
+  let mutationOrder: string[] = []
   let mutationStarted = false
 
   try {
@@ -375,6 +388,7 @@ export async function deleteDocument(
     snapshots.set(VERCEL_REDIRECTS_FILE, redirectContent)
     if (sidebarContent !== null) snapshots.set(sidebarPath, sidebarContent)
     for (const filePath of mdxFiles) snapshots.set(filePath, await fs.readFile(filePath, 'utf-8'))
+    mutationOrder = [VERCEL_REDIRECTS_FILE, ...(sidebarAnalysis?.matched ? [sidebarPath] : []), ...mdxFiles, sourcePath]
 
     if (dryRun) {
       if (verbose) console.log(`Would delete ${sourceRoute.path} and redirect it to ${destinationRoute.full}`)
@@ -416,7 +430,7 @@ export async function deleteDocument(
     let finalMessage = errorMessage
 
     if (mutationStarted) {
-      const rollbackFailures = await restoreSnapshots(snapshots)
+      const rollbackFailures = await restoreSnapshots(snapshots, mutationOrder)
       if (rollbackFailures.length > 0) {
         finalMessage = `${errorMessage}. Rollback failed: ${rollbackFailures.join('; ')}`
       }
@@ -434,13 +448,19 @@ export async function deleteDocument(
 }
 
 const main = async (): Promise<void> => {
-  const [source, destination] = process.argv.slice(2).filter(argument => !argument.startsWith('--'))
-  if (!source) throw new Error('Source path is required')
-  if (!destination) throw new Error('Destination path is required')
+  const args = process.argv.slice(2)
+  const supportedFlags = new Set(['--silent', '--dry-run'])
+  const unknownFlag = args.find(argument => argument.startsWith('--') && !supportedFlags.has(argument))
+  if (unknownFlag) throw new Error(`Unknown option: ${unknownFlag}`)
 
-  const result = await deleteDocument(source, destination, {
-    verbose: !process.argv.includes('--silent'),
-    dryRun: process.argv.includes('--dry-run'),
+  const routes = args.filter(argument => !argument.startsWith('--'))
+  if (!routes[0]) throw new Error('Source path is required')
+  if (!routes[1]) throw new Error('Destination path is required')
+  if (routes.length > 2) throw new Error(`Unexpected argument: ${routes[2]}`)
+
+  const result = await deleteDocument(routes[0], routes[1], {
+    verbose: !args.includes('--silent'),
+    dryRun: args.includes('--dry-run'),
   })
   if (!result.success) process.exitCode = 1
 }

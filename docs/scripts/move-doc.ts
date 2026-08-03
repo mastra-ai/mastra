@@ -324,6 +324,7 @@ const updateMdxLinks = async (
     let entries: Dirent[]
     try {
       entries = await fs.readdir(dir, { withFileTypes: true })
+      entries.sort((a, b) => a.name.localeCompare(b.name))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
       throw error

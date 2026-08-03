@@ -41,6 +41,10 @@ const files = {
 const item = { link: '/docs/old/page#array' }
 [reference]: /docs/old/page#reference
 `,
+  'src/content/en/docs/nested/links.mdx': `# Nested links
+
+[Parent relative](../old/page#parent)
+`,
   'src/content/en/docs/sidebars.js': sidebar,
   'src/content/en/guides/sidebars.js': "const sidebars = { guidesSidebar: ['index'] }\nexport default sidebars\n",
   'src/content/en/reference/sidebars.js':
@@ -208,6 +212,9 @@ describe('deleteDocument', () => {
     expect(links).toContain('link="/docs/replacement#new-section"')
     expect(links).toContain("link: '/docs/replacement#new-section'")
     expect(links).toContain('[reference]: /docs/replacement#new-section')
+    expect(await fixture.read('src/content/en/docs/nested/links.mdx')).toContain(
+      '[Parent relative](../replacement#new-section)',
+    )
 
     const redirects = JSON.parse(await fixture.read('vercel.redirects.json')).redirects
     expect(redirects).toContainEqual({
@@ -233,6 +240,32 @@ describe('deleteDocument', () => {
     expect(result.results[0].destination).toBe('/docs/replacement#section')
   })
 
+  test('supports a replacement in another editable family', async () => {
+    process.chdir(originalCwd)
+    await fixture.cleanup()
+    fixture = await createFixture({ 'src/content/en/guides/replacement.mdx': '# Guide replacement\n' })
+    process.chdir(fixture.tempDir)
+
+    const result = await deleteDocument('/docs/old/page', '/guides/replacement#guide', { verbose: false })
+
+    expect(result.success).toBe(true)
+    expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Absolute](/guides/replacement#guide)')
+    expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Relative](../guides/replacement#guide)')
+  })
+
+  test('supports a family-root index replacement with a hash', async () => {
+    process.chdir(originalCwd)
+    await fixture.cleanup()
+    fixture = await createFixture({ 'src/content/en/docs/index.mdx': '# Docs index\n' })
+    process.chdir(fixture.tempDir)
+
+    const result = await deleteDocument('/docs/old/page', '/docs/#section', { verbose: false })
+
+    expect(result.success).toBe(true)
+    expect(result.results[0].destination).toBe('/docs#section')
+    expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Absolute](/docs#section)')
+  })
+
   test('dry-run performs full preflight without changing files', async () => {
     const before = await fixture.snapshot()
     const result = await deleteDocument('/docs/old/page', '/docs/replacement', { dryRun: true, verbose: false })
@@ -244,6 +277,10 @@ describe('deleteDocument', () => {
     ['/docs/old/page#section', '/docs/replacement', 'Source route must not include a hash'],
     ['/docs/old/page', '/docs/old/page#section', 'different routes'],
     ['/docs/old/*', '/docs/replacement', 'Glob routes are not supported'],
+    ['/docs/../guides/page', '/docs/replacement', 'Route must not contain dot segments'],
+    ['/docs/old/page', '/docs/./replacement', 'Route must not contain dot segments'],
+    ['/docs//old/page', '/docs/replacement', 'Route must not contain repeated slashes'],
+    ['/docs/old/page', '/docs//replacement', 'Route must not contain repeated slashes'],
     ['/models/old/page', '/docs/replacement', 'Unsupported generated docs route'],
     ['/docs/old/page', '/models/replacement', 'Unsupported generated docs route'],
     ['/unknown/old', '/docs/replacement', 'Unsupported docs route'],
@@ -260,6 +297,24 @@ describe('deleteDocument', () => {
     expect(result.success).toBe(false)
     expect(result.message).toContain('Destination path does not exist')
     expect(await fixture.exists('src/content/en/docs/old/page.mdx')).toBe(true)
+  })
+
+  test('rejects a redirect-only replacement alias', async () => {
+    const result = await deleteDocument('/docs/old/page', '/docs/legacy', { verbose: false })
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Destination path does not exist')
+  })
+
+  test.each([
+    ['/docs/directory', '/docs/replacement', 'Source path must be a file'],
+    ['/docs/old/page', '/docs/directory', 'Destination path must be a file'],
+  ])('rejects directory routes before mutation: %s', async (source, destination, message) => {
+    await fs.mkdir(path.join(fixture.tempDir, 'src/content/en/docs/directory.mdx'))
+    const before = await fixture.snapshot()
+    const result = await deleteDocument(source, destination, { verbose: false })
+    expect(result.success).toBe(false)
+    expect(result.message).toContain(message)
+    expect(await fixture.snapshot()).toEqual(before)
   })
 
   test.each([
@@ -314,6 +369,22 @@ describe('deleteDocument', () => {
     expect(await fixture.exists('src/content/en/docs/old/page.mdx')).toBe(false)
   })
 
+  test('warns when the source sidebar file is missing', async () => {
+    process.chdir(originalCwd)
+    await fixture.cleanup()
+    fixture = await createFixture({ 'src/content/en/docs/sidebars.js': null })
+    process.chdir(fixture.tempDir)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement')
+
+    expect(result.success).toBe(true)
+    expect(warn).toHaveBeenCalledWith(
+      'No sidebar file found at src/content/en/docs/sidebars.js; update sidebar manually if needed.',
+    )
+  })
+
   test('allows a sidebar without the source id', async () => {
     process.chdir(originalCwd)
     await fixture.cleanup()
@@ -325,6 +396,43 @@ describe('deleteDocument', () => {
 
     const result = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
     expect(result.success).toBe(true)
+  })
+
+  test('warns when the source sidebar id is absent', async () => {
+    process.chdir(originalCwd)
+    await fixture.cleanup()
+    fixture = await createFixture({
+      'src/content/en/docs/sidebars.js':
+        "const sidebars = { docsSidebar: [{ type: 'doc', id: 'replacement' }] }\nexport default sidebars\n",
+    })
+    process.chdir(fixture.tempDir)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement')
+
+    expect(result.success).toBe(true)
+    expect(warn).toHaveBeenCalledWith('No sidebar id found for old/page in src/content/en/docs/sidebars.js')
+  })
+
+  test('silent mode suppresses informational, warning, and error output', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
+
+    expect(result.success).toBe(true)
+    expect(log).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  test('default verbosity reports completion', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement')
+    expect(result.success).toBe(true)
+    expect(log).toHaveBeenCalledWith('Document deletion completed successfully')
   })
 
   test.each([
@@ -350,6 +458,44 @@ describe('deleteDocument', () => {
     expect(await fixture.snapshot()).toEqual(before)
   })
 
+  test('restores an earlier MDX update when a later MDX write fails', async () => {
+    const before = await fixture.snapshot()
+    const originalWrite = fs.writeFile.bind(fs)
+    let calls = 0
+    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args) => {
+      calls++
+      if (calls === 4) throw new Error('second MDX write failed')
+      return await originalWrite(...args)
+    })
+
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('second MDX write failed')
+    expect(await fixture.snapshot()).toEqual(before)
+  })
+
+  test('reports both the original error and rollback failures', async () => {
+    const originalWrite = fs.writeFile.bind(fs)
+    let calls = 0
+    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args) => {
+      calls++
+      if (calls === 1) {
+        await originalWrite(...args)
+        throw new Error('original write failure')
+      }
+      if (calls === 2) throw new Error('rollback write failure')
+      return await originalWrite(...args)
+    })
+
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('original write failure')
+    expect(result.message).toContain('Rollback failed:')
+    expect(result.message).toContain('rollback write failure')
+  })
+
   test('rolls back a file that was mutated before a write rejected', async () => {
     const before = await fixture.snapshot()
     const originalWrite = fs.writeFile.bind(fs)
@@ -366,6 +512,17 @@ describe('deleteDocument', () => {
     expect(result.success).toBe(false)
     expect(result.message).toContain('mutated before rejection')
     expect(await fixture.snapshot()).toEqual(before)
+  })
+
+  test('deletes the source only after every write succeeds', async () => {
+    const write = vi.spyOn(fs, 'writeFile')
+    const unlink = vi.spyOn(fs, 'unlink')
+
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
+
+    expect(result.success).toBe(true)
+    const lastWriteOrder = Math.max(...write.mock.invocationCallOrder)
+    expect(unlink.mock.invocationCallOrder[0]).toBeGreaterThan(lastWriteOrder)
   })
 
   test('restores the source file when unlink fails', async () => {

@@ -328,6 +328,14 @@ describe('move-doc Mastra integration tests', () => {
     expect(log).not.toHaveBeenCalled()
   })
 
+  test('keeps redirect and link helper logging enabled by default', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await updateRedirects('/docs/auth/overview', '/docs/auth/overview')
+    await updateMdxLinks(['/docs/auth/overview'], '/docs/authentication/guide')
+    expect(log).toHaveBeenCalledWith('Skipped redundant static redirect: /docs/auth/overview -> /docs/auth/overview')
+    expect(log).toHaveBeenCalledWith('Updated links in src/content/en/docs/other-doc.mdx')
+  })
+
   test('moves a single file, updates redirects, sidebars, and inbound links', async () => {
     const result = await moveDocuments('/docs/references/auth', '/docs/guide/authentication', { verbose: false })
 
