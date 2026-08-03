@@ -14,6 +14,8 @@
  * @example Batch move with glob patterns:
  * pnpm tsx scripts/move-doc.ts "/docs/old/**" "/docs/new/**"
  *
+ * Use --dry-run to preview changes without making any modifications.
+ *
  * Note:
  * - The .mdx extension should be omitted from routes.
  * - Supported editable route families are /docs, /reference, and /guides.
@@ -269,6 +271,7 @@ const updateMdxLinks = async (
     oldPaths.forEach(oldPath => {
       const { path: oldBasePath } = splitPathAndHash(oldPath)
       const { path: newBasePath, hash: newHash } = splitPathAndHash(newPath)
+      const externalDestination = newBasePath.startsWith('https://')
 
       const markdownLinkRegex = new RegExp(`(?<!!)(\\[[^\\]]+\\])\\(([^)]+)\\)`, 'g')
       updatedContent = updatedContent.replace(markdownLinkRegex, (match, label, linkPath) => {
@@ -278,7 +281,8 @@ const updateMdxLinks = async (
         if (resolveRelativeRoute(currentRoute, linkBasePath) !== oldBasePath) return match
 
         const finalHash = newHash || linkHash || ''
-        return `${label}(${routeToRelativeLink(currentRoute, newBasePath)}${finalHash})`
+        const replacementPath = externalDestination ? newBasePath : routeToRelativeLink(currentRoute, newBasePath)
+        return `${label}(${replacementPath}${finalHash})`
       })
 
       const absoluteMarkdownLinkRegex = new RegExp(`\\[([^\\]]+)\\]\\(${escapeRegExp(oldBasePath)}(?:#[^)]*)?\\)`, 'g')

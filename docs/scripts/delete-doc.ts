@@ -3,10 +3,14 @@
  *
  * @example
  * pnpm tsx scripts/delete-doc.ts /docs/agents/old-page /docs/agents/replacement
+ * pnpm tsx scripts/delete-doc.ts /docs/agents/old-page https://agents.example.com
  *
- * The `.mdx` extension should be omitted. Supported route families are `/docs`,
- * `/guides`, and `/reference`. Run `pnpm run generate-vercel-redirects` after a
- * successful deletion and commit the generated `vercel.json` update.
+ * Use --dry-run to preview changes without making any modifications.
+ *
+ * The `.mdx` extension should be omitted. Sources and internal replacements support
+ * the `/docs`, `/guides`, and `/reference` route families. Replacements can also be
+ * HTTPS URLs. Run `pnpm run generate-vercel-redirects` after a successful deletion
+ * and commit the generated `vercel.json` update.
  */
 
 import fs from 'node:fs/promises'
@@ -50,6 +54,8 @@ interface NormalizedRoute {
   full: string
 }
 
+type NormalizedDestination = { kind: 'route'; route: NormalizedRoute } | { kind: 'external'; full: string }
+
 interface TextEdit {
   start: number
   end: number
@@ -80,6 +86,22 @@ const normalizeRoute = (route: string): NormalizedRoute => {
     throw new Error(`Route must not contain repeated slashes: ${route}`)
   }
   return { path: normalizedPath, hash, full: `${normalizedPath}${hash}` }
+}
+
+const normalizeDestination = (destination: string): NormalizedDestination => {
+  if (!destination.includes('://')) return { kind: 'route', route: normalizeRoute(destination) }
+
+  let url: URL
+  try {
+    url = new URL(destination)
+  } catch {
+    throw new Error(`Invalid replacement URL: ${destination}`)
+  }
+
+  if (url.protocol !== 'https:') throw new Error('External replacement URLs must use HTTPS')
+  if (url.username || url.password) throw new Error('External replacement URLs must not include credentials')
+
+  return { kind: 'external', full: url.href }
 }
 
 const routeFamily = (route: string): Family => {
@@ -356,24 +378,28 @@ export async function deleteDocument(
   let mutationStarted = false
 
   try {
-    if (isGlobPattern(source) || isGlobPattern(destination)) throw new Error('Glob routes are not supported')
+    if (isGlobPattern(source)) throw new Error('Glob routes are not supported')
 
     const sourceRoute = normalizeRoute(source)
-    const destinationRoute = normalizeRoute(destination)
+    const destinationValue = normalizeDestination(destination)
+    const destinationRoute = destinationValue.kind === 'route' ? destinationValue.route : null
+    const destinationFull = destinationValue.kind === 'route' ? destinationValue.route.full : destinationValue.full
     normalizedSource = sourceRoute.full
-    normalizedDestination = destinationRoute.full
+    normalizedDestination = destinationFull
 
+    if (destinationRoute && isGlobPattern(destinationRoute.full)) throw new Error('Glob routes are not supported')
     if (sourceRoute.hash) throw new Error('Source route must not include a hash')
-    if (sourceRoute.path === destinationRoute.path) throw new Error('Source and destination must be different routes')
+    if (destinationRoute && sourceRoute.path === destinationRoute.path) {
+      throw new Error('Source and destination must be different routes')
+    }
 
     const sourcePath = routeToFilePath(sourceRoute.path)
-    const destinationPath = routeToFilePath(destinationRoute.path)
     const family = routeFamily(sourceRoute.path)
     const sidebarPath = path.join(CONTENT_ROOT, family, 'sidebars.js')
     const sidebarId = routeToSidebarId(sourceRoute.path)
 
     await assertFile(sourcePath, 'Source')
-    await assertFile(destinationPath, 'Destination')
+    if (destinationRoute) await assertFile(routeToFilePath(destinationRoute.path), 'Destination')
 
     const redirectContent = await fs.readFile(VERCEL_REDIRECTS_FILE, 'utf-8')
     const redirectConfig = JSON.parse(redirectContent)
@@ -391,16 +417,16 @@ export async function deleteDocument(
     mutationOrder = [VERCEL_REDIRECTS_FILE, ...(sidebarAnalysis?.matched ? [sidebarPath] : []), ...mdxFiles, sourcePath]
 
     if (dryRun) {
-      if (verbose) console.log(`Would delete ${sourceRoute.path} and redirect it to ${destinationRoute.full}`)
+      if (verbose) console.log(`Would delete ${sourceRoute.path} and redirect it to ${destinationFull}`)
       return {
         success: true,
         message: `Dry run completed. Would delete ${sourceRoute.path}`,
-        results: [{ source: sourceRoute.path, destination: destinationRoute.full, status: 'would-delete' }],
+        results: [{ source: sourceRoute.path, destination: destinationFull, status: 'would-delete' }],
       }
     }
 
     mutationStarted = true
-    const pathsToUpdate = await updateRedirects(sourceRoute.path, destinationRoute.full, { verbose })
+    const pathsToUpdate = await updateRedirects(sourceRoute.path, destinationFull, { verbose })
 
     if (sidebarAnalysis === null) {
       if (verbose) console.warn(`No sidebar file found at ${sidebarPath}; update sidebar manually if needed.`)
@@ -411,7 +437,7 @@ export async function deleteDocument(
       if (verbose) console.log(`Removed sidebar id ${sidebarId} from ${sidebarPath}`)
     }
 
-    await updateMdxLinks(pathsToUpdate, destinationRoute.full, { verbose })
+    await updateMdxLinks(pathsToUpdate, destinationFull, { verbose })
     await fs.unlink(sourcePath)
 
     if (verbose) {
@@ -423,7 +449,7 @@ export async function deleteDocument(
     return {
       success: true,
       message: 'Document deletion completed successfully',
-      results: [{ source: sourceRoute.path, destination: destinationRoute.full, status: 'success' }],
+      results: [{ source: sourceRoute.path, destination: destinationFull, status: 'success' }],
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)

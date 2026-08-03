@@ -234,6 +234,38 @@ describe('deleteDocument', () => {
     })
   })
 
+  test('redirects links to an external HTTPS replacement', async () => {
+    const result = await deleteDocument('/docs/old/page', 'https://agent-builder.mastra.ai', { verbose: false })
+
+    expect(result).toMatchObject({
+      success: true,
+      results: [{ destination: 'https://agent-builder.mastra.ai/', status: 'success' }],
+    })
+    expect(await fixture.exists('src/content/en/docs/old/page.mdx')).toBe(false)
+
+    const links = await fixture.read('src/content/en/docs/links.mdx')
+    expect(links).toContain('[Absolute](https://agent-builder.mastra.ai/#absolute)')
+    expect(links).toContain('[Relative](https://agent-builder.mastra.ai/#relative)')
+    expect(links).toContain('link="https://agent-builder.mastra.ai/#card"')
+    expect(links).toContain("link: 'https://agent-builder.mastra.ai/#array'")
+    expect(links).toContain('[reference]: https://agent-builder.mastra.ai/#reference')
+    expect(await fixture.read('src/content/en/docs/nested/links.mdx')).toContain(
+      '[Parent relative](https://agent-builder.mastra.ai/#parent)',
+    )
+
+    const redirects = JSON.parse(await fixture.read('vercel.redirects.json')).redirects
+    expect(redirects).toContainEqual({
+      source: '/docs/old/page',
+      destination: 'https://agent-builder.mastra.ai/',
+      permanent: true,
+    })
+    expect(redirects).toContainEqual({
+      source: '/docs/legacy',
+      destination: 'https://agent-builder.mastra.ai/#legacy',
+      permanent: true,
+    })
+  })
+
   test('normalizes trailing slashes after splitting destination hashes', async () => {
     const result = await deleteDocument('/docs/old/page/', '/docs/replacement/#section', { verbose: false })
     expect(result.success).toBe(true)
@@ -281,6 +313,9 @@ describe('deleteDocument', () => {
     ['/docs/old/page', '/docs/./replacement', 'Route must not contain dot segments'],
     ['/docs//old/page', '/docs/replacement', 'Route must not contain repeated slashes'],
     ['/docs/old/page', '/docs//replacement', 'Route must not contain repeated slashes'],
+    ['/docs/old/page', 'http://agent-builder.mastra.ai', 'External replacement URLs must use HTTPS'],
+    ['/docs/old/page', 'https://', 'Invalid replacement URL'],
+    ['/docs/old/page', 'https://user:secret@example.com', 'must not include credentials'],
     ['/models/old/page', '/docs/replacement', 'Unsupported generated docs route'],
     ['/docs/old/page', '/models/replacement', 'Unsupported generated docs route'],
     ['/unknown/old', '/docs/replacement', 'Unsupported docs route'],
