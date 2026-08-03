@@ -2,16 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ArrowUpRight,
-  CircleDot,
-  EllipsisVertical,
-  Link2,
-  MessageSquare,
-  MessagesSquare,
-  Play,
-  Trash2,
-} from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, Link2, MessageSquare, MessagesSquare, Play, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -25,7 +16,7 @@ import { relatedWorkItems, relationshipLabel, relationshipPath } from '../servic
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, SOURCE_ICONS } from './BoardIcons';
+import { BoardStageIcon, SourceIcon } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
 
 function decisionStatusText(decision: FactoryDecisionSummary): string {
@@ -75,10 +66,6 @@ export function WorkItemCard({
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? {
-    icon: CircleDot,
-    className: 'text-icon3',
-  };
   const evaluating = evaluatingStage !== undefined;
   const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -191,7 +178,7 @@ export function WorkItemCard({
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
           <div className="flex min-w-0 items-center gap-1.5">
-            <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            <SourceIcon source={item.source} />
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />
             </span>
