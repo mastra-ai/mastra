@@ -6,6 +6,8 @@ import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabi
 import type { RouteAuth } from '../../routes/route.js';
 import { mountApiRoutes } from '../../routes/test-utils.js';
 import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { GithubInstallationBrokenError } from '../platform/github/errors.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -39,7 +41,6 @@ const tables: Tables = {
   subscriptions: [],
 };
 
-import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
 const sourceControlStorage = new SourceControlStorageInMemory();
 
 function installationRow(row: Record<string, any>) {
@@ -492,6 +493,7 @@ const testAuth: RouteAuth = {
 };
 
 import { buildGithubRoutes } from './routes.js';
+import { MaterializeError } from './sandbox.js';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -1304,6 +1306,45 @@ describe('ensure (materialize)', () => {
     expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
   });
 
+  it('returns 424 JSON when the GitHub installation is broken', async () => {
+    seedMaterializedProject();
+    githubStub.versionControl.getRepositoryAccess.mockRejectedValueOnce(
+      new GithubInstallationBrokenError({ installationId: 7, accountLogin: 'octo', orgId: 'org1' }),
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+
+    expect(res.status).toBe(424);
+    expect(await res.json()).toEqual({
+      error: 'github_installation_broken',
+      message: 'GitHub installation for @octo is unavailable. Reconnect GitHub to continue.',
+      installationId: 7,
+      accountLogin: 'octo',
+    });
+  });
+
+  it('preserves the generic JSON error contract for other materialization failures', async () => {
+    seedMaterializedProject();
+    githubStub.versionControl.getRepositoryAccess.mockRejectedValueOnce(new Error('Platform unavailable'));
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'materialize_failed', message: 'Platform unavailable' });
+  });
+
+  it('preserves MaterializeError codes', async () => {
+    seedMaterializedProject();
+    githubStub.versionControl.getRepositoryAccess.mockRejectedValueOnce(
+      new MaterializeError('Repository clone failed', 'clone-failed'),
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'clone-failed', message: 'Repository clone failed' });
+  });
+
   it('404s for a project the user does not own', async () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/missing/ensure', {
       method: 'POST',
@@ -1351,6 +1392,27 @@ describe('ensure (materialize)', () => {
     expect(materializeRepo).toHaveBeenCalledWith(
       expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
     );
+  });
+
+  it('streams a targeted error event when the GitHub installation is broken', async () => {
+    seedMaterializedProject();
+    githubStub.versionControl.getRepositoryAccess.mockRejectedValueOnce(
+      new GithubInstallationBrokenError({ installationId: 7, accountLogin: 'octo', orgId: 'org1' }),
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', {
+      method: 'POST',
+      headers: { Accept: 'text/event-stream' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const body = await res.text();
+    expect(body).toContain('event: error');
+    expect(body).toContain('"error":"github_installation_broken"');
+    expect(body).toContain('"code":"github_installation_broken"');
+    expect(body).toContain('"installationId":7');
+    expect(body).toContain('"accountLogin":"octo"');
   });
 
   it('streams server-side progress events when the client accepts an event stream', async () => {
@@ -1507,6 +1569,23 @@ describe('issues route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=zero');
     expect(res.status).toBe(400);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('returns 424 when the GitHub installation is broken', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockRejectedValueOnce(
+      new GithubInstallationBrokenError({ installationId: 7, accountLogin: 'octo', orgId: 'org1' }),
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+
+    expect(res.status).toBe(424);
+    expect(await res.json()).toEqual({
+      error: 'github_installation_broken',
+      message: 'GitHub installation for @octo is unavailable. Reconnect GitHub to continue.',
+      installationId: 7,
+      accountLogin: 'octo',
+    });
   });
 
   it('502s when GitHub is unavailable', async () => {

@@ -31,6 +31,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import { GithubInstallationBrokenError } from '../platform/github/errors.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
@@ -749,7 +750,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
               });
               await stream.writeSSE({ event: 'done', data: JSON.stringify(result) });
             } catch (err) {
-              await stream.writeSSE({ event: 'error', data: JSON.stringify(ensureErrorPayload(err).body) });
+              const { body } = ensureErrorPayload(err);
+              const data = err instanceof GithubInstallationBrokenError ? { ...body, code: err.code } : body;
+              await stream.writeSSE({ event: 'error', data: JSON.stringify(data) });
             }
           });
         }
@@ -806,6 +809,17 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
+          if (err instanceof GithubInstallationBrokenError) {
+            return c.json(
+              {
+                error: err.code,
+                message: err.message,
+                installationId: err.installationId,
+                accountLogin: err.accountLogin,
+              },
+              424,
+            );
+          }
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
             502,
@@ -1205,9 +1219,25 @@ async function prepareProject(options: {
 
 /** Shape an /ensure failure into an HTTP status + JSON body (also used as the SSE error payload). */
 function ensureErrorPayload(err: unknown): {
-  status: 429 | 502 | 500;
-  body: { error: string; message: string };
+  status: 424 | 429 | 502 | 500;
+  body: {
+    error: string;
+    message: string;
+    installationId?: number;
+    accountLogin?: string | null;
+  };
 } {
+  if (err instanceof GithubInstallationBrokenError) {
+    return {
+      status: 424,
+      body: {
+        error: err.code,
+        message: err.message,
+        installationId: err.installationId,
+        accountLogin: err.accountLogin,
+      },
+    };
+  }
   if (err instanceof SandboxBudgetError) {
     return { status: 429, body: { error: err.code, message: err.message } };
   }
