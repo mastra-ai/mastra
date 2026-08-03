@@ -1,68 +1,17 @@
-/* oxlint-disable react/only-export-components -- Provider hooks intentionally share private context instances with the provider. */
-/* eslint-disable react-refresh/only-export-components -- Provider hooks intentionally share private context instances with the provider. */
 import React from 'react';
 import type { CSSProperties } from 'react';
+import {
+  MainSidebarContext,
+  MobileDrawerContext,
+  type MobileDrawerContextValue,
+  type SidebarState,
+} from './main-sidebar-context';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';
 const SIDEBAR_WIDTH_KEY = 'sidebar:width';
 
 const SIDEBAR_WIDTH_VAR = '--sidebar-width';
-
-export type SidebarState = 'default' | 'collapsed';
-
-type MainSidebarContext = {
-  state: SidebarState;
-  desktopState: SidebarState;
-  width: number;
-  minWidth: number;
-  maxWidth: number;
-  collapseBelow: number;
-  collapsedWidth: number;
-  isMobile: boolean;
-  openMobile: boolean;
-  setOpenMobile: (open: boolean) => void;
-  toggleSidebar: () => void;
-  setWidth: (width: number) => void;
-  collapse: () => void;
-  expand: () => void;
-  commit: () => void;
-  setGestureActive: (active: boolean) => void;
-  LinkComponent?: LinkComponent;
-};
-
-// Split: drawer open-state lives in its own context so NavLink/NavHeader
-// do not re-render when the mobile drawer toggles.
-type MobileDrawerContext = {
-  openMobile: boolean;
-  setOpenMobile: (open: boolean) => void;
-};
-
-const MainSidebarContext = React.createContext<Omit<MainSidebarContext, 'openMobile' | 'setOpenMobile'> | null>(null);
-const MobileDrawerContext = React.createContext<MobileDrawerContext | null>(null);
-
-export function useMainSidebar(): MainSidebarContext {
-  const ctx = React.useContext(MainSidebarContext);
-  const drawer = React.useContext(MobileDrawerContext);
-  if (!ctx || !drawer) {
-    throw new Error('useMainSidebar must be used within a MainSidebarProvider.');
-  }
-  return { ...ctx, ...drawer };
-}
-
-export function useMaybeSidebar(): MainSidebarContext | null {
-  const ctx = React.useContext(MainSidebarContext);
-  const drawer = React.useContext(MobileDrawerContext);
-  if (!ctx || !drawer) return null;
-  return { ...ctx, ...drawer };
-}
-
-/** Reads only mobile drawer state. Cheap — no re-renders on sidebar resize. */
-export function useMobileDrawer(): MobileDrawerContext {
-  const drawer = React.useContext(MobileDrawerContext);
-  if (!drawer) throw new Error('useMobileDrawer must be used within a MainSidebarProvider.');
-  return drawer;
-}
 
 export type MainSidebarProviderProps = {
   children: React.ReactNode;
@@ -298,7 +247,7 @@ export function MainSidebarProvider({
     ],
   );
 
-  const drawerValue = React.useMemo<MobileDrawerContext>(() => ({ openMobile, setOpenMobile }), [openMobile]);
+  const drawerValue = React.useMemo<MobileDrawerContextValue>(() => ({ openMobile, setOpenMobile }), [openMobile]);
 
   // CSS var owned exclusively by writeCssVar (single source of truth).
   // SSR seeds the initial value here; post-mount writeCssVar takes over.

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebar } from './main-sidebar';
-import { MainSidebarProvider } from './main-sidebar-context';
+import { MainSidebarProvider } from './main-sidebar-provider';
 
 const mockMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {
