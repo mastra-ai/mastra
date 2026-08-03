@@ -145,6 +145,39 @@ describe('@mastra/core native optional deps', () => {
   });
 });
 
+describe('@mastra/core runtime-only dependencies', () => {
+  const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core');
+  if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
+  const coreDistDir = join(corePkg.dir, 'dist');
+
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const runtimeOnlyDeps = ['execa', '@ast-grep/napi'];
+
+  it.for(runtimeOnlyDeps.map(dep => [dep]))('%s should stay behind a non-literal dynamic import', async ([dep]) => {
+    const jsFiles = await globby(join(coreDistDir, '**/*.{js,cjs}'));
+    const filesContainingDependency: string[] = [];
+    const escapedDependency = escapeRegExp(dep);
+
+    for (const file of jsFiles) {
+      const content = await readFile(file, 'utf-8');
+      if (!content.includes(dep)) continue;
+      filesContainingDependency.push(file);
+
+      const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${escapedDependency}["']`, 'm');
+      const staticRequire = new RegExp(`(?<!\\.)require\\(\\s*["']${escapedDependency}["']\\s*\\)`);
+      const literalDynamicImport = new RegExp(
+        `import\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*["']${escapedDependency}["']\\s*\\)`,
+      );
+
+      expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
+      expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
+      expect(content, `${file} has a statically analyzable dynamic import of ${dep}`).not.toMatch(literalDynamicImport);
+    }
+
+    expect(filesContainingDependency.length).toBeGreaterThan(0);
+  });
+});
+
 describe('package devDependency bundling validation', () => {
   const packageAllowlist: Record<string, string[]> = {
     '@internal/ai-sdk-v5': ['msw'],
