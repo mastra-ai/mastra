@@ -835,14 +835,14 @@ describe('create materialization lifecycle', () => {
     }
   });
 
-  it('skips dependency installation when skipInstall is true', async () => {
+  it('skips dependency installation when install is false', async () => {
     const { create } = await import('./create');
     const { installDependencies } = await import('../../utils/clone-template');
 
     await create({
       projectName: 'my-project',
       empty: true,
-      skipInstall: true,
+      install: false,
       resolveVersionTag: vi.fn().mockResolvedValue('latest'),
     });
 
