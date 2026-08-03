@@ -168,10 +168,13 @@ export interface MastraFactoryConfig {
    * Platform-specific overrides. When the Platform-backed GitHub integration
    * is active, it derives a `runIssueTriage` runner from the mounted
    * controller automatically. An explicit `runIssueTriage` here takes
-   * precedence over the controller-derived default.
+   * precedence over the controller-derived default. `githubAppSlug` identifies
+   * Factory's own GitHub App writes so their webhook deliveries do not retrigger
+   * triage.
    */
   platform?: {
     runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+    githubAppSlug?: string;
   };
 }
 
@@ -338,6 +341,7 @@ export class MastraFactory {
         integrations.push(
           new PlatformGithubIntegration({
             runIssueTriage: this.#config.platform?.runIssueTriage,
+            slug: this.#config.platform?.githubAppSlug,
           }),
         );
       }
