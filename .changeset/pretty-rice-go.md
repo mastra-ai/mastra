@@ -8,7 +8,7 @@ Use `onEvent` to consume versioned, JSON-safe run and item lifecycle events in s
 
 ```ts
 await runExperiment(mastra, {
-  target: agent,
+  task: async ({ input }) => processItem(input),
   data: items,
   onEvent: async event => {
     await publish(event);

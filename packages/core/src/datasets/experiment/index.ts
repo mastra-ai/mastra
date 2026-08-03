@@ -623,14 +623,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           );
         }
       },
-      { concurrency: maxConcurrency },
+      { concurrency: maxConcurrency, stopOnError: eventDispatcher ? false : true },
     );
   } catch (error) {
     const completedAt = new Date();
     const skippedCount = items.length - succeededCount - failedCount;
+    const observerError = eventDispatcher?.failure;
 
-    const observerError = error as MastraError;
-    if (error instanceof MastraError && observerError.id === 'EXPERIMENT_EVENT_OBSERVER_FAILED') {
+    if (observerError) {
       if (experimentsStore) {
         try {
           await experimentsStore.updateExperiment({
@@ -645,9 +645,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           // Preserve the observer failure as the fatal error.
         }
       }
-      throw error;
+      throw observerError;
     }
 
+    const terminalError = error instanceof AggregateError ? (error.errors[0] ?? error) : error;
     const summary: ExperimentSummary = {
       experimentId,
       status: 'failed' as const,
@@ -670,7 +671,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           target: eventTarget,
           status: 'failed',
           outcome: executionSignal?.aborted ? 'cancelled' : 'failed',
-          error: toExperimentJsonValue(error),
+          error: toExperimentJsonValue(terminalError),
           totalItems: summary.totalItems,
           succeededCount,
           failedCount,

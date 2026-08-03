@@ -81,6 +81,10 @@ export class ExperimentEventDispatcher {
   #tail = Promise.resolve();
   #failure: MastraError | undefined;
 
+  get failure(): MastraError | undefined {
+    return this.#failure;
+  }
+
   constructor(experimentId: string, observer: ExperimentEventObserver) {
     this.#experimentId = experimentId;
     this.#observer = observer;
@@ -129,7 +133,7 @@ export function toExperimentJsonValue(value: unknown, seen = new WeakSet<object>
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value === 'bigint') return value.toString();
   if (typeof value === 'undefined' || typeof value === 'function' || typeof value === 'symbol') return null;
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
   if (value instanceof Error) {
     return {
       name: value.name,

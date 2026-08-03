@@ -1327,6 +1327,80 @@ describe('runExperiment', () => {
       expect(eventTypes).toEqual(['experiment.run.started', 'experiment.item.completed']);
     });
 
+    it('drains active item work before persisting observer failure counters', async () => {
+      let callCount = 0;
+      let releaseSlowItem!: () => void;
+      let slowItemFinished = false;
+      const slowItemGate = new Promise<void>(resolve => {
+        releaseSlowItem = resolve;
+      });
+      const eventTypes: string[] = [];
+      const task = vi.fn().mockImplementation(async () => {
+        if (callCount++ === 0) return 'fast response';
+        await slowItemGate;
+        slowItemFinished = true;
+        return 'slow response';
+      });
+
+      const run = runExperiment(mastra, {
+        data: [
+          { id: 'fast-item', input: 'fast' },
+          { id: 'slow-item', input: 'slow' },
+        ],
+        task,
+        maxConcurrency: 2,
+        onEvent: event => {
+          eventTypes.push(event.type);
+          if (event.type === 'experiment.item.completed') throw new Error('observer unavailable');
+        },
+      });
+      const rejection = expect(run).rejects.toMatchObject({ id: 'EXPERIMENT_EVENT_OBSERVER_FAILED' });
+
+      await vi.waitFor(() => expect(eventTypes).toContain('experiment.item.completed'));
+      let settled = false;
+      void run.catch(() => {
+        settled = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(settled).toBe(false);
+
+      releaseSlowItem();
+      await rejection;
+
+      expect(slowItemFinished).toBe(true);
+      const experiments = await experimentsStorage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+      expect(experiments.experiments[0]).toMatchObject({
+        status: 'failed',
+        succeededCount: 2,
+        failedCount: 0,
+        skippedCount: 0,
+      });
+      const persistedResults = await experimentsStorage.listExperimentResults({
+        experimentId: experiments.experiments[0]!.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedResults.results).toHaveLength(2);
+      expect(eventTypes).not.toContain('experiment.run.finished');
+    });
+
+    it('normalizes invalid dates and reports inline task identity in events', async () => {
+      const events: ExperimentEvent[] = [];
+
+      await runExperiment(mastra, {
+        data: [{ id: 'inline-item', input: { invalidDate: new Date(Number.NaN) } }],
+        task: async () => 'done',
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      expect(events.every(event => event.target.type === 'task' && event.target.id === 'inline')).toBe(true);
+      expect(events.find(event => event.type === 'experiment.item.completed')).toMatchObject({
+        input: { invalidDate: null },
+      });
+      expect(() => JSON.stringify(events)).not.toThrow();
+    });
+
     it('emits item failures and a completed-with-errors terminal outcome', async () => {
       let callCount = 0;
       const flakyAgent = createMockAgent('Response');
