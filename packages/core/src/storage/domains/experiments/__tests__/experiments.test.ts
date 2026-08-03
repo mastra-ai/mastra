@@ -69,6 +69,49 @@ describe('ExperimentsInMemory', () => {
       expect(experiment.datasetVersion).toBeNull();
       expect(experiment.status).toBe('pending');
     });
+
+    it('persists provenance, runner attestation, and grouping identity', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        provenance: {
+          source: 'github',
+          sourceId: 'mastra-ai/mastra',
+          sourceVersion: 'abc123',
+          metadata: { pullRequest: 42 },
+        },
+        runnerAttestation: {
+          runnerId: 'runner-1',
+          invocationId: 'invocation-1',
+          runnerVersion: '1.0.0',
+        },
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      });
+
+      expect(experiment.provenance).toEqual({
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+        metadata: { pullRequest: 42 },
+      });
+      expect(experiment.runnerAttestation).toEqual({
+        runnerId: 'runner-1',
+        invocationId: 'invocation-1',
+        runnerVersion: '1.0.0',
+      });
+      expect(experiment).toMatchObject({
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      });
+    });
   });
 
   describe('updateExperiment', () => {
@@ -210,6 +253,42 @@ describe('ExperimentsInMemory', () => {
       });
       expect(result.experiments).toHaveLength(1);
       expect(result.experiments[0].datasetId).toBe('ds-1');
+    });
+
+    it('filters conjunctively by grouping fields and preserves trialIndex zero', async () => {
+      await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      });
+      await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-b',
+        trialIndex: 1,
+      });
+
+      const result = await storage.listExperiments({
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(result.experiments).toHaveLength(1);
+      expect(result.experiments[0]).toMatchObject({ variantId: 'variant-a', trialIndex: 0 });
     });
 
     it('sorts by createdAt descending', async () => {

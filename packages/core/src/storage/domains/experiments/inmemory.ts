@@ -42,6 +42,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       name: input.name,
       description: input.description,
       metadata: input.metadata,
+      provenance: input.provenance ?? null,
+      runnerAttestation: input.runnerAttestation ?? null,
+      experimentSetId: input.experimentSetId ?? null,
+      comparisonId: input.comparisonId ?? null,
+      variantId: input.variantId ?? null,
+      trialIndex: input.trialIndex ?? null,
       status: 'pending',
       totalItems: input.totalItems,
       succeededCount: 0,
@@ -111,6 +117,18 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     }
     if (args.status) {
       experiments = experiments.filter(r => r.status === args.status);
+    }
+    if (args.experimentSetId !== undefined) {
+      experiments = experiments.filter(r => r.experimentSetId === args.experimentSetId);
+    }
+    if (args.comparisonId !== undefined) {
+      experiments = experiments.filter(r => r.comparisonId === args.comparisonId);
+    }
+    if (args.variantId !== undefined) {
+      experiments = experiments.filter(r => r.variantId === args.variantId);
+    }
+    if (args.trialIndex !== undefined) {
+      experiments = experiments.filter(r => r.trialIndex === args.trialIndex);
     }
     if (args.filters?.organizationId !== undefined) {
       experiments = experiments.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);

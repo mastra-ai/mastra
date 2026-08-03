@@ -2758,11 +2758,41 @@ export interface BatchDeleteItemsInput {
 
 export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
 
+/** Caller-provided information describing the source of an experiment execution. */
+export interface ExperimentProvenance {
+  source?: string;
+  sourceId?: string;
+  sourceVersion?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Stable dimensions used to group related experiment executions. */
+export interface ExperimentGrouping {
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  /** Zero-based repetition index. */
+  trialIndex?: number;
+}
+
+/** Trusted runner-generated execution identity. Not accepted by caller-facing run APIs. */
+export interface ExperimentRunnerAttestation {
+  runnerId: string;
+  invocationId: string;
+  runnerVersion?: string;
+}
+
 export interface Experiment {
   id: string;
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  provenance?: ExperimentProvenance | null;
+  runnerAttestation?: ExperimentRunnerAttestation | null;
+  experimentSetId?: string | null;
+  comparisonId?: string | null;
+  variantId?: string | null;
+  trialIndex?: number | null;
   datasetId: string | null;
   datasetVersion: number | null;
   /**
@@ -2831,6 +2861,12 @@ export interface CreateExperimentInput {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  provenance?: ExperimentProvenance;
+  runnerAttestation?: ExperimentRunnerAttestation;
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion?: string;
@@ -2952,6 +2988,10 @@ export interface ListExperimentsInput {
   targetId?: string;
   agentVersion?: string;
   status?: ExperimentStatus;
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
