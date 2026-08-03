@@ -215,7 +215,7 @@ function SankeyNode({
     maxCharacters: NODE_LABEL_MAX_CHARACTERS,
   });
   const visibleColumnLabel = columnLabel
-    ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: labelWidths.centered })
+    ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: nodeLabelWidth })
     : undefined;
   const tooltipId = useId();
   const [isHovered, setIsHovered] = useState(false);
@@ -232,7 +232,6 @@ function SankeyNode({
   const visibleY = y + (height - visibleHeight) / 2;
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
-  const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
   const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
   const showTooltipAt = (target: SVGGElement) => {
@@ -283,9 +282,9 @@ function SankeyNode({
         <title>{displayLabel}</title>
         {showColumnLabel && visibleColumnLabel ? (
           <text
-            x={columnLabelX}
+            x={labelX}
             y={18}
-            textAnchor="middle"
+            textAnchor={textAnchor}
             fill={nodeColor(hue)}
             fontSize={COLUMN_LABEL_FONT_SIZE}
             fontWeight={600}
