@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/client-js';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
@@ -115,7 +115,29 @@ function renderThreadRoute(path: string) {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
+const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+
+/** jsdom reports every box as 0×0, so the rail threshold needs a width to measure against. */
+function stubScrollerWidth(width: number) {
+  HTMLElement.prototype.getBoundingClientRect = () => ({
+    width,
+    height: 800,
+    top: 0,
+    left: 0,
+    right: width,
+    bottom: 800,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+}
+
+beforeEach(() => {
+  stubScrollerWidth(1200);
+});
+
 afterEach(() => {
+  HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   window.localStorage.removeItem(SIDEBAR_STATE_KEY);
 });
 
@@ -126,6 +148,19 @@ describe('ThreadPage conversation rail', () => {
       renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
 
       expect(await screen.findByText('There are no user turns in this thread.')).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Conversation timeline' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when the docked workspace card leaves no room beside the column', () => {
+    it('does not render conversation navigation', async () => {
+      // 704px = the 44rem column with zero gutter, what the scroller is left with
+      // once the workspace card claims its inset.
+      stubScrollerWidth(704);
+      stubThreadRoute(threadRailMessages);
+      renderThreadRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
+
+      expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
       expect(screen.queryByRole('navigation', { name: 'Conversation timeline' })).not.toBeInTheDocument();
     });
   });
