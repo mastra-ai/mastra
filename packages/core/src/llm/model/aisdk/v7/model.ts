@@ -70,15 +70,88 @@ function normalizeFileDataForV4(data: FileData): {
   };
 }
 
+function isLegacyToolResultMediaPart(
+  value: unknown,
+): value is Record<string, unknown> & { type: 'media'; data: string; mediaType: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === 'media' &&
+    'data' in value &&
+    typeof value.data === 'string' &&
+    'mediaType' in value &&
+    typeof value.mediaType === 'string'
+  );
+}
+
+function remapToolResultMediaPartsToV4(part: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (part.type !== 'tool-result' || typeof part.output !== 'object' || part.output === null) {
+    return undefined;
+  }
+
+  const output = part.output as Record<string, unknown>;
+  if (output.type !== 'content' || !Array.isArray(output.value)) {
+    return undefined;
+  }
+
+  let valueModified = false;
+  const value = output.value.map(contentPart => {
+    if (!isLegacyToolResultMediaPart(contentPart)) {
+      return contentPart;
+    }
+
+    const { data, mediaType } = normalizeFileDataForV4(contentPart.data);
+    valueModified = true;
+
+    return {
+      ...contentPart,
+      type: 'file' as const,
+      data,
+      mediaType: mediaType ?? contentPart.mediaType,
+    };
+  });
+
+  return valueModified ? { ...part, output: { ...output, value } } : undefined;
+}
+
 function remapFilePartsToV4(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
   let promptModified = false;
   const prompt = options.prompt.map(message => {
+    if (message.role === 'tool') {
+      let contentModified = false;
+      const content = message.content.map(part => {
+        const remappedPart = remapToolResultMediaPartsToV4(part as unknown as Record<string, unknown>);
+        if (remappedPart === undefined) {
+          return part;
+        }
+
+        contentModified = true;
+        return remappedPart;
+      });
+
+      if (!contentModified) {
+        return message;
+      }
+
+      promptModified = true;
+      return { ...message, content };
+    }
+
     if (message.role !== 'user' && message.role !== 'assistant') {
       return message;
     }
 
     let contentModified = false;
     const content = message.content.map(part => {
+      if (message.role === 'assistant' && part.type === 'tool-result') {
+        const remappedPart = remapToolResultMediaPartsToV4(part as unknown as Record<string, unknown>);
+        if (remappedPart !== undefined) {
+          contentModified = true;
+          return remappedPart;
+        }
+      }
+
       if (part.type !== 'file') {
         return part;
       }

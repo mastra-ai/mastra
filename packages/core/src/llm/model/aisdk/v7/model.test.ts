@@ -136,6 +136,103 @@ describe('AISDKV7LanguageModel', () => {
       });
     });
 
+    it('normalizes media from a V2 tool result before calling a V4 provider', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      await wrapped.doGenerate({
+        prompt: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call_1',
+                toolName: 'read_image',
+                input: {},
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call_1',
+                toolName: 'read_image',
+                output: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'image result' },
+                    { type: 'media', data: 'iVBORw0KGgo=', mediaType: 'image/png' },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      } as unknown as LanguageModelV4CallOptions);
+
+      const passed = (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      const toolMessage = passed.prompt[1];
+      const toolResult = toolMessage.content[0];
+
+      expect(toolMessage.role).toBe('tool');
+      expect(toolResult).toMatchObject({
+        type: 'tool-result',
+        output: {
+          type: 'content',
+          value: [
+            { type: 'text', text: 'image result' },
+            {
+              type: 'file',
+              data: { type: 'data', data: 'iVBORw0KGgo=' },
+              mediaType: 'image/png',
+            },
+          ],
+        },
+      });
+    });
+
+    it('normalizes media from a V2 tool result nested in an assistant message', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      await wrapped.doGenerate({
+        prompt: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call_1',
+                toolName: 'read_image',
+                output: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'iVBORw0KGgo=', mediaType: 'image/png' }],
+                },
+              },
+            ],
+          },
+        ],
+      } as unknown as LanguageModelV4CallOptions);
+
+      const passed = (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(passed.prompt[0].content[0]).toMatchObject({
+        type: 'tool-result',
+        output: {
+          type: 'content',
+          value: [
+            {
+              type: 'file',
+              data: { type: 'data', data: 'iVBORw0KGgo=' },
+              mediaType: 'image/png',
+            },
+          ],
+        },
+      });
+    });
+
     it('normalizes all legacy file data forms for doGenerate and preserves tagged data', async () => {
       const model = createMockV4Model();
       const wrapped = new AISDKV7LanguageModel(model);
