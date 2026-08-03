@@ -15,8 +15,13 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { factoryReviewBranch } from './factory-session.js';
 import type { GithubRepositoryPermission } from './integration.js';
-import { changeRequestTargetKey, listSubscribedPullRequestNumbers } from './subscriptions.js';
+import {
+  changeRequestTargetKey,
+  listSubscribedPullRequestNumbers,
+  restorePullRequestSubscription,
+} from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
@@ -502,6 +507,50 @@ async function retireReconciledSubscriptions(
   );
 }
 
+/** A review card sits in `done` for as long as a human takes to merge; past that, nobody is waiting. */
+const SUBSCRIPTION_BACKFILL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Re-subscribe a review session whose prepare-time subscription never landed.
+ *
+ * Nothing else can: the sweep finds pull requests through their subscriptions,
+ * so a row that failed to write is invisible to it and the thread never learns
+ * its pull request merged. Restricted to recently touched cards — without that
+ * bound the first sweep after a deploy would replay a merge into every review
+ * thread the factory ever opened.
+ */
+async function restoreReviewSubscription(
+  options: GithubRulesOptions,
+  repository: ReconcileRepository,
+  project: ExternalRepositoryProjectTarget,
+  item: WorkItemRow,
+  pullRequestNumber: number,
+): Promise<boolean> {
+  if (Date.now() - item.updatedAt.getTime() > SUBSCRIPTION_BACKFILL_WINDOW_MS) return false;
+  const branch = factoryReviewBranch(pullRequestNumber);
+  const binding = Object.values(item.sessions).find(session => session.branch === branch);
+  if (!binding) return false;
+  const session = await options.sourceControl.sessions.getBySessionId(binding.sessionId);
+  if (!session) return false;
+  return restorePullRequestSubscription(
+    {
+      orgId: project.orgId,
+      installationExternalId: String(repository.installationId),
+      projectRepositoryId: session.projectRepositoryId,
+      repositoryExternalId: String(repository.id),
+      repositorySlug: repository.fullName,
+      changeRequestId: String(pullRequestNumber),
+      sessionId: binding.sessionId,
+      ownerId: session.userId,
+      // FactoryStartCoordinator.prepare scopes the thread to the session id.
+      resourceId: binding.sessionId,
+      threadId: binding.threadId,
+      source: 'factory-review-binding',
+    },
+    options.integrationStorage,
+  );
+}
+
 /**
  * State-based safety net for merge signals: webhooks and event-log tailing
  * can miss a merge (cursor gaps, downtime, terminally failed decisions), so
@@ -555,10 +604,12 @@ export function createGithubPullRequestReconciler(
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
-            const stage = item.stages[0];
-            if (stage === 'done' || stage === 'canceled') continue;
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
-            if (pullRequestNumber) numbers.add(pullRequestNumber);
+            if (!pullRequestNumber) continue;
+            const stage = item.stages[0];
+            if (stage === 'canceled') continue;
+            const restored = await restoreReviewSubscription(options, repository, project, item, pullRequestNumber);
+            if (restored || stage !== 'done') numbers.add(pullRequestNumber);
           }
         }
         const subscribed = await listSubscribedPullRequestNumbers(

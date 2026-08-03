@@ -3,7 +3,9 @@ import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.j
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
+import type { WorkItemSessionInput } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { factoryReviewBranch } from './factory-session.js';
 import type { GithubIntegration } from './integration.js';
 import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
 import type { ReconcilePullRequestState } from './rules.js';
@@ -731,7 +733,7 @@ describe('createGithubPullRequestReconciler', () => {
 
   async function createCard(
     context: Awaited<ReturnType<typeof setup>>,
-    input: { number: number; url?: string | null; stages?: string[] },
+    input: { number: number; url?: string | null; stages?: string[]; sessions?: Record<string, WorkItemSessionInput> },
   ) {
     return context.workItems.upsert({
       orgId: 'org-1',
@@ -746,10 +748,24 @@ describe('createGithubPullRequestReconciler', () => {
         },
         title: `PR ${input.number}`,
         stages: input.stages ?? ['review'],
-        sessions: {},
+        sessions: input.sessions ?? {},
         metadata: {},
       },
     });
+  }
+
+  async function createReviewSession(context: Awaited<ReturnType<typeof setup>>, pullRequestNumber: number) {
+    const session = await context.sourceControl.sessions.create({
+      sessionId: `session-${pullRequestNumber}`,
+      projectRepositoryId: context.projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: factoryReviewBranch(pullRequestNumber),
+      baseBranch: 'main',
+    });
+    return {
+      review: { sessionId: session.sessionId, branch: session.branch, threadId: session.sessionId },
+    };
   }
 
   function createReconciler(context: Awaited<ReturnType<typeof setup>>, fetchPullRequest: ReturnType<typeof vi.fn>) {
@@ -915,6 +931,61 @@ describe('createGithubPullRequestReconciler', () => {
     await reconcile([repositoryTarget]);
 
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('resubscribes a review session whose subscription never landed and retires it on the same sweep', async () => {
+    const context = await setup('read');
+    const sessions = await createReviewSession(context, 27);
+    await createCard(context, { number: 27, stages: ['done'], sessions });
+    const fetchPullRequest = vi.fn(async () => mergedState(27));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 27 });
+    const [row] = await context.subscriptionStorage.subscriptions.listByTarget(
+      changeRequestTargetKey({ installationExternalId: '7', repositoryExternalId: '10', changeRequestId: '27' }),
+    );
+    expect(row).toMatchObject({
+      status: 'merged',
+      threadId: sessions.review.threadId,
+      resourceId: sessions.review.sessionId,
+      data: expect.objectContaining({ source: 'factory-review-binding', repositorySlug: 'acme/repo' }),
+    });
+  });
+
+  it('does not revive a subscription the sweep already retired', async () => {
+    const context = await setup('read');
+    const sessions = await createReviewSession(context, 28);
+    await createCard(context, { number: 28, stages: ['done'], sessions });
+    const fetchPullRequest = vi.fn(async () => mergedState(28));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    const rows = await context.subscriptionStorage.subscriptions.listByTarget(
+      changeRequestTargetKey({ installationExternalId: '7', repositoryExternalId: '10', changeRequestId: '28' }),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe('merged');
+  });
+
+  it('leaves a review card alone once it has gone stale', async () => {
+    const context = await setup('read');
+    const sessions = await createReviewSession(context, 29);
+    await createCard(context, { number: 29, stages: ['done'], sessions });
+    const fetchPullRequest = vi.fn(async () => mergedState(29));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000));
+    try {
+      await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(fetchPullRequest).not.toHaveBeenCalled();
   });
 
   it('never checks a card whose URL points at a different repository', async () => {

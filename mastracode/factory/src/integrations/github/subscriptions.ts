@@ -129,6 +129,25 @@ export async function subscribeToPullRequest(
   });
 }
 
+/**
+ * Re-create a subscription a session lost, without reviving a retired one.
+ *
+ * `subscribeToPullRequest` reopens whatever row it finds. A reconcile-time
+ * backfill doing that would fight the retire the same sweep just performed,
+ * every sweep. Returns whether a row was created.
+ */
+export async function restorePullRequestSubscription(
+  input: SubscribeToPullRequestInput,
+  // Same rows as the typed handle — the sweep only ever holds the generic one.
+  storage: IntegrationStorageHandle,
+): Promise<boolean> {
+  const github = storage as unknown as GithubSubscriptionStorage;
+  const rows = await github.subscriptions.listByTarget(changeRequestTargetKey(input));
+  if (rows.some(row => sameSession(row, input))) return false;
+  await subscribeToPullRequest(input, github);
+  return true;
+}
+
 export async function unsubscribeFromPullRequest(
   input: SubscribeToPullRequestInput,
   storage: GithubSubscriptionStorage,

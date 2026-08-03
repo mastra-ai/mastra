@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import type { GithubIntegration } from './integration.js';
 import { subscribeToPullRequest } from './subscriptions.js';
 
+/** Ties the branch a review session runs on to the pull request it reviews. */
+export function factoryReviewBranch(pullRequestNumber: number): string {
+  return `factory/pr-${pullRequestNumber}`;
+}
+
 export interface FactoryRuleSessionRepository {
   projectRepositoryId: string;
   repositoryExternalId: string;

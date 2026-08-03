@@ -9,6 +9,7 @@ import type { FactoryIntegration, IntegrationContext } from '../integrations/bas
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import {
   ensureFactoryRuleSession,
+  factoryReviewBranch,
   subscribeFactoryRuleSessionToPullRequest,
 } from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -144,7 +145,7 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
     return `factory/issue-${issueNumber}`;
   }
   const pullRequestNumber = factoryRulePullRequestNumber(item);
-  if (pullRequestNumber) return `factory/pr-${pullRequestNumber}`;
+  if (pullRequestNumber) return factoryReviewBranch(pullRequestNumber);
   throw new Error('Factory skill invocation requires a GitHub issue or pull request number.');
 }
 
