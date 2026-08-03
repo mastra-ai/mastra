@@ -1,21 +1,16 @@
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import type { TranscriptState } from '../services/transcript';
-import type { PullRequestSubscription } from '../services/pullRequestSubscriptions';
-import { fetchPullRequestSubscriptions } from '../services/pullRequestSubscriptions';
+import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
+import {
+  listPullRequestSubscriptions,
+  pullRequestSubscriptionsQueryKey,
+} from '../../factory/services/githubSubscriptions';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import type { TranscriptState } from '../services/transcript';
 
 const NO_SUBSCRIPTIONS: PullRequestSubscription[] = [];
-
-function pullRequestSubscriptionsQueryKey(
-  resourceId: string,
-  threadId: string | undefined,
-  projectPath: string | undefined,
-) {
-  return ['github', 'subscriptions', resourceId, threadId, projectPath] as const;
-}
 
 function notificationKey(entries: TranscriptState['entries']): string {
   return entries
@@ -34,20 +29,19 @@ function notificationKey(entries: TranscriptState['entries']): string {
     .join(':');
 }
 
-export function usePullRequestSubscriptions(projectRepositoryId: string | undefined, threadId: string | undefined) {
+export function usePullRequestSubscriptions(threadId: string | undefined, enabled: boolean) {
   const { baseUrl, resourceId, projectPath } = useChatSessionContext();
   const { transcript, busy } = useChatTranscript();
   const queryClient = useQueryClient();
   const notificationIds = notificationKey(transcript.entries);
   const sessionKey = `${resourceId}:${threadId}:${projectPath}`;
   const previous = useRef({ busy, notificationIds, sessionKey });
+  const active = enabled && Boolean(threadId);
 
   const query = useQuery({
     queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath),
     queryFn:
-      projectRepositoryId && threadId
-        ? () => fetchPullRequestSubscriptions(baseUrl, resourceId, threadId, projectPath)
-        : skipToken,
+      active && threadId ? () => listPullRequestSubscriptions(baseUrl, resourceId, threadId, projectPath) : skipToken,
   });
 
   useEffect(() => {
@@ -60,11 +54,11 @@ export function usePullRequestSubscriptions(projectRepositoryId: string | undefi
     const runSettled = seen.busy && !busy;
     const newNotification = seen.notificationIds !== notificationIds;
     if (!runSettled && !newNotification) return;
-    if (!projectRepositoryId || !threadId) return;
+    if (!active) return;
     void queryClient.invalidateQueries({
       queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath),
     });
-  }, [busy, notificationIds, projectPath, projectRepositoryId, queryClient, resourceId, sessionKey, threadId]);
+  }, [active, busy, notificationIds, projectPath, queryClient, resourceId, sessionKey, threadId]);
 
   return query.data ?? NO_SUBSCRIPTIONS;
 }

@@ -21,7 +21,7 @@ function statusIconColor(status: PullRequestSubscription['status']): string {
 }
 
 interface PullRequestLinksProps {
-  repository?: Pick<LinkedRepositoryPayload, 'projectRepositoryId' | 'slug'>;
+  repository?: Pick<LinkedRepositoryPayload, 'slug'>;
   reviewItem?: WorkItem;
   threadId: string | undefined;
   size?: 'xs' | 'sm';
@@ -60,9 +60,11 @@ function pullRequestLinks(
 ): PullRequestSubscription[] {
   if (!activeReview) return subscriptions;
 
+  // github slugs are case-insensitive — factory config and the subscriptions endpoint can disagree on case
+  const activeRepo = activeReview.repoFullName.toLowerCase();
   const alreadySubscribed = subscriptions.some(
     subscription =>
-      subscription.repoFullName === activeReview.repoFullName &&
+      subscription.repoFullName.toLowerCase() === activeRepo &&
       subscription.pullRequestNumber === activeReview.pullRequestNumber,
   );
   if (alreadySubscribed) return subscriptions;
@@ -76,7 +78,7 @@ function pullRequestLinks(
  * reads the chat session and transcript contexts.
  */
 export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs' }: PullRequestLinksProps) {
-  const subscriptions = usePullRequestSubscriptions(repository?.projectRepositoryId, threadId);
+  const subscriptions = usePullRequestSubscriptions(threadId, Boolean(repository));
   const activeReview = reviewSubscription(reviewItem, repository?.slug);
   const links = pullRequestLinks(subscriptions, activeReview);
   if (links.length === 0) return null;

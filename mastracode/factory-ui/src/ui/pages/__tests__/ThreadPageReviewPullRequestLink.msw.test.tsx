@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
-import type { PullRequestSubscription } from '../../domains/chat/services/pullRequestSubscriptions';
+import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -20,6 +20,10 @@ const OTHER_PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${OTHER
 const OTHER_PULL_REQUEST_ACCESSIBLE_NAME = `Open open mastra-ai/mastra pull request ${OTHER_PULL_REQUEST_NUMBER}`;
 const MALFORMED_PULL_REQUEST_NUMBER = 20340;
 const MALFORMED_PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${MALFORMED_PULL_REQUEST_NUMBER}`;
+const NON_POSITIVE_PULL_REQUEST_URL = 'https://github.com/mastra-ai/mastra/pull/0';
+const MIXED_CASE_REPO_SLUG = 'Mastra-AI/Mastra';
+const MIXED_CASE_PULL_REQUEST_URL = `https://github.com/${MIXED_CASE_REPO_SLUG}/pull/${PULL_REQUEST_NUMBER}`;
+const MIXED_CASE_ACCESSIBLE_NAME = `Open open ${MIXED_CASE_REPO_SLUG} pull request ${PULL_REQUEST_NUMBER}`;
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
 
 const workspaceSession = {
@@ -230,6 +234,46 @@ describe('ThreadPage pull request link placement', () => {
         .queryAllByRole('link')
         .filter(link => link.getAttribute('href') === MALFORMED_PULL_REQUEST_URL);
       expect(malformedLinks).toHaveLength(0);
+    });
+
+    it('drops a subscription whose pull request number is not positive', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [
+        {
+          ...otherPullRequestSubscription,
+          id: 'subscription-zero',
+          pullRequestNumber: 0,
+          url: NON_POSITIVE_PULL_REQUEST_URL,
+        },
+        otherPullRequestSubscription,
+      ]);
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      await within(factorySession).findByRole('link', { name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME });
+      const nonPositiveLinks = within(factorySession)
+        .queryAllByRole('link')
+        .filter(link => link.getAttribute('href') === NON_POSITIVE_PULL_REQUEST_URL);
+
+      expect(nonPositiveLinks).toHaveLength(0);
+    });
+
+    it('does not duplicate the active review when the subscription spells the repository differently', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [
+        {
+          ...pullRequestSubscription,
+          repoFullName: MIXED_CASE_REPO_SLUG,
+          url: MIXED_CASE_PULL_REQUEST_URL,
+        },
+      ]);
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      await within(factorySession).findByRole('link', { name: MIXED_CASE_ACCESSIBLE_NAME });
+      const activeReviewLinks = within(factorySession)
+        .getAllByRole('link')
+        .filter(link => link.getAttribute('href')?.endsWith(`/pull/${PULL_REQUEST_NUMBER}`));
+
+      expect(activeReviewLinks).toHaveLength(1);
     });
 
     it('still shows the active review when the subscriptions request fails', async () => {

@@ -38,7 +38,7 @@ export function useWorkspacePullRequestMerges({
         refetchOnWindowFocus: true,
         refetchInterval: query => {
           if (query.state.status !== 'success') return false;
-          const subscription = query.state.data?.subscriptions.find(
+          const subscription = query.state.data?.find(
             candidate => candidate.pullRequestNumber === target.pullRequestNumber,
           );
           return subscription?.status === 'open' ? WORKSPACE_PR_STATUS_POLL_MS : false;
@@ -60,9 +60,7 @@ export function useWorkspacePullRequestMerges({
       return;
     }
 
-    const subscription = query.data.subscriptions.find(
-      candidate => candidate.pullRequestNumber === target.pullRequestNumber,
-    );
+    const subscription = query.data.find(candidate => candidate.pullRequestNumber === target.pullRequestNumber);
     mergedBySessionId[target.sessionId] = subscription ? subscription.status === 'merged' : target.knownMerged;
   });
 
