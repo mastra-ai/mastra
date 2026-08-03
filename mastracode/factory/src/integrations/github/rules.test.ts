@@ -291,6 +291,7 @@ describe('GithubRules', () => {
 
     function makeSession(key: string, initialThreadId?: string) {
       let threadId: string | undefined = initialThreadId;
+      const agentEndListeners = new Set<(event: { type: string }) => void>();
       const session = {
         thread: {
           list: vi.fn(async () => []),
@@ -319,9 +320,16 @@ describe('GithubRules', () => {
           (input: { id: string; contents: string }, options: { requestContext: { get(key: string): unknown } }) => {
             if (!threadId) throw new Error('Signal delivered before thread persistence.');
             deliveredSignals.push({ ...input, threadId, user: options.requestContext.get('user') });
+            for (const listener of agentEndListeners) {
+              listener({ type: 'agent_end' });
+            }
             return { accepted: Promise.resolve({ accepted: true, action: 'wake' }) };
           },
         ),
+        subscribe: vi.fn((listener: (event: { type: string }) => void) => {
+          agentEndListeners.add(listener);
+          return () => agentEndListeners.delete(listener);
+        }),
         state: { set: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
