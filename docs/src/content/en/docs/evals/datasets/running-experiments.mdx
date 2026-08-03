@@ -145,7 +145,7 @@ Visit the [Scorers overview](/docs/evals/overview) for details on available and 
 
 ## Control persistence per run
 
-Use `persistence` to prevent experiment records, score records, or both from being written to storage for a specific run:
+Use `persistence` to skip storage writes for a specific run. Experiment records and score records can be disabled independently:
 
 ```typescript title="src/mastra/experiments/no-persistence.ts"
 const summary = await dataset.startExperiment({
