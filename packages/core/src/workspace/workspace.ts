@@ -1336,6 +1336,14 @@ export class Workspace<
     } catch (error) {
       this._status = 'error';
       throw error;
+    } finally {
+      // Release indexed content. The search engine holds the full text of every
+      // indexed document, and the skills registry holds the source of every
+      // loaded skill version; without this a destroyed workspace keeps them
+      // alive for the lifetime of the process. Done in `finally` so a failed
+      // resource shutdown above cannot pin the index either.
+      this._searchEngine?.clear();
+      this._skills = undefined;
     }
   }
 
