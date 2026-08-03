@@ -101,6 +101,54 @@ describe('MainSidebar resize handle gesture', () => {
   });
 });
 
+describe('MainSidebar keyboard behavior', () => {
+  it('leaves Command+B available to the browser by default', () => {
+    mockMatchMedia(false);
+    render(
+      <MainSidebarProvider>
+        <MainSidebar>
+          <MainSidebar.Nav />
+        </MainSidebar>
+      </MainSidebarProvider>,
+    );
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'KeyB',
+      key: 'b',
+      metaKey: true,
+    });
+
+    fireEvent(window, event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-state')).toBe('default');
+  });
+
+  it('toggles the sidebar when a consumer explicitly opts in', () => {
+    mockMatchMedia(false);
+    render(
+      <MainSidebarProvider disableKeyboardShortcut={false}>
+        <MainSidebar>
+          <MainSidebar.Nav />
+        </MainSidebar>
+      </MainSidebarProvider>,
+    );
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'KeyB',
+      key: 'b',
+      metaKey: true,
+    });
+
+    fireEvent(window, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-state')).toBe('collapsed');
+  });
+});
+
 describe('MainSidebar mobile drawer', () => {
   it('opens as an accessible dialog on mobile', () => {
     mockMatchMedia(true);

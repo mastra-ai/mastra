@@ -9,9 +9,7 @@ import {
   CommandPaletteResults,
   CommandPaletteScope,
 } from '@mastra/playground-ui/components/CommandPalette';
-import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -122,23 +120,21 @@ const CommandRail = ({
   </CommandPaletteRail>
 );
 
-const ShortcutResults = ({
+const CommandResults = ({
   sidebar,
   activeScope,
-  sidebarShortcutLabel,
   closeCommand,
 }: {
   sidebar: SidebarContextValue | null;
   activeScope: CommandScope;
-  sidebarShortcutLabel: string;
   closeCommand: () => void;
 }) => {
   if (!sidebar || (activeScope !== 'all' && activeScope !== 'settings')) return null;
 
   return (
-    <CommandGroup heading="Shortcuts">
+    <CommandGroup heading="Commands">
       <CommandPaletteItem
-        value="toggle sidebar collapse expand layout panel shortcut command b ctrl b"
+        value="toggle sidebar collapse expand layout panel"
         onSelect={() => {
           sidebar.toggleSidebar();
           closeCommand();
@@ -146,8 +142,6 @@ const ShortcutResults = ({
         icon={<PanelLeftIcon />}
         title="Toggle Sidebar"
         subtitle="Studio layout"
-        badge="Shortcut"
-        shortcut={<Kbd size="sm">{sidebarShortcutLabel}</Kbd>}
       />
     </CommandGroup>
   );
@@ -473,7 +467,6 @@ export const NavigationCommand = () => {
   const { navigate, paths } = useLinkComponent();
   const { isMastraPlatform } = useMastraPlatform();
   const sidebar = useMaybeSidebar();
-  const sidebarShortcutLabel = useKeyboardShortcutLabel('B');
   const [activeScope, setActiveScope] = React.useState<CommandScope>('all');
 
   const { data: agents = {} } = useAgents();
@@ -599,12 +592,7 @@ export const NavigationCommand = () => {
         <CommandRail scopeOptions={scopeOptions} activeScope={activeScope} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Studio search" />}>
           <CommandEmpty>No matching results.</CommandEmpty>
-          <ShortcutResults
-            sidebar={sidebar}
-            activeScope={activeScope}
-            sidebarShortcutLabel={sidebarShortcutLabel}
-            closeCommand={closeCommand}
-          />
+          <CommandResults sidebar={sidebar} activeScope={activeScope} closeCommand={closeCommand} />
           <PathSectionResults sections={visiblePathSections} handleSelect={handleSelect} />
           <AgentResults visible={showAgents} entries={agentEntries} paths={paths} handleSelect={handleSelect} />
           <WorkflowResults

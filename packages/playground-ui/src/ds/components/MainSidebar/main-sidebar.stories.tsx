@@ -66,8 +66,7 @@ const HelperCopy = () => (
   <>
     <p className="text-ui-md text-neutral5 font-medium">Main content area</p>
     <p className="text-ui-sm text-neutral4 mt-2 max-w-[40ch]">
-      Hover the sidebar edge to reveal the handle. Drag to resize, click to toggle, or hit{' '}
-      <kbd className="bg-surface5 text-neutral4 rounded px-1 font-mono text-[0.65rem]">⌘B</kbd>.
+      Hover the sidebar edge to reveal the handle. Drag to resize, or click to toggle.
     </p>
   </>
 );
@@ -510,7 +509,7 @@ export const Resizable: Story = {
     docs: {
       description: {
         story:
-          'Drag the right edge to resize between min and max width. Width is persisted to `localStorage` under `sidebar:width`. Dragging below `collapseBelow` snaps the sidebar to its collapsed state; the toggle (or `Ctrl+B`) restores the last expanded width.',
+          'Drag the right edge to resize between min and max width. Width is persisted to `localStorage` under `sidebar:width`. Dragging below `collapseBelow` snaps the sidebar to its collapsed state; the toggle restores the last expanded width.',
       },
     },
   },
@@ -527,7 +526,7 @@ export const Collapsed: Story = {
     docs: {
       description: {
         story:
-          'Icon-only mode. `NavLink` and `NavHeader` both render compact when their `state` prop (or context state) is `"collapsed"`. Use the trigger or `Ctrl+B` to expand.',
+          'Icon-only mode. `NavLink` and `NavHeader` both render compact when their `state` prop (or context state) is `"collapsed"`. Use the trigger to expand.',
       },
     },
   },
@@ -552,7 +551,7 @@ export const FullyCollapsible: Story = {
     docs: {
       description: {
         story:
-          'Set `collapsedWidth: 0` for a fully hidden sidebar. The drag handle persists at the edge so users can re-open it. Drag below `collapseBelow` to snap closed; click the handle (or `Ctrl+B`) to restore the previous width.',
+          'Set `collapsedWidth: 0` for a fully hidden sidebar. The drag handle persists at the edge so users can re-open it. Drag below `collapseBelow` to snap closed; click the handle to restore the previous width.',
       },
     },
   },

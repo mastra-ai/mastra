@@ -1,3 +1,5 @@
+/* oxlint-disable react/only-export-components -- Provider hooks intentionally share private context instances with the provider. */
+/* eslint-disable react-refresh/only-export-components -- Provider hooks intentionally share private context instances with the provider. */
 import React from 'react';
 import type { CSSProperties } from 'react';
 import type { LinkComponent } from '@/ds/types/link-component';
@@ -76,7 +78,7 @@ export type MainSidebarProviderProps = {
   collapseBelow?: number;
   /** Width in px when collapsed. Defaults to `64`. Set to `0` for fully hidden. */
   collapsedWidth?: number;
-  /** Disable the global ⌘B / Ctrl+B toggle shortcut. Defaults to `false`. */
+  /** Disable the global ⌘B / Ctrl+B toggle shortcut. Defaults to `true` so browser shortcuts are preserved. */
   disableKeyboardShortcut?: boolean;
   /** Scope-key for localStorage. Allows multiple independent sidebars per app. */
   storageKey?: string;
@@ -100,7 +102,7 @@ export function MainSidebarProvider({
   maxWidth = 480,
   collapseBelow,
   collapsedWidth = 64,
-  disableKeyboardShortcut = false,
+  disableKeyboardShortcut = true,
   storageKey,
   mobileBreakpoint = 1024,
   mobileWidth = 360,
