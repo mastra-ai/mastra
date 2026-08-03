@@ -133,8 +133,6 @@ minimumReleaseAgeExclude:
   - webpack-dev-server@5.2.6
   # Renovate security update: dompurify@3.4.12
   - dompurify@3.4.12
-  # Renovate security update: fast-uri@3.1.4
-  - fast-uri@3.1.4
   # Renovate security update: fast-xml-parser@5.10.1
   - fast-xml-parser@5.10.1
   # Renovate security update: svgo@3.3.4
@@ -203,7 +201,7 @@ overrides:
   ws@>=8.0.0 <8.21.0: 8.21.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
-  fast-uri@<3.1.2: 3.1.4
+  fast-uri@<3.1.5: 3.1.5
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13

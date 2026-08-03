@@ -1,4 +1,4 @@
-import { KeyboardIcon, PanelRightIcon } from 'lucide-react';
+import { PanelRightIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -45,12 +45,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
         }
       />
 
-      <TooltipContent>
-        Toggle Sidebar
-        <div className="flex items-center gap-1 [&>svg]:size-[1em]">
-          <KeyboardIcon /> Ctrl+B
-        </div>
-      </TooltipContent>
+      <TooltipContent>Toggle Sidebar</TooltipContent>
     </Tooltip>
   );
 }

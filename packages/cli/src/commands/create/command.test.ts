@@ -23,6 +23,7 @@ function createOptions(overrides: Partial<NormalizedCreateOptions> = {}): Normal
     git: true,
     template: undefined,
     timeout: 60_000,
+    install: true,
     ...overrides,
   };
 }
@@ -157,6 +158,7 @@ describe('shared create Commander wiring', () => {
       git: true,
       template: undefined,
       timeout: 60_000,
+      install: true,
     });
   });
 
@@ -187,8 +189,26 @@ describe('shared create Commander wiring', () => {
       git: false,
       template: undefined,
       timeout: 12_345,
+      install: true,
     });
     expect(subAction.mock.calls[0]?.[0]).toEqual(rootAction.mock.calls[0]?.[0]);
+  });
+
+  it('parses --no-install option', async () => {
+    const action = vi.fn();
+    await parseRoot(['project', '--no-install'], action);
+
+    expect(action).toHaveBeenCalledWith({
+      projectName: 'project',
+      empty: false,
+      llmProvider: undefined,
+      llmApiKey: undefined,
+      skills: true,
+      git: true,
+      template: undefined,
+      timeout: 60_000,
+      install: false,
+    });
   });
 });
 

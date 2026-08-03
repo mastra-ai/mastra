@@ -158,6 +158,7 @@ export type ProviderModelsMap = {
     'gemini/gemini-3-flash-preview',
     'gemini/gemini-3.1-pro-preview',
     'gemini/gemini-3.5-flash',
+    'gemini/gemini-3.6-flash',
     'minimax/minimax-m2.7',
     'minimax/minimax-m3',
     'moonshot/kimi-k2.5',
@@ -598,12 +599,12 @@ export type ProviderModelsMap = {
   readonly lilac: readonly ['google/gemma-4-31b-it', 'minimaxai/minimax-m3', 'moonshotai/kimi-k2.6', 'zai-org/glm-5.2'];
   readonly 'stepfun-ai-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash'];
   readonly 'zhipuai-coding-plan': readonly [
-    'glm-4.5-air',
     'glm-4.6v',
     'glm-4.7',
     'glm-5-turbo',
     'glm-5.1',
     'glm-5.2',
+    'glm-5.2-highspeed[1m]',
     'glm-5v-turbo',
   ];
   readonly 'nano-gpt': readonly [
@@ -1468,6 +1469,7 @@ export type ProviderModelsMap = {
     'grok-build-0-1',
     'hermes-4-405b',
     'hermes-4-70b',
+    'hy3',
     'kimi-k2',
     'kimi-k2-thinking',
     'kimi-k2.5',
@@ -3078,7 +3080,7 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-4.7-Flash',
     'hf:zai-org/GLM-5.2',
   ];
-  readonly 'zai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5.2', 'glm-5v-turbo'];
+  readonly 'zai-coding-plan': readonly ['glm-4.7', 'glm-5-turbo', 'glm-5.2', 'glm-5.2-highspeed[1m]'];
   readonly gmicloud: readonly [
     'Qwen/Qwen3.7-Max',
     'anthropic/claude-opus-4.6',
@@ -3837,6 +3839,7 @@ export type ProviderModelsMap = {
     'meta/llama-4-maverick',
     'meta/llama-4-scout',
     'meta/muse-spark-1.1',
+    'minimax/minimax-h3',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.1-lightning',
@@ -3954,6 +3957,7 @@ export type ProviderModelsMap = {
     'stepfun/step-3.7-flash',
     'tencent/hy3',
     'thinkingmachines/inkling',
+    'thinkingmachines/inkling-small',
     'voyage/rerank-2.5',
     'voyage/rerank-2.5-lite',
     'voyage/voyage-3-large',
@@ -4253,6 +4257,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.2',
     'deepseek/deepseek-v3.2-exp',
     'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-flash-0731',
     'deepseek/deepseek-v4-pro',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-image',
@@ -4317,7 +4322,6 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.7',
     'minimax/minimax-m3',
     'mistralai/codestral-2508',
-    'mistralai/devstral-2512',
     'mistralai/ministral-14b-2512',
     'mistralai/ministral-3b-2512',
     'mistralai/ministral-8b-2512',
@@ -4383,7 +4387,6 @@ export type ProviderModelsMap = {
     'openai/gpt-5-nano',
     'openai/gpt-5-pro',
     'openai/gpt-5.1',
-    'openai/gpt-5.1-chat',
     'openai/gpt-5.1-codex',
     'openai/gpt-5.1-codex-max',
     'openai/gpt-5.1-codex-mini',
@@ -4502,6 +4505,7 @@ export type ProviderModelsMap = {
     'thedrummer/skyfall-36b-v2',
     'thedrummer/unslopnemo-12b',
     'thinkingmachines/inkling',
+    'thinkingmachines/inkling-small',
     'undi95/remm-slerp-l2-13b',
     'upstage/solar-pro-3',
     'writer/palmyra-x5',
