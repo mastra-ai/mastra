@@ -10,6 +10,15 @@ A host calls `MastraFactory.prepare()`, constructs `new Mastra(...)`, then calls
 
 See `mastracode/web/src/mastra/index.ts` for the host implementation.
 
+## GitHub installation health
+
+Factory reports removed or suspended GitHub App installations through its existing web routes:
+
+- `POST /web/github/projects/:id/ensure` and `GET /web/github/projects/:id/issues` return HTTP `424` with `error: "github_installation_broken"`. The response also includes `message`, `installationId`, and `accountLogin`. The server-sent events form of `/ensure` emits the same error code and context in its `error` event.
+- `GET /web/github/status` returns healthy installations in `installations` and removed or suspended installations in `brokenInstallations`. Each broken entry includes `installationId`, `accountLogin`, `accountType`, and `brokenAt`, where `brokenAt` is a Unix timestamp in milliseconds.
+
+Clients should direct users to the existing GitHub connection-management flow when either contract reports a broken installation.
+
 ## Development
 
 ```shell
