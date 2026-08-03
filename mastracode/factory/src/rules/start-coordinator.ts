@@ -175,10 +175,14 @@ export class FactoryStartCoordinator {
     // controller state. Seed it server-side — `tags` covers fresh creation,
     // the explicit setState covers get-or-create returning a session another
     // caller created without them — so autonomous runs never depend on a
-    // browser connecting to populate the state. `untrustedCheckout` is a
-    // boolean so it rides only on state (tags are string-valued).
+    // browser connecting to populate the state. `untrustedCheckout` and
+    // `autonomousSession` are booleans so they ride only on state (tags are
+    // string-valued). Every session started here speaks under the factory's bot
+    // identity, so `autonomousSession` keeps the host machine's ~/.claude
+    // instructions out of the prompt — same rule, same output on every host.
     await session.state.set({
       ...sessionTags,
+      autonomousSession: true,
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
     if (this.#memorySettings) {

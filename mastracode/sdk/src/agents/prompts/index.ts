@@ -84,16 +84,20 @@ export function buildFullPrompt(ctx: PromptContext): string {
   // trusted configuration. When the session carries a trusted base ref, the
   // project instructions are served from that ref instead (`git show`);
   // without one, project-scope files are skipped entirely. Global (operator
-  // machine) instructions always load.
+  // machine) instructions load for interactive sessions only — an unattended
+  // run must render the same on every host, from sources a reviewer can see.
   const configDir = ctx.state?.configDir as string | undefined;
   const untrustedCheckout = ctx.state?.untrustedCheckout === true;
+  const autonomousSession = ctx.state?.autonomousSession === true;
   const baseRef = typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined;
   const projectReader = untrustedCheckout
     ? baseRef
       ? createGitRefInstructionReader(ctx.workingDir, baseRef)
       : { exists: () => false, read: () => '' }
     : undefined;
-  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader);
+  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader).filter(
+    source => !(autonomousSession && source.scope === 'global'),
+  );
   const instructionsSection = formatAgentInstructions(instructionSources);
 
   const sections = [base, instructionsSection.trim(), modelSpecific.trim(), modeSpecific.trim()].filter(Boolean);

@@ -294,6 +294,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      autonomousSession: true,
     });
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
@@ -321,6 +322,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      autonomousSession: true,
       untrustedCheckout: true,
       baseRef: 'main',
     });
@@ -349,6 +351,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      autonomousSession: true,
       untrustedCheckout: true,
       baseRef: 'main',
     });
@@ -370,12 +373,13 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      autonomousSession: true,
       untrustedCheckout: true,
       baseRef: 'release-1.x',
     });
   });
 
-  it('does not tag issue work sessions with untrustedCheckout', async () => {
+  it('marks issue work sessions autonomous without tagging them untrustedCheckout', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
     const coordinator = new FactoryStartCoordinator(
@@ -390,6 +394,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      autonomousSession: true,
     });
   });
 

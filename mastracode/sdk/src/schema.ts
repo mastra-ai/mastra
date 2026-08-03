@@ -41,6 +41,12 @@ export interface MastraCodeState {
    * project-scope instruction files are skipped entirely.
    */
   baseRef?: string;
+  /**
+   * Session runs unattended under a bot identity. Global instruction files on
+   * the host machine (~/.claude/AGENTS.md and friends) are skipped so the run
+   * depends only on sources a reviewer can see.
+   */
+  autonomousSession?: boolean;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -112,6 +118,8 @@ export const stateSchema = z.object({
   untrustedCheckout: z.boolean().optional(),
   // Trusted ref to serve instruction files from on untrusted checkouts.
   baseRef: z.string().optional(),
+  // Unattended run — skip operator-machine (global) instruction files.
+  autonomousSession: z.boolean().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
