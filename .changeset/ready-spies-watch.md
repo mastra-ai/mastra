@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Improved type safety for agent structured output by implementing a discriminated union.
+Improve structured output option typing so processor-only fields now require a separate structuredOutput.model.
