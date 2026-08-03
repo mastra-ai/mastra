@@ -5,6 +5,7 @@ import { MockMemory } from '../../memory/mock';
 import type { OutputProcessor, ProcessOutputResultArgs } from '../../processors/index';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../types';
 
 /**
  * Regression tests for the duplicate delegation prompt bug.
@@ -23,7 +24,7 @@ import { Agent } from '../agent';
 const DELEGATION_PROMPT = 'What is the capital of France?';
 const SUB_AGENT_RESPONSE = 'The capital of France is Paris.';
 
-function makeSubAgentModel() {
+function makeSubAgentModel(capturedPrompts: unknown[][] = []) {
   return new MockLanguageModelV2({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -33,22 +34,25 @@ function makeSubAgentModel() {
       content: [{ type: 'text' as const, text: SUB_AGENT_RESPONSE }],
       warnings: [],
     }),
-    doStream: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'sub-id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: SUB_AGENT_RESPONSE },
-        { type: 'text-end', id: 'text-1' },
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-        },
-      ]),
-    }),
+    doStream: async options => {
+      capturedPrompts.push(options.prompt);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'sub-id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: SUB_AGENT_RESPONSE },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          },
+        ]),
+      };
+    },
   });
 }
 
@@ -151,20 +155,23 @@ function makeOmLikeInputPersister(memory: MockMemory, persistedInputIds: string[
 async function runDelegation({
   method,
   persistInputDuringRun,
+  delegationContext,
 }: {
   method: 'generate' | 'stream';
   persistInputDuringRun: boolean;
+  delegationContext?: MastraDBMessage[];
 }) {
   const store = new InMemoryStore();
   const supervisorMemory = new MockMemory({ storage: store });
   const persistedInputIds: string[] = [];
+  const subAgentPrompts: unknown[][] = [];
 
   const subAgent = new Agent({
     id: 'sub-agent-dup-prompt',
     name: 'Sub Agent',
     description: 'A sub-agent without its own memory',
     instructions: 'Answer questions.',
-    model: makeSubAgentModel(),
+    model: makeSubAgentModel(subAgentPrompts),
     ...(persistInputDuringRun
       ? { outputProcessors: [makeOmLikeInputPersister(supervisorMemory, persistedInputIds)] }
       : {}),
@@ -181,7 +188,11 @@ async function runDelegation({
 
   const resourceId = randomUUID();
   const threadId = randomUUID();
-  const options = { maxSteps: 3, memory: { resource: resourceId, thread: threadId } };
+  const options = {
+    maxSteps: 3,
+    memory: { resource: resourceId, thread: threadId },
+    ...(delegationContext ? { delegation: { messageFilter: () => delegationContext } } : {}),
+  };
 
   if (method === 'generate') {
     await supervisor.generate(DELEGATION_PROMPT, options);
@@ -202,7 +213,7 @@ async function runDelegation({
   expect(threads.length).toBe(1);
 
   const { messages } = await memoryStorage!.listMessages({ threadId: threads[0]!.id, perPage: 100 });
-  return { messages, persistedInputIds };
+  return { messages, persistedInputIds, subAgentPrompts };
 }
 
 describe.each(['generate', 'stream'] as const)('sub-agent delegation prompt persistence (%s)', method => {
@@ -232,6 +243,30 @@ describe.each(['generate', 'stream'] as const)('sub-agent delegation prompt pers
     const assistantMessages = messages.filter(m => m.role === 'assistant');
     expect(assistantMessages.length).toBe(1);
     expect(JSON.stringify(assistantMessages[0]!.content)).toContain(SUB_AGENT_RESPONSE);
+  });
+});
+
+describe('sub-agent delegation prompt ordering', () => {
+  it('keeps the delegation prompt after forwarded supervisor context', async () => {
+    const supervisorContext = 'Delegate this request to the right agent.';
+    const futureMessage: MastraDBMessage = {
+      id: 'future-supervisor-message',
+      role: 'user',
+      createdAt: new Date(Date.now() + 60_000),
+      content: { format: 2, parts: [{ type: 'text', text: supervisorContext }] },
+    };
+
+    const { subAgentPrompts } = await runDelegation({
+      method: 'stream',
+      persistInputDuringRun: false,
+      delegationContext: [futureMessage],
+    });
+
+    const userMessages = (subAgentPrompts[0] as Array<{ role: string; content: unknown }>).filter(
+      message => message.role === 'user',
+    );
+    expect(JSON.stringify(userMessages[0]?.content)).toContain(supervisorContext);
+    expect(JSON.stringify(userMessages[1]?.content)).toContain(DELEGATION_PROMPT);
   });
 });
 

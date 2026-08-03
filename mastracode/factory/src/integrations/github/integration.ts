@@ -25,6 +25,7 @@
 
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
@@ -47,8 +48,10 @@ import type {
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { runGithubIssueTriage } from './issue-triage.js';
+import { GithubReconcileWorker } from './reconcile-worker.js';
 import { buildGithubRoutes } from './routes.js';
-import { attachGithubRules } from './rules.js';
+import { attachGithubReconciler, attachGithubRules } from './rules.js';
+import type { ReconcilePullRequestState } from './rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -1092,6 +1095,56 @@ export class GithubIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       ingestFactoryEvent,
     });
+  }
+
+  /**
+   * Merge-state safety net. Webhooks are the only other writer of merge state,
+   * and a self-hosted deployment GitHub cannot reach (private network, local
+   * dev) never receives one — without this sweep its PR cards stay open
+   * forever. Disable with `MASTRACODE_GITHUB_RECONCILE_ENABLED=false`.
+   */
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
+    const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
+    if (!reconcile) return [];
+    const intervalMs = Number(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    return [
+      new GithubReconcileWorker({
+        reconcile,
+        sourceControl: ctx.storage.sourceControl,
+        ...(Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {}),
+      }),
+    ];
+  }
+
+  /**
+   * Reads live PR state for the merge reconciler. Returns undefined when the PR
+   * cannot be resolved so a sweep never fabricates a merge.
+   */
+  async fetchPullRequestState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcilePullRequestState | undefined> {
+    try {
+      const pullRequest = await this.#getPullRequest({
+        connection: { type: 'app-installation', installationId: input.installationId },
+        sourceId: input.repository,
+        pullRequestId: String(input.number),
+      });
+      if (!pullRequest) return undefined;
+      return {
+        title: pullRequest.title,
+        url: pullRequest.url,
+        state: pullRequest.state === 'closed' ? 'closed' : 'open',
+        merged: pullRequest.merged,
+        headBranch: pullRequest.headBranch,
+        baseBranch: pullRequest.baseBranch,
+        ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   /**
