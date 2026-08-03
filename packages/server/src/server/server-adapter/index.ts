@@ -70,7 +70,6 @@ export interface StreamOptions {
 }
 
 const AGENT_CHANNEL_WEBHOOK_PATH = /^\/api\/agents\/([^/]+)\/channels\/([^/]+)\/webhook\/?$/;
-const MAX_CHANNEL_WEBHOOK_WARNINGS = 100;
 
 /**
  * MCP transport options for configuring MCP HTTP and SSE transports.
@@ -339,7 +338,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected httpLoggingConfig?: HttpLoggingConfig;
   protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
-  private warnedChannelWebhooks = new Set<string>();
   private customRouteHandler:
     | ((
         request: Request,
@@ -450,17 +448,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (findMatchingCustomRoute(path, method.toUpperCase(), routes)) return;
 
-    const [, agentId, platform] = match;
-    const warningKey = `${agentId}:${platform}`;
-    if (this.warnedChannelWebhooks.has(warningKey) || this.warnedChannelWebhooks.size >= MAX_CHANNEL_WEBHOOK_WARNINGS) {
-      return;
-    }
-    this.warnedChannelWebhooks.add(warningKey);
-
+    const agentId = match[1]!;
+    const platform = match[2]!;
+    const platformLabel = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/i.test(platform)
+      ? platform
+          .split(/[-_]/)
+          .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
+          .join(' ')
+      : 'channel';
     this.mastra
       .getLogger()
       ?.warn(
-        "Received an agent channel webhook request, but no matching channel route is registered. Add the adapter to the agent's channels.adapters configuration and restart the server.",
+        `Received a ${platformLabel} webhook, but this agent doesn't have a ${platformLabel} adapter. Add one to the agent's channels.adapters configuration and restart the server.`,
         { agentId, platform },
       );
   }

@@ -1,0 +1,17 @@
+{
+  "name": "channel-webhook-warning",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev"
+  },
+  "dependencies": {
+    "@mastra/core": "link:../../packages/core"
+  },
+  "devDependencies": {
+    "mastra": "link:../../packages/cli",
+    "typescript": "catalog:"
+  },
+  "packageManager": "pnpm@10.18.2"
+}

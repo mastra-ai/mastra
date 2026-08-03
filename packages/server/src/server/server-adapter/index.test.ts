@@ -143,7 +143,7 @@ describe('custom route forwarding', () => {
 });
 
 describe('agent channel webhook diagnostics', () => {
-  it('warns once when an agent channel webhook route is missing', () => {
+  it('warns for every request when an agent channel webhook route is missing', () => {
     const mastra = new Mastra({ logger: false });
     const adapter = new TestMastraServer({ app: {}, mastra });
     const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
@@ -151,11 +151,14 @@ describe('agent channel webhook diagnostics', () => {
     adapter.warnIfUnregisteredChannelWebhookForTest('/api/agents/support/channels/slack/webhook', 'POST', 404);
     adapter.warnIfUnregisteredChannelWebhookForTest('/api/agents/support/channels/slack/webhook', 'POST', 404);
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
-      agentId: 'support',
-      platform: 'slack',
-    });
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Received a Slack webhook, but this agent doesn't have a Slack adapter. Add one to the agent's channels.adapters configuration and restart the server.",
+      {
+        agentId: 'support',
+        platform: 'slack',
+      },
+    );
   });
 
   it('keeps user-controlled path segments out of the warning message', () => {
@@ -169,10 +172,13 @@ describe('agent channel webhook diagnostics', () => {
       404,
     );
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.not.stringMatching(/support|slack|forged/), {
-      agentId: 'support%0Aforged',
-      platform: 'slack%1B',
-    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Received a channel webhook, but this agent doesn't have a channel adapter. Add one to the agent's channels.adapters configuration and restart the server.",
+      {
+        agentId: 'support%0Aforged',
+        platform: 'slack%1B',
+      },
+    );
   });
 
   it.each([
