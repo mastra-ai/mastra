@@ -61,7 +61,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           accountName: input.accountName ?? null,
           accountType: input.accountType ?? null,
           providerMetadata: input.providerMetadata ?? {},
-          ...(input.preserveBroken ? {} : { brokenAt: null }),
+          ...(input.preserveBroken ? {} : { brokenAt: null, healthRevision: existing.healthRevision + 1 }),
         });
         return existing;
       }
@@ -76,6 +76,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         providerMetadata: input.providerMetadata ?? {},
         createdAt: new Date(),
         brokenAt: null,
+        healthRevision: 0,
       };
       this.installationsRows.push(created);
       return created;
@@ -98,12 +99,23 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const row = this.installationsRows.find(candidate => candidate.orgId === orgId && candidate.id === id);
       if (!row) return null;
       if (row.brokenAt === null) row.brokenAt = brokenAt;
+      row.healthRevision += 1;
       return row;
     },
-    clearBroken: async ({ orgId, id }: { orgId: string; id: string }): Promise<SourceControlInstallation | null> => {
+    clearBroken: async ({
+      orgId,
+      id,
+      expectedHealthRevision,
+    }: {
+      orgId: string;
+      id: string;
+      expectedHealthRevision?: number;
+    }): Promise<SourceControlInstallation | null> => {
       const row = this.installationsRows.find(candidate => candidate.orgId === orgId && candidate.id === id);
       if (!row) return null;
+      if (expectedHealthRevision !== undefined && row.healthRevision !== expectedHealthRevision) return row;
       row.brokenAt = null;
+      row.healthRevision += 1;
       return row;
     },
   };

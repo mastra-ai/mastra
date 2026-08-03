@@ -29,6 +29,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       // healthy; a persistent installation-broken signal that survives
       // process restarts and is cleared only by an explicit reconnect flow.
       broken_at: { type: 'bigint', nullable: true },
+      health_revision: { type: 'integer', default: 0 },
     },
     uniqueIndexes: [
       {
@@ -216,6 +217,8 @@ export interface SourceControlInstallation {
    * cleared by explicit re-registration or `clearBroken`.
    */
   brokenAt: number | null;
+  /** Monotonic version used to reject stale health-check completions. */
+  healthRevision: number;
 }
 
 export interface UpsertSourceControlInstallationInput {
@@ -404,11 +407,15 @@ export interface SourceControlStorageHandle {
      */
     markBroken(args: { orgId: string; id: string; brokenAt: number }): Promise<SourceControlInstallation | null>;
     /**
-     * Clear `brokenAt` back to `null`. Called from sync reconciliation when
-     * an installation reappears in Platform's live list; also called
-     * implicitly by `upsert` on re-registration.
+     * Clear `brokenAt` back to `null`. When `expectedHealthRevision` is
+     * provided, the clear is applied only if no newer health signal has been
+     * recorded. Explicit re-registration also clears the marker via `upsert`.
      */
-    clearBroken(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
+    clearBroken(args: {
+      orgId: string;
+      id: string;
+      expectedHealthRevision?: number;
+    }): Promise<SourceControlInstallation | null>;
   };
   readonly repositories: {
     list(args: { orgId: string; installationId: string }): Promise<SourceControlRepository[]>;
@@ -514,6 +521,7 @@ interface InstallationDbRow extends Record<string, unknown> {
   provider_metadata: SourceControlProviderMetadata;
   created_at: Date;
   broken_at: number | null;
+  health_revision: number;
 }
 
 interface RepositoryDbRow extends Record<string, unknown> {
@@ -606,6 +614,7 @@ function toInstallation(row: InstallationDbRow): SourceControlInstallation {
     providerMetadata: row.provider_metadata,
     createdAt: row.created_at,
     brokenAt: row.broken_at,
+    healthRevision: row.health_revision,
   };
 }
 
@@ -834,12 +843,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
             external_id: input.externalId,
           };
           const updateExisting = () =>
-            db().updateAtomic<InstallationDbRow>(INSTALLATIONS, where, () => ({
+            db().updateAtomic<InstallationDbRow>(INSTALLATIONS, where, current => ({
               connected_by_user_id: input.connectedByUserId,
               account_name: input.accountName ?? null,
               account_type: input.accountType ?? null,
               provider_metadata: input.providerMetadata ?? {},
-              ...(input.preserveBroken ? {} : { broken_at: null }),
+              ...(input.preserveBroken ? {} : { broken_at: null, health_revision: current.health_revision + 1 }),
             }));
 
           const updated = await updateExisting();
@@ -854,6 +863,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               provider_metadata: input.providerMetadata ?? {},
               created_at: new Date(),
               broken_at: null,
+              health_revision: 0,
             });
             return toInstallation(row);
           } catch (error) {
@@ -870,22 +880,26 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return true;
         },
         markBroken: async ({ orgId, id, brokenAt }) => {
-          // Atomic "set only if null" — a broken installation keeps its
-          // earliest brokenAt across concurrent markers. Returning null from
-          // the callback aborts the write; updateAtomic still returns the
-          // unmodified row so we can hand back the current state either way.
           const row = await db().updateAtomic<InstallationDbRow>(
             INSTALLATIONS,
             { id, integration_id: integrationId, org_id: orgId },
-            current => (current.broken_at === null ? { broken_at: brokenAt } : null),
+            current => ({
+              broken_at: current.broken_at ?? brokenAt,
+              health_revision: current.health_revision + 1,
+            }),
           );
           return row ? toInstallation(row) : null;
         },
-        clearBroken: async ({ orgId, id }) => {
+        clearBroken: async ({ orgId, id, expectedHealthRevision }) => {
           const row = await db().updateAtomic<InstallationDbRow>(
             INSTALLATIONS,
             { id, integration_id: integrationId, org_id: orgId },
-            () => ({ broken_at: null }),
+            current => {
+              if (expectedHealthRevision !== undefined && current.health_revision !== expectedHealthRevision) {
+                return null;
+              }
+              return { broken_at: null, health_revision: current.health_revision + 1 };
+            },
           );
           return row ? toInstallation(row) : null;
         },

@@ -729,7 +729,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       });
     }
 
-    await this.storage.installations.clearBroken({ orgId, id: installation.id });
+    const cleared = await this.storage.installations.clearBroken({
+      orgId,
+      id: installation.id,
+      expectedHealthRevision: installation.healthRevision,
+    });
+    if (!cleared || cleared.brokenAt !== null || cleared.healthRevision !== installation.healthRevision + 1) {
+      throw new GithubInstallationBrokenError({
+        installationId,
+        accountLogin: installation.accountName,
+        orgId,
+      });
+    }
     this.#installationReposCache.delete(installationId);
     for (const [cacheKey, cached] of this.#repositoryAccessCache) {
       if (cached.installationId === installationId) this.#repositoryAccessCache.delete(cacheKey);

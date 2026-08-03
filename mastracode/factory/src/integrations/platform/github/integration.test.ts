@@ -1245,6 +1245,39 @@ describe('PlatformGithubIntegration', () => {
     await sourceControl.installations.clearBroken({ orgId: 'org-1', id: installation.id });
     accessibleRepositoryNames = ['app', 'api'];
 
+    let releaseConfirmationClear: () => void = () => {};
+    let signalConfirmationClear: () => void = () => {};
+    const confirmationClearGate = new Promise<void>(resolve => {
+      releaseConfirmationClear = resolve;
+    });
+    const confirmationClearStarted = new Promise<void>(resolve => {
+      signalConfirmationClear = resolve;
+    });
+    const originalClearBroken = sourceControl.installations.clearBroken;
+    const clearBrokenSpy = vi.spyOn(sourceControl.installations, 'clearBroken').mockImplementation(async input => {
+      if (input.expectedHealthRevision !== undefined) {
+        signalConfirmationClear();
+        await confirmationClearGate;
+      }
+      return originalClearBroken(input);
+    });
+
+    const racingConfirmation = app.request('/web/github/installations/7/confirm-reconnect', { method: 'POST' });
+    await confirmationClearStarted;
+    await sourceControl.installations.markBroken({
+      orgId: 'org-1',
+      id: installation.id,
+      brokenAt: 1_700_000_000_000,
+    });
+    releaseConfirmationClear();
+
+    expect((await racingConfirmation).status).toBe(424);
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
+      brokenAt: 1_700_000_000_000,
+    });
+    clearBrokenSpy.mockRestore();
+    await sourceControl.installations.clearBroken({ orgId: 'org-1', id: installation.id });
+
     let releasePassiveUpsert: () => void = () => {};
     let signalPassiveUpsert: () => void = () => {};
     const passiveUpsertGate = new Promise<void>(resolve => {

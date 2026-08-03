@@ -441,6 +441,36 @@ describe('SourceControlStorage', () => {
       expect(reread?.brokenAt).toBe(earliest);
     });
 
+    it('rejects a stale conditional clear after a newer broken signal', async () => {
+      const installation = await createInstallation(github, { externalId: 'install-broken-cas' });
+      const first = await github.installations.markBroken({
+        orgId: 'org-1',
+        id: installation.id,
+        brokenAt: 1_700_000_000_000,
+      });
+      const second = await github.installations.markBroken({
+        orgId: 'org-1',
+        id: installation.id,
+        brokenAt: 1_700_000_005_000,
+      });
+      expect(second?.brokenAt).toBe(first?.brokenAt);
+      expect(second?.healthRevision).toBe((first?.healthRevision ?? 0) + 1);
+
+      const staleClear = await github.installations.clearBroken({
+        orgId: 'org-1',
+        id: installation.id,
+        expectedHealthRevision: first?.healthRevision,
+      });
+      expect(staleClear).toMatchObject({ brokenAt: 1_700_000_000_000, healthRevision: second?.healthRevision });
+
+      const currentClear = await github.installations.clearBroken({
+        orgId: 'org-1',
+        id: installation.id,
+        expectedHealthRevision: second?.healthRevision,
+      });
+      expect(currentClear).toMatchObject({ brokenAt: null, healthRevision: (second?.healthRevision ?? 0) + 1 });
+    });
+
     it('clearBroken sets brokenAt back to null', async () => {
       const installation = await createInstallation(github, { externalId: 'install-broken-4' });
       await github.installations.markBroken({ orgId: 'org-1', id: installation.id, brokenAt: 1_700_000_000_000 });
