@@ -83,7 +83,6 @@ export function normalizeCreateCommandOptions(
   projectName: string | undefined,
   options: CreateCommandOptions,
 ): NormalizedCreateOptions {
-  console.log(options);
   return {
     projectName,
     empty: options.empty ?? false,
