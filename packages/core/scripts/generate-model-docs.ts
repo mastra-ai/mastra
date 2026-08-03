@@ -98,6 +98,7 @@ function getRequiredEnvVars(provider: ProviderInfo): string[] {
 }
 
 function getEnvVarPlaceholder(envVar: string): string {
+  if (/_URL$/.test(envVar)) return 'https://your-base-url';
   if (/_API_TOKEN$|_TOKEN$/.test(envVar)) return 'your-api-token';
   if (/_API_KEY$|_KEY$|_PAT$/.test(envVar)) return 'your-api-key';
   if (/_ACCOUNT_ID$|_PROJECT_ID$|_SITE_ID$|_WORKSPACE_ID$|_ORG_ID$|_ORGANIZATION_ID$/.test(envVar)) {
@@ -594,7 +595,10 @@ ${(() => {
     .filter(v => !authEnvVars.includes(v))
     .map(v => `${v}=${getEnvVarPlaceholder(v)}`);
 
-  const gatewayKeySection = ['# Use gateway API key', ...urlLines, ...authLines].join('\n');
+  // Keep the API-key wording when the key is all there is; a gateway that also
+  // needs URL vars gets a heading that covers both.
+  const heading = urlLines.length > 0 ? '# Gateway configuration' : '# Use gateway API key';
+  const gatewayKeySection = [heading, ...urlLines, ...authLines].join('\n');
 
   // Only gateways that expose the upstream provider in their model ids (e.g.
   // `openai/gpt-4o`) can be called with that provider's own key. Gateways with
