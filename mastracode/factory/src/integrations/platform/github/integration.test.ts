@@ -1010,7 +1010,7 @@ describe('PlatformGithubIntegration', () => {
       accountName: 'other-org',
       accountType: 'Organization',
     });
-    await sourceControl.repositories.upsert({
+    const appRepository = await sourceControl.repositories.upsert({
       orgId: 'org-1',
       input: {
         installationId: installation.id,
@@ -1020,7 +1020,7 @@ describe('PlatformGithubIntegration', () => {
         providerMetadata: {},
       },
     });
-    await sourceControl.repositories.upsert({
+    const apiRepository = await sourceControl.repositories.upsert({
       orgId: 'org-1',
       input: {
         installationId: installation.id,
@@ -1030,6 +1030,27 @@ describe('PlatformGithubIntegration', () => {
         providerMetadata: {},
       },
     });
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Reconnect project' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    for (const repository of [appRepository, apiRepository]) {
+      await sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: `/workspace/${repository.slug.split('/')[1]}`,
+      });
+    }
     let installationIsLive = false;
     let accessibleRepositoryNames: string[] = [];
     const fetchImpl = vi.fn<typeof fetch>(async input => {
@@ -1205,6 +1226,24 @@ describe('PlatformGithubIntegration', () => {
     await expect(sourceControl.installations.get({ orgId: 'org-1', id: otherInstallation.id })).resolves.toMatchObject({
       brokenAt: expect.any(Number),
     });
+
+    const repositoryListCallsBeforeRestriction = fetchImpl.mock.calls.filter(([input]) =>
+      String(input).includes('/github-app/installations/7/repositories'),
+    ).length;
+    accessibleRepositoryNames = ['app'];
+    const restrictedHealthyInstallation = await app.request('/web/github/installations/7/confirm-reconnect', {
+      method: 'POST',
+    });
+    expect(restrictedHealthyInstallation.status).toBe(424);
+    expect(
+      fetchImpl.mock.calls.filter(([input]) => String(input).includes('/github-app/installations/7/repositories')),
+    ).toHaveLength(repositoryListCallsBeforeRestriction + 1);
+    await expect(sourceControl.installations.get({ orgId: 'org-1', id: installation.id })).resolves.toMatchObject({
+      brokenAt: expect.any(Number),
+    });
+
+    await sourceControl.installations.clearBroken({ orgId: 'org-1', id: installation.id });
+    accessibleRepositoryNames = ['app', 'api'];
 
     let releasePassiveUpsert: () => void = () => {};
     let signalPassiveUpsert: () => void = () => {};

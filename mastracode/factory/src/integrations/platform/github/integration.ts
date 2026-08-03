@@ -698,9 +698,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       externalId: String(installationId),
     });
     if (!installation) return false;
-    if (installation.brokenAt === null) return true;
 
-    const repositories = await this.storage.repositories.list({ orgId, installationId: installation.id });
+    const linkedRepositoryIds = new Set(
+      (await this.storage.projectRepositories.listConfiguredExternalKeys())
+        .filter(key => key.installationExternalId === installation.externalId)
+        .map(key => key.repositoryExternalId),
+    );
     this.#installationReposCache.delete(installationId);
 
     let accessibleRepositories: RepoSummary[];
@@ -708,6 +711,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       accessibleRepositories = await this.listInstallationRepos(installationId);
     } catch (error) {
       if (!isDeadInstallation(error)) throw error;
+      await this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt: Date.now() });
       throw new GithubInstallationBrokenError({
         installationId,
         accountLogin: installation.accountName,
@@ -715,8 +719,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       });
     }
 
-    const accessibleSlugs = new Set(accessibleRepositories.map(repository => repository.fullName.toLowerCase()));
-    if (repositories.some(repository => !accessibleSlugs.has(repository.slug.toLowerCase()))) {
+    const accessibleRepositoryIds = new Set(accessibleRepositories.map(repository => String(repository.id)));
+    if ([...linkedRepositoryIds].some(repositoryId => !accessibleRepositoryIds.has(repositoryId))) {
+      await this.storage.installations.markBroken({ orgId, id: installation.id, brokenAt: Date.now() });
       throw new GithubInstallationBrokenError({
         installationId,
         accountLogin: installation.accountName,

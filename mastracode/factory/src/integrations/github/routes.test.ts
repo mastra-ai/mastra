@@ -1095,6 +1095,33 @@ describe('repos route', () => {
     });
   });
 
+  it('returns the documented fetch failure when reconnect confirmation has an unexpected upstream error', async () => {
+    const confirmInstallationReconnect = vi.fn().mockRejectedValue(new Error('Platform unavailable'));
+
+    const res = await buildApp({ workosId: 'u1' }, { confirmInstallationReconnect }).request(
+      '/web/github/installations/7/confirm-reconnect',
+      { method: 'POST' },
+    );
+
+    expect(res.status).toBe(502);
+    await expect(res.json()).resolves.toEqual({
+      error: 'github_fetch_failed',
+      message: 'Platform unavailable',
+    });
+  });
+
+  it('requires authentication to confirm a reconnect', async () => {
+    const confirmInstallationReconnect = vi.fn().mockResolvedValue(true);
+
+    const res = await buildApp(null, { confirmInstallationReconnect }).request(
+      '/web/github/installations/7/confirm-reconnect',
+      { method: 'POST' },
+    );
+
+    expect(res.status).toBe(401);
+    expect(confirmInstallationReconnect).not.toHaveBeenCalled();
+  });
+
   it.each([404, 409])('marks dead installations broken on %s and keeps listing the rest', async status => {
     install(7, 'octo');
     install(8, 'stale');
