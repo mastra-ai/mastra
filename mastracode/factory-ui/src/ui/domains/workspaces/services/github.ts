@@ -21,6 +21,20 @@ export interface GithubInstallation {
   accountType: string | null;
 }
 
+export interface BrokenGithubInstallation extends GithubInstallation {
+  brokenAt: number;
+}
+
+export function isGithubInstallationBrokenError(
+  err: unknown,
+): err is Error & {
+  code: 'github_installation_broken';
+  accountLogin?: string | null;
+  installationId?: number;
+} {
+  return (err as { code?: string } | null)?.code === 'github_installation_broken';
+}
+
 /** Reason the GitHub feature is in its current state, returned by the server. */
 export type GithubStatusReason =
   | 'missing_config'
@@ -46,6 +60,8 @@ export interface GithubStatus {
   sandboxEnabled?: boolean;
   connected: boolean;
   installations: GithubInstallation[];
+  /** Installations that the server can no longer mint tokens for. Absent on older servers. */
+  brokenInstallations?: BrokenGithubInstallation[];
   /**
    * True when the status request failed because the user is not authenticated
    * (HTTP 401), as opposed to the feature being genuinely disabled. Lets the SPA
@@ -459,13 +475,18 @@ export interface PrepareProgress {
   message: string;
 }
 
+type GithubServiceError = Error & {
+  code?: string;
+  accountLogin?: string | null;
+  installationId?: number;
+};
+
 /**
  * Materialize a GitHub project into its cloud sandbox: provision/reattach the
  * sandbox and clone/pull the repo inside it. Streams live server-side progress
  * via SSE, invoking `onProgress` for each step so the UI can show the user what
  * is happening. Returns the resourceId used to open the project. Throws an Error
- * whose message carries the server's error code so the UI can surface
- * "sandbox not configured" distinctly.
+ * whose code carries the server's error code so the UI can distinguish failures.
  */
 export async function ensureRepoMaterialized(
   baseUrl: string,
@@ -491,7 +512,7 @@ export async function ensureRepoMaterialized(
   }
 
   let result: MaterializeResult | undefined;
-  let failure: (Error & { code?: string }) | undefined;
+  let failure: GithubServiceError | undefined;
 
   await readSSE(res.body, (event, data) => {
     if (event === 'progress') {
@@ -499,9 +520,18 @@ export async function ensureRepoMaterialized(
     } else if (event === 'done') {
       result = JSON.parse(data) as MaterializeResult;
     } else if (event === 'error') {
-      const body = JSON.parse(data) as { error?: string; message?: string };
-      failure = new Error(body.message ?? 'Failed to prepare repository') as Error & { code?: string };
-      failure.code = body.error;
+      const body = JSON.parse(data) as {
+        error?: string;
+        code?: string;
+        message?: string;
+        accountLogin?: string | null;
+        installationId?: number;
+      };
+      const err = new Error(body.message ?? 'Failed to prepare repository') as GithubServiceError;
+      err.code = body.code ?? body.error;
+      err.accountLogin = body.accountLogin;
+      err.installationId = body.installationId;
+      failure = err;
     }
   });
 
@@ -511,18 +541,29 @@ export async function ensureRepoMaterialized(
 }
 
 /** Build an Error carrying the server's error code from a non-OK JSON response. */
-async function ensureError(res: Response): Promise<Error & { code?: string }> {
+async function ensureError(res: Response): Promise<GithubServiceError> {
   let code = `http_${res.status}`;
   let message = `Failed to prepare repository (${res.status})`;
+  let accountLogin: string | null | undefined;
+  let installationId: number | undefined;
   try {
-    const body = (await res.json()) as { error?: string; message?: string };
+    const body = (await res.json()) as {
+      error?: string;
+      message?: string;
+      accountLogin?: string | null;
+      installationId?: number;
+    };
     if (body.error) code = body.error;
     if (body.message) message = body.message;
+    accountLogin = body.accountLogin;
+    installationId = body.installationId;
   } catch {
     /* ignore non-JSON */
   }
-  const err = new Error(message) as Error & { code?: string };
+  const err = new Error(message) as GithubServiceError;
   err.code = code;
+  err.accountLogin = accountLogin;
+  err.installationId = installationId;
   return err;
 }
 

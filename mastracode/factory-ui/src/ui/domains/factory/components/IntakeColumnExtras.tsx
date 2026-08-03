@@ -4,6 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import type { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import type { useLinearIssuesQuery } from '../../../../hooks/useLinearData';
+import { isGithubInstallationBrokenError, manageGithubConnection } from '../../workspaces/services/github';
 import type { IntakeSource } from '../boardCandidates';
 import { connectLinear, isLinearReauthError } from '../services/linear';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
@@ -27,9 +28,23 @@ export function IntakeColumnExtras({
   const { baseUrl } = useApiConfig();
   if (source === undefined) return null;
   const feed = source === 'github' ? issues : source === 'github-prs' ? pulls : linearIssues;
+  const githubInstallationBroken =
+    (source === 'github' || source === 'github-prs') &&
+    feed.isError &&
+    isGithubInstallationBrokenError(feed.error);
 
   return (
     <>
+      {githubInstallationBroken && (
+        <div className="flex flex-col gap-2 p-1">
+          <Txt as="span" variant="ui-xs" className="text-icon3">
+            GitHub installation removed. Reconnect to keep syncing {source === 'github-prs' ? 'pull requests' : 'issues'}.
+          </Txt>
+          <Button size="xs" onClick={() => manageGithubConnection(baseUrl)}>
+            Reconnect GitHub
+          </Button>
+        </div>
+      )}
       {source === 'linear' && linearIssues.isError && isLinearReauthError(linearIssues.error) && (
         <div className="flex flex-col gap-2 p-1">
           <Txt as="span" variant="ui-xs" className="text-icon3">

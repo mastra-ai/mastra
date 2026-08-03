@@ -40,6 +40,29 @@ describe('useGithubStatusQuery', () => {
     expect(result.current.data).toEqual(connectedStatus);
   });
 
+  it('given an installation is broken, when the hook resolves, then it preserves the reconnect context', async () => {
+    const brokenStatus: GithubStatus = {
+      enabled: true,
+      sandboxEnabled: true,
+      connected: false,
+      installations: [],
+      brokenInstallations: [
+        {
+          installationId: 42,
+          accountLogin: 'mastra-ai',
+          accountType: 'Organization',
+          brokenAt: Date.UTC(2026, 7, 3),
+        },
+      ],
+    };
+    server.use(http.get(STATUS_URL, () => HttpResponse.json(brokenStatus)));
+
+    const { result } = renderHookWithProviders(() => useGithubStatusQuery());
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data).toEqual(brokenStatus);
+  });
+
   it('given the server returns 401, when the hook resolves, then the status reports authRequired with reason', async () => {
     server.use(http.get(STATUS_URL, () => HttpResponse.json({ error: 'auth_required' }, { status: 401 })));
 

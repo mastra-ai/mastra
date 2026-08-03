@@ -11,6 +11,7 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useEnsureMaterializedSandbox } from '../../../../hooks/useEnsureMaterializedSandbox';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { isGithubInstallationBrokenError, manageGithubConnection } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -167,12 +168,33 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
 }
 
 function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesApi) {
-  const { sessionError, retrySession } = useChatSessionContext();
+  const { baseUrl, sessionError, retrySession } = useChatSessionContext();
 
   // A failed workspace preparation keeps the session disabled, which leaves
   // the messages query pending forever — surface the real failure instead of
   // an eternal skeleton.
   if (sessionError) {
+    if (isGithubInstallationBrokenError(sessionError)) {
+      const account = sessionError.accountLogin ? `@${sessionError.accountLogin}` : 'this account';
+      return (
+        <div className="flex flex-col items-stretch gap-4">
+          <Notice variant="destructive">
+            GitHub installation for {account} was removed. Reconnect to continue.
+          </Notice>
+          <div className="flex items-center gap-2">
+            <Button variant="default" onClick={() => manageGithubConnection(baseUrl)}>
+              Reconnect GitHub
+            </Button>
+            {retrySession && (
+              <Button variant="outline" onClick={retrySession}>
+                Retry
+              </Button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col items-stretch gap-4">
         <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>

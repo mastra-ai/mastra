@@ -36,9 +36,8 @@ const workspaceSession = {
 };
 
 /** Stubs the thread route's network surface with a controllable `/ensure`. */
-function stubThreadRoute() {
+function stubThreadRoute(failure: 'generic' | 'broken-sse' = 'generic') {
   let ensureCalls = 0;
-  let ensureFailures = 1;
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -74,7 +73,19 @@ function stubThreadRoute() {
     // The materialization call under test: fails first, succeeds on retry.
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => {
       ensureCalls += 1;
-      if (ensureCalls <= ensureFailures) {
+      if (ensureCalls === 1 && failure === 'broken-sse') {
+        return new HttpResponse(
+          `event: error\ndata: ${JSON.stringify({
+            error: 'github_installation_broken',
+            code: 'github_installation_broken',
+            message: 'GitHub installation for @acme is unavailable. Reconnect GitHub to continue.',
+            installationId: 42,
+            accountLogin: 'acme',
+          })}\n\n`,
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
+      }
+      if (ensureCalls === 1) {
         return HttpResponse.json(
           { error: 'clone-failed', message: "git clone failed: could not create '/workspace/acme/app'" },
           { status: 502 },
@@ -150,5 +161,16 @@ describe('ThreadPage workspace preparation failure', () => {
     expect(
       screen.queryByText("Failed to prepare the workspace: git clone failed: could not create '/workspace/acme/app'"),
     ).not.toBeInTheDocument();
+  });
+
+  it('turns a broken-installation SSE error into an actionable GitHub reconnect state', async () => {
+    stubThreadRoute('broken-sse');
+    renderThreadRoute();
+
+    expect(
+      await screen.findByText('GitHub installation for @acme was removed. Reconnect to continue.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reconnect GitHub' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

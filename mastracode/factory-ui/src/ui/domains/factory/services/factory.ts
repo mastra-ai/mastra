@@ -40,6 +40,12 @@ export interface GithubPullRequestPage {
   nextPage: number | null;
 }
 
+type RepositoryResourceError = Error & {
+  code?: string;
+  accountLogin?: string | null;
+  installationId?: number;
+};
+
 /** GET helper for the read-only per-repository GitHub endpoints. */
 async function getRepositoryResource<T>(
   baseUrl: string,
@@ -59,14 +65,29 @@ async function getRepositoryResource<T>(
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
+    let code: string | undefined;
+    let accountLogin: string | null | undefined;
+    let installationId: number | undefined;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as {
+        error?: string;
+        message?: string;
+        accountLogin?: string | null;
+        installationId?: number;
+      };
+      code = body.error;
+      accountLogin = body.accountLogin;
+      installationId = body.installationId;
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
     } catch {
       /* ignore non-JSON */
     }
-    throw new Error(message);
+    const err = new Error(message) as RepositoryResourceError;
+    err.code = code;
+    err.accountLogin = accountLogin;
+    err.installationId = installationId;
+    throw err;
   }
   return (await res.json()) as T;
 }

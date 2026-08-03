@@ -6,18 +6,34 @@ import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { ConnectRepositoriesPanel } from '../../workspaces';
+import type { BrokenGithubInstallation } from '../../workspaces/services/github';
 import { manageGithubConnection } from '../../workspaces/services/github';
 import { GithubPatBlock } from './GithubPatBlock';
 import { FactorySetupSection } from './FactorySetupSection';
-import { SettingsCard } from './SettingsCard';
+import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
+
+function BrokenInstallationRow({ installation, baseUrl }: { installation: BrokenGithubInstallation; baseUrl: string }) {
+  return (
+    <SettingsRow
+      label={`@${installation.accountLogin ?? 'unknown'} — installation removed`}
+      hint="Reconnect GitHub to restore repository access and intake."
+    >
+      <Button size="xs" onClick={() => manageGithubConnection(baseUrl)}>
+        Reconnect
+      </Button>
+    </SettingsRow>
+  );
+}
 
 export function RepositoriesSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
-  const githubConnected = useGithubStatusQuery().data?.connected === true;
+  const githubStatus = useGithubStatusQuery().data;
+  const githubConnected = githubStatus?.connected === true;
+  const brokenInstallations = githubStatus?.brokenInstallations ?? [];
   const activeFactory = factoryQuery.data;
 
   if (!activeFactory) {
@@ -38,6 +54,17 @@ export function RepositoriesSection() {
           )
         }
       >
+        {brokenInstallations.length > 0 && (
+          <SettingsCard>
+            {brokenInstallations.map(installation => (
+              <BrokenInstallationRow
+                key={installation.installationId}
+                installation={installation}
+                baseUrl={baseUrl}
+              />
+            ))}
+          </SettingsCard>
+        )}
         <SettingsCard className="p-4">
           <ConnectRepositoriesPanel factory={activeFactory} />
         </SettingsCard>
