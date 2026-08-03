@@ -5,9 +5,10 @@
  * the whole wait.
  */
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import assert from 'node:assert';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -18,17 +19,6 @@ import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useThreadPageKickoffs } from '../../hooks/useThreadPageKickoffs';
 import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
-
-if (typeof globalThis.ResizeObserver === 'undefined') {
-  class ResizeObserverPolyfill implements ResizeObserver {
-    constructor(_callback: ResizeObserverCallback) {}
-    observe(_target: Element, _options?: ResizeObserverOptions) {}
-    unobserve(_target: Element) {}
-    disconnect() {}
-  }
-
-  globalThis.ResizeObserver = ResizeObserverPolyfill;
-}
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -44,6 +34,13 @@ interface PreparingSession {
   /** Lets the agent-controller session create finish, as a sandbox would. */
   finishWorkspace: () => void;
   sentMessages: string[];
+}
+
+/** The controller sends `{ message }`; anything else means the wire shape moved. */
+function readSentMessage(body: unknown): string {
+  if (typeof body !== 'object' || body === null) return '';
+  if ('message' in body && typeof body.message === 'string') return body.message;
+  return '';
 }
 
 /**
@@ -146,8 +143,7 @@ function stubPreparingSession(): PreparingSession {
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
-      const body = (await request.json()) as { message?: string; text?: string };
-      sentMessages.push(body.message ?? body.text ?? '');
+      sentMessages.push(readSentMessage(await request.json()));
       return HttpResponse.json({ ok: true });
     }),
   );
@@ -211,6 +207,26 @@ describe('Composer while a session prepares its workspace', () => {
     await waitFor(() => expect(sentMessages).toEqual(['fix the login bug']));
     // The queued message was shown when it was typed, not echoed again on dispatch.
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
+  });
+
+  it('refuses an image dropped while preparing, since a queued message carries text only', async () => {
+    const { sentMessages } = stubPreparingSession();
+
+    const { container } = renderThread();
+
+    const message = () => screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message()).toBeEnabled());
+    await waitFor(() => expect(screen.getByText('Preparing workspace…')).toBeInTheDocument());
+
+    const form = container.querySelector('form');
+    assert(form);
+    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
+
+    await waitFor(() =>
+      expect(screen.getByText('Images can be attached once the session is ready.')).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
+    expect(sentMessages).toEqual([]);
   });
 
   it('keeps a slash command in the composer, since commands act on a live session', async () => {

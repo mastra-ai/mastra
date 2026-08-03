@@ -182,28 +182,8 @@ describe('User sessions creation', () => {
   });
 
   it('waits for the session list before naming, so it cannot reuse a name in use', async () => {
+    stubFactoryWithRepository();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: [
-            {
-              id: 'conn-1',
-              installationId: 'inst-7',
-              repositories: [
-                {
-                  id: projectRepositoryId,
-                  branch: 'main',
-                  sandboxWorkdir: '/workspace/hello',
-                  repository: { slug: 'octo/hello', defaultBranch: 'main' },
-                },
-              ],
-            },
-          ],
-        }),
-      ),
       http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, async () => {
         await new Promise(resolve => setTimeout(resolve, 100));
         return HttpResponse.json({ sessions: [userSession()] });

@@ -154,6 +154,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const addImageFiles = async (fileList: Iterable<File>) => {
+    // A queued kickoff carries text only, and drop/paste bypass the disabled
+    // attach button — refuse here rather than send an unattachable message.
+    if (queueing) {
+      pushNotice('Images can be attached once the session is ready.');
+      return;
+    }
     const imageFiles = Array.from(fileList).filter(
       file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
     );
@@ -206,9 +212,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
-    // Images are unreachable here (the attach button follows `status`), and a
-    // queued kickoff carries text only.
-    if (queueing && routeThreadId && outgoing.length === 0) {
+    if (queueing && routeThreadId) {
       localUser(text, false);
       void queueThreadPageKickoff({ resourceId, projectPath, threadId: routeThreadId }, text, {
         echoed: true,
