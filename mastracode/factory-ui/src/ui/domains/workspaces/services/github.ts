@@ -25,9 +25,7 @@ export interface BrokenGithubInstallation extends GithubInstallation {
   brokenAt: number;
 }
 
-export function isGithubInstallationBrokenError(
-  err: unknown,
-): err is Error & {
+export function isGithubInstallationBrokenError(err: unknown): err is Error & {
   code: 'github_installation_broken';
   accountLogin?: string | null;
   installationId?: number;

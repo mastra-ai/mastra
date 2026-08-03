@@ -59,7 +59,9 @@ describe('IntakeColumnExtras GitHub installation health', () => {
 
     const { client } = renderWithProviders(<IntakeColumnExtrasHarness />);
 
-    expect(await screen.findByText('GitHub installation removed. Reconnect to keep syncing issues.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('GitHub installation removed. Reconnect to keep syncing issues.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reconnect GitHub' })).toBeInTheDocument();
 
     broken = false;

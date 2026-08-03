@@ -57,11 +57,7 @@ export function RepositoriesSection() {
         {brokenInstallations.length > 0 && (
           <SettingsCard>
             {brokenInstallations.map(installation => (
-              <BrokenInstallationRow
-                key={installation.installationId}
-                installation={installation}
-                baseUrl={baseUrl}
-              />
+              <BrokenInstallationRow key={installation.installationId} installation={installation} baseUrl={baseUrl} />
             ))}
           </SettingsCard>
         )}

@@ -70,7 +70,10 @@ describe('GitHubAppCallbackHandler', () => {
   it('given reconnect confirmation fails, shows an error and preserves callback params for retry', async () => {
     server.use(
       http.post(`${TEST_BASE_URL}/web/github/installations/124/confirm-reconnect`, () =>
-        HttpResponse.json({ error: 'github_installation_broken', message: 'Repository access is still unavailable.' }, { status: 424 }),
+        HttpResponse.json(
+          { error: 'github_installation_broken', message: 'Repository access is still unavailable.' },
+          { status: 424 },
+        ),
       ),
     );
 
@@ -88,18 +91,24 @@ describe('GitHubAppCallbackHandler', () => {
 
   it.each([
     ['missing', '/factories/fp-1/settings/repositories?github_app_installed=true&keep=missing'],
-    ['nonnumeric', '/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=nope&keep=nonnumeric'],
+    [
+      'nonnumeric',
+      '/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=nope&keep=nonnumeric',
+    ],
     [
       'unsafe',
       '/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=9007199254740992&keep=unsafe',
     ],
-  ])('given a completed callback with a %s installation ID, shows an error and preserves callback params', async (_, url) => {
-    const router = renderCallback(url);
+  ])(
+    'given a completed callback with a %s installation ID, shows an error and preserves callback params',
+    async (_, url) => {
+      const router = renderCallback(url);
 
-    expect(
-      await screen.findByText('GitHub reconnect could not be confirmed. Try reconnecting again.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('GitHub App installed')).not.toBeInTheDocument();
-    expect(router.state.location.search).toContain('github_app_installed=true');
-  });
+      expect(
+        await screen.findByText('GitHub reconnect could not be confirmed. Try reconnecting again.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('GitHub App installed')).not.toBeInTheDocument();
+      expect(router.state.location.search).toContain('github_app_installed=true');
+    },
+  );
 });

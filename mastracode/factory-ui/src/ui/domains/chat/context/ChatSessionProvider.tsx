@@ -178,9 +178,7 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
       const account = sessionError.accountLogin ? `@${sessionError.accountLogin}` : 'this account';
       return (
         <div className="flex flex-col items-stretch gap-4">
-          <Notice variant="destructive">
-            GitHub installation for {account} was removed. Reconnect to continue.
-          </Notice>
+          <Notice variant="destructive">GitHub installation for {account} was removed. Reconnect to continue.</Notice>
           <div className="flex items-center gap-2">
             <Button variant="default" onClick={() => manageGithubConnection(baseUrl)}>
               Reconnect GitHub

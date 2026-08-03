@@ -13,7 +13,6 @@ import type { GithubIssue } from '../ui/domains/factory/services/factory';
  * server) — poll on a gentler cadence than the DB-backed work-items list. */
 export const INTAKE_POLL_MS = 30_000;
 
-
 /**
  * Open issues for a GitHub project, loaded one page at a time as the list is
  * scrolled; disabled until a github project is active.

@@ -51,7 +51,8 @@ export function IntakeColumnExtras({
       {githubInstallationBroken && (
         <div className="flex flex-col gap-2 p-1">
           <Txt as="span" variant="ui-xs" className="text-icon3">
-            GitHub installation removed. Reconnect to keep syncing {source === 'github-prs' ? 'pull requests' : 'issues'}.
+            GitHub installation removed. Reconnect to keep syncing{' '}
+            {source === 'github-prs' ? 'pull requests' : 'issues'}.
           </Txt>
           <Button size="xs" onClick={() => manageGithubConnection(baseUrl)}>
             Reconnect GitHub
