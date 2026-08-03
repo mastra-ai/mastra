@@ -95,9 +95,9 @@ export function buildFullPrompt(ctx: PromptContext): string {
       ? createGitRefInstructionReader(ctx.workingDir, baseRef)
       : { exists: () => false, read: () => '' }
     : undefined;
-  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader).filter(
-    source => !(autonomousSession && source.scope === 'global'),
-  );
+  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
+    skipGlobal: autonomousSession,
+  });
   const instructionsSection = formatAgentInstructions(instructionSources);
 
   const sections = [base, instructionsSection.trim(), modelSpecific.trim(), modeSpecific.trim()].filter(Boolean);
