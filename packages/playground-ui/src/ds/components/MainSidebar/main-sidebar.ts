@@ -11,8 +11,9 @@ import { MainSidebarRoot } from './main-sidebar-root';
 import { MainSidebarSections } from './main-sidebar-sections';
 import { MainSidebarTrigger } from './main-sidebar-trigger';
 
-export { MainSidebarProvider, type SidebarState, type MainSidebarProviderProps } from './main-sidebar-context';
-export { useMainSidebar, useMaybeSidebar } from './main-sidebar-context';
+export type { MainSidebarStateContextValue, MobileDrawerContextValue, SidebarState } from './main-sidebar-context';
+export { useMainSidebar, useMaybeSidebar, useMaybeSidebarState, useMobileDrawer } from './main-sidebar-context';
+export { MainSidebarProvider, type MainSidebarProviderProps } from './main-sidebar-provider';
 export { navItemClasses } from './main-sidebar-nav-item-classes';
 export { type MainSidebarNavItemSize } from './main-sidebar-nav-item-classes';
 export { type NavLink } from './main-sidebar-nav-link';
