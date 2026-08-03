@@ -38,6 +38,8 @@ console.log(`Current status: ${experiment.status}`)
 
 Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/reference/datasets/startExperiment).
 
+When `persistence.experiments` is set to `'none'`, the run isn't stored. The returned `experimentId` identifies the background execution but can't be used with `dataset.getExperiment()`.
+
 ## Returns
 
 <PropertiesTable
