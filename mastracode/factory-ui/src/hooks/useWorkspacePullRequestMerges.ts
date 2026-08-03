@@ -56,7 +56,7 @@ export function useWorkspacePullRequestMerges({
 
     const query = queries[index];
     if (!query?.isSuccess) {
-      mergedBySessionId[target.sessionId] = false;
+      mergedBySessionId[target.sessionId] = target.knownMerged;
       return;
     }
 
