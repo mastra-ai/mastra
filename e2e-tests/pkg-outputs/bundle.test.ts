@@ -161,24 +161,41 @@ describe('@mastra/core runtime-only dependencies', () => {
 
   it.for(runtimeOnlyDeps.map(dep => [dep]))('%s should stay behind a non-literal dynamic import', async ([dep]) => {
     const escapedDependency = escapeRegExp(dep);
-    const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${escapedDependency}["']`, 'm');
-    const staticRequire = new RegExp(`(?<!\\.)require\\(\\s*["']${escapedDependency}["']\\s*\\)`);
-    const literalDynamicImport = new RegExp(
-      `import\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*["']${escapedDependency}["']\\s*\\)`,
+    // Covers default/named/namespace imports, side-effect imports (import "dep"),
+    // and re-exports (export ... from "dep"), with or without whitespace.
+    const staticEsmImport = new RegExp(
+      `^(?:import|export)\\s*(?:[\\w*{}$,\\s]*?from\\s*)?(["'])${escapedDependency}\\1`,
+      'm',
     );
+    const staticRequire = new RegExp(`(?<!\\.)require\\s*\\(\\s*(["'\`])${escapedDependency}\\1\\s*\\)`);
+    const literalDynamicImport = new RegExp(
+      `import\\s*\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*(["'\`])${escapedDependency}\\1\\s*\\)`,
+    );
+    // The compiled loader must survive as the specifier passed to a call (e.g.
+    // importModule("execa")) in a file that also dynamically imports a variable.
+    // Mentions of the bare dependency name in comments or error messages alone
+    // must not satisfy this test.
+    const specifierPassedToLoader = new RegExp(`[A-Za-z_$][\\w$]*\\(\\s*(["'\`])${escapedDependency}\\1\\s*\\)`);
+    const nonLiteralDynamicImport = /import\(\s*(?:\/\*[\s\S]*?\*\/\s*)*[A-Za-z_$]/;
 
-    const filesContainingDependency: string[] = [];
+    const filesWithRuntimeLoader: string[] = [];
 
     for (const [file, content] of await readDistFiles()) {
       if (!content.includes(dep)) continue;
-      filesContainingDependency.push(file);
 
       expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
       expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
       expect(content, `${file} has a statically analyzable dynamic import of ${dep}`).not.toMatch(literalDynamicImport);
+
+      if (specifierPassedToLoader.test(content) && nonLiteralDynamicImport.test(content)) {
+        filesWithRuntimeLoader.push(file);
+      }
     }
 
-    expect(filesContainingDependency.length).toBeGreaterThan(0);
+    expect(
+      filesWithRuntimeLoader.length,
+      `no dist file passes '${dep}' to a runtime loader alongside a non-literal dynamic import`,
+    ).toBeGreaterThan(0);
   });
 });
 
