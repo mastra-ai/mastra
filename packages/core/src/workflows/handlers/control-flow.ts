@@ -34,6 +34,7 @@ import {
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
+  omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';
 import type { ExecuteStepParams } from './step';
@@ -957,7 +958,7 @@ export async function executeForeach(
       type: 'workflow-step-start',
       payload: {
         id: stepId,
-        ...stepInfo,
+        ...omitPriorCompletionFields(stepInfo),
         status: 'running',
       },
     },
