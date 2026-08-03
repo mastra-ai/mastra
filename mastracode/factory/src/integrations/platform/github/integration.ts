@@ -187,6 +187,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
+  readonly #slug: string | undefined;
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
   readonly #reconcileEnabled: boolean;
@@ -445,15 +446,23 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   constructor(
     options: {
       runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+      /** GitHub App slug used to recognize Factory's own webhook writes. */
+      slug?: string;
     } = {},
   ) {
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
+    this.#slug = options.slug;
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
     this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
     this.#runIssueTriage = options.runIssueTriage;
+  }
+
+  /** GitHub App slug when the deployment explicitly provides it. */
+  get slug(): string | undefined {
+    return this.#slug;
   }
 
   get storage(): SourceControlStorageHandle {

@@ -346,9 +346,12 @@ describe('SankeyChart', () => {
 
     expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
     const channelLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Channel');
+    const regionLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Region');
     const outcomeLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Outcome');
-    expect(channelLabel?.getAttribute('text-anchor')).toBe('middle');
-    expect(outcomeLabel?.getAttribute('text-anchor')).toBe('middle');
+    // edge headers anchor to their node like the node labels do, so they stay inside the margin
+    expect(channelLabel?.getAttribute('text-anchor')).toBe('start');
+    expect(regionLabel?.getAttribute('text-anchor')).toBe('middle');
+    expect(outcomeLabel?.getAttribute('text-anchor')).toBe('end');
     const nodes = [...container.querySelectorAll('svg rect[rx="3"]')];
     const node = nodes[0];
     const nextNode = nodes.find(
@@ -360,7 +363,12 @@ describe('SankeyChart', () => {
     expect(
       Number(nextNode?.getAttribute('y')) - Number(node?.getAttribute('y')) - Number(node?.getAttribute('height')),
     ).toBeCloseTo(56);
-    expect(channelLabel?.getAttribute('x')).toBe('163.5');
+    expect(channelLabel?.getAttribute('x')).toBe(node?.getAttribute('x'));
+    const columnXs = [...new Set(nodes.map(rect => Number(rect.getAttribute('x'))))].sort((a, b) => a - b);
+    expect(columnXs).toHaveLength(3);
+    const nodeWidth = Number(node?.getAttribute('width'));
+    expect(Number(regionLabel?.getAttribute('x'))).toBeCloseTo(columnXs[1] + nodeWidth / 2);
+    expect(Number(outcomeLabel?.getAttribute('x'))).toBeCloseTo(columnXs[2] + nodeWidth);
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
     expect(searchLabel?.getAttribute('font-size')).toBe('11');
     expect(searchLabel?.getAttribute('text-anchor')).toBe('start');
