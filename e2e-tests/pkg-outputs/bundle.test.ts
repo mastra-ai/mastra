@@ -16,6 +16,8 @@ const globalIgnore = [
   'mastra-docs',
 ];
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 describe.for(
   allPackages
     .filter(pkg => !globalIgnore.includes(pkg.packageJson.name))
@@ -110,8 +112,6 @@ describe('@mastra/core native optional deps', () => {
   if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
   const coreDistDir = join(corePkg.dir, 'dist');
 
-  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
   // Optional peer dependencies with native binaries must not be statically
   // imported in the bundle. They should only appear as string literals inside
   // dynamic import() or createRequire().resolve() calls. If the bundler
@@ -150,24 +150,28 @@ describe('@mastra/core runtime-only dependencies', () => {
   if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
   const coreDistDir = join(corePkg.dir, 'dist');
 
-  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const runtimeOnlyDeps = ['execa', '@ast-grep/napi'];
 
-  it.for(runtimeOnlyDeps.map(dep => [dep]))('%s should stay behind a non-literal dynamic import', async ([dep]) => {
-    const jsFiles = await globby(join(coreDistDir, '**/*.{js,cjs}'));
-    const filesContainingDependency: string[] = [];
-    const escapedDependency = escapeRegExp(dep);
+  // Shared across the per-dependency test cases so dist is globbed and read once.
+  let distFiles: Promise<[file: string, content: string][]> | undefined;
+  const readDistFiles = () =>
+    (distFiles ??= globby(join(coreDistDir, '**/*.{js,cjs}')).then(files =>
+      Promise.all(files.map(async (file): Promise<[string, string]> => [file, await readFile(file, 'utf-8')])),
+    ));
 
-    for (const file of jsFiles) {
-      const content = await readFile(file, 'utf-8');
+  it.for(runtimeOnlyDeps.map(dep => [dep]))('%s should stay behind a non-literal dynamic import', async ([dep]) => {
+    const escapedDependency = escapeRegExp(dep);
+    const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${escapedDependency}["']`, 'm');
+    const staticRequire = new RegExp(`(?<!\\.)require\\(\\s*["']${escapedDependency}["']\\s*\\)`);
+    const literalDynamicImport = new RegExp(
+      `import\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*["']${escapedDependency}["']\\s*\\)`,
+    );
+
+    const filesContainingDependency: string[] = [];
+
+    for (const [file, content] of await readDistFiles()) {
       if (!content.includes(dep)) continue;
       filesContainingDependency.push(file);
-
-      const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${escapedDependency}["']`, 'm');
-      const staticRequire = new RegExp(`(?<!\\.)require\\(\\s*["']${escapedDependency}["']\\s*\\)`);
-      const literalDynamicImport = new RegExp(
-        `import\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*["']${escapedDependency}["']\\s*\\)`,
-      );
 
       expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
       expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
