@@ -698,7 +698,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       externalId: String(installationId),
     });
     if (!installation) return false;
-    const expectedHealthRevision = installation.healthRevision;
+    const expectedHealthRevision = installation.healthRevision ?? 0;
 
     const linkedRepositoryIds = new Set(
       (await this.storage.projectRepositories.listConfiguredExternalKeys())
