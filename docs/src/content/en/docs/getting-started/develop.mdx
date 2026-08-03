@@ -25,13 +25,13 @@ Changes in your `src/mastra/` directory automatically restart the development se
 
 ## Build with AI
 
-Mastra provides skills and a CLI to help your coding agent write high-quality Mastra code. The [Build with AI reference](/reference/build-with-ai) covers other ways to give coding agents access to Mastra documentation, including the MCP docs server.
+Mastra provides skills and a CLI to help your coding agent write high-quality Mastra code.
 
 ### Mastra skills
 
 AI models may not have up-to-date knowledge of Mastra's APIs. Use [Mastra skills](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance, best practices, and instructions for fetching the latest Mastra documentation.
 
-Projects generated with [create mastra](/docs) include skills that your coding agent picks up automatically.
+Projects generated with [create mastra](/docs) include Mastra skills that your coding agent picks up automatically.
 
 Install the skills manually with:
 
@@ -47,7 +47,7 @@ npx skills update mastra
 
 ### Mastra CLI
 
-Use the [`mastra` CLI](/reference/cli/mastra) to give your coding agent a feedback loop for testing updates and inspecting results. This helps it build more ambitious features with less intervention. The CLI gives it access to agents, workflows, tools, memory, evals, traces, and logs.
+Use the [`mastra` CLI](/reference/cli/mastra) to give your coding agent a feedback loop for testing updates and inspecting results. The CLI gives it access to agents, workflows, tools, memory, evals, traces, and logs.
 
 For example, your coding agent can run an agent, then pull traces to inspect the results:
 
