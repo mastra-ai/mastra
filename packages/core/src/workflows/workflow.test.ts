@@ -1240,11 +1240,13 @@ describe('Workflow (Default Engine Specifics)', () => {
       const run = await workflow.createRun();
       const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 'test' } });
 
-      // Register an observer stream which pushes a throwing handler to #observerHandlers
-      run.observeStreamLegacy();
-
-      // Spy on console/logger error to verify error is caught cleanly
+      // Spy on logger error to verify logger behavior
       const loggerErrorSpy = vi.spyOn(workflow.logger, 'error');
+
+      // Create an observer stream whose underlying reader cancel method rejects
+      const observer = run.observeStreamLegacy();
+      const reader = observer.stream.getReader();
+      vi.spyOn(reader, 'cancel').mockRejectedValue(new Error('Observer cleanup failed'));
 
       // Consume stream chunks
       for await (const _event of stream) {
@@ -1254,8 +1256,8 @@ describe('Workflow (Default Engine Specifics)', () => {
       const result = await getWorkflowState();
       expect(result.status).toBe('success');
 
-      // Verify closeStreamAction completes without throwing unhandled rejection
-      await expect((run as any).closeStreamAction()).resolves.not.toThrow();
+      // Verify closeStreamAction resolves smoothly to undefined
+      await expect((run as any).closeStreamAction()).resolves.toBeUndefined();
     });
   });
 });

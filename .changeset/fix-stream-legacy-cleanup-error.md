@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix resource leak in `streamLegacy` cleanup by using `Promise.allSettled` for observer handlers and ensuring stream writer locks are always released.
+Fixed an issue where observer cleanup failures no longer prevent legacy workflow streams from completing cleanly.
