@@ -281,7 +281,7 @@ describe('ObservabilityStorage base class', () => {
       error: null,
       input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
       output: { text: 'x'.repeat(10_000) },
-      attributes: { model: 'claude-sonnet-5' },
+      attributes: { model: 'claude-sonnet-4-6' },
       metadata: { environment: 'production' },
     };
 

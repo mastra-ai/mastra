@@ -467,6 +467,8 @@ function previewTextFromContent(content: unknown): string {
     .join(' ');
 }
 
+// Known bound: if a following message serializes `content` before `role`, its text can
+// fall inside the previous user segment — acceptable for this truncated-JSON recovery path.
 function recoverUserTextFromPartialJson(raw: string): string {
   const scanned = raw.length > PARTIAL_JSON_SCAN_LIMIT ? raw.slice(0, PARTIAL_JSON_SCAN_LIMIT) : raw;
   const markers: { role: string; start: number; end: number }[] = [];
@@ -512,6 +514,14 @@ export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_
       } catch {
         // The store sliced `input` mid-JSON — recover whatever user text is intact.
         return truncatePreview(recoverUserTextFromPartialJson(trimmed), maxLength);
+      }
+    } else if (trimmed.startsWith('"')) {
+      // A JSON-encoded scalar string ('"hello"') — unwrap it so the preview drops the
+      // quotes; a truncated one falls through and previews as plain text.
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        // Not valid JSON — treat as plain text below.
       }
     }
   }
@@ -568,7 +578,7 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
 /**
  * Lightweight span record containing only the fields needed for timeline rendering.
  * Excludes heavy fields: input, output, attributes, tags, links.
- * This reduces per-span payload from ~17KB to ~370 bytes (~97% reduction).
+ * This keeps the per-span payload a small fraction of a full span record's.
  */
 export const lightSpanRecordSchema = z
   .object({

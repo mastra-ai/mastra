@@ -8,7 +8,15 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { useTraces } from '../use-traces';
-import { fullDeltaBatch, fullTracesPage0, lightDeltaBatch, lightDeltaEmptyBatch, lightPage0 } from './fixtures/traces';
+import {
+  fullDeltaBatch,
+  fullTracesPage0,
+  legacyLightEmptyPage0,
+  legacyLightPage0,
+  lightDeltaBatch,
+  lightDeltaEmptyBatch,
+  lightPage0,
+} from './fixtures/traces';
 
 const BASE_URL = 'http://localhost:4111';
 const LIGHT_URL = `${BASE_URL}/api/observability/traces/light`;
@@ -120,6 +128,45 @@ describe('useTraces light-list fetching', () => {
     const deltaSearch = fullSearches.find(s => s.includes('mode=delta'));
     expect(deltaSearch).toContain('after=cursor-full-1');
     expect(lightRequests).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('falls back to the full traces endpoint when the light endpoint 200s with legacy-shape rows', async () => {
+    const lightRequests = vi.fn<() => void>();
+    const fullSearches: string[] = [];
+    server.use(
+      http.get(LIGHT_URL, () => {
+        lightRequests();
+        return HttpResponse.json(legacyLightPage0);
+      }),
+      listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
+    );
+
+    const { result, unmount } = renderTraces();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isError).toBe(false);
+    expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-full']);
+    await waitFor(() => expect(fullSearches.some(s => s.includes('mode=delta'))).toBe(true));
+    expect(lightRequests).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('does not fall back when the light endpoint 200s with an empty page', async () => {
+    const fullRequests = vi.fn<() => void>();
+    server.use(
+      http.get(LIGHT_URL, () => HttpResponse.json(legacyLightEmptyPage0)),
+      http.get(FULL_URL, () => {
+        fullRequests();
+        return HttpResponse.json(fullTracesPage0);
+      }),
+    );
+
+    const { result, unmount } = renderTraces();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.data?.spans).toEqual([]);
+    expect(fullRequests).not.toHaveBeenCalled();
     unmount();
   });
 

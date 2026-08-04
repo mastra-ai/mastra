@@ -39,7 +39,7 @@ const rootSpan = {
   metadata: null,
   tags: [],
   error: null,
-  attributes: { model: 'claude-sonnet-5' },
+  attributes: { model: 'claude-sonnet-4-6' },
   input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
   output: { text: 'y'.repeat(20_000) },
 };

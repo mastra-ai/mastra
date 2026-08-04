@@ -278,6 +278,11 @@ describe('buildInputPreview', () => {
     expect(buildInputPreview(input)).toBe('from the wire');
   });
 
+  it('unwraps a JSON-encoded scalar string instead of keeping its quotes', () => {
+    expect(buildInputPreview('"plain scalar prompt"')).toBe('plain scalar prompt');
+    expect(buildInputPreview('"truncated scalar promp')).toBe('"truncated scalar promp');
+  });
+
   it('reads text parts out of structured content', () => {
     const input = [{ role: 'user', content: [{ type: 'text', text: 'part one' }, { type: 'image' }] }];
 

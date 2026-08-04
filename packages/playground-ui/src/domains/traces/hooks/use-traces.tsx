@@ -26,7 +26,9 @@ const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, Del
  * fails with a non-permission HTTP error (404 from servers without the route,
  * 500 from servers whose store throws instead of serving the projection), so
  * every subsequent page fetch, delta poll and periodic refresh uses the full
- * list endpoint instead.
+ * list endpoint instead. The pin is deliberately session-sticky even for
+ * transient errors — worst case is the pre-light behavior of fetching full
+ * rows for the rest of the session.
  */
 type LightListSupport = 'unknown' | 'unsupported';
 const lightListSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, LightListSupport>();
@@ -117,7 +119,21 @@ const fetchTracesFn = async (args: FetchTracesFnArgs) => {
     return client.listTraces(params as ListTracesArgs);
   }
   try {
-    return await client.listTracesLight(params as ListTracesArgs);
+    const response = await client.listTracesLight(params as ListTracesArgs);
+    // A 200 can still be a legacy projection: servers whose store implements the
+    // pre-preview light list answer with rows carrying none of the new fields.
+    // Current servers always set `status` on every row, so a non-empty page where
+    // every row lacks it is legacy-shaped — pin and refetch the full rows. Empty
+    // pages never pin (indistinguishable, and they render identically either way;
+    // the next non-empty page decides).
+    if (args.mode !== 'delta') {
+      const spans = response.spans ?? [];
+      if (spans.length > 0 && spans.every(span => span.status === undefined)) {
+        lightListSupportByClient.set(client, 'unsupported');
+        return client.listTraces(params as ListTracesArgs);
+      }
+    }
+    return response;
   } catch (error) {
     if (!isLightListUnsupportedError(error)) throw error;
     lightListSupportByClient.set(client, 'unsupported');

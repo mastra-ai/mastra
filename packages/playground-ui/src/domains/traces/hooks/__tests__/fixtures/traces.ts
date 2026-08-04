@@ -49,6 +49,31 @@ export const lightDeltaBatch: ListTracesLightResponse = {
   spans: [lightSpanBravo],
 };
 
+/** A light page as served by stores that predate the preview/status fields:
+ *  rows without `status`/`inputPreview`/`metadata` and no `deltaCursor`. */
+export const legacyLightPage0: ListTracesLightResponse = {
+  pagination: { total: 1, page: 0, perPage: 25, hasMore: false },
+  spans: [
+    {
+      traceId: 'trace-legacy',
+      spanId: 'span-legacy',
+      parentSpanId: null,
+      name: 'legacy agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: timestamp,
+      endedAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ],
+};
+
+export const legacyLightEmptyPage0: ListTracesLightResponse = {
+  pagination: { total: 0, page: 0, perPage: 25, hasMore: false },
+  spans: [],
+};
+
 export const lightDeltaEmptyBatch: ListTracesLightResponse = {
   delta: { limit: 100, hasMore: false },
   deltaCursor: 'cursor-2',
