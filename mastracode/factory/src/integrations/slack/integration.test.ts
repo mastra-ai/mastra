@@ -5,13 +5,13 @@ vi.mock('@mastra/slack', () => ({
   createSlackAdapter: vi.fn(() => ({ __adapter: true })),
 }));
 
-const { createGithubSourceControl } = vi.hoisted(() => ({
-  createGithubSourceControl: vi.fn(() => ({ __sourceControl: true })),
+const { adaptSourceControlOwner } = vi.hoisted(() => ({
+  adaptSourceControlOwner: vi.fn(() => ({ __sourceControl: true })),
 }));
 
 vi.mock('./slack.js', async importOriginal => ({
   ...(await importOriginal<typeof import('./slack.js')>()),
-  createGithubSourceControl,
+  adaptSourceControlOwner,
 }));
 
 import { SlackIntegration } from './integration.js';
@@ -24,7 +24,7 @@ function ctxWith(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  createGithubSourceControl.mockClear();
+  adaptSourceControlOwner.mockClear();
 });
 
 describe('SlackIntegration.channels', () => {
@@ -48,7 +48,7 @@ describe('SlackIntegration.channels', () => {
 
     integration.channels(ctxWith({ sourceControlOwner }));
 
-    expect(createGithubSourceControl).toHaveBeenCalledWith(sourceControlOwner);
+    expect(adaptSourceControlOwner).toHaveBeenCalledWith(sourceControlOwner);
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: true });
   });
 
@@ -57,7 +57,7 @@ describe('SlackIntegration.channels', () => {
 
     integration.channels(ctxWith());
 
-    expect(createGithubSourceControl).not.toHaveBeenCalled();
+    expect(adaptSourceControlOwner).not.toHaveBeenCalled();
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: false });
   });
 });

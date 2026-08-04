@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createChannelResourceIdResolver,
   resolveChannelThreadId,
-  createGithubSourceControl,
+  adaptSourceControlOwner,
   createHandlers,
   resolveLinkedSender,
   resolveFactoryForLink,
@@ -758,7 +758,7 @@ describe('Slack thread work-item creation', () => {
  * what the base branch is — so it gets tested against a stubbed owner rather
  * than through the handlers, which stub the adapted surface instead.
  */
-describe('createGithubSourceControl', () => {
+describe('adaptSourceControlOwner', () => {
   function makeOwner({
     connections = [{ id: 'conn-gh', integrationId: 'github' }],
     projectRepositories = [{ id: 'pr-1', repositoryId: 'repo-1', branch: null }] as Array<{
@@ -785,7 +785,7 @@ describe('createGithubSourceControl', () => {
   it('resolves the first repository linked to the owner-owned connection, defaulting the base branch to the repo default', async () => {
     const owner = makeOwner();
 
-    const result = await createGithubSourceControl(owner as any).resolveProjectRepository(resolveArgs);
+    const result = await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs);
 
     expect(result).toEqual({ projectRepositoryId: 'pr-1', baseBranch: 'main' });
     expect(owner.projectRepositories.list).toHaveBeenCalledWith({ orgId: 'org-1', connectionId: 'conn-gh' });
@@ -795,7 +795,7 @@ describe('createGithubSourceControl', () => {
   it('prefers the branch pinned on the project repository over the repository default', async () => {
     const owner = makeOwner({ projectRepositories: [{ id: 'pr-1', repositoryId: 'repo-1', branch: 'develop' }] });
 
-    const result = await createGithubSourceControl(owner as any).resolveProjectRepository(resolveArgs);
+    const result = await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs);
 
     expect(result).toEqual({ projectRepositoryId: 'pr-1', baseBranch: 'develop' });
   });
@@ -805,28 +805,28 @@ describe('createGithubSourceControl', () => {
   it('ignores connections belonging to other integrations', async () => {
     const owner = makeOwner({ connections: [{ id: 'conn-linear', integrationId: 'linear' }] });
 
-    expect(await createGithubSourceControl(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
+    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
     expect(owner.projectRepositories.list).not.toHaveBeenCalled();
   });
 
   it('resolves nothing when the connection has no linked repository', async () => {
     const owner = makeOwner({ projectRepositories: [] });
 
-    expect(await createGithubSourceControl(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
+    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
     expect(owner.repositories.get).not.toHaveBeenCalled();
   });
 
   it('resolves nothing when the linked repository row is missing', async () => {
     const owner = makeOwner({ repository: null });
 
-    expect(await createGithubSourceControl(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
+    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
   });
 
   it('delegates branch lookup to the owner unchanged', async () => {
     const owner = makeOwner();
     const args = { projectRepositoryId: 'pr-1', userId: 'user-1', branch: 'slack/thread-1' };
 
-    const session = await createGithubSourceControl(owner as any).getSessionForBranch(args);
+    const session = await adaptSourceControlOwner(owner as any).getSessionForBranch(args);
 
     expect(session).toEqual({ sessionId: 'us-existing' });
     expect(owner.sessions.getForBranch).toHaveBeenCalledWith(args);
@@ -844,7 +844,7 @@ describe('createGithubSourceControl', () => {
       baseBranch: 'main',
     };
 
-    const session = await createGithubSourceControl(owner as any).createSession(args);
+    const session = await adaptSourceControlOwner(owner as any).createSession(args);
 
     expect(owner.sessions.create).toHaveBeenCalledWith(expect.objectContaining(args));
     expect(session.sessionId).toEqual(expect.any(String));

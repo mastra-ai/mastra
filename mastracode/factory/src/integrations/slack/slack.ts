@@ -52,7 +52,8 @@ interface SlackChannelDeps {
    * when the sender is linked and their factory has a repository, the thread's
    * resourceId becomes a Factory user-session id (repo cloned on a
    * `slack/{threadTs}` branch) instead of the chat-only `channel:...` id.
-   * Absent (no GitHub App configured) → chat-only sessions as before.
+   * Absent (no source-control integration registered) → chat-only sessions as
+   * before.
    */
   sourceControl?: SlackSourceControl;
   /**
@@ -65,14 +66,15 @@ interface SlackChannelDeps {
 }
 
 /**
- * The slice of the GitHub integration's source-control storage the Slack
- * wiring needs. Structural (not the storage types themselves) so slack.ts
- * stays decoupled from the integration's module graph and tests can stub it.
+ * The slice of the source-control owner's storage the Slack wiring needs.
+ * Structural (not the storage types themselves) so slack.ts stays decoupled
+ * from the owning integration's module graph and tests can stub it.
  */
 export interface SlackSourceControl {
   /**
    * Resolve the factory's linked repository — first repo on the factory's
-   * GitHub connection, the same single-repo assumption the web kickoff makes.
+   * source-control connection, the same single-repo assumption the web kickoff
+   * makes.
    */
   resolveProjectRepository(args: {
     orgId: string;
@@ -134,11 +136,13 @@ interface SourceControlOwnerSlice {
 
 /**
  * Adapt the source-control owner's storage handle into the
- * {@link SlackSourceControl} surface. Repo resolution mirrors the factory's
- * own `ensureFactoryRuleSession`: the factory's GitHub connection → its first
- * linked repository → pinned branch or repo default as the base.
+ * {@link SlackSourceControl} surface. Nothing here is GitHub-specific — the
+ * owner is whichever integration owns source control, matched by its own
+ * `integrationId`. Repo resolution mirrors the factory's own
+ * `ensureFactoryRuleSession`: the owner's connection on the factory → its
+ * first linked repository → pinned branch or repo default as the base.
  */
-export function createGithubSourceControl(owner: SourceControlOwnerSlice): SlackSourceControl {
+export function adaptSourceControlOwner(owner: SourceControlOwnerSlice): SlackSourceControl {
   return {
     async resolveProjectRepository({ orgId, factoryProjectId }) {
       const connections = await owner.connections.list({ orgId, factoryProjectId });
@@ -358,7 +362,7 @@ function threadBranch(threadId: string): string {
  * session then materializes the repo sandbox via the factory's dynamic
  * workspace (clone + PAT), the session shows up in the web Sessions list, and
  * View Session deep-links land on the normal workspace route. Everything else
- * (unlinked, unrouted, repo-less, or no GitHub) keeps the chat-only
+ * (unlinked, unrouted, repo-less, or no source control) keeps the chat-only
  * `defaultResourceId`.
  *
  * Pure lookups only — cards for unlinked/unrouted senders are the dispatch

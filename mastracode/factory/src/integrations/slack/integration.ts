@@ -23,7 +23,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
-import { createSlackChannelsConfig, createGithubSourceControl } from './slack.js';
+import { createSlackChannelsConfig, adaptSourceControlOwner } from './slack.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -92,7 +92,7 @@ export class SlackIntegration implements FactoryIntegration {
       },
       accountLinks: ctx.storage.channelIdentity,
       projects: ctx.storage.projects,
-      sourceControl: sourceControlOwner ? createGithubSourceControl(sourceControlOwner) : undefined,
+      sourceControl: sourceControlOwner ? adaptSourceControlOwner(sourceControlOwner) : undefined,
       workItems: ctx.rules?.workItems,
     });
   }
