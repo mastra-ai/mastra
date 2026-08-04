@@ -97,6 +97,18 @@ describe('credential store provider registry', () => {
     ctx.set('user', 'not-a-user');
     expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
   });
+
+  it('refuses a tenant whose resolved user id is not a string', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 'org_1' }, user: { id: 7 } });
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
+
+  it('refuses a tenant whose resolved org id is not a string', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 7 }, user: { id: 'prov_5' } });
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
 });
 
 describe('gateway credentialStore injection', () => {
