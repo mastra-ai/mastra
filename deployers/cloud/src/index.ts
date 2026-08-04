@@ -79,6 +79,13 @@ export class CloudDeployer extends Deployer {
       path: join(outputDirectory, 'output'),
       pm: 'npm',
     };
+    if (
+      installState &&
+      installState.explicitLockfile &&
+      installState.explicitLockfile.basename !== 'package-lock.json'
+    ) {
+      throw new Error(`Cloud only supports npm bundle lockfiles, got ${installState.explicitLockfile.basename}`);
+    }
     if (installState?.frozen) {
       installOptions.frozen = true;
     }
