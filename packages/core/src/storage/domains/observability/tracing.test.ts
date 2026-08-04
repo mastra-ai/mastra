@@ -291,6 +291,26 @@ describe('buildInputPreview', () => {
     expect(buildInputPreview(full.slice(0, 80))).toBe('survives truncation');
   });
 
+  it('does not surface assistant text when truncated JSON has no user text', () => {
+    const truncated =
+      '[{"role":"user","content":[{"type":"image"}]},{"role":"assistant","content":"assistant reply text';
+
+    expect(buildInputPreview(truncated)).toBeUndefined();
+  });
+
+  it('recovers every user message from truncated JSON', () => {
+    const truncated =
+      '{"messages":[{"role":"user","content":"first question"},{"role":"assistant","content":"an answer"},{"role":"user","content":"second question"},{"role":"assistant","content":"cut off mid-doc';
+
+    expect(buildInputPreview(truncated)).toBe('first question | second question');
+  });
+
+  it('handles truncated JSON with many role markers and no recoverable text', () => {
+    const truncated = `[${'{"role":"user"},'.repeat(10_000)}`;
+
+    expect(buildInputPreview(truncated)).toBeUndefined();
+  });
+
   it('truncates past the max length with an ellipsis', () => {
     const preview = buildInputPreview({ messages: [{ role: 'user', content: 'a'.repeat(400) }] });
 

@@ -263,33 +263,33 @@ describe('ObservabilityStorage base class', () => {
   });
 
   describe('listTracesLight fallback', () => {
+    const fullTraceSpan = {
+      traceId: 't1',
+      spanId: 's1',
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: 'agent_run' as const,
+      isEvent: false,
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      endedAt: new Date('2026-01-01T00:00:01Z'),
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: null,
+      status: 'success' as const,
+      entityType: null,
+      entityId: null,
+      entityName: null,
+      error: null,
+      input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
+      output: { text: 'x'.repeat(10_000) },
+      attributes: { model: 'claude-sonnet-5' },
+    };
+
     // Mirrors what a backend without a dedicated lightweight query returns.
     class TracesOnly extends ObservabilityStorage {
       override async listTraces() {
         return {
           pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
-          spans: [
-            {
-              traceId: 't1',
-              spanId: 's1',
-              parentSpanId: null,
-              name: 'agent run',
-              spanType: 'agent_run' as const,
-              isEvent: false,
-              startedAt: new Date('2026-01-01T00:00:00Z'),
-              endedAt: new Date('2026-01-01T00:00:01Z'),
-              createdAt: new Date('2026-01-01T00:00:00Z'),
-              updatedAt: null,
-              status: 'success' as const,
-              entityType: null,
-              entityId: null,
-              entityName: null,
-              error: null,
-              input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
-              output: { text: 'x'.repeat(10_000) },
-              attributes: { model: 'claude-sonnet-5' },
-            },
-          ],
+          spans: [fullTraceSpan],
         };
       }
     }
@@ -309,12 +309,33 @@ describe('ObservabilityStorage base class', () => {
       expect(row.inputPreview).toBe('summarize this thread');
     });
 
-    it('preserves pagination and delta metadata from listTraces', async () => {
+    it('preserves pagination metadata from listTraces', async () => {
       const s = new TracesOnly();
 
       const result = await s.listTracesLight({ pagination: { page: 0, perPage: 10 } });
 
       expect(result.pagination).toEqual({ total: 1, page: 0, perPage: 10, hasMore: false });
+    });
+
+    it('passes delta metadata through and projects rows light in delta mode', async () => {
+      class DeltaTraces extends ObservabilityStorage {
+        override async listTraces() {
+          return {
+            delta: { limit: 100, hasMore: true },
+            deltaCursor: 'cursor-after',
+            spans: [fullTraceSpan],
+          };
+        }
+      }
+      const s = new DeltaTraces();
+
+      const result = await s.listTracesLight({ mode: 'delta', after: 'cursor-before', limit: 100 });
+
+      expect(result.delta).toEqual({ limit: 100, hasMore: true });
+      expect(result.deltaCursor).toBe('cursor-after');
+      const row = result.spans[0]! as Record<string, unknown>;
+      expect(row.input).toBeUndefined();
+      expect(row.inputPreview).toBe('summarize this thread');
     });
 
     it('still throws when the backend implements neither', async () => {

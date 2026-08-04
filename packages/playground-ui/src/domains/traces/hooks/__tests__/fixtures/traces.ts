@@ -1,0 +1,81 @@
+import { SpanType } from '@mastra/core/observability';
+import type { LightSpanRecord, ListTracesLightResponse, ListTracesResponse } from '@mastra/core/storage';
+import { TraceStatus } from '@mastra/core/storage';
+
+const timestamp = new Date('2026-06-10T00:00:00.000Z');
+const laterTimestamp = new Date('2026-06-10T00:05:00.000Z');
+
+export const lightSpanAlpha: LightSpanRecord = {
+  traceId: 'trace-alpha',
+  spanId: 'span-alpha',
+  parentSpanId: null,
+  name: 'weather agent run',
+  spanType: SpanType.AGENT_RUN,
+  isEvent: false,
+  startedAt: timestamp,
+  endedAt: timestamp,
+  inputPreview: 'What is the weather in Paris?',
+  createdAt: timestamp,
+  updatedAt: timestamp,
+};
+
+export const lightSpanBravo: LightSpanRecord = {
+  traceId: 'trace-bravo',
+  spanId: 'span-bravo',
+  parentSpanId: null,
+  name: 'travel agent run',
+  spanType: SpanType.AGENT_RUN,
+  isEvent: false,
+  startedAt: laterTimestamp,
+  endedAt: laterTimestamp,
+  inputPreview: 'Book a train to Lyon',
+  createdAt: laterTimestamp,
+  updatedAt: laterTimestamp,
+};
+
+export const lightPage0: ListTracesLightResponse = {
+  pagination: { total: 1, page: 0, perPage: 25, hasMore: false },
+  deltaCursor: 'cursor-1',
+  spans: [lightSpanAlpha],
+};
+
+export const lightDeltaBatch: ListTracesLightResponse = {
+  delta: { limit: 100, hasMore: false },
+  deltaCursor: 'cursor-2',
+  spans: [lightSpanBravo],
+};
+
+export const lightDeltaEmptyBatch: ListTracesLightResponse = {
+  delta: { limit: 100, hasMore: false },
+  deltaCursor: 'cursor-2',
+  spans: [],
+};
+
+export const fullTracesPage0: ListTracesResponse = {
+  pagination: { total: 1, page: 0, perPage: 25, hasMore: false },
+  deltaCursor: 'cursor-full-1',
+  spans: [
+    {
+      traceId: 'trace-full',
+      spanId: 'span-full',
+      parentSpanId: null,
+      name: 'full agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: timestamp,
+      endedAt: timestamp,
+      input: { prompt: 'What is the weather in Paris?' },
+      output: { text: 'Sunny' },
+      attributes: { agentId: 'weather-agent' },
+      status: TraceStatus.SUCCESS,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ],
+};
+
+export const fullDeltaBatch: ListTracesResponse = {
+  delta: { limit: 100, hasMore: false },
+  deltaCursor: 'cursor-full-2',
+  spans: [],
+};

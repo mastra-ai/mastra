@@ -458,8 +458,8 @@ describe('ObservabilityStorageDuckDB', () => {
             metadata: null,
             tags: ['v1'],
             links: null,
-            input: null,
-            output: null,
+            input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
+            output: { text: 'a long answer' },
             error: null,
             startedAt: new Date('2026-01-03T00:00:00Z'),
             endedAt: new Date('2026-01-03T00:00:01Z'),
@@ -470,6 +470,60 @@ describe('ObservabilityStorageDuckDB', () => {
       // On base the facade falls through to the base-class throw; after the fix it resolves.
       const result = await storage.listTracesLight({});
       expect(result.spans.map(s => s.traceId)).toContain('trace-light-1');
+      const row = result.spans.find(s => s.traceId === 'trace-light-1')!;
+      expect((row as Record<string, unknown>).input).toBeUndefined();
+      expect((row as Record<string, unknown>).output).toBeUndefined();
+      expect(row.inputPreview).toBe('summarize this thread');
+    });
+
+    it('listTracesLight serves delta polling with light rows', async () => {
+      const bootstrap = await storage.listTracesLight({ mode: 'delta' });
+      expect(bootstrap.spans).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-light-delta',
+          spanId: 'root-light-delta',
+          parentSpanId: null,
+          name: 'agent-run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityType: EntityType.AGENT,
+          entityId: 'agent-light',
+          entityName: 'myAgent',
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: 'production',
+          source: null,
+          serviceName: 'svc',
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: null,
+          links: null,
+          input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
+          output: { text: 'a long answer' },
+          error: null,
+          startedAt: new Date('2026-01-04T00:00:00Z'),
+          endedAt: new Date('2026-01-04T00:00:01Z'),
+        },
+      });
+
+      const poll = await storage.listTracesLight({ mode: 'delta', after: bootstrap.deltaCursor! });
+      expect(poll.delta).toEqual({ limit: 10, hasMore: false });
+      expect(poll.deltaCursor).toBeTruthy();
+      expect(poll.spans.map(s => s.traceId)).toEqual(['trace-light-delta']);
+      const row = poll.spans[0]!;
+      expect((row as Record<string, unknown>).input).toBeUndefined();
+      expect((row as Record<string, unknown>).output).toBeUndefined();
+      expect(row.inputPreview).toBe('summarize this thread');
     });
 
     it('listTraces applies scalar prefilter and tag post-filter correctly', async () => {

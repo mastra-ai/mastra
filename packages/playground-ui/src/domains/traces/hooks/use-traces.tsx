@@ -21,6 +21,15 @@ import { is403ForbiddenError } from '@/lib/query-utils';
 type DeltaSupport = 'unknown' | 'unsupported';
 const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, DeltaSupport>();
 
+/**
+ * Per-MastraClient light-list support cache. Sticks once the light endpoint
+ * fails with a non-permission HTTP error (404 from servers without the route,
+ * 500/501 from stores without the light projection), so every subsequent page
+ * fetch, delta poll and periodic refresh uses the full list endpoint instead.
+ */
+type LightListSupport = 'unknown' | 'unsupported';
+const lightListSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, LightListSupport>();
+
 /** Tunables for live-tail polling. All fields optional — defaults below.
  *  Platform consumers override individual fields to throttle traffic or
  *  reshape the freshness/visibility trade-offs. */
@@ -75,6 +84,14 @@ function isHttp501(error: unknown): boolean {
   return (error as { status?: number } | null)?.status === 501;
 }
 
+/** HTTP failures other than 403 mean the light endpoint isn't served (missing
+ *  route or store without the projection). 403 is a permission denial that the
+ *  full endpoint would hit too, so it must not trigger the fallback. */
+function isLightListUnsupportedError(error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status;
+  return typeof status === 'number' && status !== 403;
+}
+
 type FetchTracesFnArgs = TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
 } & ({ mode: 'delta'; after?: string; limit?: number } | { mode?: 'page'; page: number; perPage: number });
@@ -92,7 +109,18 @@ const fetchTracesFn = async (args: FetchTracesFnArgs) => {
 
   // The list only renders identity, timing, status and a short input preview, so ask
   // for the lightweight projection. Selecting a row fetches the full record separately.
-  return client.listTracesLight(params as ListTracesArgs);
+  // Clients pinned to full mode keep using listTraces (page and delta alike), exactly
+  // as before the light endpoint existed; full rows are a superset of the light ones.
+  if (lightListSupportByClient.get(client) === 'unsupported') {
+    return client.listTraces(params as ListTracesArgs);
+  }
+  try {
+    return await client.listTracesLight(params as ListTracesArgs);
+  } catch (error) {
+    if (!isLightListUnsupportedError(error)) throw error;
+    lightListSupportByClient.set(client, 'unsupported');
+    return client.listTraces(params as ListTracesArgs);
+  }
 };
 
 export const TRACES_PER_PAGE = 25;

@@ -434,8 +434,17 @@ const inputPreviewField = z.string().describe('Short text preview of the span in
 
 type PreviewMessage = { role?: string; content?: unknown };
 
-/** Matches a user message's text inside JSON that may have been cut off mid-document. */
-const USER_CONTENT_PATTERN = /"role"\s*:\s*"user"[\s\S]*?"(?:content|text)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+/**
+ * Maximum number of characters scanned when recovering user text from truncated
+ * JSON. Bounds the work done on degenerate or adversarial inputs.
+ */
+const PARTIAL_JSON_SCAN_LIMIT = 65_536;
+
+/** Matches a `"role": "<value>"` marker so scanning can respect message boundaries. */
+const ROLE_MARKER_PATTERN = /"role"\s*:\s*"([^"\\]*)"/g;
+
+/** Matches a `content`/`text` JSON string value within a single message segment. */
+const CONTENT_VALUE_PATTERN = /"(?:content|text)"\s*:\s*"((?:[^"\\]|\\.)*)"/;
 
 function truncatePreview(text: string, maxLength: number): string | undefined {
   if (!text) return undefined;
@@ -459,9 +468,18 @@ function previewTextFromContent(content: unknown): string {
 }
 
 function recoverUserTextFromPartialJson(raw: string): string {
+  const scanned = raw.length > PARTIAL_JSON_SCAN_LIMIT ? raw.slice(0, PARTIAL_JSON_SCAN_LIMIT) : raw;
+  const markers: { role: string; start: number; end: number }[] = [];
+  for (const match of scanned.matchAll(ROLE_MARKER_PATTERN)) {
+    const start = match.index ?? 0;
+    markers.push({ role: match[1] ?? '', start, end: start + match[0].length });
+  }
   const parts: string[] = [];
-  for (const match of raw.matchAll(USER_CONTENT_PATTERN)) {
-    const captured = match[1];
+  for (let i = 0; i < markers.length; i++) {
+    const marker = markers[i]!;
+    if (marker.role !== 'user') continue;
+    const segmentEnd = i + 1 < markers.length ? markers[i + 1]!.start : scanned.length;
+    const captured = CONTENT_VALUE_PATTERN.exec(scanned.slice(marker.end, segmentEnd))?.[1];
     if (!captured) continue;
     try {
       parts.push(JSON.parse(`"${captured}"`) as string);
