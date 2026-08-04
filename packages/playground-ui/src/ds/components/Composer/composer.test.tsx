@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createRef, useState } from 'react';
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
-import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput } from './composer';
+import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
 
 afterEach(() => {
   cleanup();
@@ -188,6 +188,49 @@ describe('Composer', () => {
       const pulse = document.querySelector('[data-slot="composer-sending-pulse"]');
       assert(pulse);
       expect(pulse.getAttribute('aria-hidden')).toBe('true');
+    });
+  });
+
+  describe('when the ring is idle', () => {
+    it('aims the lit arc at the pointer', async () => {
+      render(
+        <ComposerRing>
+          <ComposerBox>
+            <ComposerInput aria-label="Message" />
+          </ComposerBox>
+        </ComposerRing>,
+      );
+
+      const ring = document.querySelector<HTMLElement>('[data-slot="composer-ring"]');
+      assert(ring);
+      expect(ring.getAttribute('data-busy')).toBe('false');
+
+      // jsdom reports a zero-sized box, so the centre sits at the origin.
+      fireEvent(window, new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 0 }));
+
+      await waitFor(() => {
+        expect(ring.style.getPropertyValue('--composer-ring-angle')).toBe('90deg');
+      });
+    });
+  });
+
+  describe('when the ring is busy', () => {
+    it('stops tracking the pointer so the spin owns the angle', async () => {
+      render(
+        <ComposerRing busy>
+          <ComposerBox>
+            <ComposerInput aria-label="Message" />
+          </ComposerBox>
+        </ComposerRing>,
+      );
+
+      const ring = document.querySelector<HTMLElement>('[data-slot="composer-ring"]');
+      assert(ring);
+      fireEvent(window, new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 0 }));
+
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      expect(ring.getAttribute('data-busy')).toBe('true');
+      expect(ring.style.getPropertyValue('--composer-ring-angle')).toBe('');
     });
   });
 

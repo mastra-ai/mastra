@@ -5937,6 +5937,32 @@ if (ENABLE_TESTS) {
           expect(byProvider.get('anthropic')).toBe(50);
         });
 
+        it('getMetricBreakdown: filters a batch of trace IDs', async () => {
+          await observability.batchCreateMetrics({
+            metrics: [
+              makeMetric({ traceId: 'trace-a', value: 10 }),
+              makeMetric({ traceId: 'trace-b', value: 20 }),
+              makeMetric({ traceId: 'trace-c', value: 30 }),
+            ],
+          });
+
+          const result = await observability.getMetricBreakdown({
+            name: ['agent.duration_ms'],
+            aggregation: 'sum',
+            groupBy: ['traceId'],
+            filters: { traceIds: ['trace-a', 'trace-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.traceId, group.value])
+              .sort(([left], [right]) => String(left).localeCompare(String(right))),
+          ).toEqual([
+            ['trace-a', 10],
+            ['trace-c', 30],
+          ]);
+        });
+
         it('getMetricBreakdown: groups by a label key', async () => {
           await seedMetrics();
           const result = await observability.getMetricBreakdown({

@@ -170,7 +170,7 @@ See [Observational Memory](../memory/observational-memory) for details on how ob
 
 ## What the model sees
 
-Each memory feature lands in one of two places in the request sent to the model: the system messages or the conversation messages. Which layers are present depends on which features you've enabled — working memory, semantic recall, and Observational Memory only appear when configured, while message history is on by default. The diagram shows where each enabled layer is placed in the request; the list below describes what each layer contributes:
+Each memory feature is added to either the system messages or the conversation messages in the request sent to the model. The layers depend on the features you've enabled. Working memory and semantic recall only appear when configured. The same applies to Observational Memory, while message history is on by default. The diagram shows where each enabled layer is placed in the request. The list below describes what each layer contributes:
 
 <MemoryContextWindowImage />
 

@@ -80,6 +80,8 @@ For each significantly changed file: `git log --oneline -20 -- <file>`, `git bla
 
 Read around the changed lines: the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages. Then judge the approach: does it fit the existing design, or fight it? If the history shows a simpler or more consistent approach, flag it.
 
+For behavior-changing code, find the nearest analogous implementation and compare where it lives and how it follows existing abstractions, APIs, and test patterns. Flag deviations that are not justified by the codebase or its history.
+
 ## Phase 5: Verdict
 
 Weigh the findings — yours and the confirmed ones inherited from existing reviewers — and commit to one verdict:
