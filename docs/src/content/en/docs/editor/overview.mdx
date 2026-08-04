@@ -55,41 +55,6 @@ In [Studio](/docs/studio/overview), open **Agents**, select an agent, then selec
 
 Save changes as a draft to test them without affecting the live agent. Publish the draft when it's ready to use.
 
-## Decide what collaborators can edit
-
-By default, collaborators can change an agent's instructions and manage its tools, including their descriptions. The agent's `id`, `name`, and `model` always come from code.
-
-Use the agent's `editor` field to limit what can be changed:
-
-```typescript title="src/mastra/agents/support-agent.ts"
-import { Agent } from '@mastra/core/agent'
-
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support agent',
-  instructions: 'Help customers with Acme products.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  editor: {
-    instructions: true,
-    tools: {
-      description: true,
-    },
-  },
-})
-```
-
-This agent lets collaborators change its instructions and improve the descriptions of tools already attached to it. They can't add or remove tools.
-
-| `editor` value | What collaborators can change |
-| - | - |
-| Omitted | Instructions, tools, and tool descriptions |
-| `false` | Nothing |
-| `{ instructions: true }` | Instructions |
-| `{ tools: true }` | Tools and tool descriptions |
-| `{ tools: { description: true } }` | Descriptions of tools already added in code |
-
-Studio shows everything else as read-only. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
-
 ## Instructions
 
 The **Instructions** section shows the agent's system prompt defined in code. Collaborators can replace it or add more instruction blocks.
@@ -193,6 +158,41 @@ Arcade tool IDs use `Toolkit.ToolName` format, such as `Github.GetRepository`.
 Collaborators can also create a reusable MCP client in Studio and add its tools to an agent. Stored clients can start a local `stdio` server or connect to a remote HTTP server. Tool filters let each agent use only the tools it needs from that server.
 
 See the [Editor tools reference](/reference/editor/tools) for provider options, MCP configuration, conditions, and tool filtering.
+
+## Decide what collaborators can edit
+
+By default, collaborators can change an agent's instructions and manage its tools, including their descriptions. The agent's `id`, `name`, and `model` always come from code.
+
+Use the agent's `editor` field to limit what can be changed:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Help customers with Acme products.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  editor: {
+    instructions: true,
+    tools: {
+      description: true,
+    },
+  },
+})
+```
+
+This agent lets collaborators change its instructions and improve the descriptions of tools already attached to it. They can't add or remove tools.
+
+| `editor` value | What collaborators can change |
+| - | - |
+| Omitted | Instructions, tools, and tool descriptions |
+| `false` | Nothing |
+| `{ instructions: true }` | Instructions |
+| `{ tools: true }` | Tools and tool descriptions |
+| `{ tools: { description: true } }` | Descriptions of tools already added in code |
+
+Studio shows everything else as read-only. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
 
 ## Choose where changes are stored
 
