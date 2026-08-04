@@ -380,7 +380,15 @@ export function SankeySignals({
           totalSnapshots={totalSnapshots}
         />
       ) : viewMode === 'lifelines' ? (
-        <ThemeLifelines entityId={entityId} entityType={entityType} signalNames={signalNames} snapshots={snapshots} />
+        <ThemeLifelines
+          entityId={entityId}
+          entityType={entityType}
+          signalNames={signalNames}
+          snapshots={snapshots}
+          totalSnapshots={totalSnapshots}
+          selectedIndex={selectedSnapshotIndex}
+          onSnapshotSelect={selectSnapshot}
+        />
       ) : (
         <>
           <SnapshotTimeline

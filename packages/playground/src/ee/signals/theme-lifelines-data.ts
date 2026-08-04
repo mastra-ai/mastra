@@ -13,6 +13,25 @@ export type ThemeLifeline = {
   points: ThemeLifelinePoint[];
 };
 
+export type LifelineConnector = {
+  from: ThemeLifelinePoint;
+  to: ThemeLifelinePoint;
+};
+
+/**
+ * Pairs of presence points at consecutive landmarks. Gaps stay unconnected so
+ * a theme's absence between two appearances remains visible.
+ */
+export function lifelineConnectors(points: ThemeLifelinePoint[]): LifelineConnector[] {
+  const connectors: LifelineConnector[] = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const from = points[index]!;
+    const to = points[index + 1]!;
+    if (to.snapshotIndex === from.snapshotIndex + 1) connectors.push({ from, to });
+  }
+  return connectors;
+}
+
 /**
  * One fixed row per theme label across an ordered run of landmark flows, most
  * persistent first, so stable themes read as continuous spines and transient

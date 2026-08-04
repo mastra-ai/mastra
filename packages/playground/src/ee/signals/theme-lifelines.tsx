@@ -4,13 +4,20 @@ import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { formatSignalName, formatSnapshotCutoff } from './signal-formatting';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
-import { timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
-import { buildThemeLifelines } from './theme-lifelines-data';
+import { TimelineTrack } from './snapshot-timeline';
+import type { TimelineMarkerKind } from './snapshot-timeline';
+import { timelineTickPositions } from './snapshot-timeline-data';
+import { buildThemeLifelines, lifelineConnectors } from './theme-lifelines-data';
 import type { ThemeLifeline } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
 
+const TRACK_HEIGHT = 28;
 const MAX_BAR_HEIGHT = 22;
 const MIN_BAR_HEIGHT = 4;
+
+function barHeight(share: number) {
+  return Math.max(MIN_BAR_HEIGHT, Math.round(share * MAX_BAR_HEIGHT));
+}
 
 function pointTitle(snapshot: ThemeSnapshot | undefined, label: string, traceCount: number, share: number) {
   const cutoff = snapshot?.cutoffAt ? formatSnapshotCutoff(snapshot.cutoffAt) : undefined;
@@ -29,6 +36,7 @@ function LifelineRow({
   hue: number;
 }) {
   const isPersistent = row.points.length * 2 >= snapshots.length;
+  const connectors = lifelineConnectors(row.points);
 
   return (
     <li
@@ -38,14 +46,36 @@ function LifelineRow({
       <span className="text-neutral4 w-52 shrink-0 truncate text-right text-xs" title={row.label}>
         {row.label}
       </span>
-      <div className="border-border1 relative h-7 min-w-0 flex-1 border-b">
+      <div className="border-border1 relative mx-2 h-7 min-w-0 flex-1 border-b">
+        {connectors.length > 0 ? (
+          <svg
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 size-full"
+            preserveAspectRatio="none"
+            viewBox={`0 0 100 ${TRACK_HEIGHT}`}
+          >
+            {connectors.map(({ from, to }) => (
+              <line
+                key={`${from.snapshotIndex}-${to.snapshotIndex}`}
+                stroke={nodeColor(hue)}
+                strokeOpacity={0.45}
+                strokeWidth={1.2}
+                vectorEffect="non-scaling-stroke"
+                x1={positions[from.snapshotIndex]}
+                y1={TRACK_HEIGHT - 1 - barHeight(from.share)}
+                x2={positions[to.snapshotIndex]}
+                y2={TRACK_HEIGHT - 1 - barHeight(to.share)}
+              />
+            ))}
+          </svg>
+        ) : null}
         {row.points.map(point => (
           <span
             key={point.snapshotIndex}
             className="absolute bottom-px w-1.5 -translate-x-1/2 rounded-xs"
             style={{
               left: `${positions[point.snapshotIndex]}%`,
-              height: `${Math.max(MIN_BAR_HEIGHT, Math.round(point.share * MAX_BAR_HEIGHT))}px`,
+              height: `${barHeight(point.share)}px`,
               backgroundColor: nodeColor(hue),
             }}
             title={pointTitle(snapshots[point.snapshotIndex], row.label, point.traceCount, point.share)}
@@ -99,11 +129,17 @@ export function ThemeLifelines({
   entityType,
   signalNames,
   snapshots,
+  totalSnapshots,
+  selectedIndex,
+  onSnapshotSelect,
 }: {
   entityId: string;
   entityType: string;
   signalNames: TraceSignalName[];
   snapshots: ThemeSnapshot[];
+  totalSnapshots: number;
+  selectedIndex: number;
+  onSnapshotSelect: (index: number) => void;
 }) {
   const flowQueries = useThemeFlows(
     entityId,
@@ -113,7 +149,6 @@ export function ThemeLifelines({
   );
   const flows = flowQueries.map(query => query.data);
   const positions = timelineTickPositions(snapshots);
-  const dayLabels = timelineDayLabels(snapshots);
 
   if (!flows.some(flow => flow !== undefined)) {
     return (
@@ -125,23 +160,16 @@ export function ThemeLifelines({
 
   return (
     <section aria-label="Theme lifelines" className="space-y-5">
-      {/* Mirrors each row's label and count columns so the axis aligns with the tracks. */}
-      <div aria-hidden="true" className="flex items-center gap-3">
-        <span className="w-52 shrink-0" />
-        <div className="relative h-4 min-w-0 flex-1">
-          {snapshots.map((snapshot, index) =>
-            dayLabels[index] ? (
-              <span
-                key={snapshot.snapshotId}
-                className="text-neutral3 absolute -translate-x-1/2 font-mono text-[10px] tabular-nums"
-                style={{ left: `${positions[index]}%` }}
-              >
-                {dayLabels[index]}
-              </span>
-            ) : null,
-          )}
-        </div>
-        <span className="w-9 shrink-0" />
+      {/* Spacers mirror each row's label and count columns so the shared track aligns with the rows. */}
+      <div className="flex items-center gap-3">
+        <span aria-hidden="true" className="w-52 shrink-0" />
+        <TimelineTrack
+          snapshots={snapshots}
+          totalCount={totalSnapshots}
+          markers={new Map<number, TimelineMarkerKind>([[selectedIndex, 'selected']])}
+          onTickSelect={onSnapshotSelect}
+        />
+        <span aria-hidden="true" className="w-9 shrink-0" />
       </div>
       {signalNames.map(signalName => (
         <SignalLifelines

@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
-import { buildThemeLifelines } from '../theme-lifelines-data';
+import { buildThemeLifelines, lifelineConnectors } from '../theme-lifelines-data';
 import {
   earlierThemeFlowResponse,
   fourStageThemeFlowResponse,
@@ -90,6 +90,36 @@ describe('buildThemeLifelines', () => {
       const legacy = rows.find(row => row.label === 'Legacy support request');
 
       expect(legacy?.points.map(point => point.snapshotIndex)).toEqual([0, 2]);
+    });
+  });
+});
+
+describe('lifelineConnectors', () => {
+  describe('when a theme is present at consecutive landmarks', () => {
+    it('links each adjacent pair of points', () => {
+      const points = [
+        { snapshotIndex: 3, share: 0.5, traceCount: 5 },
+        { snapshotIndex: 4, share: 0.4, traceCount: 4 },
+        { snapshotIndex: 5, share: 0.6, traceCount: 6 },
+      ];
+
+      const connectors = lifelineConnectors(points);
+
+      expect(connectors.map(connector => [connector.from.snapshotIndex, connector.to.snapshotIndex])).toEqual([
+        [3, 4],
+        [4, 5],
+      ]);
+    });
+  });
+
+  describe('when the theme skips landmarks in between', () => {
+    it('leaves the gap unconnected so absence stays visible', () => {
+      const points = [
+        { snapshotIndex: 0, share: 0.5, traceCount: 5 },
+        { snapshotIndex: 2, share: 0.4, traceCount: 4 },
+      ];
+
+      expect(lifelineConnectors(points)).toEqual([]);
     });
   });
 });
@@ -184,6 +214,47 @@ describe('SankeySignals lifelines mode', () => {
         .getAllByRole('listitem')
         .map(row => row.getAttribute('aria-label'));
       expect(rowNames[rowNames.length - 1]).toBe('Legacy support request: present in 2 of 5 landmarks');
+    });
+
+    it('reuses the shared landmark timeline above the lifeline rows', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      const track = within(lifelines).getByRole('group', { name: 'Snapshot landmarks' });
+      expect(within(track).getAllByRole('button', { name: /Snapshot \d+ of/ })).toHaveLength(
+        landmarkThemeSnapshotsResponse.snapshots.length,
+      );
+    });
+
+    it('keeps the landmark picked on the timeline in sync with the flow view', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      fireEvent.click(within(lifelines).getByRole('button', { name: /Snapshot 1 of/ }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Flow' }));
+
+      const flowTimeline = await screen.findByRole('region', { name: 'Snapshot timeline' });
+      const selectedTick = within(flowTimeline).getByRole('button', { name: /Snapshot 1 of/ });
+      expect(selectedTick.getAttribute('aria-current')).toBe('true');
+    });
+
+    it('draws a connecting line between adjacent landmarks within a theme row', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
+      const persistentRow = await within(goalSection).findByRole('listitem', {
+        name: 'Resolve support request: present in 5 of 5 landmarks',
+      });
+      expect(persistentRow.querySelectorAll('line')).toHaveLength(4);
     });
 
     it('returns to the flow chart when the user switches back', async () => {
