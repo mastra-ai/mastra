@@ -254,6 +254,42 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should merge tool-call + tool-error into a single output-error part', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-error',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          error: new Error('Provider tool failed'),
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Provider tool failed',
+      },
+      providerExecuted: true,
+    });
+  });
+
   // ── Source and file parts ───────────────────────────────────
 
   it('should produce a source part', () => {
