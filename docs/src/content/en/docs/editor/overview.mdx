@@ -265,11 +265,13 @@ See [`MastraEditor`](/reference/editor/mastra-editor#source) for file locations 
 
 ## Versioning
 
+:::note[Database storage required for Editor-managed versions]
+The draft, publish, and restore workflow requires database storage. With `source: 'code'`, Git provides the durable version history, and committed versions are read-only in Studio.
+:::
+
 With the database option, saving a change creates a draft version. The live agent keeps using the published version until you publish the draft.
 
 Publishing makes that version live. Restoring an older version creates another draft first, so you can test it before it replaces the current version.
-
-When Editor stores changes as files, Git provides the version history instead. Studio shows each committed change to an agent's JSON file as a read-only version.
 
 ### Select a version
 
