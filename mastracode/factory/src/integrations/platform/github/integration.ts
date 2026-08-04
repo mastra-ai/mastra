@@ -887,7 +887,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ issues: GithubIssue[] }>('GET', `${path}?${query}`);
     return {
       issues: result.issues.map(issue => parseIntakeIssue(sourceId, issue)),
-      nextCursor: result.issues.length === PAGE_SIZE ? String(page + 1) : null,
+      nextCursor: result.issues.length > 0 ? String(page + 1) : null,
     };
   }
 

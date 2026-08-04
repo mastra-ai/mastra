@@ -5022,7 +5022,10 @@ export class Agent<
               const subAgentUserMessage: MastraDBMessage = {
                 id: this.#mastra?.generateId() || randomUUID(),
                 role: 'user',
-                createdAt: new Date(),
+                // New runs let MessageList stamp this after it adds forwarded context.
+                // Resume runs do not add the prompt again, but still need a timestamp
+                // for the explicit transcript save below.
+                ...(resumeData ? { createdAt: new Date() } : {}),
                 threadId: subAgentThreadId,
                 resourceId: subAgentResourceId,
                 content: {
@@ -5034,7 +5037,7 @@ export class Agent<
                     },
                   ],
                 },
-              };
+              } as MastraDBMessage;
 
               // The sub-agent run receives only the delegation prompt as input; supervisor
               // history is forwarded separately via the `context` option so it reaches the

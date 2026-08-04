@@ -173,7 +173,7 @@ describe('PlatformGithubIntegration', () => {
           labels: ['bug'],
         }),
       ],
-      nextCursor: null,
+      nextCursor: '2',
     });
     await expect(
       integration.versionControl.listPullRequests({ connection: installationConnection, sourceId: 'acme/app' }),
@@ -182,6 +182,29 @@ describe('PlatformGithubIntegration', () => {
       nextCursor: null,
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('label=bug%2Curgent');
+  });
+
+  it('continues platform issue pagination after a short filtered page and stops on an empty page', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      return json({ issues: url.searchParams.get('page') === '1' ? [issue] : [] });
+    });
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    const firstPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: '1',
+    });
+    const secondPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: firstPage.nextCursor ?? undefined,
+    });
+
+    expect(firstPage).toMatchObject({ issues: [expect.objectContaining({ id: '12' })], nextCursor: '2' });
+    expect(secondPage).toEqual({ issues: [], nextCursor: null });
   });
 
   it('fetches issue details, creates comments, and preserves not-found semantics', async () => {

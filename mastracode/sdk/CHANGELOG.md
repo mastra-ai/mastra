@@ -1,5 +1,29 @@
 # @mastra/code-sdk
 
+## 1.1.2-alpha.6
+
+### Patch Changes
+
+- Added `skipGlobalInstructions` to session state. When set, a session ignores the agent instruction files in the machine's home directory (`~/.claude/CLAUDE.md`, `~/.mastracode/AGENTS.md`, and the other supported locations) and reads only the ones in the project it works on. Servers that run sessions on behalf of other people set it so a run never inherits the personal configuration of whoever hosts the process. ([#20633](https://github.com/mastra-ai/mastra/pull/20633))
+
+  Seed it on the controller to cover every session it creates:
+
+  ```ts
+  prepareAgentControllerMount({
+    initialState: { skipGlobalInstructions: true },
+  });
+  ```
+
+  Sessions you drive yourself are unaffected and still read your home directory instructions.
+
+- Updated dependencies [[`a19e5b7`](https://github.com/mastra-ai/mastra/commit/a19e5b79b76fffa92f9cf17e0e89c3fa714534e8), [`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`19ccefa`](https://github.com/mastra-ai/mastra/commit/19ccefa628dc971b4bfa2058a324a6ac9b846358), [`19ccefa`](https://github.com/mastra-ai/mastra/commit/19ccefa628dc971b4bfa2058a324a6ac9b846358), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866), [`f6e002c`](https://github.com/mastra-ai/mastra/commit/f6e002c9e15eda94fcb35c350c60f9bba1b823d4), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866)]:
+  - @mastra/mcp@1.15.1-alpha.1
+  - @mastra/core@1.56.0-alpha.6
+  - @mastra/pg@1.19.0-alpha.3
+  - @mastra/libsql@1.19.0-alpha.2
+  - @mastra/duckdb@1.6.0-alpha.0
+  - @mastra/memory@1.25.0-alpha.2
+
 ## 1.1.2-alpha.5
 
 ### Patch Changes

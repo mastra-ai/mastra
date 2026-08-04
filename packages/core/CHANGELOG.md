@@ -1,5 +1,69 @@
 # @mastra/core
 
+## 1.56.0-alpha.6
+
+### Minor Changes
+
+- Added batch trace ID filtering to observability metric queries. ([#20535](https://github.com/mastra-ai/mastra/pull/20535))
+
+  ```ts
+  const result = await observability.getMetricBreakdown({
+    name: ['mastra_model_total_input_tokens'],
+    aggregation: 'sum',
+    groupBy: ['traceId'],
+    filters: { traceIds: ['trace-1', 'trace-2'] },
+  });
+  ```
+
+- Added per-run controls for experiment and score persistence. Targets and scorers continue to run, while callers can keep results in memory without writing selected record types to storage. ([#20643](https://github.com/mastra-ai/mastra/pull/20643))
+
+  ```typescript
+  const summary = await dataset.startExperiment({
+    targetType: 'agent',
+    targetId: 'my-agent',
+    scorers: ['accuracy'],
+    persistence: { experiments: 'none', scores: 'none' },
+  });
+  ```
+
+- Added scorer failure results so callers can inspect completed stages and `status: 'failed'` judge executions in `error.result.judge` after `scorer.run()` rejects. ([#20195](https://github.com/mastra-ai/mastra/pull/20195))
+
+  ```typescript
+  import { ScorerRunError } from '@mastra/core/evals';
+
+  try {
+    await scorer.run(input);
+  } catch (error) {
+    if (error instanceof ScorerRunError) {
+      console.log(error.failedStep);
+      console.log(error.completedSteps);
+      console.log(error.result);
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Fixed TokenLimiter silently dropping agent output when used as an output processor. It counted every stream part — including lifecycle parts like `step-start` (which embeds the full serialized request) and reasoning deltas — so a realistic limit could be exhausted before any answer text arrived. Once the limit was hit, all later parts were withheld, including `tool-call` parts, so agents returned empty text or stopped executing tools with no error. ([#20256](https://github.com/mastra-ai/mastra/pull/20256))
+
+  Now only generated output counts against the limit (text and object parts), tool and lifecycle parts always pass through, and the first time output is withheld the processor emits a transient `data-token-limit-reached` part so truncation is visible:
+
+  ```typescript
+  for await (const part of stream.fullStream) {
+    if (part.type === 'data-token-limit-reached') {
+      console.log('output truncated at', part.data.limit, 'tokens');
+    }
+  }
+  ```
+
+  Fixes #20250
+
+- Fixed sub-agent delegation prompts being ordered before forwarded supervisor context. ([#20535](https://github.com/mastra-ai/mastra/pull/20535))
+
+- Fixed provider-executed tool spans appearing outside the model step in traces. `PROVIDER_TOOL_CALL` spans now nest under the model step that delivered the tool result — matching how regular tool calls are traced — with their start time backdated to the tool call, so tools like OpenAI-hosted web search show up in the right place in the timeline. Tool input is now also captured whenever the provider supplies arguments. Calls whose result never arrives stay anchored to the agent run span. Fixes #20335. ([#20522](https://github.com/mastra-ai/mastra/pull/20522))
+
+- Added an optional `instructions` field to the Observational Memory `retrieval` config type. It appends application-specific recall guidance after Mastra's built-in retrieval instructions. ([#20160](https://github.com/mastra-ai/mastra/pull/20160))
+
 ## 1.56.0-alpha.5
 
 ### Minor Changes

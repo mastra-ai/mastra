@@ -1,5 +1,14 @@
 # @mastra/next
 
+## 0.2.12-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`52363cf`](https://github.com/mastra-ai/mastra/commit/52363cfc5a06a75144679b4641b5b3a58877425b), [`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`19ccefa`](https://github.com/mastra-ai/mastra/commit/19ccefa628dc971b4bfa2058a324a6ac9b846358), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866)]:
+  - @mastra/hono@1.5.13-alpha.6
+  - @mastra/core@1.56.0-alpha.6
+  - @mastra/server@1.56.0-alpha.6
+
 ## 0.2.12-alpha.5
 
 ### Patch Changes
