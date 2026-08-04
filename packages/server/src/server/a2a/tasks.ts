@@ -1,12 +1,5 @@
-import type {
-  Message,
-  Task,
-  TaskState,
-  TaskStatus,
-  TaskContext,
-  TaskArtifactUpdateEvent,
-  Artifact,
-} from '@mastra/core/a2a';
+import type { Message, Task, TaskStatus, TaskContext, TaskArtifactUpdateEvent, Artifact } from '@mastra/core/a2a';
+import { MastraA2AError } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { InMemoryTaskStore } from './store';
 
@@ -113,22 +106,18 @@ export async function loadOrCreateTask({
   // Handle existing task
   logger?.info(`[Task ${taskId}] Loaded existing task.`);
 
+  const { status } = data;
+  if (['completed', 'failed', 'canceled', 'rejected'].includes(status.state)) {
+    throw MastraA2AError.invalidRequest(`Task ${taskId} is in terminal state ${status.state} and cannot be restarted.`);
+  }
+
   // Add message to history and prepare updated data
   let updatedData = data;
   updatedData.history = [...(data.history || []), message];
 
   // Handle state transitions
-  const { status } = data;
-  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
-
-  if (finalStates.includes(status.state)) {
-    logger?.warn(`[Task ${taskId}] Received message for task in final state ${status.state}. Restarting.`);
-    updatedData = applyUpdateToTask(updatedData, {
-      state: 'submitted',
-      message: undefined,
-    });
-  } else if (status.state === 'input-required') {
-    logger?.info(`[Task ${taskId}] Changing state from 'input-required' to 'working'.`);
+  if (status.state === 'input-required' || status.state === 'auth-required') {
+    logger?.info(`[Task ${taskId}] Changing state from '${status.state}' to 'working'.`);
     updatedData = applyUpdateToTask(updatedData, { state: 'working' });
   } else if (status.state === 'working') {
     logger?.warn(`[Task ${taskId}] Received message while already 'working'. Proceeding.`);
