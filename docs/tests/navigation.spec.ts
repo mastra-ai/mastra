@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 
 const IGNORED_ERROR_PATTERNS = [
   /hydrat/i,
@@ -218,6 +218,16 @@ function visibleSidebarPane(page: Page, pane: 'root' | 'contextual') {
   return page.locator(`[data-sidebar-pane="${pane}"]:visible`)
 }
 
+async function expectContextualCategoryRootLink(rootPane: Locator) {
+  const agentsLink = rootPane.getByRole('link', { name: 'Agents', exact: true })
+  const agentsItem = agentsLink.locator('xpath=ancestor::li[1]')
+  await expect(agentsLink).toHaveAttribute('href', '/docs/agents/overview')
+  await expect(agentsLink).not.toHaveClass(/menu__link--sublist/)
+  await expect(agentsItem.locator(':scope > div > button.menu__caret')).toHaveCount(0)
+  await expect(agentsItem.locator(':scope > ul.menu__list')).toHaveCount(0)
+  return agentsLink
+}
+
 async function openMobileSidebar(page: Page) {
   const hamburger = page.getByRole('button', { name: 'Toggle navigation bar' })
   await hamburger.click()
@@ -231,8 +241,7 @@ test.describe('Contextual sidebar', () => {
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const rootPane = visibleSidebarPane(page, 'root')
-    const agentsLink = rootPane.getByRole('link', { name: 'Agents', exact: true })
-    await expect(agentsLink).toHaveAttribute('href', '/docs/agents/overview')
+    const agentsLink = await expectContextualCategoryRootLink(rootPane)
 
     await agentsLink.click()
     await expect(page).toHaveURL('/docs/agents/overview')
@@ -272,12 +281,9 @@ test.describe('Contextual sidebar', () => {
     await expect(restoredRootPane).toBeVisible()
     await expect(page).toHaveURL(urlBeforeBack)
     await expect(restoredRootPane).toBeFocused()
-    await expect(restoredRootPane.getByRole('button', { name: "Expand sidebar category 'Agents'" })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
+    const restoredAgentsLink = await expectContextualCategoryRootLink(restoredRootPane)
 
-    await restoredRootPane.getByRole('link', { name: 'Agents', exact: true }).click()
+    await restoredAgentsLink.click()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
     await page.getByRole('link', { name: 'Docs', exact: true }).first().click()
     await expect(page).toHaveURL('/docs')
@@ -336,15 +342,16 @@ test.describe('Contextual sidebar', () => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
-    const agentsLink = visibleSidebarPane(page, 'root').getByRole('link', { name: 'Agents', exact: true })
+    const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
     const newPagePromise = context.waitForEvent('page')
     await agentsLink.click({ modifiers: ['Meta'] })
     const newPage = await newPagePromise
     await newPage.waitForLoadState('domcontentloaded')
 
     await expect(page).toHaveURL('/docs')
-    await expect(visibleSidebarPane(page, 'root')).toBeVisible()
-    await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
+    const unchangedRootPane = visibleSidebarPane(page, 'root')
+    await expect(unchangedRootPane).toBeVisible()
+    await expectContextualCategoryRootLink(unchangedRootPane)
     await expect(newPage).toHaveURL('/docs/agents/overview')
     const directContextualPane = visibleSidebarPane(newPage, 'contextual')
     await expect(directContextualPane).toBeVisible()
@@ -369,7 +376,7 @@ test.describe('Contextual sidebar', () => {
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await openMobileSidebar(page)
-    const agentsLink = visibleSidebarPane(page, 'root').getByRole('link', { name: 'Agents', exact: true })
+    const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
     const newPagePromise = context.waitForEvent('page')
     await agentsLink.click({ modifiers: ['Meta'] })
     const newPage = await newPagePromise
@@ -377,8 +384,9 @@ test.describe('Contextual sidebar', () => {
 
     await expect(page).toHaveURL('/docs')
     await expect(page.locator('.navbar-sidebar')).toBeVisible()
-    await expect(visibleSidebarPane(page, 'root')).toBeVisible()
-    await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
+    const unchangedRootPane = visibleSidebarPane(page, 'root')
+    await expect(unchangedRootPane).toBeVisible()
+    await expectContextualCategoryRootLink(unchangedRootPane)
     await expect(newPage).toHaveURL('/docs/agents/overview')
     await openMobileSidebar(newPage)
     const directContextualPane = visibleSidebarPane(newPage, 'contextual')
@@ -406,7 +414,8 @@ test.describe('Contextual sidebar', () => {
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await openMobileSidebar(page)
-    await visibleSidebarPane(page, 'root').getByRole('link', { name: 'Agents', exact: true }).click()
+    const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
+    await agentsLink.click()
     await expect(page).toHaveURL('/docs/agents/overview')
     await expect(page.locator('.navbar-sidebar')).not.toBeVisible()
 
@@ -428,10 +437,7 @@ test.describe('Contextual sidebar', () => {
     await expect(page.locator('.navbar-sidebar')).toBeVisible()
     await expect(page).toHaveURL(urlBeforeBack)
     await expect(rootPane).toBeFocused()
-    await expect(rootPane.getByRole('button', { name: "Expand sidebar category 'Agents'" })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
+    await expectContextualCategoryRootLink(rootPane)
 
     await page.goto('/docs/agents/skills', { waitUntil: 'domcontentloaded' })
     await page.reload()
