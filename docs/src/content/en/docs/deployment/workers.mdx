@@ -33,7 +33,7 @@ Workers matter when any of these apply:
 - Different parts of the system need to scale independently (e.g., more orchestration capacity without more API instances)
 - Background tool calls should run on dedicated compute
 
-If your application handles light traffic and workflows complete quickly, the default in-process setup works fine. Skip the worker infrastructure until you need it.
+If your application handles light traffic and workflows complete fast, the default in-process setup works fine. Skip the worker infrastructure until you need it.
 
 ## Worker types
 
@@ -63,7 +63,7 @@ The background task worker manages concurrency limits, task lifecycle, and resul
 
 ## How workers run
 
-### In-process (default)
+### In-process mode (default)
 
 With no configuration, Mastra creates and starts workers inside the API process. Events flow through an in-memory PubSub, and everything shares a single Node.js runtime.
 
@@ -80,7 +80,7 @@ This setup needs no external infrastructure beyond your storage adapter. It does
 
 ### Split processes
 
-To run workers separately, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
+To run workers in their own processes, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
 
 <Tabs>
   <TabItem value="redis" label="Redis Streams + PostgreSQL">
@@ -124,7 +124,7 @@ Run the same build artifact in multiple containers, each with a different [`MAST
 
 Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
-The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with a Docker Compose example.
+The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with Docker Compose and Kubernetes examples.
 
 ## Network architecture
 
@@ -140,14 +140,14 @@ All three worker types (orchestration, scheduler, background task) sit behind th
 
 ## Known limitations
 
-- **No dead-letter queue**: Failed events are nacked and retried, but there is no DLQ for events that repeatedly fail.
+- **No dead-letter queue**: Failed events are nacked and retried, but there's no DLQ for events that fail after all retries.
 - **No built-in health endpoint**: Workers don't expose an HTTP health check. Use container-level liveness probes or process monitoring.
 - **Scheduler is single-instance**: Running multiple scheduler processes causes duplicate schedule fires.
 - **Runs stuck in "running" after API crash**: If the API process crashes while executing a workflow step, the run remains in `running` status with no automatic retry. For [durable agents](/docs/long-running-agents/durable-agents), set `recovery.durableAgents` to `'auto'` in the Mastra config to automatically re-drive orphaned runs on server restart. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery) for details.
 
 ## Related
 
-- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose example and topology options
+- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose and Kubernetes examples
 - [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
 - [Workers reference](/reference/workers/overview): Details about worker environment variables and types, with a list of supported storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`

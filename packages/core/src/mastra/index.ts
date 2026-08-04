@@ -70,9 +70,17 @@ import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
+import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
+import type { StoredWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/stored';
+import {
+  assertValidStoredWorkflow,
+  collectNestedWorkflowIds,
+  rehydrateWorkflow,
+  toJsonSchemaOrUndefined,
+} from '../workflows/stored';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
@@ -4478,6 +4486,62 @@ export class Mastra<
   }
 
   /**
+   * Removes a workflow from the Mastra instance by its key or ID.
+   * Used when stored workflows are updated/deleted so subsequent saves can
+   * re-register the same id cleanly.
+   *
+   * Note: this only clears the live in-process registration. In-flight runs
+   * are unaffected (they capture stepFlow at start time). Static workflow
+   * scorers stay registered (matching removeAgent/removeTool behavior).
+   *
+   * @param keyOrId - The workflow key or ID to remove
+   * @returns true if a workflow was removed, false if no workflow was found
+   *
+   * @example
+   * ```typescript
+   * // Remove by key
+   * mastra.removeWorkflow('myWorkflow');
+   *
+   * // Remove by ID
+   * mastra.removeWorkflow('workflow-123');
+   * ```
+   */
+  public removeWorkflow(keyOrId: string): boolean {
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+
+    if (workflows[keyOrId]) {
+      delete workflows[keyOrId];
+      this.#hiddenWorkflowKeys.delete(keyOrId);
+      return true;
+    }
+
+    const key = Object.keys(workflows).find(k => workflows[k]?.id === keyOrId);
+    if (key) {
+      delete workflows[key];
+      this.#hiddenWorkflowKeys.delete(key);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Returns how a workflow was registered — `'code'` for statically declared
+   * or `addWorkflow()`-added workflows, `'stored'` for anything added via
+   * `addStoredWorkflow()` (either at boot or through the HTTP/SDK surface).
+   * Returns `undefined` if no workflow is registered under that key/id.
+   *
+   * Reads `workflow.origin`, which is set to `'stored'` by `rehydrateWorkflow`
+   * at construction time and defaults to `'code'` otherwise. Used by the HTTP
+   * layer to surface a visual distinction (e.g. a "Stored" badge in Studio).
+   */
+  public getWorkflowOrigin(keyOrId: string): 'code' | 'stored' | undefined {
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    const workflow = workflows[keyOrId] ?? Object.values(workflows).find(wf => wf?.id === keyOrId);
+    return workflow?.origin;
+  }
+
+  /**
    * Adds a new workflow to the Mastra instance.
    *
    * This method allows dynamic registration of workflows after the Mastra instance
@@ -4549,6 +4613,293 @@ export class Mastra<
       }
       // If the worker doesn't exist yet (workers not started), schedules
       // will be registered when SchedulerWorker.init() runs.
+    }
+  }
+
+  #replaceStoredWorkflow(workflow: AnyWorkflow, key: string): void {
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.getStorage(),
+    });
+    if (!workflow.committed) {
+      workflow.commit();
+    }
+
+    (this.#workflows as Record<string, AnyWorkflow>)[key] = workflow;
+    this.#hiddenWorkflowKeys.delete(key);
+    this.registerStaticWorkflowScorers(workflow);
+  }
+
+  /**
+   * Flattens this instance's registries into the index the stored-workflow
+   * validation core resolves references and schemas against. Registered keys
+   * and canonical ids both count as valid references. Schemas are converted
+   * best-effort — an unconvertible schema degrades to "unknown", never to a
+   * false incompatibility. Agents stay presence-only: their `{ prompt }`
+   * input default lives in schema-flow itself.
+   */
+  #buildWorkflowRegistryIndex(): WorkflowRegistryIndex {
+    const agents: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, agent] of Object.entries(this.listAgents() ?? {})) {
+      agents[key] = {};
+      agents[agent.id] = {};
+    }
+    const tools: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, tool] of Object.entries(this.listTools() ?? {})) {
+      const schemas: WorkflowRegistrySchemas = {
+        inputSchema: toJsonSchemaOrUndefined(tool.inputSchema),
+        outputSchema: toJsonSchemaOrUndefined(tool.outputSchema),
+      };
+      tools[key] = schemas;
+      tools[tool.id] = schemas;
+    }
+    const workflows: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, workflow] of Object.entries(this.#workflows as Record<string, AnyWorkflow>)) {
+      const schemas: WorkflowRegistrySchemas = {
+        inputSchema: toJsonSchemaOrUndefined(workflow.inputSchema),
+        outputSchema: toJsonSchemaOrUndefined(workflow.outputSchema),
+      };
+      workflows[key] = schemas;
+      workflows[workflow.id] = schemas;
+    }
+    return { agents, tools, workflows };
+  }
+
+  /**
+   * Persist a static workflow definition to storage and live-register it on
+   * this Mastra instance so it becomes immediately runnable. The same path is
+   * used by `loadStoredWorkflows()` at boot to re-materialize previously saved
+   * workflows.
+   *
+   * @example
+   * ```typescript
+   * await mastra.addStoredWorkflow({
+   *   id: 'cli-weather-v1',
+   *   inputSchema:  { type: 'object', properties: { location: { type: 'string' } }, required: ['location'] },
+   *   outputSchema: { type: 'object', properties: { report:   { type: 'string' } }, required: ['report'] },
+   *   graph: [...],
+   * });
+   *
+   * const run = await mastra.getWorkflow('cli-weather-v1').createRun();
+   * await run.start({ inputData: { location: 'Helsinki' } });
+   * ```
+   */
+  public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
+    await this.addStoredWorkflows([def]);
+  }
+
+  /**
+   * Persist and live-register a set of stored workflow definitions that depend
+   * on each other — typically a root workflow plus the helper workflows it
+   * nests, none of which exist yet.
+   *
+   * The bundle is validated as a unit: references resolve against this
+   * instance's registries UNION the bundle's own ids, so a root may nest a
+   * helper being introduced in the same call. Members are then hydrated in
+   * dependency order, since hydration resolves nested workflows through the
+   * live registry.
+   *
+   * Failure semantics — a rejected bundle registers nothing:
+   * - Duplicate ids, invalid members, and dependency cycles are all detected
+   *   before anything is mutated.
+   * - If hydration or persistence fails partway, the in-memory registry is
+   *   restored to its prior state.
+   * - Storage writes happen last. A storage-level failure mid-bundle is the
+   *   one residual window where rows can be partially written; the registry is
+   *   still rolled back, and the orphaned rows are inert until the next boot.
+   *
+   * `addStoredWorkflow()` is the single-member case.
+   *
+   * @example
+   * ```typescript
+   * await mastra.addStoredWorkflows([
+   *   { id: 'lookup-first-customer', ... },  // helper — order is derived, not assumed
+   *   { id: 'parallel-customer-lookup', ... }, // root, nests the helper above
+   * ]);
+   * ```
+   */
+  public async addStoredWorkflows(defs: readonly StoredWorkflowGraph[]): Promise<void> {
+    if (defs.length === 0) return;
+
+    const seen = new Set<string>();
+    for (const def of defs) {
+      if (seen.has(def.id)) {
+        throw new Error(
+          `Stored workflow bundle contains more than one definition with id "${def.id}". Ids must be unique within a bundle.`,
+        );
+      }
+      seen.add(def.id);
+    }
+
+    // Save-path is strict (boot-time load is lenient — see #loadStoredWorkflows).
+    // Normalization coerces the wire shape; one validation call per member
+    // covers structure, JSON-Schema keywords, references, and schema-flow.
+    const members = defs.map(def => ({
+      def,
+      normalized: normalizeWorkflowBuilderDefinition({
+        id: def.id,
+        description: def.description,
+        inputSchema: def.inputSchema,
+        outputSchema: def.outputSchema,
+        stateSchema: def.stateSchema,
+        requestContextSchema: def.requestContextSchema,
+        graph: def.graph,
+      }),
+    }));
+
+    // Members may nest each other, so the index every member validates against
+    // is the live registries plus the bundle itself — not the registry alone.
+    const index = this.#buildWorkflowRegistryIndex();
+    const bundleIds = new Set(members.map(member => member.def.id));
+    for (const { normalized } of members) {
+      (index.workflows ??= {})[normalized.id] = {
+        inputSchema: normalized.inputSchema,
+        outputSchema: normalized.outputSchema,
+      } as WorkflowRegistrySchemas;
+    }
+    for (const { normalized } of members) {
+      assertValidStoredWorkflow(normalized, index);
+    }
+
+    // Hydration resolves nested workflows through the live registry, so a
+    // member cannot be hydrated before the bundle members it nests.
+    const ordered: typeof members = [];
+    const remaining = new Map(members.map(member => [member.def.id, member] as const));
+    const hydrated = new Set<string>();
+    let progress = true;
+    while (remaining.size > 0 && progress) {
+      progress = false;
+      for (const [id, member] of Array.from(remaining)) {
+        const pending = Array.from(collectNestedWorkflowIds(member.def.graph)).filter(
+          dependency => dependency !== id && bundleIds.has(dependency) && !hydrated.has(dependency),
+        );
+        if (pending.length > 0) continue;
+        remaining.delete(id);
+        hydrated.add(id);
+        ordered.push(member);
+        progress = true;
+      }
+    }
+    if (remaining.size > 0) {
+      throw new Error(
+        `Stored workflow bundle has a circular nested-workflow dependency among: ${Array.from(remaining.keys())
+          .sort()
+          .join(', ')}.`,
+      );
+    }
+
+    // Snapshot the registry slots this bundle will overwrite so a failure
+    // anywhere below leaves the instance exactly as it was found.
+    const registry = this.#workflows as Record<string, AnyWorkflow>;
+    const priorWorkflows = new Map<string, AnyWorkflow | undefined>();
+    const priorHiddenKeys = new Set<string>();
+    for (const { def } of ordered) {
+      priorWorkflows.set(def.id, registry[def.id]);
+      if (this.#hiddenWorkflowKeys.has(def.id)) priorHiddenKeys.add(def.id);
+    }
+    const restoreRegistry = () => {
+      for (const [id, prior] of priorWorkflows) {
+        if (prior) registry[id] = prior;
+        else delete registry[id];
+        if (priorHiddenKeys.has(id)) this.#hiddenWorkflowKeys.add(id);
+      }
+    };
+
+    try {
+      for (const { def } of ordered) {
+        const { workflow } = await rehydrateWorkflow(def, this);
+        this.#replaceStoredWorkflow(workflow as AnyWorkflow, def.id);
+      }
+
+      const store = await this.#storage?.getStore('workflowDefinitions');
+      if (store) {
+        for (const { def } of ordered) {
+          await store.upsert({
+            id: def.id,
+            description: def.description,
+            metadata: def.metadata,
+            inputSchema: def.inputSchema,
+            outputSchema: def.outputSchema,
+            stateSchema: def.stateSchema,
+            requestContextSchema: def.requestContextSchema,
+            graph: def.graph,
+          });
+        }
+      }
+    } catch (error) {
+      restoreRegistry();
+      throw error;
+    }
+  }
+
+  /**
+   * Load any previously persisted workflow definitions from storage and
+   * live-register each one. Called by `startWorkers()` after storage init.
+   * Bad rows are logged and skipped — one corrupt definition shouldn't sink
+   * the rest.
+   * @internal
+   */
+  async #loadStoredWorkflows(): Promise<void> {
+    const store = await this.#storage?.getStore('workflowDefinitions');
+    if (!store) return;
+
+    const { definitions } = await store.list({ status: 'active' });
+
+    // Code-registered workflows win; storage is additive.
+    const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
+
+    const pendingIds = new Set(pending.map(d => d.id));
+    const deps = new Map<string, Set<string>>();
+    for (const def of pending) {
+      const all = collectNestedWorkflowIds(def.graph);
+      const pendingDeps = new Set<string>();
+      for (const id of all) if (pendingIds.has(id) && id !== def.id) pendingDeps.add(id);
+      deps.set(def.id, pendingDeps);
+    }
+
+    // Hydrate in dependency order; anything left after the loop is a cycle.
+    const remaining = new Map(pending.map(d => [d.id, d] as const));
+    const loaded = new Set<string>();
+    let progress = true;
+    while (remaining.size > 0 && progress) {
+      progress = false;
+      for (const [id, def] of Array.from(remaining)) {
+        const unresolved = Array.from(deps.get(id) ?? []).filter(d => !loaded.has(d));
+        if (unresolved.length > 0) continue;
+        remaining.delete(id);
+        progress = true;
+        try {
+          const { workflow } = await rehydrateWorkflow(
+            {
+              id: def.id,
+              description: def.description,
+              metadata: def.metadata,
+              inputSchema: def.inputSchema as Record<string, any>,
+              outputSchema: def.outputSchema as Record<string, any>,
+              stateSchema: def.stateSchema as Record<string, any> | undefined,
+              requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
+              graph: def.graph,
+            },
+            this,
+            // Lenient at boot (save path is strict): degrade to z.any() + warn.
+            {
+              onUnsupportedSchema: 'warn',
+              onUnsupported: message => this.#logger?.warn?.(`Stored workflow "${def.id}": ${message}`),
+            },
+          );
+          this.addWorkflow(workflow as AnyWorkflow, def.id);
+          loaded.add(def.id);
+        } catch (error) {
+          this.#logger?.error?.(`Failed to load stored workflow "${def.id}"`, { error });
+        }
+      }
+    }
+    if (remaining.size > 0) {
+      const stuck = Array.from(remaining.keys()).join(', ');
+      this.#logger?.error?.(
+        `Failed to load stored workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
+      );
     }
   }
 
@@ -5445,6 +5796,11 @@ export class Mastra<
       }
     } else {
       targets = this.#workers;
+    }
+
+    // Rehydrate persisted workflow definitions (after storage.init() above).
+    if (this.#storage) {
+      await this.#loadStoredWorkflows();
     }
 
     // When explicitly starting the backgroundTasks worker (e.g.

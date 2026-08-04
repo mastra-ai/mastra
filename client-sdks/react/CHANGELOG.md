@@ -1,5 +1,52 @@
 # @mastra/react
 
+## 1.4.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`db4e6ff`](https://github.com/mastra-ai/mastra/commit/db4e6ff744503112eb64deeaf6c2b54bf26a54c7), [`6d19a65`](https://github.com/mastra-ai/mastra/commit/6d19a6517f5da3911023d446b7e2d5dad8adb1cb)]:
+  - @mastra/core@1.56.0-alpha.5
+  - @mastra/client-js@1.37.0-alpha.5
+
+## 1.4.0-alpha.4
+
+### Minor Changes
+
+- `WorkflowStepFactory` understands the new declarative step entries. ([#20471](https://github.com/mastra-ai/mastra/pull/20471))
+
+  **New resolved kinds.** `agent-step` and `tool-step` with matching `AgentStep` / `ToolStep` renderer slots. Entries without a dedicated renderer still fall back to `UnknownStep`.
+
+  **`map-step` resolves from the dedicated `type: 'mapping'` entry.** Previously a generic `type: 'step'` entry carrying `mapConfig`. `ResolvedWorkflowMapStep['flow']` is a union of both shapes — narrow on `flow.type` before reading the mapping code (`flow.mapConfig` for `'mapping'` entries, `flow.step.mapConfig` for legacy `'step'` entries).
+
+  **`nested-workflow-step` also resolves from the first-class `type: 'workflow'` entry** emitted for `.then(subWorkflow)`, which carries `workflowId` and the nested `serializedStepFlow`.
+
+  **Usage.** Pass a `ResolvedWorkflowStep` and the renderer slots you care about; unhandled kinds fall through to `UnknownStep`:
+
+  ```tsx
+  import { WorkflowStepFactory } from '@mastra/react';
+  import type { ResolvedWorkflowStep } from '@mastra/react';
+
+  function StepNode({ step }: { step: ResolvedWorkflowStep }) {
+    return (
+      <WorkflowStepFactory
+        step={step}
+        AgentStep={s => <AgentCard agentId={s.flow.agentId} result={s.result} />}
+        ToolStep={s => <ToolCard toolId={s.flow.toolId} result={s.result} />}
+        MapStep={s => <MapCard code={s.flow.type === 'mapping' ? s.flow.mapConfig : s.flow.step.mapConfig} />}
+        UnknownStep={s => <GenericCard id={s.id} />}
+      />
+    );
+  }
+  ```
+
+### Patch Changes
+
+- Fixed streamed assistant messages in `useChat`-style threads being keyed by a stale message id when observational memory rotates the response message id during a run. The accumulator now follows the rotated id carried by `step-start`, so streamed messages always match the ids they are persisted under and no longer disappear or duplicate after a refresh. Part of the fix for [#19810](https://github.com/mastra-ai/mastra/issues/19810) ([#20084](https://github.com/mastra-ai/mastra/pull/20084))
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2)]:
+  - @mastra/core@1.56.0-alpha.4
+  - @mastra/client-js@1.37.0-alpha.4
+
 ## 1.3.5-alpha.3
 
 ### Patch Changes
