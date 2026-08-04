@@ -376,15 +376,18 @@ describe('SankeySignals drill-in', () => {
 
       fireEvent.click(themeNode);
 
-      expect(await screen.findByText('Add transcript')).not.toBeNull();
+      const banner = await screen.findByLabelText('Active theme drill-in');
+      expect(within(banner).getByText('Goal · Add transcript')).not.toBeNull();
+      expect(await within(banner).findByText('Showing the 2 of 3 traces that flow through this theme')).not.toBeNull();
       expect(screen.queryByText('Drill-in: Goal = "Add transcript"')).toBeNull();
       await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
       // Themes outside the drilled paths disappear instead of lingering as
       // zero-count ghosts.
       expect(screen.queryByTitle('Other')).toBeNull();
       expect(pathsRequestCount).toBe(2);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
 
       await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·'));
       expect(screen.getAllByTitle('Other').length).toBeGreaterThan(0);
@@ -498,7 +501,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
 
       expect(await screen.findByText(/This theme is not present in the selected snapshot/)).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Clear filter' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Clear theme filter' })).not.toBeNull();
     });
   });
 
@@ -530,7 +533,7 @@ describe('SankeySignals drill-in', () => {
         </QueryClientProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await screen.findByText('Add transcript');
+      await screen.findByLabelText('Active theme drill-in');
 
       result.rerender(
         <QueryClientProvider client={queryClient}>

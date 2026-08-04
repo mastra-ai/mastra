@@ -11,7 +11,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
+import { ArrowLeftRight, ChartNoAxesGantt, Waypoints, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
@@ -63,6 +63,64 @@ function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; icon: Rea
         {label}
       </Txt>
     </Tab>
+  );
+}
+
+/**
+ * Active drill-in state banner: a dismissible filter chip in the theme's
+ * signal hue plus a plain-language description of the filtered subset, so the
+ * chart below clearly reads as "traces flowing through this theme" rather
+ * than a full snapshot.
+ */
+function ThemeFilterBanner({
+  selection,
+  filteredTraceCount,
+  totalTraceCount,
+  onViewDetails,
+  onClear,
+}: {
+  selection: ThemeSelection;
+  filteredTraceCount?: number;
+  totalTraceCount: number;
+  onViewDetails: () => void;
+  onClear: () => void;
+}) {
+  const color = nodeColor(getSignalHue(selection.signalName));
+
+  return (
+    <section
+      aria-label="Active theme drill-in"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2"
+      style={{
+        borderColor: `color-mix(in srgb, ${color} 35%, transparent)`,
+        backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
+      }}
+    >
+      <button
+        aria-label="Clear theme filter"
+        className="border-border1 bg-surface2 text-neutral6 hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 text-xs font-medium transition-colors"
+        onClick={onClear}
+        type="button"
+      >
+        <span aria-hidden="true" className="size-2 rounded-[2px]" style={{ backgroundColor: color }} />
+        {formatSignalName(selection.signalName)} · {selection.label}
+        <X aria-hidden="true" className="size-3.5" />
+      </button>
+      <span className="text-neutral4 text-xs">
+        {filteredTraceCount === undefined
+          ? 'Loading theme traces…'
+          : `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that flow through this theme`}
+      </span>
+      <Button
+        aria-label={`View theme details for ${selection.label}`}
+        onClick={onViewDetails}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        Details →
+      </Button>
+    </section>
   );
 }
 
@@ -367,27 +425,19 @@ export function SankeySignals({
             onSnapshotChange={selectSnapshot}
           />
           <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-            {snapshotSummaryLabel(snapshot, flow)}
+            {drillIn ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}` : snapshotSummaryLabel(snapshot, flow)}
           </p>
           {drillIn ? (
-            <nav aria-label="Active theme drill-in" className="text-neutral4 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-neutral6 text-base font-semibold">{drillIn.label}</span>
-              <Button
-                aria-label={`View theme details for ${drillIn.label}`}
-                onClick={() => {
-                  setNoiseSignalName(undefined);
-                  setDetailSelection(drillIn);
-                }}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                View theme details
-              </Button>
-              <Button onClick={() => setDrillIn(undefined)} size="sm" type="button" variant="ghost">
-                Clear filter
-              </Button>
-            </nav>
+            <ThemeFilterBanner
+              selection={drillIn}
+              filteredTraceCount={pathsQuery.data ? flow.stages[0]?.traceCount : undefined}
+              totalTraceCount={currentFlow.stages[0]?.traceCount ?? currentFlow.snapshot.traceCount}
+              onViewDetails={() => {
+                setNoiseSignalName(undefined);
+                setDetailSelection(drillIn);
+              }}
+              onClear={() => setDrillIn(undefined)}
+            />
           ) : null}
           {drillIn && !drillInAvailable ? (
             <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
