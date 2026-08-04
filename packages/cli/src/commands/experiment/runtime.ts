@@ -6,6 +6,8 @@ export const EXPERIMENT_DATASET_CANONICALIZATION_VERSION = '1' as const;
 export const EXPERIMENT_WORKER_MAX_FRAME_BYTES = 1024 * 1024;
 export const EXPERIMENT_WORKER_MAX_PENDING_OUTPUT_BYTES = 4 * EXPERIMENT_WORKER_MAX_FRAME_BYTES;
 
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 export const EXPERIMENT_WORKER_EXIT_CODES = {
   completed: 0,
   completedWithErrors: 10,
@@ -292,14 +294,37 @@ export async function runExperimentWorker({
   let finishing = false;
   let sequence = 0;
   let heartbeat: NodeJS.Timeout | undefined;
-  let deadlineTimer: NodeJS.Timeout | undefined;
+  let clearDeadlineTimer: (() => void) | undefined;
   let deadlineAt = Number.POSITIVE_INFINITY;
   let writeTail = Promise.resolve();
   let pendingOutputBytes = 0;
   let heartbeatQueued = false;
 
   const report = (message: string) => stderr.write(`[mastra experiment worker] ${message}\n`);
-  const remainingMs = () => Math.max(1, deadlineAt - Date.now());
+  const scheduleAtDeadline = (callback: () => void) => {
+    let timer: NodeJS.Timeout | undefined;
+    let cleared = false;
+    let fired = false;
+    const schedule = () => {
+      if (cleared || fired) return;
+      const remaining = deadlineAt - Date.now();
+      timer = setTimeout(
+        remaining <= 0
+          ? () => {
+              if (cleared || fired) return;
+              fired = true;
+              callback();
+            }
+          : schedule,
+        remaining <= 0 ? 0 : Math.min(remaining, MAX_TIMER_DELAY_MS),
+      );
+    };
+    schedule();
+    return () => {
+      cleared = true;
+      clearTimeout(timer);
+    };
+  };
   const abortForProtocolFailure = (message: string) => {
     if (protocolFailure || terminal) return;
     protocolFailure = new Error(message);
@@ -307,16 +332,21 @@ export async function runExperimentWorker({
     controller?.abort(protocolFailure);
   };
   const waitForDrain = async () => {
-    let timer: NodeJS.Timeout | undefined;
-    await Promise.race([
-      once(stdout, 'drain'),
-      new Promise((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('stdout backpressure exceeded the experiment deadline')),
-          remainingMs(),
-        );
-      }),
-    ]).finally(() => clearTimeout(timer));
+    const drainController = new AbortController();
+    let deadlineExceeded = false;
+    const clearTimer = scheduleAtDeadline(() => {
+      deadlineExceeded = true;
+      drainController.abort();
+    });
+    try {
+      await once(stdout, 'drain', { signal: drainController.signal });
+    } catch (error) {
+      if (deadlineExceeded) throw new Error('stdout backpressure exceeded the experiment deadline');
+      throw error;
+    } finally {
+      clearTimer();
+      drainController.abort();
+    }
   };
   const writeEvent = (type: string, payload: Record<string, unknown>) => {
     if (!correlation || terminal || (type === 'heartbeat' && heartbeatQueued)) return writeTail;
@@ -374,7 +404,7 @@ export async function runExperimentWorker({
       return exitCode;
     } finally {
       clearInterval(heartbeat);
-      clearTimeout(deadlineTimer);
+      clearDeadlineTimer?.();
     }
   };
   const emitCompletion = async (value: Completion) => {
@@ -382,7 +412,7 @@ export async function runExperimentWorker({
       return (await finish(value.status, value.semanticEvent, value.exitCode, value.retryable)) ?? value.exitCode;
     } catch (error) {
       clearInterval(heartbeat);
-      clearTimeout(deadlineTimer);
+      clearDeadlineTimer?.();
       const failure = error instanceof Error ? error : new Error(String(error));
       report(`terminal protocol output failed: ${failure.message}`);
       if (failure instanceof ProtocolOutputError && failure.frameAccepted) {
@@ -446,11 +476,11 @@ export async function runExperimentWorker({
     const deadlinePromise = new Promise<never>((_, reject) => {
       rejectDeadline = reject;
     });
-    deadlineTimer = setTimeout(() => {
+    clearDeadlineTimer = scheduleAtDeadline(() => {
       const error = new Error('Experiment deadline exceeded');
       controller?.abort(error);
       rejectDeadline?.(error);
-    }, remainingMs());
+    });
     try {
       await Promise.race([
         runExperiment(mastra, {
@@ -498,18 +528,18 @@ export async function runExperimentWorker({
       ]);
     } catch (error) {
       runError = error instanceof Error ? error : new Error(String(error));
+    } finally {
+      clearDeadlineTimer?.();
+      clearDeadlineTimer = undefined;
     }
     try {
-      let timer: NodeJS.Timeout | undefined;
+      let clearTimer: (() => void) | undefined;
       await Promise.race([
         mastra.shutdown(),
         new Promise((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error('Mastra shutdown exceeded the experiment deadline')),
-            remainingMs(),
-          );
+          clearTimer = scheduleAtDeadline(() => reject(new Error('Mastra shutdown exceeded the experiment deadline')));
         }),
-      ]).finally(() => clearTimeout(timer));
+      ]).finally(() => clearTimer?.());
     } catch (error) {
       runError = error instanceof Error ? error : new Error(String(error));
     }

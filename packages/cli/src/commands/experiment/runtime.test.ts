@@ -313,6 +313,48 @@ describe('runExperimentWorker', () => {
     expect(harness.output()).toContain('"status":"timed-out"');
   });
 
+  it('does not overflow far-future deadlines', async () => {
+    const request = createRequest();
+    request.deadlineAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString();
+    let signal: AbortSignal | undefined;
+    const harness = createHarness(async (_mastra, config) => {
+      signal = config.signal;
+      if (!signal.aborted) {
+        await new Promise<void>(resolve => signal!.addEventListener('abort', () => resolve(), { once: true }));
+      }
+      await config.onEvent({
+        type: 'experiment.run.finished',
+        version: 1,
+        experimentId: config.experimentId,
+        sequence: 1,
+        timestamp: new Date().toISOString(),
+        target: { type: config.targetType, id: config.targetId },
+        outcome: 'cancelled',
+        completedWithErrors: false,
+      });
+    });
+    harness.stdin.write(`${JSON.stringify(request)}\n`);
+
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(signal?.aborted).toBe(false);
+
+    harness.stdin.write(
+      `${JSON.stringify({
+        type: 'cancel',
+        protocolVersion: '1',
+        experimentId: request.experimentId,
+        jobId: request.jobId,
+        attempt: request.attempt,
+        idempotencyKey: request.idempotencyKey,
+        requestedAt: new Date().toISOString(),
+        reason: 'cancelled by test',
+      })}\n`,
+    );
+
+    await expect(harness.result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.cancelled);
+  });
+
   it('rejects an invalid terminal semantic outcome', async () => {
     const request = createRequest();
     const harness = createHarness(async (_mastra, config) => {
