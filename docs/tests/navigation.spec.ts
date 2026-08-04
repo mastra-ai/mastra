@@ -334,7 +334,18 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
     await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
     await expect(newPage).toHaveURL('/docs/agents/overview')
+    const directContextualPane = visibleSidebarPane(newPage, 'contextual')
+    await expect(directContextualPane).toBeVisible()
+
+    const childPagePromise = context.waitForEvent('page')
+    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ modifiers: ['Meta'] })
+    const childPage = await childPagePromise
+    await childPage.waitForLoadState('domcontentloaded')
+
+    await expect(newPage).toHaveURL('/docs/agents/overview')
     await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
+    await expect(childPage).toHaveURL('/docs/agents/using-tools')
+    await expect(visibleSidebarPane(childPage, 'root')).toBeVisible()
   })
 
   test('mobile and tablet: modified click leaves the drawer and root pane unchanged', async ({
@@ -358,7 +369,20 @@ test.describe('Contextual sidebar', () => {
     await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
     await expect(newPage).toHaveURL('/docs/agents/overview')
     await openMobileSidebar(newPage)
+    const directContextualPane = visibleSidebarPane(newPage, 'contextual')
+    await expect(directContextualPane).toBeVisible()
+
+    const childPagePromise = context.waitForEvent('page')
+    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ modifiers: ['Meta'] })
+    const childPage = await childPagePromise
+    await childPage.waitForLoadState('domcontentloaded')
+
+    await expect(newPage).toHaveURL('/docs/agents/overview')
+    await expect(newPage.locator('.navbar-sidebar')).toBeVisible()
     await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
+    await expect(childPage).toHaveURL('/docs/agents/using-tools')
+    await openMobileSidebar(childPage)
+    await expect(visibleSidebarPane(childPage, 'root')).toBeVisible()
   })
 
   test('mobile and tablet: drawer closes on navigation and Back swaps panes without closing', async ({

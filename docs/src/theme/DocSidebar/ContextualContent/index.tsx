@@ -2,6 +2,7 @@ import React, { type ReactNode } from 'react'
 import { ThemeClassNames } from '@docusaurus/theme-common'
 import DocSidebarItems from '@theme/DocSidebarItems'
 import type { PropSidebarItem } from '@docusaurus/plugin-content-docs'
+import { ContextualSidebarPaneProvider } from '../../contextual-sidebar-context'
 
 import styles from './styles.module.css'
 
@@ -23,9 +24,11 @@ export default function ContextualContent({ activePath, items, label, onBack, on
         </button>
         <h2 className={styles.heading}>{label}</h2>
       </div>
-      <ul className={`${ThemeClassNames.docs.docSidebarMenu} menu__list`}>
-        <DocSidebarItems items={items} activePath={activePath} level={1} onItemClick={onItemClick} />
-      </ul>
+      <ContextualSidebarPaneProvider>
+        <ul className={`${ThemeClassNames.docs.docSidebarMenu} menu__list`}>
+          <DocSidebarItems items={items} activePath={activePath} level={1} onItemClick={onItemClick} />
+        </ul>
+      </ContextualSidebarPaneProvider>
     </>
   )
 }

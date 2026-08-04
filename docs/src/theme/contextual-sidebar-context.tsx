@@ -24,6 +24,15 @@ type ContextualSidebarContextValue = Readonly<{
 }>
 
 const ContextualSidebarContext = createContext<ContextualSidebarContextValue | undefined>(undefined)
+const ContextualSidebarPaneContext = createContext(false)
+
+export function ContextualSidebarPaneProvider({ children }: { children: ReactNode }): ReactNode {
+  return <ContextualSidebarPaneContext.Provider value>{children}</ContextualSidebarPaneContext.Provider>
+}
+
+export function useIsContextualSidebarPane(): boolean {
+  return useContext(ContextualSidebarPaneContext)
+}
 
 export function ContextualSidebarProvider({ children }: { children: ReactNode }): ReactNode {
   const { pathname } = useLocation()
