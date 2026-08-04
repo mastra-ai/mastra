@@ -1,5 +1,5 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { WorkflowInputData } from '../workflow-input-data';
@@ -22,6 +22,32 @@ const processorSchema = z.object({
 afterEach(() => cleanup());
 
 describe('WorkflowInputData', () => {
+  describe('when the form view renders an array of objects', () => {
+    it('submits an added object item after its required field is edited', async () => {
+      const onSubmit = vi.fn();
+
+      render(
+        <WorkflowInputData
+          schema={z.object({ input: z.array(z.object({ email: z.string() })) })}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add Input item' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Expand object' }));
+      fireEvent.change(await screen.findByRole('textbox', { name: /email/i }), {
+        target: { value: 'ada@example.com' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledWith({ input: [{ email: 'ada@example.com' }] });
+      });
+    });
+  });
+
   describe('when the form view renders a string field', () => {
     it('uses a multiline text input', async () => {
       render(
