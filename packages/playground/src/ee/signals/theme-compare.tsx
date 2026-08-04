@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
-import { formatSignalName, formatSnapshotCutoff, formatSnapshotWindow } from './signal-formatting';
+import { snapshotSummaryLabel } from './sankey-signals-data';
+import { formatSignalName } from './signal-formatting';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
@@ -19,12 +20,6 @@ function percent(share: number) {
 function deltaLabel(delta: number) {
   const points = Math.round(delta * 100);
   return `${points >= 0 ? '+' : ''}${points}pp`;
-}
-
-function markerSummary(snapshot: ThemeSnapshot) {
-  return snapshot.cutoffAt
-    ? formatSnapshotCutoff(snapshot.cutoffAt)
-    : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt);
 }
 
 function Sparkline({
@@ -201,7 +196,7 @@ export function ThemeCompare({
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <button
-          aria-label={`Point A, ${markerSummary(snapshotA)}`}
+          aria-label={`Point A, ${snapshotSummaryLabel(snapshotA, flows[aIndex])}`}
           aria-pressed={armedMarker === 'a'}
           className={`text-neutral4 flex items-baseline gap-2 rounded-md border px-2 py-1 font-mono text-xs tabular-nums transition-colors ${
             armedMarker === 'a' ? 'border-amber-400/60 bg-amber-400/10' : 'border-border1 hover:border-amber-400/40'
@@ -210,10 +205,10 @@ export function ThemeCompare({
           type="button"
         >
           <span className="font-bold text-amber-400">A</span>
-          {markerSummary(snapshotA)}
+          {snapshotSummaryLabel(snapshotA, flows[aIndex])}
         </button>
         <button
-          aria-label={`Point B, ${markerSummary(snapshotB)}`}
+          aria-label={`Point B, ${snapshotSummaryLabel(snapshotB, flows[bIndex])}`}
           aria-pressed={armedMarker === 'b'}
           className={`text-neutral4 flex items-baseline gap-2 rounded-md border px-2 py-1 font-mono text-xs tabular-nums transition-colors ${
             armedMarker === 'b' ? 'border-blue-400/60 bg-blue-400/10' : 'border-border1 hover:border-blue-400/40'
@@ -222,7 +217,7 @@ export function ThemeCompare({
           type="button"
         >
           <span className="font-bold text-blue-400">B</span>
-          {markerSummary(snapshotB)}
+          {snapshotSummaryLabel(snapshotB, flows[bIndex])}
         </button>
         <p className="text-neutral3 text-xs">Clicking the timeline moves point {armedMarker === 'a' ? 'A' : 'B'}.</p>
       </div>

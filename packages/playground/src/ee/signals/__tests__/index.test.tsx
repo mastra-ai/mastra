@@ -147,12 +147,11 @@ describe('Signals page', () => {
       );
     });
 
-    it('labels the populated analysis', async () => {
+    it('shows the snapshot summary under the timeline instead of a page header', async () => {
       renderSignalsPage();
 
-      expect(
-        await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
-      ).not.toBeNull();
+      expect(await screen.findByTestId('snapshot-summary')).not.toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
     });
 
     it('exposes the theme flow as a named region', async () => {

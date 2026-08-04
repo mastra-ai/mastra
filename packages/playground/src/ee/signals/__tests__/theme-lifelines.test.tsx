@@ -257,6 +257,18 @@ describe('SankeySignals lifelines mode', () => {
       expect(persistentRow.querySelectorAll('line')).toHaveLength(4);
     });
 
+    it('shows date, trace count, and theme count under the shared timeline', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+      await screen.findByRole('region', { name: 'Theme lifelines' });
+
+      const lifelines = screen.getByRole('region', { name: 'Theme lifelines' });
+      const summary = within(lifelines).getByTestId('snapshot-summary');
+      expect(summary.textContent).toContain('· 50 traces · 9 themes');
+    });
+
     it('returns to the flow chart when the user switches back', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });

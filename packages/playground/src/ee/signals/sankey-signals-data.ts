@@ -1,6 +1,7 @@
 import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
 
-import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
+import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
+import type { ThemeFlowResponse, ThemeNode, ThemeSnapshot, TraceSignalName } from './types';
 
 const MINIMUM_LAYOUT_WEIGHT = 0.01;
 
@@ -160,4 +161,23 @@ function displayNodeLabel(node: ThemeNode) {
 
 function formatSignalName(signalName: TraceSignalName) {
   return `${signalName.slice(0, 1).toUpperCase()}${signalName.slice(1)}`;
+}
+
+/**
+ * "Date · N traces · N themes" line rendered under the timeline in every view
+ * mode. Counts come from the charted flow (cohort stage totals), so a drilled
+ * flow reports the drilled subset; date-only while the flow is loading.
+ */
+export function snapshotSummaryLabel(snapshot: ThemeSnapshot, flow: ThemeFlowResponse | undefined) {
+  const date = snapshot.cutoffAt
+    ? formatSnapshotCutoff(snapshot.cutoffAt)
+    : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt);
+  if (!flow) return date;
+
+  const traceCount = flow.stages[0]?.traceCount ?? flow.snapshot.traceCount;
+  const themeCount = flow.stages.reduce(
+    (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
+    0,
+  );
+  return `${date} · ${traceLabel(traceCount)} · ${themeCount} themes`;
 }

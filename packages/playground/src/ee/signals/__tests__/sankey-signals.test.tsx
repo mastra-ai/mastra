@@ -398,31 +398,20 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('renders the page identity without duplicating the shell documentation action', async () => {
+    it('renders without the page identity header', async () => {
       renderSankeySignals();
 
-      expect(await screen.findByText('TRACE INTELLIGENCE')).not.toBeNull();
-      expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
-      expect(screen.getByText(/Trace intelligence groups recurring patterns across traces/)).not.toBeNull();
-      expect(screen.queryByRole('link', { name: 'Trace intelligence documentation' })).toBeNull();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      expect(screen.queryByText('TRACE INTELLIGENCE')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
+      expect(screen.queryByTestId('signals-page-header')).toBeNull();
+      expect(screen.queryByRole('list', { name: 'Trace intelligence metrics' })).toBeNull();
     });
 
-    it('shows entity and window in the analysis header without a snapshot ordinal', async () => {
+    it('shows date, trace count, and theme count below the timeline', async () => {
       renderSankeySignals();
 
-      const header = await screen.findByTestId('signals-page-header');
-      expect(within(header).getByText('support-agent · Jul 1–8, 2026')).not.toBeNull();
-      expect(within(header).queryByText(/Snapshot \d/)).toBeNull();
-    });
-
-    it('shows exactly three metrics derived from the loaded flow', async () => {
-      renderSankeySignals();
-
-      const metrics = await screen.findByRole('list', { name: 'Trace intelligence metrics' });
-      expect(within(metrics).getAllByRole('listitem')).toHaveLength(3);
-      expect(within(metrics).getByText('50 traces analyzed')).not.toBeNull();
-      expect(within(metrics).getByText('9 themes')).not.toBeNull();
-      expect(within(metrics).getByText('4 trace signal types')).not.toBeNull();
+      expect(await screen.findByText('Jul 1–8, 2026 · 50 traces · 9 themes')).not.toBeNull();
     });
 
     it('shows the selected snapshot context without controls for a single snapshot', async () => {
@@ -508,7 +497,7 @@ describe('SankeySignals', () => {
     it('does not force the analysis into a separate horizontal scroll region', async () => {
       renderSankeySignals();
 
-      await screen.findByTestId('signals-page-header');
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(screen.queryByTestId('signals-analysis-scroll')).toBeNull();
       expect(screen.queryByTestId('signals-analysis-canvas')).toBeNull();
     });
@@ -1002,9 +991,7 @@ describe('SankeySignals', () => {
       );
       renderSankeySignals();
 
-      const header = await screen.findByTestId('signals-page-header');
-      expect(within(header).getByText('support-agent · Jul 1–8, 2026')).not.toBeNull();
-      expect(screen.getByText('Snapshot 273/303 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 273/303 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
       expect(screen.queryByText(/812/)).toBeNull();
     });
   });
@@ -1021,13 +1008,13 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('uses the charted cohort stage total in the header badge, not snapshot metadata', async () => {
+    it('uses the charted cohort stage total in the timeline summary, not snapshot metadata', async () => {
       renderSankeySignals();
 
-      const metrics = await screen.findByRole('list', { name: 'Trace intelligence metrics' });
-      expect(within(metrics).getByText('70 traces analyzed')).not.toBeNull();
-      expect(within(metrics).queryByText('80 traces analyzed')).toBeNull();
-      expect(within(metrics).queryByText('50 traces analyzed')).toBeNull();
+      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('70 traces'));
+      const summary = screen.getByTestId('snapshot-summary');
+      expect(summary.textContent).not.toContain('80 traces');
+      expect(summary.textContent).not.toContain('50 traces');
     });
 
     it('uses authoritative stage totals for every distribution', async () => {

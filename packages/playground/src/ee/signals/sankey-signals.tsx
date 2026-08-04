@@ -26,10 +26,11 @@ import {
   getSignalRecordNodeLabel,
   getSignalRecordNodeValue,
   selectFlowSnapshotIds,
+  snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
 import { SignalDistributions } from './signal-distributions';
-import { formatSignalName, formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
+import { formatSignalName } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
@@ -284,6 +285,9 @@ export function SankeySignals({
           onPlayingChange={handlePlayingChange}
           onSnapshotChange={selectSnapshot}
         />
+        <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
+          {snapshotSummaryLabel(snapshot, undefined)}
+        </p>
         <SignalsFrameLoadingSkeleton />
       </main>
     );
@@ -303,13 +307,6 @@ export function SankeySignals({
       (distributionPositions.get(left.signalName) ?? stages.length) -
       (distributionPositions.get(right.signalName) ?? stages.length),
   );
-  const themeCount = stages.reduce(
-    (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
-    0,
-  );
-  // Stage totals are the cross-signal cohort actually charted; snapshot
-  // metadata counts every trace any single signal analyzed.
-  const cohortTraceCount = flow.stages[0]?.traceCount ?? flow.snapshot.traceCount;
   const isNodeClickable = drillInAvailable
     ? (selection: SankeyChartNodeSelection) =>
         findThemeSelection(flow, selection.column.id, selection.value) !== undefined
@@ -334,36 +331,6 @@ export function SankeySignals({
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
-      <header className="max-w-3xl" data-testid="signals-page-header">
-        <div className="text-neutral4 flex items-center gap-2 font-mono text-xs font-semibold tracking-widest">
-          <span aria-hidden="true" className="bg-accent1 size-2 rounded-full" />
-          TRACE INTELLIGENCE
-        </div>
-        <h1 className="text-neutral6 mt-2 text-xl font-semibold sm:text-2xl">
-          Understand what drives every agent interaction
-        </h1>
-        <p className="text-neutral3 mt-1.5 text-sm leading-5">
-          Trace intelligence groups recurring patterns across traces so you can see how goal, outcome, behavior, and
-          sentiment trace signals connect.
-        </p>
-        <p className="text-neutral4 mt-2 font-mono text-xs">
-          {entityId} ·{' '}
-          {snapshot.cutoffAt
-            ? `state as of ${formatSnapshotCutoff(snapshot.cutoffAt)}`
-            : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}
-        </p>
-        <ul aria-label="Trace intelligence metrics" className="mt-3 flex flex-wrap gap-2">
-          <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
-            {traceLabel(cohortTraceCount)} analyzed
-          </li>
-          <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
-            {themeCount} themes
-          </li>
-          <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
-            {flow.stages.length} trace signal types
-          </li>
-        </ul>
-      </header>
       <Tabs<SignalsViewMode> value={viewMode} defaultTab="flow" onValueChange={handleViewModeChange} className="w-fit">
         <TabList variant="pill-ghost">
           <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
@@ -399,6 +366,9 @@ export function SankeySignals({
             onPlayingChange={handlePlayingChange}
             onSnapshotChange={selectSnapshot}
           />
+          <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
+            {snapshotSummaryLabel(snapshot, flow)}
+          </p>
           {drillIn ? (
             <nav aria-label="Active theme drill-in" className="text-neutral4 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-neutral6 text-base font-semibold">{drillIn.label}</span>

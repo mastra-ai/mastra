@@ -2,6 +2,7 @@ import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
 import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
+import { snapshotSummaryLabel } from './sankey-signals-data';
 import { formatSignalName, formatSnapshotCutoff } from './signal-formatting';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
@@ -171,6 +172,11 @@ export function ThemeLifelines({
         />
         <span aria-hidden="true" className="w-9 shrink-0" />
       </div>
+      {snapshots[selectedIndex] ? (
+        <p className="text-neutral4 font-mono text-xs" data-testid="snapshot-summary">
+          {snapshotSummaryLabel(snapshots[selectedIndex], flows[selectedIndex])}
+        </p>
+      ) : null}
       {signalNames.map(signalName => (
         <SignalLifelines
           key={signalName}
