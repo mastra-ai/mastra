@@ -122,6 +122,7 @@ export class ObserverRunner {
         this.observationConfig.instruction,
         this.observationConfig.threadTitle,
         extractors,
+        this.observationConfig.instructionMode,
       ),
       model,
       ...(memory ? { memory } : {}),
@@ -329,6 +330,7 @@ export class ObserverRunner {
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
       activeExtractors,
+      this.observationConfig.instructionMode,
     );
     this.lastExchange = {
       systemPrompt,
@@ -553,6 +555,7 @@ export class ObserverRunner {
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
       activeExtractors,
+      this.observationConfig.instructionMode,
     );
     this.lastExchange = {
       systemPrompt,

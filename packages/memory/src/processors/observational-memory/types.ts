@@ -61,6 +61,37 @@ export type ResolvedActivationTTL = number | 'auto';
  */
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
 
+/**
+ * How a custom `instruction` combines with OM's built-in extraction guidance.
+ *
+ * - `'append'` — the instruction is appended under `=== CUSTOM INSTRUCTIONS ===`, after
+ *   OM's defaults. Suited to nudging the default behaviour.
+ * - `'replace'` — the instruction replaces OM's built-in extraction guidance entirely.
+ *   OM still owns the persona, output format, guidelines, and parsing contract, so the
+ *   caller decides *what* to extract while OM decides how the result is shaped.
+ *
+ * @default 'append'
+ */
+export type InstructionMode = 'append' | 'replace';
+
+/**
+ * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
+ *
+ * Pass `false` to disable both, or an object to disable them individually. Agents that
+ * drive their own control flow generally want `suggestedResponse: false` so memory does
+ * not compete with the agent for what to say next.
+ *
+ * @default true
+ */
+export type ContinuationHintsConfig =
+  | boolean
+  | {
+      /** Emit the `<current-task>` section. @default true */
+      currentTask?: boolean;
+      /** Emit the `<suggested-response>` section. @default true */
+      suggestedResponse?: boolean;
+    };
+
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
@@ -192,10 +223,30 @@ export interface ObservationConfig {
   previousObserverTokens?: number | false;
 
   /**
-   * Custom instructions to append to the Observer's system prompt.
+   * Custom instructions for the Observer's system prompt.
    * Use this to customize observation behavior for specific use cases.
+   *
+   * By default the instruction is appended to OM's built-in extraction guidance.
+   * Set {@link ObservationConfig.instructionMode} to `'replace'` to substitute it instead,
+   * which is the better fit when the domain differs enough that the defaults work against you.
    */
   instruction?: string;
+
+  /**
+   * How {@link ObservationConfig.instruction} combines with OM's built-in extraction guidance.
+   * Ignored when `instruction` is not set.
+   *
+   * @default 'append'
+   */
+  instructionMode?: InstructionMode;
+
+  /**
+   * Which continuation-hint sections the Observer should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Manage working memory through Observational Memory extraction.
@@ -329,10 +380,29 @@ export interface ReflectionConfig {
   bufferActivation?: number;
 
   /**
-   * Custom instructions to append to the Reflector's system prompt.
+   * Custom instructions for the Reflector's system prompt.
    * Use this to customize reflection behavior for specific use cases.
+   *
+   * By default the instruction is appended to OM's built-in consolidation guidance.
+   * Set {@link ReflectionConfig.instructionMode} to `'replace'` to substitute it instead.
    */
   instruction?: string;
+
+  /**
+   * How {@link ReflectionConfig.instruction} combines with OM's built-in consolidation guidance.
+   * Ignored when `instruction` is not set.
+   *
+   * @default 'append'
+   */
+  instructionMode?: InstructionMode;
+
+  /**
+   * Which continuation-hint sections the Reflector should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Additional values to extract from reflector output. Built-in OM fields are registered automatically.
@@ -1049,8 +1119,10 @@ export interface ResolvedObservationConfig {
   blockAfter?: number;
   /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
   previousObserverTokens?: number | false;
-  /** Custom instructions to append to the Observer's system prompt */
+  /** Custom instructions for the Observer's system prompt */
   instruction?: string;
+  /** Whether `instruction` is appended to or replaces OM's built-in extraction guidance */
+  instructionMode: InstructionMode;
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
   /** Filter for attachment parts forwarded to the Observer model */
@@ -1076,8 +1148,10 @@ export interface ResolvedReflectionConfig {
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
-  /** Custom instructions to append to the Reflector's system prompt */
+  /** Custom instructions for the Reflector's system prompt */
   instruction?: string;
+  /** Whether `instruction` is appended to or replaces OM's built-in consolidation guidance */
+  instructionMode: InstructionMode;
   /** Resolved reflector extractors, including enabled built-ins and user extractors */
   extractors: Extractor<any>[];
 }

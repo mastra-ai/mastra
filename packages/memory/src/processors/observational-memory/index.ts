@@ -53,6 +53,8 @@ export type {
   ObserveTrigger,
   ObservationConfig,
   ReflectionConfig,
+  InstructionMode,
+  ContinuationHintsConfig,
   ObserverResult,
   ReflectorResult,
   // Observation marker config
@@ -84,8 +86,13 @@ export {
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
+  resolveExtractionInstructions,
+  OBSERVER_EXTRACTION_INSTRUCTIONS,
   type ObserverResult as ObserverAgentResult,
 } from './observer-agent';
+
+// Reflector Agent
+export { REFLECTOR_CONSOLIDATION_INSTRUCTIONS } from './reflector-agent';
 
 // Re-export storage types from core for convenience
 export type {
