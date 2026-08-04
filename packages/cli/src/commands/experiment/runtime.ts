@@ -417,7 +417,9 @@ export async function runExperimentWorker({
         if (type === 'heartbeat') heartbeatQueued = false;
       }
     });
-    writeTail = queuedWrite.catch(() => undefined);
+    writeTail = queuedWrite.catch(error => {
+      if (type === 'heartbeat') abortForProtocolFailure(error instanceof Error ? error.message : String(error));
+    });
     return queuedWrite;
   };
   const finish = async (
@@ -430,6 +432,8 @@ export async function runExperimentWorker({
     finishing = true;
     clearInterval(heartbeat);
     try {
+      await writeTail;
+      if (protocolFailure) throw protocolFailure;
       await writeEvent('terminal', {
         status,
         ...(status === 'failed' ? { retryable } : {}),
@@ -703,12 +707,18 @@ export async function runExperimentWorker({
   const iterator = stdin[Symbol.asyncIterator]();
   while (!terminal && !protocolFailure) {
     const nextChunk = iterator.next();
-    const result = runPromise
-      ? await Promise.race([
-          nextChunk.then(input => ({ type: 'input' as const, input })),
-          runPromise.then(() => ({ type: 'run-complete' as const })),
-        ])
-      : { type: 'input' as const, input: await nextChunk };
+    let result: { type: 'input'; input: IteratorResult<Buffer | string> } | { type: 'run-complete' };
+    try {
+      result = runPromise
+        ? await Promise.race([
+            nextChunk.then(input => ({ type: 'input' as const, input })),
+            runPromise.then(() => ({ type: 'run-complete' as const })),
+          ])
+        : { type: 'input' as const, input: await nextChunk };
+    } catch (error) {
+      abortForProtocolFailure(`stdin read failed: ${error instanceof Error ? error.message : String(error)}`);
+      break;
+    }
     if (result.type === 'run-complete') {
       void nextChunk.catch(() => undefined);
       (stdin as NodeJS.ReadableStream & { destroy?(): void }).destroy?.();

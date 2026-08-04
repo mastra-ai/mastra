@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import { ToolMockMatcher } from '@mastra/core/datasets';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -454,6 +454,98 @@ describe('runExperimentWorker', () => {
       .map(line => JSON.parse(line));
     expect(events.filter(event => event.type === 'terminal')).toHaveLength(1);
     expect(events.at(-1)?.payload).toMatchObject({ status: 'failed', retryable: false });
+  });
+
+  it('reports stdin read failures through protocol finalization', async () => {
+    const request = createRequest();
+    const stdin = Readable.from(
+      (async function* () {
+        yield `${JSON.stringify(request)}\n`;
+        throw new Error('stdin unavailable');
+      })(),
+    );
+    const stdout = new PassThrough();
+    let output = '';
+    stdout.setEncoding('utf8').on('data', chunk => (output += chunk));
+
+    const result = runExperimentWorker({
+      mastra: { shutdown: vi.fn().mockResolvedValue(undefined) },
+      build,
+      stdin,
+      stdout,
+      stderr: new PassThrough(),
+      runExperiment: async (_mastra, config) => {
+        if (!config.signal.aborted) {
+          await new Promise<void>(resolve => config.signal.addEventListener('abort', () => resolve(), { once: true }));
+        }
+      },
+    });
+
+    await expect(result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.protocol);
+    expect(output).toContain('"type":"process-failure"');
+    expect(output).toContain('stdin read failed: stdin unavailable');
+    expect(output).toContain('"status":"failed"');
+  });
+
+  it('does not publish a successful terminal after a queued heartbeat write fails', async () => {
+    vi.useFakeTimers();
+    try {
+      const request = createRequest();
+      request.deadlineAt = new Date(Date.now() + 60_000).toISOString();
+      const stdin = new PassThrough();
+      const stdout = new PassThrough();
+      let output = '';
+      stdout.setEncoding('utf8').on('data', chunk => (output += chunk));
+      const originalWrite = stdout.write.bind(stdout);
+      let writeCount = 0;
+      stdout.write = ((chunk: Uint8Array | string) => {
+        writeCount += 1;
+        if (writeCount === 2) return false;
+        return originalWrite(chunk);
+      }) as typeof stdout.write;
+      let completeRun: (() => void) | undefined;
+      const runReady = new Promise<void>(resolve => {
+        completeRun = resolve;
+      });
+      const result = runExperimentWorker({
+        mastra: { shutdown: vi.fn().mockResolvedValue(undefined) },
+        build,
+        stdin,
+        stdout,
+        stderr: new PassThrough(),
+        runExperiment: async (_mastra, config) => {
+          await runReady;
+          await config.onEvent({
+            type: 'experiment.run.finished',
+            version: 1,
+            experimentId: config.experimentId,
+            sequence: 1,
+            timestamp: new Date().toISOString(),
+            target: { type: config.targetType, id: config.targetId },
+            outcome: 'completed',
+            completedWithErrors: false,
+          });
+        },
+      });
+      stdin.write(`${JSON.stringify(request)}\n`);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(writeCount).toBe(2);
+
+      completeRun?.();
+      await Promise.resolve();
+      await Promise.resolve();
+      stdout.emit('error', new Error('stdout unavailable'));
+
+      await expect(result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.protocol);
+      const terminal = output
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line))
+        .findLast(event => event.type === 'terminal');
+      expect(terminal?.payload).toMatchObject({ status: 'failed', retryable: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('cancels only with the complete active correlation tuple', async () => {
