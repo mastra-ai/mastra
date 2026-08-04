@@ -4,6 +4,7 @@ description: "Reference for Editor tool sources, providers, descriptions, condit
 packages:
   - "@mastra/core"
   - "@mastra/editor"
+  - "@mastra/mcp"
 ---
 
 # Tool configuration
@@ -42,6 +43,12 @@ Conditions apply to a tool field variant or MCP client reference. Per-tool `rule
 ## Stored MCP clients
 
 The `editor.mcp` namespace manages reusable MCP client configurations. See the [`mcp` namespace](/reference/editor/mastra-editor#namespaces) for CRUD method signatures.
+
+`@mastra/mcp` is an optional peer dependency of `@mastra/editor`. Install it before configuring stored MCP clients so Editor can load their tools at runtime:
+
+```bash npm2yarn
+npm install @mastra/mcp
+```
 
 ### Transports
 

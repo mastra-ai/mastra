@@ -230,4 +230,4 @@ Arcade tools use `Toolkit.ToolName` format: `Github.GetRepository`, `Slack.SendM
 
 ### Authentication
 
-The legacy Arcade resolver uses `resourceId` from request context when available. It otherwise falls back to the supplied `userId`, then to a shared `default` identity.
+The legacy Arcade resolver uses `resourceId` from request context when available. It otherwise falls back to the supplied `userId`, then to a shared `default` identity. Use `default` only for intentionally shared integrations. In tenant-isolated deployments, provide a trusted, stable `resourceId` or explicit `userId`. Omitting both doesn't isolate callers.
