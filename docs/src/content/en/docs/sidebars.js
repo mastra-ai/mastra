@@ -16,14 +16,8 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'doc',
-      id: 'index',
-      label: 'Get Started',
-    },
-    {
       type: 'category',
-      label: 'Essentials',
-      collapsible: false,
+      label: 'Start',
       collapsed: false,
       customProps: {
         displayAsGroup: true,
@@ -31,31 +25,18 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'what-is-mastra',
-          label: 'What is Mastra?',
+          id: 'index',
+          label: 'Get Started',
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/build-with-ai',
-          label: 'Build with AI',
+          id: 'getting-started/develop',
+          label: 'Develop',
         },
         {
           type: 'doc',
           id: 'storage/overview',
           label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/file-based-agents',
-          label: 'File-based Agents',
-          customProps: {
-            tags: ['beta'],
-          },
         },
       ],
     },
@@ -283,42 +264,9 @@ const sidebars = {
               label: 'Observability',
             },
             {
-              type: 'category',
-              label: 'Agent Builder',
-              items: [
-                { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-                { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-                { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-                { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-                { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-                { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-                { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-                { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-                { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-                { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-                { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-              ],
-            },
-            {
-              type: 'category',
+              type: 'doc',
+              id: 'editor/overview',
               label: 'Editor',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'editor/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'editor/tools',
-                  label: 'Tools',
-                },
-                {
-                  type: 'doc',
-                  id: 'editor/prompts',
-                  label: 'Prompts',
-                },
-              ],
             },
           ],
         },
@@ -446,68 +394,6 @@ const sidebars = {
               type: 'doc',
               id: 'capabilities/channels/other-adapters',
               label: 'More',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'RAG',
-          items: [
-            {
-              type: 'doc',
-              id: 'rag/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'rag/chunking-and-embedding',
-              label: 'Chunking and Embedding',
-            },
-            {
-              type: 'doc',
-              id: 'rag/vector-databases',
-              label: 'Vector Databases',
-            },
-            {
-              type: 'doc',
-              id: 'rag/retrieval',
-              label: 'Retrieval',
-            },
-            {
-              type: 'doc',
-              id: 'rag/graph-rag',
-              label: 'GraphRAG',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Voice',
-          items: [
-            {
-              type: 'doc',
-              id: 'voice/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'voice/text-to-speech',
-              label: 'Text to Speech',
-            },
-            {
-              type: 'doc',
-              id: 'voice/speech-to-text',
-              label: 'Speech to Text',
-            },
-            {
-              type: 'doc',
-              id: 'voice/speech-to-speech',
-              label: 'Speech to Speech',
-            },
-            {
-              type: 'doc',
-              id: 'voice/realtime-voice',
-              label: 'Realtime Voice',
             },
           ],
         },
@@ -960,22 +846,6 @@ const sidebars = {
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
-            {
-              type: 'category',
-              label: 'Datasets',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'evals/datasets/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'evals/datasets/running-experiments',
-                  label: 'Running Experiments',
-                },
-              ],
-            },
           ],
         },
         {
@@ -1024,6 +894,22 @@ const sidebars = {
               customProps: {
                 tags: ['beta'],
               },
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'datasets/running-experiments',
+              label: 'Running Experiments',
             },
           ],
         },

@@ -22,7 +22,6 @@ import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
-import { WorkingIndicator } from '../domains/chat/components/WorkingIndicator';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
@@ -133,14 +132,13 @@ function ThreadShell({ workspacePath, children }: { workspacePath: string | unde
 }
 
 function ThreadTranscript() {
-  const { transcript, showWorkingIndicator } = useChatTranscript();
+  const { transcript } = useChatTranscript();
 
   return (
     <>
       <TranscriptHistoryLoader />
       {transcript.entries.length === 0 && <EmptyThreadState />}
       <Transcript />
-      {showWorkingIndicator && <WorkingIndicator />}
     </>
   );
 }

@@ -108,12 +108,9 @@ function ChatTranscriptValueProvider({
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
   const busy = connection.state?.running === true || effectiveTranscript.pending;
-  const lastEntry = effectiveTranscript.entries.at(-1);
-  const showWorkingIndicator = busy && !(lastEntry?.kind === 'message' && lastEntry.streaming);
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,
-    showWorkingIndicator,
     localUser,
     reset,
     resolvePrompt,
