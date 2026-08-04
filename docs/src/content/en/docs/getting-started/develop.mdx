@@ -60,7 +60,7 @@ mastra api --url http://localhost:4111 agent run agent '{"messages":"Hello"}'
 mastra api --url http://localhost:4111 trace list
 ```
 
-Remember to install the [Mastra skills](#mastra-skills) to teach your coding agent how to use the CLI.
+Remember to install the [Mastra skill](#mastra-skill) to teach your coding agent how to use the CLI.
 
 ## Project structure
 
@@ -105,29 +105,20 @@ Watch [AI Search](https://youtu.be/sj4yondKtMs) for a video walkthrough of file-
 
 :::
 
-### Basic layout
+### Start with two files
 
-Each agent has its own directory. Its configuration, instructions, tools, and skills are co-located:
+A file-based agent lives in its own directory under `src/mastra/agents/`. To create a working agent, add a `config.ts` file for its model and runtime options and an `instructions.md` file for its always-on prompt:
 
 ```text
-src/mastra/
-  agents/
-    agent/
-      config.ts
-      instructions.md
-      tools/
-        tool.ts
-      skills/
-        skill.md
+src/mastra/agents/
+  writing-assistant/
+    config.ts
+    instructions.md
 ```
 
-Only `config.ts` and `instructions.md` are required. Add other capabilities as needed.
+The directory name becomes the agent's default `id` and `name`. In this example, Mastra registers the agent as `writing-assistant`.
 
-### Quickstart
-
-In `src/mastra/agents/agent/`, create these two files:
-
-```typescript title="src/mastra/agents/agent/config.ts"
+```typescript title="src/mastra/agents/writing-assistant/config.ts"
 import { agentConfig } from '@mastra/core/agent'
 
 export default agentConfig({
@@ -135,32 +126,30 @@ export default agentConfig({
 })
 ```
 
-```markdown title="src/mastra/agents/agent/instructions.md"
-You are a helpful assistant.
+```markdown title="src/mastra/agents/writing-assistant/instructions.md"
+You are a writing assistant. Rewrite text so it is clear, concise, and direct.
 ```
 
-Run `mastra dev`, then open Studio and select `agent`.
+Run `mastra dev`, open Studio, and select `writing-assistant`. Try asking it:
 
-### Add capabilities
+```text
+Rewrite this sentence: Our platform provides users with the ability to build agents quickly.
+```
 
-Add capabilities with these file conventions:
+### Paths provide identity
 
-| Capability | File convention |
+Mastra uses paths to discover and name file-based capabilities. An agent directory supplies the default agent `id` and `name`. Inside the agent, `tools/search_docs.ts` registers the tool as `search_docs`, while `skills/style-guide.md` registers the skill as `style-guide`.
+
+### Add capabilities when needed
+
+Start with configuration and instructions, then add files or directories as the agent needs more capabilities:
+
+| Path | What it adds |
 | - | - |
-| [Agent config](/reference/file-based-agents/config) | `src/mastra/agents/<agent-id>/config.ts` |
-| [Instructions](/reference/file-based-agents/instructions) | `src/mastra/agents/<agent-id>/instructions.md` |
-| [Tools](/reference/file-based-agents/tools) | `src/mastra/agents/<agent-id>/tools/` |
-| [Skills](/reference/file-based-agents/skills) | `src/mastra/agents/<agent-id>/skills/` |
-| [Memory](/reference/file-based-agents/memory) | `src/mastra/agents/<agent-id>/memory.ts` |
-| [Workspace](/reference/file-based-agents/workspace) | `src/mastra/agents/<agent-id>/workspace.ts` and `src/mastra/agents/<agent-id>/workspace/` |
-| [Processors](/reference/file-based-agents/processors) | `src/mastra/agents/<agent-id>/processors/` |
-| [Scorers](/reference/file-based-agents/scorers) | `src/mastra/agents/<agent-id>/scorers/` |
-| [Subagents](/reference/file-based-agents/subagents) | `src/mastra/agents/<agent-id>/subagents/` |
-| [Workflows](/reference/file-based-agents/workflows) | `src/mastra/workflows/` |
-| [Storage](/reference/file-based-agents/storage) | `src/mastra/storage.ts` |
-| [Observability](/reference/file-based-agents/observability) | `src/mastra/observability.ts` |
-| [Logger](/reference/file-based-agents/logger) | `src/mastra/logger.ts` |
-| [Server config](/reference/file-based-agents/server) | `src/mastra/server.ts` |
-| [Studio config](/reference/file-based-agents/studio) | `src/mastra/studio.ts` |
-| AgentController | Not yet file-based; create at runtime with `new AgentController()` |
-| Schedules | Not yet file-based; create at runtime with `mastra.schedules.create()` |
+| [`tools/<tool-name>.ts`](/reference/file-based-agents/tools) | Functions the model can call |
+| [`skills/<skill-name>.md`](/reference/file-based-agents/skills) | Detailed guidance the agent loads when relevant |
+| [`memory.ts`](/reference/file-based-agents/memory) | Conversation history and working context |
+| [`workspace.ts` and `workspace/`](/reference/file-based-agents/workspace) | Filesystem and shell access |
+| [`subagents/<agent-id>/`](/reference/file-based-agents/subagents) | Specialist agents that the parent can delegate to |
+
+Keep each capability next to the agent that uses it. Mastra discovers and registers these files when the development server starts or restarts.
