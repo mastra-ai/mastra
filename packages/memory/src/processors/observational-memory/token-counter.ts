@@ -1770,6 +1770,23 @@ export class TokenCounter {
         return { tokens, overheadDelta, toolResultDelta };
       }
 
+      if (invocation.state === 'output-error') {
+        // A failed tool call surfaces its error text to the model in place of a result,
+        // so count it like a small tool result to keep token accounting consistent
+        // (and not throw on the state).
+        toolResultDelta++;
+        const errorText = (invocation as { errorText?: string }).errorText ?? 'Tool execution failed';
+        tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorText);
+        return { tokens, overheadDelta, toolResultDelta };
+      }
+
+      if (invocation.state === 'approval-responded') {
+        // An answered approval is control metadata with no model-visible output of its
+        // own; the resulting tool output arrives separately as a 'result' or
+        // 'output-error' part. Mirror 'approval-requested' and count nothing.
+        return { tokens, overheadDelta, toolResultDelta };
+      }
+
       throw new Error(
         `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
       );
