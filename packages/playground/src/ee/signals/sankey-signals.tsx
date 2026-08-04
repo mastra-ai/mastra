@@ -49,6 +49,8 @@ export interface SankeySignalsProps {
   dateFrom?: Date;
   dateTo?: Date;
   height?: number;
+  /** Date range control rendered in line with the view mode tabs. */
+  dateRangePicker?: React.ReactNode;
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
@@ -198,6 +200,11 @@ function FlowCard({
   );
 }
 
+/** Right-aligned control row shown when the view tabs are unavailable. */
+function DateRangeRow({ children }: { children: React.ReactNode }) {
+  return <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{children}</div>;
+}
+
 export function SankeySignals({
   entityId,
   entityType = 'agent',
@@ -205,6 +212,7 @@ export function SankeySignals({
   dateFrom,
   dateTo,
   height,
+  dateRangePicker,
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
@@ -313,28 +321,46 @@ export function SankeySignals({
     onSuccess: setSignalNames,
   });
 
-  if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
-
-  if (snapshotsQuery.isError || hasFlowError || hasActivePathsError) {
+  if (snapshotsQuery.isPending) {
     return (
-      <SignalsErrorState
-        message="Unable to load trace signal flow."
-        onRetry={() => {
-          setIsPlaying(false);
-          void snapshotsQuery.refetch();
-          void Promise.all(flowQueries.map(query => query.refetch()));
-          if (drillIn && drillInAvailable) void pathsQuery.refetch();
-        }}
-        onClear={hasActivePathsError ? () => setDrillIn(undefined) : undefined}
-      />
+      <>
+        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        <SignalsLoadingSkeleton />
+      </>
     );
   }
 
-  if (!snapshot) return <SignalsEmptyState LinkComponent={Link} />;
+  if (snapshotsQuery.isError || hasFlowError || hasActivePathsError) {
+    return (
+      <>
+        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        <SignalsErrorState
+          message="Unable to load trace signal flow."
+          onRetry={() => {
+            setIsPlaying(false);
+            void snapshotsQuery.refetch();
+            void Promise.all(flowQueries.map(query => query.refetch()));
+            if (drillIn && drillInAvailable) void pathsQuery.refetch();
+          }}
+          onClear={hasActivePathsError ? () => setDrillIn(undefined) : undefined}
+        />
+      </>
+    );
+  }
+
+  if (!snapshot) {
+    return (
+      <>
+        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        <SignalsEmptyState LinkComponent={Link} />
+      </>
+    );
+  }
 
   if (isFlowPending) {
     return (
       <main className="min-w-0 space-y-5 p-4 lg:p-6">
+        {dateRangePicker && <div className="flex justify-end">{dateRangePicker}</div>}
         <SnapshotTimeline
           snapshots={snapshots}
           selectedIndex={selectedSnapshotIndex}
@@ -354,7 +380,12 @@ export function SankeySignals({
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
 
   if (!currentFlow || !flow || !graphSummary || populatedStageCount < 2) {
-    return <SignalsEmptyState LinkComponent={Link} />;
+    return (
+      <>
+        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        <SignalsEmptyState LinkComponent={Link} />
+      </>
+    );
   }
 
   const stages = flow.stages;
@@ -389,13 +420,21 @@ export function SankeySignals({
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
-      <Tabs<SignalsViewMode> value={viewMode} defaultTab="flow" onValueChange={handleViewModeChange} className="w-fit">
-        <TabList variant="pill-ghost">
-          <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
-          <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
-          <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
-        </TabList>
-      </Tabs>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <Tabs<SignalsViewMode>
+          value={viewMode}
+          defaultTab="flow"
+          onValueChange={handleViewModeChange}
+          className="w-fit"
+        >
+          <TabList variant="pill-ghost">
+            <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
+            <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
+            <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+          </TabList>
+        </Tabs>
+        {dateRangePicker}
+      </div>
       {viewMode === 'compare' ? (
         <ThemeCompare
           entityId={entityId}

@@ -6,8 +6,9 @@ import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SignalsOverviewPage from '..';
-import { navHandle } from '../../../lib/nav';
+import { navHandleWithChildren } from '../../../lib/nav';
 import { RouteHeader } from '../../../lib/route-header/route-header';
+import { SignalsEntityCrumb } from '../signals-entity-crumb';
 import {
   drilldownThemeFlowResponse,
   firstThemeExamplesResponse,
@@ -46,7 +47,9 @@ function renderSignalsPageWithShell() {
     [
       {
         path: '/intelligence',
-        handle: navHandle('/intelligence'),
+        handle: navHandleWithChildren('/intelligence', [
+          { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
+        ]),
         element: (
           <QueryClientProvider client={queryClient}>
             <RouteHeader />
@@ -58,6 +61,10 @@ function renderSignalsPageWithShell() {
     { initialEntries: ['/intelligence'] },
   );
   return render(<RouterProvider router={router} />);
+}
+
+function headerAgentSelector() {
+  return within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('combobox');
 }
 
 afterEach(() => {
@@ -114,12 +121,12 @@ describe('Signals page', () => {
         ),
       );
 
-      renderSignalsPage();
+      renderSignalsPageWithShell();
 
       expect(await screen.findByText('Unable to load trace intelligence entities.')).not.toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-      expect(await screen.findByRole('combobox', { name: 'Agent' })).not.toBeNull();
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
       expect(attempts).toBe(2);
     });
   });
@@ -167,10 +174,20 @@ describe('Signals page', () => {
       expect(screen.getAllByRole('link', { name: 'Trace intelligence documentation' })).toHaveLength(1);
     });
 
-    it('keeps the single agent visible in the selector', async () => {
-      renderSignalsPage();
+    it('keeps the single agent visible in the header selector', async () => {
+      renderSignalsPageWithShell();
 
-      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+    });
+
+    it('shows the agent selector in the breadcrumb instead of a page-level control row', async () => {
+      renderSignalsPageWithShell();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      const main = screen.getByRole('main');
+      expect(within(main).queryByRole('combobox')).toBeNull();
+      expect(screen.queryByText('Snapshot date')).toBeNull();
+      expect(within(main).getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
     });
   });
 
@@ -221,7 +238,7 @@ describe('Signals page', () => {
   });
 
   describe('when an eligible agent is loaded with the default snapshot range', () => {
-    it('requests snapshots from the last seven days and labels the cutoff control', async () => {
+    it('requests snapshots from the last seven days without a snapshot date label', async () => {
       vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
       const snapshotRequests: URL[] = [];
       server.use(
@@ -238,7 +255,7 @@ describe('Signals page', () => {
       renderSignalsPage();
 
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
-      expect(screen.getByText('Snapshot date')).not.toBeNull();
+      expect(screen.queryByText('Snapshot date')).toBeNull();
       expect(screen.getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
       expect(snapshotRequests).toHaveLength(1);
       expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-20T12:00:00.000Z');
@@ -358,9 +375,9 @@ describe('Signals page', () => {
         ),
       );
 
-      renderSignalsPage();
+      renderSignalsPageWithShell();
 
-      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
       expect(screen.queryByText('Not enough trace signal data yet')).toBeNull();
     });
   });
@@ -378,27 +395,28 @@ describe('Signals page', () => {
       );
     });
 
-    it('lists every agent in the always-visible selector', async () => {
-      renderSignalsPage();
+    it('lists every agent in the header selector', async () => {
+      renderSignalsPageWithShell();
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
 
-      const selector = await screen.findByRole('combobox', { name: 'Agent' });
-      fireEvent.click(selector);
+      fireEvent.click(headerAgentSelector());
 
       expect(await screen.findByRole('option', { name: 'support-agent' })).not.toBeNull();
       expect(screen.getByRole('option', { name: 'triage-agent' })).not.toBeNull();
     });
 
     it('explains why the selected agent cannot render a flow', async () => {
-      renderSignalsPage();
+      renderSignalsPageWithShell();
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
 
-      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      fireEvent.click(headerAgentSelector());
       const triageAgent = await screen.findByRole('option', { name: 'triage-agent' });
       fireEvent.pointerDown(triageAgent, { pointerType: 'mouse' });
       fireEvent.click(triageAgent, { detail: 1 });
 
       expect(await screen.findByText('Not enough trace signal data yet')).not.toBeNull();
       expect(screen.getByText('Available trace signals: Goal')).not.toBeNull();
-      expect(screen.getByRole('combobox', { name: 'Agent' })).not.toBeNull();
+      expect(headerAgentSelector().textContent).toContain('triage-agent');
     });
   });
 
@@ -424,8 +442,9 @@ describe('Signals page', () => {
           });
         }),
       );
-      renderSignalsPage();
-      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      renderSignalsPageWithShell();
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+      fireEvent.click(headerAgentSelector());
       const billingAgent = await screen.findByRole('option', { name: 'billing-agent' });
 
       fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
