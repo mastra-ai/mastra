@@ -698,6 +698,7 @@ export class Mastra<
 
   #storage?: MastraCompositeStore;
   #storageExplicit = false;
+  #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #scorers?: TScorers;
   #tools?: TTools;
@@ -1411,11 +1412,19 @@ export class Mastra<
       this.#storageExplicit = true;
     } else {
       storage = new InMemoryStore();
-      this.#logger?.warn(
-        'No `storage` configured on Mastra — falling back to an in-memory store. ' +
-          'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
-          'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
-      );
+      this.#storageFallbackWarningPending = true;
+      queueMicrotask(() => {
+        if (!this.#storageFallbackWarningPending) {
+          return;
+        }
+
+        this.#storageFallbackWarningPending = false;
+        this.#logger?.warn(
+          'No `storage` configured on Mastra — falling back to an in-memory store. ' +
+            'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
+            'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+        );
+      });
     }
     storage = augmentWithInit(storage);
 
@@ -5106,6 +5115,7 @@ export class Mastra<
    * ```
    */
   public setStorage(storage: MastraCompositeStore) {
+    this.#storageFallbackWarningPending = false;
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
