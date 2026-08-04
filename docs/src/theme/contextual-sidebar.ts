@@ -94,7 +94,7 @@ export function findInitialContextualSidebarCategory(
   }
 
   for (const item of items) {
-    if (isContextualCategory(item) && getLocalPathname(item.href, siteUrl) === normalizedPathname) {
+    if (isContextualCategory(item) && collectContextualSidebarPathnames(item, siteUrl).includes(normalizedPathname)) {
       return item
     }
 

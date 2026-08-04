@@ -284,15 +284,17 @@ test.describe('Contextual sidebar', () => {
     expect(getErrors(), 'JS errors during contextual sidebar navigation').toEqual([])
   })
 
-  test('desktop: direct overview loads initialize context while later history remains transient', async ({
+  test('desktop: direct destination loads initialize context while later history remains transient', async ({
     page,
     isMobile,
   }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
 
-    const directResponse = await page.request.get('/docs/agents/overview')
-    expect(directResponse.ok()).toBe(true)
-    expect(await directResponse.text()).toMatch(/data-sidebar-pane=(?:"contextual"|contextual)/)
+    for (const path of ['/docs/agents/overview', '/docs/agents/skills']) {
+      const directResponse = await page.request.get(path)
+      expect(directResponse.ok()).toBe(true)
+      expect(await directResponse.text()).toMatch(/data-sidebar-pane=(?:"contextual"|contextual)/)
+    }
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await visibleSidebarPane(page, 'root').getByRole('link', { name: 'Agents', exact: true }).click()
@@ -312,8 +314,16 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
     await expect(page).toHaveURL('/docs/agents/overview')
 
-    await page.goto('/docs/agents/using-tools', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/agents/skills', { waitUntil: 'domcontentloaded' })
+    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
+    await expect(
+      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Skills', exact: true }),
+    ).toHaveAttribute('aria-current', 'page')
+    await page.reload()
+    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to docs' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+    await expect(page).toHaveURL('/docs/agents/skills')
   })
 
   test('desktop: modified click leaves the opener unchanged and the new overview tab initializes context', async ({
@@ -345,7 +355,7 @@ test.describe('Contextual sidebar', () => {
     await expect(newPage).toHaveURL('/docs/agents/overview')
     await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
     await expect(childPage).toHaveURL('/docs/agents/using-tools')
-    await expect(visibleSidebarPane(childPage, 'root')).toBeVisible()
+    await expect(visibleSidebarPane(childPage, 'contextual')).toBeVisible()
   })
 
   test('mobile and tablet: modified click leaves the drawer and root pane unchanged', async ({
@@ -382,7 +392,7 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
     await expect(childPage).toHaveURL('/docs/agents/using-tools')
     await openMobileSidebar(childPage)
-    await expect(visibleSidebarPane(childPage, 'root')).toBeVisible()
+    await expect(visibleSidebarPane(childPage, 'contextual')).toBeVisible()
   })
 
   test('mobile and tablet: drawer closes on navigation and Back swaps panes without closing', async ({
@@ -420,6 +430,14 @@ test.describe('Contextual sidebar', () => {
       'aria-expanded',
       'false',
     )
+
+    await page.goto('/docs/agents/skills', { waitUntil: 'domcontentloaded' })
+    await page.reload()
+    await openMobileSidebar(page)
+    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
+    await expect(
+      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Skills', exact: true }),
+    ).toHaveAttribute('aria-current', 'page')
 
     expect(getErrors(), 'JS errors during mobile contextual sidebar navigation').toEqual([])
   })
