@@ -1,6 +1,6 @@
 ---
 title: "Stored workflows | Workflows"
-description: "Define workflows as JSON definitions that persist in storage, survive restarts, and run like code-defined workflows."
+description: "Create, persist, update, and run workflows from JSON definitions."
 packages:
   - "@mastra/core"
 ---
@@ -19,296 +19,137 @@ Because a definition contains no JavaScript closures, anything that can produce 
 
 ## When to use stored workflows
 
-Use stored workflows when workflows are created or changed at runtime, for example:
+Use stored workflows when users, agents, visual editors, or external systems need to create workflows without changing application code or deploying again.
 
-- Letting users or agents compose workflows without a deploy.
-- Building workflow authoring tools on top of Mastra.
-- Managing workflow definitions from an external system through the [server API](/reference/server/routes) or [Client SDK](/reference/client-js/workflows).
+Keep defining workflows with [`createWorkflow()`](/docs/workflows/overview) when the workflow belongs in your application source or needs custom step functions. Stored workflows can invoke agents, tools, and workflows that are already registered on the `Mastra` instance.
 
-Keep defining workflows in code with [`createWorkflow()`](/docs/workflows/overview) when the workflow logic is part of your application and needs custom `execute` functions. Stored workflows can only reference agents, tools, and other workflows that are already registered on your `Mastra` instance.
+## Quickstart
 
-## Definition shape
+The following example registers a tool and invokes it from a stored workflow. It then runs the workflow. `LibSQLStore` persists the definition in `mastra.db`, so Mastra can restore it after a restart.
 
-A stored workflow definition has the following top-level fields:
+```typescript title="src/stored-workflow.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { createTool } from '@mastra/core/tools'
+import { LibSQLStore } from '@mastra/libsql'
+import { z } from 'zod'
 
-| Field | Required | Description |
-| - | - | - |
-| `id` | Yes | Unique workflow ID. Also the ID used to run the workflow. |
-| `description` | No | Human-readable description |
-| `inputSchema` | Yes | JSON Schema for the workflow input |
-| `outputSchema` | Yes | JSON Schema for the workflow output |
-| `stateSchema` | No | JSON Schema for shared [workflow state](/docs/workflows/workflow-state) |
-| `requestContextSchema` | No | JSON Schema for values read from the request context |
-| `metadata` | No | Arbitrary JSON metadata, preserved through storage |
-| `graph` | Yes | Array of step entries executed in order |
+const greetingTool = createTool({
+  id: 'create-greeting',
+  description: 'Create a greeting for a name',
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  outputSchema: z.object({
+    message: z.string(),
+  }),
+  execute: async ({ name }) => ({
+    message: `Hello, ${name}!`,
+  }),
+})
 
-Schemas use JSON Schema rather than Zod because the definition must round-trip through JSON. Mastra converts them to Zod internally when the workflow is registered.
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+  tools: { 'create-greeting': greetingTool },
+})
 
-The following example defines a workflow with a single mapping step:
-
-```json
-{
-  "id": "greeting-workflow",
-  "description": "Returns a greeting for the supplied name",
-  "inputSchema": {
-    "type": "object",
-    "properties": { "name": { "type": "string" } },
-    "required": ["name"]
+await mastra.addStoredWorkflow({
+  id: 'greeting-workflow',
+  description: 'Create a greeting for the supplied name',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+    },
+    required: ['name'],
   },
-  "outputSchema": {
-    "type": "object",
-    "properties": { "message": { "type": "string" } },
-    "required": ["message"]
+  outputSchema: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
   },
-  "graph": [
+  graph: [
     {
-      "type": "mapping",
-      "id": "create-greeting",
-      "mapConfig": "{\"message\":{\"template\":\"Hello, ${initData.name}!\"}}"
-    }
-  ]
-}
-```
-
-## Graph entries
-
-The `graph` array holds step entries. Entries run in order, and each entry receives the previous entry's output as its input. The first entry receives the workflow input.
-
-| Entry type | Description |
-| - | - |
-| `agent` | Invoke a registered agent |
-| `tool` | Invoke a registered tool |
-| `mapping` | Reshape data between steps |
-| `workflow` | Invoke a registered workflow as a nested step |
-| `parallel` | Run several steps concurrently and merge their outputs |
-| `conditional` | Run every branch whose predicate is true, concurrently |
-| `foreach` | Run one step per item of an array input |
-| `loop` | Repeat a step while or until a predicate holds |
-| `sleep` | Pause for a fixed duration |
-| `sleepUntil` | Pause until a fixed date |
-
-You don't have to write these entries by hand. Code-defined workflows that add agents and tools with the [`.agent()`](/reference/workflows/workflow-methods/agent) and [`.tool()`](/reference/workflows/workflow-methods/tool) builder methods produce the same declarative entries, so their graphs serialize into this format.
-
-### Agent steps
-
-An `agent` entry invokes a registered agent by ID. Agent steps always accept `{ prompt: string }` as input and return `{ text: string }` by default:
-
-```json
-{
-  "type": "agent",
-  "id": "summarize",
-  "agentId": "support-agent"
-}
-```
-
-The `id` is the step's call-site ID within this workflow. Later steps address the result as `stepResults.summarize`, regardless of the agent's own ID.
-
-To get structured output instead of `{ text }`, add an `outputSchema`. Mastra wires the schema into the agent call as structured output:
-
-```json
-{
-  "type": "agent",
-  "id": "extract-subtopics",
-  "agentId": "support-agent",
-  "outputSchema": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": { "title": { "type": "string" } },
-      "required": ["title"]
-    }
-  }
-}
-```
-
-Because agent steps require a `{ prompt }` object, use a `mapping` step before the agent to build the prompt from workflow data.
-
-Agent entries also accept an optional `description` and an `options` object with two persistable fields, `retries` and `metadata`:
-
-```json
-{
-  "type": "agent",
-  "id": "summarize",
-  "agentId": "support-agent",
-  "description": "Summarize the incoming request",
-  "options": { "retries": 2, "metadata": { "team": "support" } }
-}
-```
-
-Only `retries` and `metadata` round-trip through storage. Options that hold functions, such as `onFinish` or a function-valued `toolChoice`, are rejected with an error when a code-defined workflow is stored, and other agent call options don't persist.
-
-### Tool steps
-
-A `tool` entry invokes a registered tool by ID. The tool's own input and output schemas apply; they're resolved from the registry when the workflow is registered:
-
-```json
-{
-  "type": "tool",
-  "id": "lookup",
-  "toolId": "lookup-customer"
-}
-```
-
-Tool entries accept the same optional `description` and `options` fields as agent entries, with the same `retries` and `metadata` limits.
-
-### Mapping steps
-
-A `mapping` entry reshapes data. Its `mapConfig` is a JSON **string** (so it round-trips through storage unchanged) that encodes an object: each key becomes a key of the step's output, and its descriptor defines exactly one source:
-
-| Descriptor | Description |
-| - | - |
-| `{ "value": ... }` | A constant JSON value |
-| `{ "template": "..." }` | A string built from `${...}` placeholders |
-| `{ "initData": true, "path": "a.b" }` | A value from the workflow input |
-| `{ "step": "step-id", "path": "a.b" }` | A value from a preceding step's output |
-| `{ "requestContextPath": "a.b" }` | A value from the request context |
-
-The `step` source also accepts an array of step IDs, such as `{ "step": ["escalate", "auto-reply"], "path": "text" }`. The first listed step with a non-empty result supplies the value, which selects the branch that ran after a `conditional` entry.
-
-Templates resolve placeholders against the roots `initData`, `inputData`, `state`, `requestContext`, and `stepResults.<step-id>`:
-
-```json
-{
-  "type": "mapping",
-  "id": "build-prompt",
-  "mapConfig": "{\"prompt\":{\"template\":\"Summarize this request: ${initData.request}\"}}"
-}
-```
-
-Objects and arrays resolved by a template are stringified as JSON. `null` values inside a present result render as empty strings, and a template that references a step with no successful output fails the run rather than silently producing an empty string.
-
-Mapping steps must be top-level entries in the graph. They can't be placed inside `parallel`, `conditional`, `foreach`, or `loop` containers.
-
-### Nested workflow steps
-
-A `workflow` entry invokes another registered workflow, which can be code-defined or another stored workflow:
-
-```json
-{
-  "type": "workflow",
-  "id": "lookup-first",
-  "workflowId": "lookup-customer-workflow"
-}
-```
-
-The `id` is the call-site ID: the same nested workflow can appear multiple times in one graph under different IDs, and later steps address each result as `stepResults.<id>`. Like agent and tool entries, a `workflow` entry accepts an optional `description`.
-
-### Parallel and conditional
-
-`parallel` runs several single steps concurrently and merges their outputs into one object keyed by step ID. `conditional` pairs each step with a declarative predicate and runs every branch whose predicate is true, concurrently:
-
-```json
-{
-  "type": "conditional",
-  "steps": [
-    { "type": "agent", "id": "escalate", "agentId": "support-agent" },
-    { "type": "agent", "id": "auto-reply", "agentId": "support-agent" }
+      type: 'tool',
+      id: 'greet',
+      toolId: 'create-greeting',
+    },
   ],
-  "predicates": [
-    { "op": "eq", "left": { "path": "inputData.priority" }, "right": { "literal": "urgent" } },
-    { "op": "ne", "left": { "path": "inputData.priority" }, "right": { "literal": "urgent" } }
-  ]
-}
-```
+})
 
-Steps inside `parallel` and `conditional` must be single steps (`agent`, `tool`, or `workflow`), and every conditional branch requires a declarative predicate. All branches receive the container's input directly. To give branches different inputs, map one common object before the container and let each branch consume the fields it needs, or nest a workflow that does its own mapping.
-
-### Predicates
-
-Conditional branches and loops use a JSON predicate DSL instead of closures. Operands are either `{ "path": "..." }` references or `{ "literal": ... }` values. Paths resolve against `initData`, `inputData`, `stepResults`, and `state`.
-
-| Operator | Shape |
-| - | - |
-| `eq`, `ne`, `lt`, `lte`, `gt`, `gte` | `{ "op": "eq", "left": ..., "right": ... }` |
-| `in`, `notIn` | `{ "op": "in", "value": ..., "set": [...] }` |
-| `exists`, `notExists` | `{ "op": "exists", "path": "..." }` |
-| `truthy`, `falsy` | `{ "op": "truthy", "value": ... }` |
-| `and`, `or` | `{ "op": "and", "args": [...] }` |
-| `not` | `{ "op": "not", "arg": ... }` |
-
-Missing paths never throw: path-based operators return `false` when the path can't be resolved. Use `exists` or `notExists` to distinguish a missing value from a falsy one.
-
-### Foreach and loop
-
-`foreach` runs its body once per item of an array input. The preceding step must produce a raw array. Each invocation receives one item and results preserve input order. Concurrency defaults to `1`:
-
-```json
-{
-  "type": "foreach",
-  "step": { "type": "workflow", "id": "write-blurb", "workflowId": "blurb-workflow" },
-  "opts": { "concurrency": 3 }
-}
-```
-
-The foreach body can be an `agent`, `tool`, or `workflow` step, but not a `mapping`. Mappings always build objects while a foreach consumes a raw array, so the step before the foreach (or the workflow input itself) must already be an array of the body's input.
-
-`loop` repeats a single step while (`dowhile`) or until (`dountil`) a predicate holds. Stored loops require a declarative predicate:
-
-```json
-{
-  "type": "loop",
-  "loopType": "dountil",
-  "step": { "type": "tool", "id": "poll", "toolId": "check-status" },
-  "predicate": {
-    "op": "eq",
-    "left": { "path": "inputData.status" },
-    "right": { "literal": "done" }
-  }
-}
-```
-
-### Sleep
-
-`sleep` pauses for a fixed number of milliseconds, and `sleepUntil` pauses until a fixed date (an ISO date string in JSON). Stored definitions require literal values. Durations computed at runtime need a code-defined workflow:
-
-```json
-{ "type": "sleep", "id": "wait", "duration": 5000 }
-```
-
-```json
-{ "type": "sleepUntil", "id": "wait-for-launch", "date": "2027-01-01T00:00:00.000Z" }
-```
-
-## Adding stored workflows
-
-Add a stored workflow in code with [`mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow), over HTTP with `POST /api/stored/workflows` on the [Mastra server](/reference/server/routes), or from the [Client SDK](/reference/client-js/workflows) with `upsertStoredWorkflow()`. Each path validates and persists the definition before registering it as a live workflow.
-
-Adding a definition with an existing ID replaces the stored definition and the live registration. In-flight runs are unaffected and keep the graph they started with.
-
-When a root workflow nests helper workflows that don't exist yet, submit them together as a bundle: [`mastra.addStoredWorkflows()`](/reference/core/addStoredWorkflows) in code, or the `dependencies` field of the HTTP and Client SDK upsert. Mastra validates the bundle as a unit, then registers members in dependency order so helpers exist before the workflows that nest them. A rejected bundle registers nothing.
-
-### Validation
-
-Definitions are validated before anything is persisted or registered:
-
-- Structure: entry shapes and required fields, plus placement rules such as top-level-only mappings.
-- References: every `agentId`, `toolId`, and `workflowId` must resolve against the live registries (or the same bundle).
-- Schema flow: each step's input must be compatible with what the previous step produces, including mapping output inference.
-
-Validation failures include a dotted path (for example `graph.2.steps.0`) pointing at the offending entry.
-
-## Durability
-
-Stored definitions persist through the `workflowDefinitions` storage domain. On boot, Mastra loads all active definitions from storage and registers each one, in dependency order. See the [storage reference](/reference/storage/overview) for which adapters support the domain.
-
-Without a storage adapter that supports `workflowDefinitions`, `addStoredWorkflow()` still validates and registers the workflow in memory, but the definition is lost on restart.
-
-## Running stored workflows
-
-A registered stored workflow runs like any other workflow:
-
-```typescript
 const workflow = mastra.getWorkflow('greeting-workflow')
 const run = await workflow.createRun()
-const result = await run.start({ inputData: { name: 'Ada' } })
+const result = await run.start({
+  inputData: { name: 'Ada' },
+})
+
+if (result.status === 'success') {
+  console.log(result.result.message)
+}
 ```
 
-On authenticated servers, stored-workflow management requires the `stored-workflows:read` and `stored-workflows:write` permissions, and running the workflow requires `workflows:execute`.
+The workflow prints `Hello, Ada!`. Calling [`addStoredWorkflow()`](/reference/core/addStoredWorkflow) validates the definition before it changes storage or the live workflow registry.
+
+The definition uses JSON Schema because it must survive a JSON round trip. The `graph` describes which registered components to invoke and how data moves between them. See the [stored workflow definition reference](/reference/workflows/stored-workflow-definition) for every field and graph entry.
+
+## Build and update definitions
+
+A definition can come from any source that produces JSON. For example, an API route can accept a definition created by a visual editor and register it directly:
+
+```typescript
+const definition = await request.json()
+await mastra.addStoredWorkflow(definition)
+```
+
+### Register dependencies first
+
+Register referenced components on the same `Mastra` instance before adding the stored workflow. Agent and nested workflow entries use their intrinsic IDs. A tool entry uses its key from the `Mastra` `tools` object, so the quickstart registers the tool under `create-greeting` before referencing that key with `toolId`.
+
+Use a `mapping` entry when one step's output doesn't match the next step's input. Mapping entries can read data from the workflow input and previous step results, along with workflow state and request context. The [definition reference](/reference/workflows/stored-workflow-definition#mapping-steps) lists the supported mapping descriptors.
+
+### Replace a workflow
+
+Add a new definition with the same `id` to replace the persisted definition and live registration:
+
+```typescript
+await mastra.addStoredWorkflow(updatedDefinition)
+```
+
+New runs use the updated graph. Runs that already started continue with their original graph.
+
+### Add nested workflows together
+
+When a root workflow references helper workflows that aren't registered yet, add the full set with [`addStoredWorkflows()`](/reference/core/addStoredWorkflows):
+
+```typescript
+await mastra.addStoredWorkflows([rootDefinition, helperDefinition])
+```
+
+Mastra validates the bundle as a unit and determines the registration order from the dependencies. If validation fails, none of the definitions are registered.
+
+### Manage definitions over HTTP
+
+Applications don't need direct access to the `Mastra` instance to manage stored workflows. Use one of these interfaces:
+
+- [Client SDK workflows API](/reference/client-js/workflows): Call `upsertStoredWorkflow()` from a JavaScript or TypeScript client.
+- [Server routes](/reference/server/routes): Send definitions to `POST /api/stored/workflows`.
+
+On authenticated servers, stored-workflow management requires the `stored-workflows:read` and `stored-workflows:write` permissions. Running the registered workflow requires `workflows:execute`.
+
+### Persist definitions
+
+Stored definitions use the `workflowDefinitions` storage domain. On startup, Mastra loads active definitions from storage and registers them in dependency order.
+
+Without a storage adapter that supports this domain, `addStoredWorkflow()` still registers the workflow in memory, but the definition is lost when the process restarts. See the [storage reference](/reference/storage/overview) for adapter support.
 
 ## Related
 
-- [Client SDK: stored workflows](/reference/client-js/workflows)
-- [Server routes](/reference/server/routes)
+- [Stored workflow definition](/reference/workflows/stored-workflow-definition)
 - [`Mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow)
 - [`Mastra.addStoredWorkflows()`](/reference/core/addStoredWorkflows)
-- [Storage overview](/reference/storage/overview)
+- [Client SDK workflows API](/reference/client-js/workflows)
+- [Server routes](/reference/server/routes)
