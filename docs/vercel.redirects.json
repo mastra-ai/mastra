@@ -1129,6 +1129,11 @@
       "source": "/docs/voice/:path*",
       "destination": "/guides/voice/:path*",
       "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/:path*",
+      "destination": "/docs/datasets/:path*",
+      "permanent": true
     }
   ]
 }

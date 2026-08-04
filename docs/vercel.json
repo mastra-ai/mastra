@@ -1146,6 +1146,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/evals/datasets/:path*",
+      "destination": "/docs/datasets/:path*",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -1933,6 +1938,11 @@
     {
       "source": "/docs/voice/:path*/llms.txt",
       "destination": "/guides/voice/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/:path*/llms.txt",
+      "destination": "/docs/datasets/:path*/llms.txt",
       "permanent": true
     }
   ]
