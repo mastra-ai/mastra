@@ -1,6 +1,5 @@
 ---
-'@mastra/playground-ui': patch
 '@mastra/client-js': patch
 ---
 
-Added optional landmark metadata to trace signal theme snapshot responses: a per-snapshot selection reason and the total number of in-range snapshots, returned when the theme-snapshots endpoint is queried with the landmarks presentation.
+Added landmark support to trace signal theme snapshot types: an optional `presentation: 'landmarks'` request option, a per-snapshot selection `reason`, a `cutoffAt` timestamp for time-axis placement, and a top-level `totalSnapshots` count returned when the theme-snapshots endpoint is queried in landmarks mode.
