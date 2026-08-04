@@ -221,8 +221,9 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     error,
     status: computeTraceStatus({ error, endedAt }),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
-    // Written alongside `input` at insert time — see `spanRecordToRow`.
-    inputPreview: nullableString(row.inputPreview),
+    // Derived at read time from the raw `input` column; buildInputPreview parses
+    // internally and can recover a preview from truncated JSON.
+    inputPreview: buildInputPreview(row.input ?? null) ?? null,
     createdAt: startedAt,
     updatedAt: null,
   };
@@ -272,7 +273,6 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     attributes: jsonEncode(span.attributes),
     links: jsonEncode(span.links),
     input: jsonEncode(span.input),
-    inputPreview: buildInputPreview(span.input) ?? null,
     output: jsonEncode(span.output),
     error: jsonEncode(span.error),
     requestContext: jsonEncode(span.requestContext),

@@ -63,9 +63,9 @@ type TraceRootProjection = {
 };
 
 /**
- * Columns a trace list renders. `inputPreview` is stored next to `input` at insert
- * time (see `spanRecordToRow`) precisely so listing never reads the `input` blob —
- * ClickHouse would have to decompress the whole column just to slice it.
+ * Columns a trace list renders. `input` is selected only so the row mapper can
+ * derive a short `inputPreview` at read time (see `rowToLightSpanRecord`); the
+ * raw blob itself never leaves the store.
  */
 const LIGHT_TRACE_ROOT_FIELDS = [
   'traceId',
@@ -81,7 +81,7 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'entityName',
   'error',
   'metadataRaw',
-  'inputPreview',
+  'input',
 ];
 
 const FULL_PROJECTION: TraceRootProjection = {
@@ -249,8 +249,8 @@ export async function listTraces(
 
 /**
  * List traces projecting only the columns a trace list renders.
- * Never reads the attributes/input/output blobs, so payload and ClickHouse read
- * volume stay flat as traces grow.
+ * Skips the attributes/output blobs and reduces `input` to a short preview in
+ * the mapper, so the response payload stays flat as traces grow.
  */
 export async function listTracesLight(
   client: ClickHouseClient,
