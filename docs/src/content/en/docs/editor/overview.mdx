@@ -10,7 +10,7 @@ packages:
 
 # Editor
 
-Editor works like a CMS for your agents. It enables collaborators to update an agent in Studio without needing access to your codebase or the ability to write code. They can change its instructions and tools, then test a draft before publishing it.
+Editor works like a CMS for your agents. Collaborators can change an agent's instructions and tools in Studio without accessing the codebase or writing code. They can test changes before making them live.
 
 TypeScript defines the agent's default values. Editor saves changes separately instead of updating the source code, so collaborators can improve the agent while developers retain control over its model, identity, and runtime.
 
@@ -24,7 +24,7 @@ Watch the [Mastra Editor workshop](https://www.youtube.com/watch?v=XTjuRoI7t_k\&
 
 ## When to use Editor
 
-Use Editor when an agent is defined in code but the people responsible for its behavior shouldn't need to edit the codebase. It works well when instructions or tools change often and collaborators need to test those changes before they reach users. If developers own every change and always release agent configuration with the application, keep the [agent configuration in code](/docs/agents/overview) instead.
+Use Editor when an agent is defined in code but the people responsible for its behavior shouldn't edit the codebase. It works well when instructions or tools change often and need testing before they reach users. If developers own every change and release agent configuration with the application, keep the [agent configuration in code](/docs/agents/overview) instead.
 
 ## Quickstart
 
@@ -53,13 +53,13 @@ export const mastra = new Mastra({
 
 ## Use Editor in Studio
 
-In [Studio](/docs/studio/overview), open **Agents**, select an agent, then select **Editor**. From there, collaborators can update the agent's instructions and tools based on its Editor permissions.
+In [Studio](/docs/studio/overview), open **Agents**, select an agent, then select **Editor**. Collaborators can update the agent's instructions and tools based on its Editor permissions.
 
-Save changes as a draft to test them without affecting the live agent. Publish the draft when it's ready to use.
+With database storage, save changes as a draft to test them without affecting the live agent. Publish the draft when it's ready to use.
 
 ## Instructions
 
-The **Instructions** section shows the agent's system prompt defined in code. Collaborators can replace it or add more instruction blocks.
+The **Instructions** section shows the agent's system prompt defined in code. Collaborators can override it or add instruction blocks.
 
 An instruction block can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through [request context](/docs/server/request-context). A [display condition](/reference/editor/prompt-blocks#display-conditions) can show a block only for a customer, role, or feature flag.
 
@@ -67,7 +67,7 @@ An instruction block can include values from the current request. For example, <
 
 A prompt block is a saved piece of instruction text that can be used by more than one agent. Create one under **Prompts**, publish it, then open an agent's **Instructions** section and select **Add block**.
 
-For example, a support agent, returns agent, and order-status agent may all need the same refund policy. Save the policy as a prompt block and add it to each agent. When the policy changes, update and publish the block once instead of editing three agents.
+For example, agents for support, returns, and order status may all need the same refund policy. Save the policy as a prompt block and add it to each agent. When the policy changes, update and publish the block once instead of editing three agents.
 
 When a prompt block changes, every agent that references its published version receives the update. Draft changes are used only while previewing, so they don't affect the live agents until the block is published.
 
@@ -75,19 +75,13 @@ See the [prompt blocks reference](/reference/editor/prompt-blocks) for template 
 
 ## Tools
 
-Tools let an agent take actions. Editor can use tools already registered on the Mastra instance, tools from integration providers, and tools exposed by MCP servers.
-
-Collaborators choose from the tools made available to Editor. They can't write a new tool implementation in Studio, but developers don't have to define every tool individually either:
+Tools let an agent take actions. Collaborators choose from the tools available to Editor, but they can't implement new tools in Studio. How tools become available depends on their source:
 
 - **Project tools** must be implemented and registered in the Mastra project by a developer.
 - **Integration tools** become available after a developer registers a provider such as Composio or Arcade. Collaborators can then browse the provider's catalog and add tools without each tool being added in code first.
 - **MCP tools** become available when an MCP client is configured. A collaborator with access can create the client in Studio, then choose from the tools exposed by its servers.
 
-The agent's `editor` setting still controls what collaborators can do. With `tools: true`, they can add or remove available tools. With `tools: { description: true }`, they can only edit descriptions for tools already added in code.
-
 In the agent's **Tools** section, add the tools it needs. You can also rewrite a tool's description for that agent. A more specific description helps the agent understand when to use the tool without changing the tool itself.
-
-Tools are saved as part of the agent's draft. You can test a different set before publishing, then return to the previous version if the change doesn't work as expected.
 
 ### Project tools
 
@@ -107,7 +101,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The Studio tool picker now lists the tool. A collaborator can add it to an agent when that agent allows tool editing. The agent's Editor view also lists tools attached in code.
+The Studio tool picker lists the tool. A collaborator can add it to an agent when that agent allows tool editing. The agent's Editor view also lists tools attached in code.
 
 ### Composio
 
@@ -159,7 +153,7 @@ Arcade tool IDs use `Toolkit.ToolName` format, such as `Github.GetRepository`.
 
 Collaborators can also create a reusable MCP client in Studio and add its tools to an agent. Stored clients can start a local `stdio` server or connect to a remote HTTP server. Tool filters let each agent use only the tools it needs from that server.
 
-See the [Editor tools reference](/reference/editor/tools) for provider options, MCP configuration, conditions, and tool filtering.
+See the [Editor tools reference](/reference/editor/tools) for MCP configuration, conditions, filtering, and resolution order. See [`ToolProvider`](/reference/editor/tool-provider) for provider options.
 
 ## Decide what collaborators can edit
 
@@ -248,7 +242,7 @@ export const mastra = new Mastra({
 })
 ```
 
-In this mode, Studio writes one JSON override file for each agent. It doesn't generate TypeScript or change the file where you created the agent. By default, an agent with the ID `support-agent` gets this file:
+In this mode, each edited agent has one JSON override file. Editor doesn't generate TypeScript or change the file where you created the agent. By default, an agent with the ID `support-agent` gets this file:
 
 ```text
 mastra/editor/agents/support-agent.json
@@ -275,11 +269,9 @@ See [`MastraEditor`](/reference/editor/mastra-editor#source) for file locations 
 
 ## Versioning
 
-Versioning depends on where Editor stores changes. Database-backed agents and prompt blocks use draft and published versions. Code-backed agent overrides use JSON files and Git history.
+Database-backed agents and prompt blocks use draft and published versions. Saving creates a draft while the live agent continues using the published version. Publishing makes the draft live. Restoring an older version creates a draft that you can test before publishing.
 
-With the database option, saving a change creates a draft version. The live agent keeps using the published version until you publish the draft.
-
-Publishing makes that version live. Restoring an older version creates another draft first, so you can test it before it replaces the current version.
+Code-backed agent overrides use JSON files and Git history.
 
 ### Select a version
 
