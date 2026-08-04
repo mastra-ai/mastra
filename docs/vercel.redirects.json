@@ -1034,6 +1034,81 @@
       "source": "/docs/getting-started/file-based-agents",
       "destination": "/docs/getting-started/develop",
       "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/overview",
+      "destination": "https://agent-builder.mastra.ai/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/access-control",
+      "destination": "https://agent-builder.mastra.ai/access-control",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/browser",
+      "destination": "https://agent-builder.mastra.ai/browser",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/channels",
+      "destination": "https://agent-builder.mastra.ai/channels",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/configuration",
+      "destination": "https://agent-builder.mastra.ai/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/deploying",
+      "destination": "https://agent-builder.mastra.ai/deployment",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/integrations",
+      "destination": "https://agent-builder.mastra.ai/tool-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/memory",
+      "destination": "https://agent-builder.mastra.ai/memory",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/model-policy",
+      "destination": "https://agent-builder.mastra.ai/model-policy",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/skill-registries",
+      "destination": "https://agent-builder.mastra.ai/skill-registries",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/workspace",
+      "destination": "https://agent-builder.mastra.ai/workspace",
+      "permanent": true
+    },
+    {
+      "source": "/reference/editor/agent-builder/agent-builder-options",
+      "destination": "https://agent-builder.mastra.ai/reference/agent-builder-options",
+      "permanent": true
+    },
+    {
+      "source": "/reference/editor/agent-builder/builder-agent-defaults",
+      "destination": "https://agent-builder.mastra.ai/reference/builder-agent-defaults",
+      "permanent": true
+    },
+    {
+      "source": "/reference/editor/agent-builder/builder-models",
+      "destination": "https://agent-builder.mastra.ai/reference/builder-models",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/agent-builder",
+      "destination": "https://agent-builder.mastra.ai/reference/client",
+      "permanent": true
     }
   ]
 }
