@@ -63,6 +63,7 @@ function renderSignalsPageWithShell() {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('Signals page', () => {
@@ -313,7 +314,10 @@ describe('Signals page', () => {
 
   describe('when a custom snapshot date range is applied', () => {
     it('requests snapshots with inclusive start and end timestamps', async () => {
-      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
+      // Freeze the full clock (not just Date.now) so the calendar's month
+      // matches the frozen date regardless of when the test runs.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
       const snapshotRequests: URL[] = [];
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),

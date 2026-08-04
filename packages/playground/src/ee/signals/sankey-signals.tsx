@@ -285,6 +285,9 @@ export function SankeySignals({
     (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
     0,
   );
+  // Stage totals are the cross-signal cohort actually charted; snapshot
+  // metadata counts every trace any single signal analyzed.
+  const cohortTraceCount = flow.stages[0]?.traceCount ?? flow.snapshot.traceCount;
   const isNodeClickable = drillInAvailable
     ? (selection: SankeyChartNodeSelection) =>
         findThemeSelection(flow, selection.column.id, selection.value) !== undefined
@@ -329,7 +332,7 @@ export function SankeySignals({
         </p>
         <ul aria-label="Trace intelligence metrics" className="mt-3 flex flex-wrap gap-2">
           <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
-            {traceLabel(flow.snapshot.traceCount)} analyzed
+            {traceLabel(cohortTraceCount)} analyzed
           </li>
           <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
             {themeCount} themes

@@ -1021,11 +1021,12 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('uses the authoritative snapshot total in the header badge', async () => {
+    it('uses the charted cohort stage total in the header badge, not snapshot metadata', async () => {
       renderSankeySignals();
 
       const metrics = await screen.findByRole('list', { name: 'Trace intelligence metrics' });
-      expect(within(metrics).getByText('80 traces analyzed')).not.toBeNull();
+      expect(within(metrics).getByText('70 traces analyzed')).not.toBeNull();
+      expect(within(metrics).queryByText('80 traces analyzed')).toBeNull();
       expect(within(metrics).queryByText('50 traces analyzed')).toBeNull();
     });
 
