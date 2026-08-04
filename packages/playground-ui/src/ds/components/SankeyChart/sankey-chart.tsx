@@ -261,6 +261,20 @@ function SankeyNode({
 
   return (
     <>
+      {/* Rendered outside the interactive group so hovering the header never opens a theme tooltip. */}
+      {showColumnLabel && visibleColumnLabel ? (
+        <text
+          x={labelX}
+          y={18}
+          textAnchor={textAnchor}
+          fill={nodeColor(hue)}
+          fontSize={COLUMN_LABEL_FONT_SIZE}
+          fontWeight={600}
+        >
+          {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
+          {visibleColumnLabel}
+        </text>
+      ) : null}
       <g
         aria-describedby={description ? tooltipId : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
@@ -289,20 +303,8 @@ function SankeyNode({
         style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
       >
-        <title>{displayLabel}</title>
-        {showColumnLabel && visibleColumnLabel ? (
-          <text
-            x={labelX}
-            y={18}
-            textAnchor={textAnchor}
-            fill={nodeColor(hue)}
-            fontSize={COLUMN_LABEL_FONT_SIZE}
-            fontWeight={600}
-          >
-            {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
-            {visibleColumnLabel}
-          </text>
-        ) : null}
+        {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
+        {description ? null : <title>{displayLabel}</title>}
         <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
         <text
           x={labelX}

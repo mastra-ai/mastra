@@ -355,6 +355,30 @@ describe('SankeyChart', () => {
       expect(container.querySelector('svg path[fill-opacity]')?.getAttribute('fill-opacity')).toBe('0.75');
     });
 
+    it('shows only the custom tooltip, never a second native title popup', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+
+      fireEvent.mouseEnter(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+      expect(node.querySelector('title')).toBeNull();
+    });
+
+    it('does not open the theme tooltip when the column header is hovered', async () => {
+      const { container } = renderDescribedNode();
+      await screen.findByLabelText(nodeLabel);
+      const header = [...container.querySelectorAll('svg text[font-size="12"]')].find(
+        label => label.textContent === 'Channel',
+      );
+      if (!header) throw new Error('Column header was not rendered');
+
+      fireEvent.mouseEnter(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
+      expect(screen.getByLabelText(nodeLabel).contains(header)).toBe(false);
+    });
+
     it('keeps the description and ribbons active when a hovered node loses focus', async () => {
       const { container } = renderDescribedNode();
       const node = await screen.findByLabelText(nodeLabel);

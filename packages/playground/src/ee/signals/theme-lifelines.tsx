@@ -42,9 +42,12 @@ function LifelineRow({
   return (
     <li
       aria-label={`${row.label}: present in ${row.points.length} of ${snapshots.length} landmarks`}
-      className={`flex items-center gap-3 ${isPersistent ? '' : 'opacity-55'}`}
+      className={`group hover:bg-surface3 flex items-center gap-3 rounded-md transition-colors ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
     >
-      <span className="text-neutral4 w-52 shrink-0 truncate text-right text-xs" title={row.label}>
+      <span
+        className="text-neutral4 group-hover:text-neutral6 w-52 shrink-0 truncate text-right text-xs"
+        title={row.label}
+      >
         {row.label}
       </span>
       <div className="border-border1 relative mx-2 h-7 min-w-0 flex-1 border-b">
