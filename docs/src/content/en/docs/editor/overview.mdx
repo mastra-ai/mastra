@@ -190,34 +190,9 @@ Editor can save changes in your database or as files in your repository.
 
 ### Your configured database
 
-The database option is the default. Editor uses the storage configured on your `Mastra` instance for agent changes and prompt blocks. It keeps their version history there too. If your app already uses a supported store such as LibSQL, PostgreSQL, or MongoDB, Editor can use that same store.
+The database option is the default. Editor uses the storage configured on your `Mastra` instance, so your application and Editor can share the same backend.
 
-You can also give Editor its own database. The following example keeps the app and Editor in separate LibSQL files:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraCompositeStore } from '@mastra/core/storage'
-import { MastraEditor } from '@mastra/editor'
-import { LibSQLStore } from '@mastra/libsql'
-
-export const mastra = new Mastra({
-  agents: {/* your existing agents */},
-  storage: new MastraCompositeStore({
-    id: 'mastra-storage',
-    default: new LibSQLStore({
-      id: 'app-storage',
-      url: 'file:./mastra.db',
-    }),
-    editor: new LibSQLStore({
-      id: 'editor-storage',
-      url: 'file:./editor.db',
-    }),
-  }),
-  editor: new MastraEditor(),
-})
-```
-
-Collaborators can save drafts and publish from Studio. Their changes go to `editor.db` in this example, not to the agent's source file.
+To use a separate backend for Editor data, set the `editor` option on [`MastraCompositeStore`](/reference/storage/composite#options). Storage domains without an explicit route continue to use its `default` store.
 
 ### Files in your repository
 
