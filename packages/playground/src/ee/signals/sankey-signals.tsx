@@ -253,8 +253,13 @@ export function SankeySignals({
   const flowQueries = useThemeFlows(entityId, entityType, signalNames, flowSnapshotIds);
   const flowQuery = flowQueries[flowSnapshotIds.indexOf(snapshot?.snapshotId ?? '')];
   const currentFlow = flowQuery?.data;
-  const isFlowPending = flowQueries.some(query => query.isPending);
+  // The loading skeleton tracks only the selected snapshot's flow; prefetched
+  // neighbors warm the cache in the background without blocking the chart.
+  const isFlowPending = flowQuery?.isPending ?? false;
+  // Errors stay window-wide: a failed preload surfaces the retry state instead
+  // of letting playback advance into a broken frame.
   const hasFlowError = flowQueries.some(query => query.isError);
+  const isFlowWindowBusy = flowQueries.some(query => query.isPending) || hasFlowError;
   const windowFlows = useMemo(() => flowQueries.flatMap(query => (query.data ? [query.data] : [])), [flowQueries]);
   const stableUnfilteredFlow = useMemo(
     () => (currentFlow ? stabilizeThemeFlow(currentFlow, windowFlows) : undefined),
@@ -286,7 +291,7 @@ export function SankeySignals({
 
   useSnapshotPlayback({
     isPlaying,
-    isPlaybackBlocked: isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn,
+    isPlaybackBlocked: isFlowWindowBusy || isPlaybackBlockedByDrillIn,
     nextSnapshot: nextSnapshotOrdinal,
     onAdvance: ordinal => {
       if (ordinal === undefined) {

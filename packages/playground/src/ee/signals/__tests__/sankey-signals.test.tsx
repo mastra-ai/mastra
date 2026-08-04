@@ -10,9 +10,11 @@ import { SankeySignals } from '../sankey-signals';
 import {
   getSignalRecordNodeId,
   getSignalRecordNodeLabel,
+  snapshotSummaryLabel,
   stabilizeThemeFlow,
   themeFlowToSankeyData,
 } from '../sankey-signals-data';
+import { formatSnapshotCutoff } from '../signal-formatting';
 import type { ThemeFlowResponse } from '../types';
 import {
   duplicateLabelThemeFlowResponse,
@@ -120,6 +122,33 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe('snapshotSummaryLabel', () => {
+  describe('when the flow holds exactly one theme', () => {
+    it('reports the theme count in the singular', () => {
+      const firstStage = themeFlowResponse.stages[0];
+      const singleThemeFlow: ThemeFlowResponse = {
+        ...themeFlowResponse,
+        stages: firstStage
+          ? [{ ...firstStage, nodes: firstStage.nodes.filter(node => node.kind === 'theme').slice(0, 1) }]
+          : [],
+        links: [],
+      };
+
+      const label = snapshotSummaryLabel(themeSnapshotsResponse.snapshots[0], singleThemeFlow);
+
+      expect(label.endsWith('· 1 theme')).toBe(true);
+    });
+  });
+});
+
+describe('formatSnapshotCutoff', () => {
+  describe('when the server sends an unparseable timestamp', () => {
+    it('falls back to the raw value instead of throwing', () => {
+      expect(formatSnapshotCutoff('not-a-timestamp')).toBe('not-a-timestamp');
+    });
+  });
 });
 
 describe('stabilizeThemeFlow', () => {
@@ -249,6 +278,27 @@ describe('SankeySignals', () => {
 
       expect(await screen.findByRole('status', { name: 'Loading trace intelligence' })).not.toBeNull();
       expect(screen.getByTestId('signals-loading-skeleton')).not.toBeNull();
+    });
+  });
+
+  describe('when only a prefetched neighbor flow is still loading', () => {
+    it('renders the selected snapshot flow instead of the loading skeleton', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(multiThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          // The selected snapshot resolves; its prefetched neighbor never does.
+          if (snapshotId === 'snapshot-3') await new Promise(() => {});
+          return HttpResponse.json(fourStageThemeFlowResponse);
+        }),
+      );
+
+      renderSankeySignals();
+
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
+      expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
     });
   });
 

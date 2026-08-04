@@ -1,6 +1,6 @@
 import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
 
-import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
+import { formatSnapshotCutoff, formatSnapshotWindow, themeLabel, traceLabel } from './signal-formatting';
 import type { ThemeFlowResponse, ThemeNode, ThemeSnapshot, TraceSignalName } from './types';
 
 const MINIMUM_LAYOUT_WEIGHT = 0.01;
@@ -179,5 +179,5 @@ export function snapshotSummaryLabel(snapshot: ThemeSnapshot, flow: ThemeFlowRes
     (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
     0,
   );
-  return `${date} · ${traceLabel(traceCount)} · ${themeCount} themes`;
+  return `${date} · ${traceLabel(traceCount)} · ${themeLabel(themeCount)}`;
 }
