@@ -99,7 +99,11 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
   const user = wrapped ? (raw.user as RequestContextUser) : raw;
   const orgId = wrapped ? raw.session?.activeOrganizationId : user.organizationId;
   const userId = user.workosId ?? user.id;
-  if (!userId) return undefined;
+  // The slot holds whatever the provider returned, so the declared string
+  // types are hopes, not guarantees. A non-string id must refuse the tenant
+  // (fail closed), not flow onward as a mistyped key.
+  if (typeof userId !== 'string' || !userId) return undefined;
+  if (orgId !== undefined && typeof orgId !== 'string') return undefined;
   return { orgId, userId };
 }
 
