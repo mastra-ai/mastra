@@ -6,23 +6,14 @@
 '@mastra/server': patch
 ---
 
-Added an actionable server warning when an agent channel webhook returns 404 because its channel adapter route was not registered.
+Added a clear server warning when a webhook is sent to an agent without a matching channel adapter. No adapter setup is needed for the warning:
 
-Register the adapter before sending events to `POST /api/agents/your-agent/channels/slack/webhook`:
+```sh
+curl -X POST http://localhost:4111/api/agents/support/channels/slack/webhook
+```
 
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { createSlackAdapter } from '@chat-adapter/slack';
+The server keeps the 404 response and logs:
 
-const agent = new Agent({
-  id: 'your-agent',
-  name: 'Your Agent',
-  instructions: 'Help users in Slack.',
-  model: 'openai/gpt-5-mini',
-  channels: {
-    adapters: {
-      slack: createSlackAdapter(),
-    },
-  },
-});
+```text
+Received a Slack webhook, but this agent doesn't have a Slack adapter. Add one to the agent's channels.adapters configuration and restart the server.
 ```
