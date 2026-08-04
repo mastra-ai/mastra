@@ -212,7 +212,7 @@ unsubscribe()
   {
     name: 'idGenerator',
     type: '() => string',
-    description: 'Custom identifier generator for threads, messages, and runs.',
+    description: 'Custom identifier generator for threads, messages, and signals.',
     isOptional: true,
   },
   {
@@ -434,10 +434,9 @@ await controller.init()
 
 #### `destroy()`
 
-Stop controller-owned interval handlers. Session stream cleanup remains the caller's responsibility.
+Stop controller-owned interval handlers. This doesn't destroy Sessions created by the controller.
 
 ```typescript
-session.abort()
 await controller.destroy()
 ```
 

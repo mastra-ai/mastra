@@ -528,7 +528,7 @@ const modelId = session.model.get()
 
 ### `session.model.displayName()`
 
-Return a short display name for the active model: the last segment of the model ID (for example, `claude-sonnet-4` from `anthropic/claude-sonnet-4`). Returns `'unknown'` when no model is selected.
+Return the last segment of the active model ID as a short display name. Returns `'unknown'` when no model is selected.
 
 ```typescript
 const name = session.model.displayName()
