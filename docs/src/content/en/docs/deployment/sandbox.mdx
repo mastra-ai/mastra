@@ -47,12 +47,17 @@ export const mastra = new Mastra({
   deployer: new SandboxDeployer({
     sandbox: new VercelSandbox({
       sandboxName: 'my-preview',
-      timeout: 3_600_000, // 1 hour
+      timeout: 2_400_000, // 40 minutes
       ports: [4111],
     }),
   }),
 })
 ```
+
+Two Vercel-specific requirements:
+
+- `timeout` can't exceed the maximum sandbox lifetime of your plan, 45 minutes on Pro. A higher value fails the deploy with a 400 from the Vercel API.
+- Declare the server port in `ports`. Vercel exposes only ports declared at creation, unlike E2B and Daytona.
 
 Build and deploy in one command:
 
