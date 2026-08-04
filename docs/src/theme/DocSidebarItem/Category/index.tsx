@@ -140,6 +140,7 @@ function DocSidebarItemCategoryCollapsible({
   ...props
 }: Props): ReactNode {
   const { items, label, collapsible, className, href } = item
+  const isContextualSidebarCategory = Boolean(href && item.customProps?.contextualSidebar === true)
   const { enterSidebar } = useContextualSidebar()
   // Get tags from customProps in sidebar config
   const tags = item?.customProps?.tags
@@ -161,7 +162,7 @@ function DocSidebarItemCategoryCollapsible({
       if (!collapsible) {
         return false
       }
-      return isActive ? false : item.collapsed
+      return isActive && !isContextualSidebarCategory ? false : item.collapsed
     },
   })
 
@@ -172,7 +173,7 @@ function DocSidebarItemCategoryCollapsible({
     setCollapsed(toCollapsed)
   }
   useAutoExpandActiveCategory({
-    isActive,
+    isActive: isActive && !isContextualSidebarCategory,
     collapsed,
     updateCollapsed,
     activePath,
@@ -184,12 +185,13 @@ function DocSidebarItemCategoryCollapsible({
   }, [collapsible, expandedItem, index, setCollapsed, autoCollapseCategories])
 
   const handleItemClick: ComponentProps<'a'>['onClick'] = e => {
-    const isContextualSidebarCategory = Boolean(href && item.customProps?.contextualSidebar === true)
     if (isContextualSidebarCategory && !isPlainPrimaryClick(e)) {
       return
     }
     if (isContextualSidebarCategory) {
       enterSidebar(item)
+      onItemClick?.(item)
+      return
     }
     onItemClick?.(item)
     if (collapsible) {

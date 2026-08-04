@@ -1,9 +1,10 @@
-import React, { createContext, type ReactNode, useContext, useEffect, useState } from 'react'
+import React, { createContext, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { useLocation } from '@docusaurus/router'
 import type { PropSidebarItem, PropSidebarItemCategory } from '@docusaurus/plugin-content-docs'
 import {
   enterContextualSidebar,
+  findInitialContextualSidebarCategory,
   getContextualSidebarItems,
   isContextualSidebarVisible,
   observeContextualSidebarPathname,
@@ -15,6 +16,7 @@ type ContextualSidebarContextValue = Readonly<{
   clearSidebar: () => void
   enterSidebar: (category: PropSidebarItemCategory) => void
   getSidebarItems: (sidebar: readonly PropSidebarItem[]) => readonly PropSidebarItem[] | undefined
+  initializeSidebar: (sidebar: readonly PropSidebarItem[]) => void
 }>
 
 const ContextualSidebarContext = createContext<ContextualSidebarContextValue | undefined>(undefined)
@@ -25,6 +27,7 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
     siteConfig: { url: siteUrl },
   } = useDocusaurusContext()
   const [sidebarState, setSidebarState] = useState<ContextualSidebarState>()
+  const initializedSidebar = useRef(false)
   const observedState = observeContextualSidebarPathname(sidebarState, pathname)
 
   useEffect(() => {
@@ -32,6 +35,18 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
       setSidebarState(observedState)
     }
   }, [observedState, sidebarState])
+
+  const initializeSidebar = useRef((sidebar: readonly PropSidebarItem[]) => {
+    if (initializedSidebar.current) {
+      return
+    }
+    initializedSidebar.current = true
+
+    const category = findInitialContextualSidebarCategory(sidebar, pathname, siteUrl)
+    if (category) {
+      setSidebarState(enterContextualSidebar(category, pathname, siteUrl))
+    }
+  }).current
 
   const activeSidebar = isContextualSidebarVisible(sidebarState, pathname) ? sidebarState : undefined
 
@@ -45,6 +60,7 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
       }
     },
     getSidebarItems: sidebar => getContextualSidebarItems(sidebar, activeSidebar),
+    initializeSidebar,
   }
 
   return <ContextualSidebarContext.Provider value={value}>{children}</ContextualSidebarContext.Provider>

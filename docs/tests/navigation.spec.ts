@@ -270,6 +270,10 @@ test.describe('Contextual sidebar', () => {
     await expect(restoredRootPane).toBeVisible()
     await expect(page).toHaveURL(urlBeforeBack)
     await expect(restoredRootPane).toBeFocused()
+    await expect(restoredRootPane.getByRole('button', { name: "Expand sidebar category 'Agents'" })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
 
     await restoredRootPane.getByRole('link', { name: 'Agents', exact: true }).click()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
@@ -280,7 +284,10 @@ test.describe('Contextual sidebar', () => {
     expect(getErrors(), 'JS errors during contextual sidebar navigation').toEqual([])
   })
 
-  test('desktop: history, reload, and direct visits do not restore contextual state', async ({ page, isMobile }) => {
+  test('desktop: direct overview loads initialize context while later history remains transient', async ({
+    page,
+    isMobile,
+  }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
@@ -296,12 +303,16 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
 
     await page.reload()
+    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to docs' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+    await expect(page).toHaveURL('/docs/agents/overview')
+
     await page.goto('/docs/agents/using-tools', { waitUntil: 'domcontentloaded' })
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
   })
 
-  test('desktop: modified click leaves the opener at the root pane and the new tab starts at root', async ({
+  test('desktop: modified click leaves the opener unchanged and the new overview tab initializes context', async ({
     page,
     context,
     isMobile,
@@ -319,7 +330,7 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
     await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
     await expect(newPage).toHaveURL('/docs/agents/overview')
-    await expect(visibleSidebarPane(newPage, 'root')).toBeVisible()
+    await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
   })
 
   test('mobile and tablet: modified click leaves the drawer and root pane unchanged', async ({
@@ -343,7 +354,7 @@ test.describe('Contextual sidebar', () => {
     await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
     await expect(newPage).toHaveURL('/docs/agents/overview')
     await openMobileSidebar(newPage)
-    await expect(visibleSidebarPane(newPage, 'root')).toBeVisible()
+    await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
   })
 
   test('mobile and tablet: drawer closes on navigation and Back swaps panes without closing', async ({
@@ -377,6 +388,10 @@ test.describe('Contextual sidebar', () => {
     await expect(page.locator('.navbar-sidebar')).toBeVisible()
     await expect(page).toHaveURL(urlBeforeBack)
     await expect(rootPane).toBeFocused()
+    await expect(rootPane.getByRole('button', { name: "Expand sidebar category 'Agents'" })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
 
     expect(getErrors(), 'JS errors during mobile contextual sidebar navigation').toEqual([])
   })

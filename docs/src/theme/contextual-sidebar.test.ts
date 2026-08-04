@@ -5,6 +5,7 @@ import {
   createContextualSidebarItems,
   enterContextualSidebar,
   findContextualSidebarCategory,
+  findInitialContextualSidebarCategory,
   getContextualSidebarItems,
   getLocalPathname,
   isContextualSidebarVisible,
@@ -73,6 +74,17 @@ describe('contextual sidebar model', () => {
     expect(findContextualSidebarCategory([regularCategory], '/docs/agents/overview')).toBeUndefined()
     expect(findContextualSidebarCategory(sidebar, '/docs/agents/overview')).toBe(contextualCategory)
     expect(findContextualSidebarCategory(sidebar, '/docs/agents/missing')).toBeUndefined()
+  })
+
+  it('finds an initial contextual category only at its exact overview pathname', () => {
+    const contextualCategory = createCategory()
+    const regularCategory = { ...createCategory(false), href: '/docs/workflows/overview' }
+    const sidebar: PropSidebarItem[] = [regularCategory, contextualCategory]
+
+    expect(findInitialContextualSidebarCategory(sidebar, '/docs/agents/overview/', siteUrl)).toBe(contextualCategory)
+    expect(findInitialContextualSidebarCategory(sidebar, '/docs/agents/using-tools', siteUrl)).toBeUndefined()
+    expect(findInitialContextualSidebarCategory(sidebar, '/docs/workflows/overview', siteUrl)).toBeUndefined()
+    expect(findInitialContextualSidebarCategory(sidebar, '/docs/agents/overview-extra', siteUrl)).toBeUndefined()
   })
 
   it('creates Overview before the original category children without mutation', () => {

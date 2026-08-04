@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import clsx from 'clsx'
 import { NavbarSecondaryMenuFiller, type NavbarSecondaryMenuComponent, ThemeClassNames } from '@docusaurus/theme-common'
 import { useNavbarMobileSidebar } from '@docusaurus/theme-common/internal'
@@ -12,7 +12,10 @@ import { useContextualSidebar } from '../../contextual-sidebar-context'
 const DocSidebarMobileSecondaryMenu: NavbarSecondaryMenuComponent<Props> = ({ sidebar, path }) => {
   const mobileSidebar = useNavbarMobileSidebar()
   const navigationRef = useRef<HTMLDivElement>(null)
-  const { activeSidebar, clearSidebar, getSidebarItems } = useContextualSidebar()
+  const { activeSidebar, clearSidebar, getSidebarItems, initializeSidebar } = useContextualSidebar()
+
+  useEffect(() => initializeSidebar(sidebar), [initializeSidebar, sidebar])
+
   const contextualItems = getSidebarItems(sidebar)
   const contextualSidebar =
     activeSidebar && contextualItems ? { state: activeSidebar, items: contextualItems } : undefined

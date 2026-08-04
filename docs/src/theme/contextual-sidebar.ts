@@ -83,6 +83,32 @@ export function findContextualSidebarCategory(
   return undefined
 }
 
+export function findInitialContextualSidebarCategory(
+  items: readonly PropSidebarItem[],
+  pathname: string,
+  siteUrl: string,
+): (PropSidebarItemCategory & { href: string }) | undefined {
+  const normalizedPathname = normalizePathname(pathname)
+  if (!normalizedPathname) {
+    return undefined
+  }
+
+  for (const item of items) {
+    if (isContextualCategory(item) && getLocalPathname(item.href, siteUrl) === normalizedPathname) {
+      return item
+    }
+
+    if (item.type === 'category') {
+      const match = findInitialContextualSidebarCategory(item.items, normalizedPathname, siteUrl)
+      if (match) {
+        return match
+      }
+    }
+  }
+
+  return undefined
+}
+
 function collectItemPathnames(items: readonly PropSidebarItem[], siteUrl: string, pathnames: Set<string>): void {
   for (const item of items) {
     if (item.type === 'link') {
