@@ -37,7 +37,9 @@ export const workflowDefinitionInputSchema = workflowBuilderDefinitionInputSchem
   .extend({
     dependencies: z
       .array(workflowBuilderDefinitionInputSchema)
-      .optional()
+      // Nullish, not optional: OpenAI strict compatibility makes optional
+      // properties required+nullable, so strict-provider models must send null.
+      .nullish()
       .describe(
         'Helper workflows this definition nests that do not exist in the catalog yet. They travel with this submission as one unit: validated together, shown together, and saved together when the user clicks Save. Use them only when a nested workflow is genuinely needed — for example to give each parallel branch its own input shaping. Each helper becomes an ordinary stored workflow the user will see.',
       ),

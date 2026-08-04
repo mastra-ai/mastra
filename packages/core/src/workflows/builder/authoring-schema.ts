@@ -4,12 +4,19 @@
  * Studio `submit-workflow-draft`) consume these schemas so the guidance a
  * model sees at the final submission boundary is identical everywhere.
  *
- * Two flavors per shape:
- * - `...InputSchema` — the model-facing schema. Accepts authoring aliases
- *   (`agent` for `agentId`, object-form `mapConfig`/`output`) and carries the
- *   full authoring guidance in descriptions.
- * - the plain schema — the strict canonical form produced by
- *   `normalizeWorkflowBuilderDefinition` (string `mapConfig`, `agentId` only).
+ * The model-facing input flavor (`...InputSchema`) reuses the canonical entry
+ * schemas directly and differs only where the wider input is genuinely
+ * friendlier to authoring models AND survives provider strict-schema
+ * compatibility transforms (OpenAI makes every property required and closes
+ * arbitrary-key records to empty objects, so optional alias pairs and
+ * required `z.record(...)` fields become unfillable contradictions):
+ * - `mapConfig` accepts object form as well as the canonical JSON string.
+ * - Optional fields accept explicit `null` (strict providers force models to
+ *   emit `null` for fields they cannot omit).
+ * - Opaque JSON Schema fields are `z.unknown()`, mirroring the persisted
+ *   `WorkflowDefinition` contract, so they stay fillable under OpenAI.
+ * `normalizeWorkflowBuilderDefinition` canonicalizes the wider input
+ * (stringifies object `mapConfig`, drops `null` optionals).
  *
  * Surface-specific lifecycle wording (persist-immediately vs. Ready + explicit
  * user Save) stays out of this module; attach it on the tool description at
@@ -22,15 +29,30 @@ export const WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION =
 
 const jsonSchema = z.record(z.string(), z.unknown());
 
+const STEP_OPTIONS_DESCRIPTION =
+  'JSON-safe subset of step options that round-trips through storage. `onFinish` callbacks and function-valued scorers are NOT supported.';
+
 const stepOptionsSchema = z
   .object({
     retries: z.number().int().nonnegative().optional().describe('Retry count on failure. Static number only.'),
     metadata: jsonSchema.optional().describe('Arbitrary JSON-safe metadata attached to the step.'),
   })
   .optional()
-  .describe(
-    'JSON-safe subset of step options that round-trips through storage. `onFinish` callbacks and function-valued scorers are NOT supported.',
-  );
+  .describe(STEP_OPTIONS_DESCRIPTION);
+
+// Input-dialect twin: strict-provider compatibility (OpenAI) rewrites optional
+// properties as required+nullable, so models on those providers are forced to
+// emit null where they would omit the field. The input dialect accepts null at
+// exactly those optional slots; normalization strips the nulls before the
+// canonical schema validates. `metadata` is additionally `z.unknown()` here
+// because OpenAI turns arbitrary-key records into unfillable closed objects.
+const stepOptionsInputSchema = z
+  .object({
+    retries: z.number().int().nonnegative().nullish().describe('Retry count on failure. Static number only.'),
+    metadata: z.unknown().nullish().describe('Arbitrary JSON-safe metadata object attached to the step.'),
+  })
+  .nullish()
+  .describe(STEP_OPTIONS_DESCRIPTION);
 
 const agentOutputSchemaDescription =
   "OPTIONAL JSON Schema (Draft 2020-12) describing the structured output the agent must produce for this step. When set, the agent runs with structured output and the step's output IS that shape (not `{ text: string }`). Use this when a downstream step needs a machine-readable field — for example, an agent that reads a listing and emits `{ files: string[] }`, which a subsequent `foreach` iterates over.";
@@ -49,21 +71,16 @@ export const workflowBuilderAgentEntrySchema = z
   })
   .describe(AGENT_ENTRY_DESCRIPTION);
 
-export const workflowBuilderAgentEntryInputSchema = z
-  .strictObject({
-    type: z.literal('agent'),
-    id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
-    agentId: z
-      .string()
-      .min(1)
-      .optional()
-      .describe('Id of an agent registered on this Mastra instance (from resource discovery).'),
-    agent: z.string().min(1).optional().describe('Alias for agentId; prefer agentId.'),
-    description: z.string().optional(),
-    outputSchema: z.unknown().optional().describe(agentOutputSchemaDescription),
-    options: stepOptionsSchema,
+export const workflowBuilderAgentEntryInputSchema = workflowBuilderAgentEntrySchema
+  .extend({
+    description: z.string().nullish(),
+    outputSchema: z.unknown().nullish().describe(agentOutputSchemaDescription),
+    options: stepOptionsInputSchema,
   })
   .describe(AGENT_ENTRY_DESCRIPTION);
+
+const TOOL_ENTRY_DESCRIPTION =
+  "Tool step. The previous step's output is validated against the tool's inputSchema and the step produces the tool's outputSchema shape exactly.";
 
 export const workflowBuilderToolEntrySchema = z
   .strictObject({
@@ -73,9 +90,14 @@ export const workflowBuilderToolEntrySchema = z
     description: z.string().optional(),
     options: stepOptionsSchema,
   })
-  .describe(
-    "Tool step. The previous step's output is validated against the tool's inputSchema and the step produces the tool's outputSchema shape exactly.",
-  );
+  .describe(TOOL_ENTRY_DESCRIPTION);
+
+export const workflowBuilderToolEntryInputSchema = workflowBuilderToolEntrySchema
+  .extend({
+    description: z.string().nullish(),
+    options: stepOptionsInputSchema,
+  })
+  .describe(TOOL_ENTRY_DESCRIPTION);
 
 export const workflowBuilderMappingDescriptorSchema = z
   .union([
@@ -114,17 +136,12 @@ export const workflowBuilderMappingEntrySchema = z
   .describe('Mapping step. Its output is an object whose top-level keys are exactly the keys of mapConfig.');
 
 export const workflowBuilderMappingEntryInputSchema = z
-  .object({
+  .strictObject({
     type: z.literal('mapping'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
     mapConfig: z
       .union([workflowBuilderMappingConfigSchema, z.string().min(1)])
-      .optional()
       .describe(WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION),
-    output: workflowBuilderMappingConfigSchema.optional().describe('Alias for mapConfig; prefer mapConfig.'),
-  })
-  .refine(step => (step.mapConfig === undefined) !== (step.output === undefined), {
-    message: 'Provide exactly one of mapConfig or output.',
   })
   .describe('Mapping step. Its output is an object whose top-level keys are exactly the keys of mapConfig.');
 
@@ -150,15 +167,23 @@ export const workflowBuilderNestedWorkflowEntrySchema = z
     'Nested workflow step. The referenced workflow runs as a single step: its input is the current step input (a first top-level nested workflow receives the parent input directly when schemas match) and its output becomes this step output. Map its output through stepResults.<id> — this step own id — when a different final shape is required.',
   );
 
+export const workflowBuilderNestedWorkflowEntryInputSchema = workflowBuilderNestedWorkflowEntrySchema
+  .extend({
+    description: z.string().nullish(),
+    options: stepOptionsInputSchema,
+  })
+  .describe(String(workflowBuilderNestedWorkflowEntrySchema.description));
+
 const executableInnerStepSchema = z.union([
   workflowBuilderAgentEntrySchema,
   workflowBuilderToolEntrySchema,
   workflowBuilderNestedWorkflowEntrySchema,
 ]);
+
 const executableInnerStepInputSchema = z.union([
   workflowBuilderAgentEntryInputSchema,
-  workflowBuilderToolEntrySchema,
-  workflowBuilderNestedWorkflowEntrySchema,
+  workflowBuilderToolEntryInputSchema,
+  workflowBuilderNestedWorkflowEntryInputSchema,
 ]);
 
 const literalScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -203,24 +228,11 @@ const LOOP_DESCRIPTION =
 export const workflowBuilderParallelEntrySchema = z
   .strictObject({ type: z.literal('parallel'), steps: z.array(executableInnerStepSchema).min(1) })
   .describe(PARALLEL_DESCRIPTION);
-export const workflowBuilderParallelEntryInputSchema = z
-  .strictObject({ type: z.literal('parallel'), steps: z.array(executableInnerStepInputSchema).min(1) })
-  .describe(PARALLEL_DESCRIPTION);
 
 export const workflowBuilderForeachEntrySchema = z
   .strictObject({
     type: z.literal('foreach'),
     step: executableInnerStepSchema,
-    opts: z
-      .object({ concurrency: z.number().int().positive() })
-      .optional()
-      .describe('Optional concurrency control; defaults to 1 (sequential).'),
-  })
-  .describe(FOREACH_DESCRIPTION);
-export const workflowBuilderForeachEntryInputSchema = z
-  .strictObject({
-    type: z.literal('foreach'),
-    step: executableInnerStepInputSchema,
     opts: z
       .object({ concurrency: z.number().int().positive() })
       .optional()
@@ -243,13 +255,6 @@ export const workflowBuilderConditionalEntrySchema = z
   .strictObject({
     type: z.literal('conditional'),
     steps: z.array(executableInnerStepSchema).min(1),
-    predicates: z.array(workflowBuilderPredicateSchema).min(1),
-  })
-  .describe(CONDITIONAL_DESCRIPTION);
-export const workflowBuilderConditionalEntryInputSchema = z
-  .strictObject({
-    type: z.literal('conditional'),
-    steps: z.array(executableInnerStepInputSchema).min(1),
     predicates: z
       .array(workflowBuilderPredicateSchema)
       .min(1)
@@ -262,9 +267,38 @@ export const workflowBuilderLoopEntrySchema = z
     type: z.literal('loop'),
     step: executableInnerStepSchema,
     loopType: z.enum(['dowhile', 'dountil']),
-    predicate: workflowBuilderPredicateSchema,
+    predicate: workflowBuilderPredicateSchema.describe('Declarative predicate — no JS closures.'),
   })
   .describe(LOOP_DESCRIPTION);
+
+// Container input twins: children use the null-tolerant executable input steps,
+// and foreach's optional opts accept null from strict providers.
+export const workflowBuilderParallelEntryInputSchema = z
+  .strictObject({ type: z.literal('parallel'), steps: z.array(executableInnerStepInputSchema).min(1) })
+  .describe(PARALLEL_DESCRIPTION);
+
+export const workflowBuilderForeachEntryInputSchema = z
+  .strictObject({
+    type: z.literal('foreach'),
+    step: executableInnerStepInputSchema,
+    opts: z
+      .object({ concurrency: z.number().int().positive().nullish() })
+      .nullish()
+      .describe('Optional concurrency control; defaults to 1 (sequential).'),
+  })
+  .describe(FOREACH_DESCRIPTION);
+
+export const workflowBuilderConditionalEntryInputSchema = z
+  .strictObject({
+    type: z.literal('conditional'),
+    steps: z.array(executableInnerStepInputSchema).min(1),
+    predicates: z
+      .array(workflowBuilderPredicateSchema)
+      .min(1)
+      .describe('One declarative predicate per branch, aligned by array index with steps. No JS closures.'),
+  })
+  .describe(CONDITIONAL_DESCRIPTION);
+
 export const workflowBuilderLoopEntryInputSchema = z
   .strictObject({
     type: z.literal('loop'),
@@ -287,11 +321,11 @@ export const workflowBuilderGraphEntrySchema = z.discriminatedUnion('type', [
   workflowBuilderLoopEntrySchema,
 ]);
 
-export const workflowBuilderGraphEntryInputSchema = z.union([
+export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type', [
   workflowBuilderAgentEntryInputSchema,
-  workflowBuilderToolEntrySchema,
+  workflowBuilderToolEntryInputSchema,
   workflowBuilderMappingEntryInputSchema,
-  workflowBuilderNestedWorkflowEntrySchema,
+  workflowBuilderNestedWorkflowEntryInputSchema,
   workflowBuilderParallelEntryInputSchema,
   workflowBuilderForeachEntryInputSchema,
   workflowBuilderSleepEntrySchema,
@@ -320,12 +354,12 @@ export const workflowBuilderDefinitionInputSchema = z
       .string()
       .min(1)
       .describe('Workflow id — kebab-case. Preserve the exact requested workflow ID unless the user renames it.'),
-    description: z.string().optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-    inputSchema: jsonSchema.describe('Complete JSON Schema (Draft 2020-12) for the workflow input.'),
-    outputSchema: jsonSchema.describe('Complete JSON Schema (Draft 2020-12) for the workflow output.'),
-    stateSchema: jsonSchema.nullish().describe('Optional JSON Schema for persisted workflow state.'),
-    requestContextSchema: jsonSchema.nullish().describe('Optional JSON Schema for request context values.'),
+    description: z.string().nullish(),
+    metadata: z.record(z.string(), z.unknown()).nullish(),
+    inputSchema: z.unknown().describe('Complete JSON Schema (Draft 2020-12) for the workflow input.'),
+    outputSchema: z.unknown().describe('Complete JSON Schema (Draft 2020-12) for the workflow output.'),
+    stateSchema: z.unknown().nullish().describe('Optional JSON Schema for persisted workflow state.'),
+    requestContextSchema: z.unknown().nullish().describe('Optional JSON Schema for request context values.'),
     graph: z.array(workflowBuilderGraphEntryInputSchema).min(1).describe(GRAPH_DESCRIPTION),
   })
   .describe(

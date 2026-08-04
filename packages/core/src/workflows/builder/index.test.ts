@@ -67,6 +67,18 @@ describe('workflow builder authoring contract', () => {
       '*Pattern B — two branches call the SAME resource on different values.*',
     );
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('{ "requestContextPath": "<field.path>" }');
+    // Collapsing mutually exclusive conditional branches. Models repeatedly emitted
+    // `${stepResults.a.f}${stepResults.b.f}` here, which throws on the unfired branch,
+    // so the step-array source must be taught in the mapping list, the conditional
+    // section, and the anti-patterns.
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      '{ "step": ["<stepIdA>", "<stepIdB>", ...], "path": "<field.path>" }',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('**Collapsing branches back into one field.**');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      '"mapConfig": "{\\"response\\":{\\"step\\":[\\"urgent-support\\",\\"normal-support\\"],\\"path\\":\\"text\\"}}"',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('❌ Concatenating `conditional` branches in a template');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Human-in-the-loop **suspend / resume**');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('State is **read-only** to the graph you author');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Out of scope — do NOT emit these');
@@ -139,6 +151,20 @@ describe('workflow builder authoring contract', () => {
         graph: [{ type: 'mapping', id: 'map', mapConfig: () => ({}) }],
       }),
     ).toThrow('must be JSON-safe');
+  });
+
+  it('drops null metadata like the other optional schema fields', () => {
+    // Weaker authoring models emit explicit `metadata: null` for the optional
+    // field. Mirror the stateSchema/requestContextSchema handling so the null
+    // key never reaches the persisted definition, whose schema is `.optional()`.
+    const definition = normalizeWorkflowBuilderDefinition({
+      id: 'null-metadata-flow',
+      inputSchema: {},
+      outputSchema: {},
+      metadata: null,
+      graph: [{ type: 'mapping', id: 'map', mapConfig: { output: { value: { initData: 'value' } } } }],
+    });
+    expect('metadata' in definition).toBe(false);
   });
 
   describe('when a definition is preflighted for execution', () => {

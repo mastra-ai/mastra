@@ -6,7 +6,7 @@
       "inputSchema": {},
       "outputSchema": {},
       "graph": [
-        { "type": "agent", "id": "answer", "agent": "support-agent", "outputSchema": {}, "options": { "retries": 1 } }
+        { "type": "agent", "id": "answer", "agentId": "support-agent", "outputSchema": {}, "options": { "retries": 1 } }
       ]
     },
     "expected": {
@@ -39,13 +39,13 @@
       "id": "mapping-flow",
       "inputSchema": {},
       "outputSchema": {},
-      "graph": [{ "type": "mapping", "id": "shape", "output": { "result": { "value": 4 } } }]
+      "graph": [{ "type": "mapping", "id": "shape", "mapConfig": { "result": { "value": 4 } } }]
     },
     "expected": {
       "id": "mapping-flow",
       "inputSchema": {},
       "outputSchema": {},
-      "graph": [{ "type": "mapping", "id": "shape", "mapConfig": "{\"output\":{\"result\":{\"value\":4}}}" }]
+      "graph": [{ "type": "mapping", "id": "shape", "mapConfig": "{\"result\":{\"value\":4}}" }]
     }
   },
   {
@@ -189,7 +189,7 @@
       "graph": [
         {
           "type": "loop",
-          "step": { "type": "agent", "id": "iterate", "agent": "support-agent" },
+          "step": { "type": "agent", "id": "iterate", "agentId": "support-agent" },
           "loopType": "dountil",
           "predicate": { "op": "truthy", "value": { "path": "inputData.done" } }
         }

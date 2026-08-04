@@ -241,6 +241,7 @@ A mapping step's \`mapConfig\` is a **JSON-encoded string** of an object (yes, e
 - \`{ "value": <constant> }\` — embed a literal JSON value.
 - \`{ "initData": true, "path": "<field.path>" }\` — pluck a field from the workflow's original input. This is the canonical direct source form; do not emit \`{ "initData": "<field>" }\`, \`{ "initData": true }\` without \`path\`, or combine it with \`step\`.
 - \`{ "step": "<stepId>", "path": "<field.path>" }\` — pluck a single field from a prior step's output. Dotted paths drill into nested objects. This source must not also include \`initData\`.
+- \`{ "step": ["<stepIdA>", "<stepIdB>", ...], "path": "<field.path>" }\` — the ARRAY form of the same source. It resolves the listed steps in order and uses the FIRST one that actually produced a result, then applies \`path\` to it. This is how you read a value out of a set of steps when only some of them ran — most importantly, collapsing mutually exclusive \`conditional\` branches. See the conditional section.
 - \`{ "requestContextPath": "<field.path>" }\` — read a field from the run's request context (per-run ambient values such as a caller id or tenant, supplied at run time rather than in the workflow input). Note the shape: the path is the VALUE of \`requestContextPath\`, with no separate \`path\` key. Use it only for values the caller genuinely passes as request context; if the value belongs in the workflow's own input, use \`initData\` instead. Declare \`requestContextSchema\` on the workflow so the field can be validated.
 
 Canonical direct-source examples:
@@ -446,6 +447,18 @@ Rules:
 - All branches receive the same input: the previous step's output.
 - The output is an object keyed by each branch step's \`id\`; a branch whose predicate was false has an \`undefined\` entry.
 
+**Collapsing branches back into one field.** This is the step everyone gets wrong. Because an unfired branch produces no result, you CANNOT reference it individually: \`\${stepResults.<unfiredBranch>.<field>}\` THROWS at runtime and fails the entire run — even though the branch that did fire succeeded. To return "whatever the selected branch produced", add a following mapping that uses the step ARRAY source form, which picks the first branch that actually ran:
+
+\`\`\`json
+{
+  "type": "mapping",
+  "id": "select-response",
+  "mapConfig": "{\\"response\\":{\\"step\\":[\\"urgent-support\\",\\"normal-support\\"],\\"path\\":\\"text\\"}}"
+}
+\`\`\`
+
+List every branch id in the array. This is the ONLY correct way to merge mutually exclusive branches — do not concatenate them in a template, and do not map from the container (the \`conditional\` entry itself has no id and is not a readable step result).
+
 **\`loop\` — repeat a step while / until a predicate holds.** Emit:
 
 \`\`\`json
@@ -490,6 +503,7 @@ Rules:
 - ❌ Adding a no-op step-1 mapping that just renames \`inputData\` keys. Step 1 receives the workflow input object directly. (Past step 1, if you need workflow input again, use \`\${initData.…}\` — not a rename mapping.)
 - ❌ \`mapConfig\` as an object (\`"mapConfig": { ... }\`). It MUST be a JSON-encoded string (\`"mapConfig": "{...}"\`).
 - ❌ Refusing to use \`foreach\` because no upstream tool returns an array, and falling back to a single agent step that "loops internally". The engine has NO array→iteration workaround that beats \`foreach\`. The correct move is ALWAYS to insert a bridge agent step whose \`outputSchema\` is an array (typically \`Array<{ prompt: string }>\` when the inner \`foreach\` step is an agent), between the string/object-returning upstream and the \`foreach\`. "The tool doesn't return an array" is never a reason to skip \`foreach\` — it is the reason to add the bridge agent.
+- ❌ Concatenating \`conditional\` branches in a template to "get whichever one ran" — \`\${stepResults.urgent-support.text}\${stepResults.normal-support.text}\`. Only one branch runs; referencing the unfired one THROWS and fails the whole workflow even though the selected branch succeeded. Use the step-array mapping source instead: \`{"response":{"step":["urgent-support","normal-support"],"path":"text"}}\`.
 - ❌ Guessing a \`workflowId\` — inventing an id, or using a name the user mentioned without confirming it through authoritative resource discovery. Nested references must resolve when the definition is validated. (Helper workflows you author yourself for Pattern B are the one exception, and only in the exact way your surface policy specifies.)
 - ❌ Self-referencing (\`workflowId\` equal to the workflow you are currently authoring) or building A→B→A cycles across workflows. The pre-flight validator will reject them.
 - ❌ Writing a bridge mapping that pipes ONLY the previous step's output when the downstream agent needs ADDITIONAL context from the workflow input to be useful. Classic case: a listing tool returns bare basenames (e.g. \`app-tools.ts\\nserver.ts\`) — no path prefix — so a downstream agent asked to "read and summarize each file" has no idea what folder they live in. Fix: combine both scopes in the mapping template. \`\${initData.<workflowInputField>}\` is available in EVERY mapping; use it to thread the workflow's original input (folder path, repo name, target branch, ticket id, etc.) into the prompt alongside \`\${stepResults.<upstream>}\`. See the "combining upstream output with workflow input" worked example below.
@@ -688,17 +702,35 @@ function normalizeJsonValue(value: unknown, path: string, seen: Set<object>): Wo
   }
 }
 
+// OpenAI strict-schema compatibility makes every optional property required and
+// nullable, so strict-provider models are forced to emit `null` for fields they
+// would otherwise omit. Strip null at exactly the optional structural slots the
+// canonical schema declares — never blanket-strip, because a mapping constant
+// source `{ "value": null }` is a legitimate null.
+const OPTIONAL_ENTRY_KEYS = ['description', 'outputSchema', 'options', 'opts'] as const;
+const OPTIONAL_STEP_OPTION_KEYS = ['retries', 'metadata'] as const;
+const OPTIONAL_FOREACH_OPT_KEYS = ['concurrency'] as const;
+
+function dropNullKeys(target: WorkflowBuilderJsonObject, keys: readonly string[]): void {
+  for (const key of keys) {
+    if (target[key] === null) delete target[key];
+  }
+}
+
 function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEntry {
   const normalized = normalizeJsonValue(entry, 'graph entry', new Set()) as WorkflowBuilderJsonObject;
-  if (normalized.type === 'agent' && typeof normalized.agentId !== 'string' && typeof normalized.agent === 'string') {
-    normalized.agentId = normalized.agent;
-    delete normalized.agent;
+  dropNullKeys(normalized, OPTIONAL_ENTRY_KEYS);
+  if (normalized.options && typeof normalized.options === 'object' && !Array.isArray(normalized.options)) {
+    dropNullKeys(normalized.options as WorkflowBuilderJsonObject, OPTIONAL_STEP_OPTION_KEYS);
+    if (Object.keys(normalized.options).length === 0) delete normalized.options;
   }
-  if (normalized.type === 'mapping' && typeof normalized.mapConfig !== 'string') {
-    const mapConfig =
-      normalized.mapConfig ?? (normalized.output === undefined ? undefined : { output: normalized.output });
-    if (mapConfig !== undefined) normalized.mapConfig = JSON.stringify(mapConfig);
-    delete normalized.output;
+  if (normalized.opts && typeof normalized.opts === 'object' && !Array.isArray(normalized.opts)) {
+    dropNullKeys(normalized.opts as WorkflowBuilderJsonObject, OPTIONAL_FOREACH_OPT_KEYS);
+    // Canonical foreach opts requires concurrency, so an emptied opts is invalid.
+    if (Object.keys(normalized.opts).length === 0) delete normalized.opts;
+  }
+  if (normalized.type === 'mapping' && typeof normalized.mapConfig !== 'string' && normalized.mapConfig !== undefined) {
+    normalized.mapConfig = JSON.stringify(normalized.mapConfig);
   }
   if ((normalized.type === 'parallel' || normalized.type === 'conditional') && Array.isArray(normalized.steps)) {
     normalized.steps = normalized.steps.map(step =>
@@ -713,6 +745,8 @@ function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEnt
 
 export function normalizeWorkflowBuilderDefinition(input: unknown): WorkflowBuilderDefinition {
   const normalized = normalizeJsonValue(input, 'workflow definition', new Set()) as WorkflowBuilderJsonObject;
+  if (normalized.description === null) delete normalized.description;
+  if (normalized.metadata === null) delete normalized.metadata;
   if (normalized.stateSchema === null) delete normalized.stateSchema;
   if (normalized.requestContextSchema === null) delete normalized.requestContextSchema;
   if (!Array.isArray(normalized.graph)) throw new TypeError('Workflow definition graph must be an array.');
