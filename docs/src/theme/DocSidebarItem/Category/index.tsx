@@ -184,7 +184,11 @@ function DocSidebarItemCategoryCollapsible({
   }, [collapsible, expandedItem, index, setCollapsed, autoCollapseCategories])
 
   const handleItemClick: ComponentProps<'a'>['onClick'] = e => {
-    if (href && item.customProps?.contextualSidebar === true && isPlainPrimaryClick(e)) {
+    const isContextualSidebarCategory = Boolean(href && item.customProps?.contextualSidebar === true)
+    if (isContextualSidebarCategory && !isPlainPrimaryClick(e)) {
+      return
+    }
+    if (isContextualSidebarCategory) {
       enterSidebar(item)
     }
     onItemClick?.(item)

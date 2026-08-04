@@ -317,7 +317,32 @@ test.describe('Contextual sidebar', () => {
 
     await expect(page).toHaveURL('/docs')
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+    await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
     await expect(newPage).toHaveURL('/docs/agents/overview')
+    await expect(visibleSidebarPane(newPage, 'root')).toBeVisible()
+  })
+
+  test('mobile and tablet: modified click leaves the drawer and root pane unchanged', async ({
+    page,
+    context,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, 'Mobile sidebar only renders on mobile and tablet')
+
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await openMobileSidebar(page)
+    const agentsLink = visibleSidebarPane(page, 'root').getByRole('link', { name: 'Agents', exact: true })
+    const newPagePromise = context.waitForEvent('page')
+    await agentsLink.click({ modifiers: ['Meta'] })
+    const newPage = await newPagePromise
+    await newPage.waitForLoadState('domcontentloaded')
+
+    await expect(page).toHaveURL('/docs')
+    await expect(page.locator('.navbar-sidebar')).toBeVisible()
+    await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+    await expect(agentsLink.locator('xpath=ancestor::li[1]')).toHaveClass(/menu__list-item--collapsed/)
+    await expect(newPage).toHaveURL('/docs/agents/overview')
+    await openMobileSidebar(newPage)
     await expect(visibleSidebarPane(newPage, 'root')).toBeVisible()
   })
 
