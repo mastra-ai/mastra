@@ -1,5 +1,13 @@
 # mastra
 
+## 1.22.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`d94b8e1`](https://github.com/mastra-ai/mastra/commit/d94b8e1cee67416d518a8c30099040061bef6a1c)]:
+  - @mastra/core@1.56.0-alpha.7
+  - @mastra/deployer@1.56.0-alpha.7
+
 ## 1.22.0-alpha.6
 
 ### Patch Changes
