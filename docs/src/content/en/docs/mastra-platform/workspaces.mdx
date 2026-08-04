@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 
 ## One bucket, many sandboxes
 
-The two providers have different lifecycles, and the difference matters when you design agents.
+Their lifecycles differ, which affects how you design agents.
 
 **`PlatformFilesystem` is a long-lived handle to the environment's bucket.** All requests, all agents, and all sandboxes in the environment read and write the same object storage. Anything an agent writes is visible on the next request unless you explicitly delete it.
 
