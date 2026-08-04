@@ -167,6 +167,39 @@ When `startExperimentAsync()` runs with `experiments: 'none'`, it doesn't persis
 
 Use synchronous `startExperiment()` when the caller needs the returned summary. An experiment event observer can receive lifecycle events and the terminal summary.
 
+## Observe experiment events
+
+Use `onEvent` to receive versioned, JSON-safe lifecycle events while an experiment runs. This works with `startExperiment()`, `startExperimentAsync()`, and `runExperiment()`.
+
+```typescript title="src/mastra/experiments/observe.ts"
+import type { ExperimentEvent } from '@mastra/core/datasets'
+
+const events: ExperimentEvent[] = []
+
+await dataset.startExperimentAsync({
+  task: async ({ input }) => processItem(input),
+  persistence: { experiments: 'none' },
+  onEvent: async event => {
+    events.push(event)
+    await publishEvent(event)
+  },
+})
+```
+
+The observer receives these event types:
+
+- `experiment.run.started`: Identifies the run, target, resolved dataset version, and item count.
+- `experiment.item.completed`: Reports a committed item result after scoring, including scores, errors, retry count, tool mock details, and stable item identity.
+- `experiment.run.finished`: Reports the terminal outcome and summary counters.
+
+Mastra awaits each observer call before delivering the next event. This serialized delivery applies backpressure and ensures event `sequence` values match delivery order, while item execution can remain concurrent.
+
+If the observer throws or rejects, Mastra aborts the remaining run and rejects `runExperiment()` with a `MastraError` whose `id` is `EXPERIMENT_EVENT_OBSERVER_FAILED`. It doesn't send a terminal event through the failed observer. For `startExperimentAsync()`, the method has already returned when a detached observer fails, so handle delivery failures inside the observer when the caller needs direct error reporting.
+
+The `experiment.run.finished` event is awaited before Mastra persists the final experiment status. Treat the event as the authoritative terminal signal when experiment persistence is disabled, but don't use it as a read-after-write signal for storage.
+
+The exported event types are `ExperimentEvent`, `ExperimentRunStartedEvent`, `ExperimentItemCompletedEvent`, and `ExperimentRunFinishedEvent`. Use the discriminated `type` field to narrow an event before reading event-specific properties.
+
 ## Tool mocks
 
 When an experiment runs an agent that calls side-effecting tools, attach static tool mocks to individual dataset items to make the run deterministic. During the experiment, a mocked tool returns its declared output instead of executing. Tools without a mock on the item run live by default.

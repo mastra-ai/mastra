@@ -393,7 +393,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         target: eventTarget,
         status: 'running',
         datasetId: datasetRecord?.id ?? null,
-        datasetVersion: datasetRecord?.version ?? null,
+        datasetVersion,
         totalItems: items.length,
       });
     } catch (observerError) {
