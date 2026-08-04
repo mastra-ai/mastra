@@ -46,6 +46,10 @@ export const MANAGED_PROVIDER_CONFIGS: Record<CreateLLMProvider, ManagedProvider
 
 const OPENAI_API_KEY = 'OPENAI_API_KEY';
 const OPENAI_MODEL = /(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g;
+const REQUIRED_AGENT_TOOLS = [
+  ['web_fetch', 'webFetchTool'],
+  ['web_search', 'webSearchTool'],
+] as const;
 
 function findMatches(content: string, pattern: RegExp): RegExpMatchArray[] {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
@@ -126,7 +130,19 @@ function normalizeManagedManifest(
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
+function assertAgentToolContract(source: string): void {
+  for (const [property, tool] of REQUIRED_AGENT_TOOLS) {
+    const matches = findMatches(source, new RegExp(`^\\s*${property}\\s*:\\s*${tool}\\s*,?\\s*$`, 'm'));
+    if (matches.length !== 1) {
+      throw new Error(
+        `Default template compatibility error: expected one ${property}: ${tool} assignment in src/mastra/agents/agent.ts, found ${matches.length}.`,
+      );
+    }
+  }
+}
+
 function adaptAgentSource(source: string, provider: CreateLLMProvider, config: ManagedProviderConfig): string {
+  assertAgentToolContract(source);
   if (provider === 'openai') return source;
   if (!config.primaryModel || !config.observationalModel) {
     throw new Error(`Default template compatibility error: model configuration is missing for ${config.displayName}.`);

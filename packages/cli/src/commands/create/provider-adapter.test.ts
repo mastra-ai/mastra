@@ -250,6 +250,24 @@ describe('adaptDefaultTemplate', () => {
     expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toBe('OPENAI_API_KEY=\n');
   });
 
+  it.each([
+    ['web_fetch', 'webFetchTool'],
+    ['web_search', 'webSearchTool'],
+  ] as const)('fails before writing when the required %s tool assignment is missing', async (property, tool) => {
+    const projectPath = await createFixture();
+    const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
+    const originalAgent = await fs.readFile(agentPath, 'utf8');
+    const incompleteAgent = originalAgent.replace(new RegExp(`^\\s*${property}\\s*:\\s*${tool}\\s*,?\\s*$`, 'm'), '');
+    await fs.writeFile(agentPath, incompleteAgent, 'utf8');
+
+    await expect(adaptFixture({ projectPath, provider: 'openai', versionTag: 'latest' })).rejects.toThrow(
+      `expected one ${property}: ${tool} assignment`,
+    );
+
+    expect(await fs.readFile(agentPath, 'utf8')).toBe(incompleteAgent);
+    expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toBe('OPENAI_API_KEY=\n');
+  });
+
   it('does not fail when provider-specific README wording changes or README is absent', async () => {
     const changedReadmeProject = await createFixture();
     const changedReadmePath = path.join(changedReadmeProject, 'README.md');
