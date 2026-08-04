@@ -1,0 +1,27 @@
+{
+  "name": "examples-workflow-sdk",
+  "type": "module",
+  "private": true,
+  "description": "Run Mastra workflows on Vercel's Workflow SDK via @mastra/workflow-sdk",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "nitro dev",
+    "build": "nitro build",
+    "clean": "rm -rf .nitro .output node_modules mastra.db*"
+  },
+  "dependencies": {
+    "@mastra/core": "link:../../packages/core",
+    "@mastra/libsql": "link:../../stores/libsql",
+    "@mastra/workflow-sdk": "link:../../workflows/workflow-sdk",
+    "nitro": "3.0.260610-beta",
+    "workflow": "5.0.0-beta.36",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "Apache-2.0"
+}

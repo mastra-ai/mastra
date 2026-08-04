@@ -1,4 +1,5 @@
 export * from './workflow';
+export { runScorersForStep, type RunScorersParams } from './handlers/step';
 export * from './execution-engine';
 export * from './default';
 export * from './step';

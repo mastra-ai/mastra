@@ -1,22 +1,22 @@
 ---
-'@mastra/workflow': minor
+'@mastra/workflow-sdk': minor
 ---
 
-Added `@mastra/workflow`, an experimental integration that runs Mastra workflows on the [Workflow SDK](https://workflow-sdk.dev), Vercel's durable execution runtime. Steps become durable and replayable, `suspend()` parks on a real hook instead of holding a process open, and `.sleep()` survives a deploy — while you keep authoring workflows with the Mastra API you already use.
+Added `@mastra/workflow-sdk`, an experimental integration that runs Mastra workflows on the [Workflow SDK](https://workflow-sdk.dev), Vercel's durable execution runtime. Steps become durable and replayable, `suspend()` parks on a real hook instead of holding a process open, and `.sleep()` survives a deploy — while you keep authoring workflows with the Mastra API you already use.
 
 **Setup.** Register the runner once in your project's `workflows/` directory. Both lines are required: the re-export puts the runner into your build, and the side-effect import loads your workflow definitions in the process that runs steps.
 
 ```ts
 // workflows/mastra.ts
-export * from '@mastra/workflow/workflows';
+export * from '@mastra/workflow-sdk/workflows';
 import '../src/mastra';
 ```
 
 Then create workflows with `init()`:
 
 ```ts
-import { init } from '@mastra/workflow';
-import { mastraRunner } from '@mastra/workflow/workflows';
+import { init } from '@mastra/workflow-sdk';
+import { mastraRunner } from '@mastra/workflow-sdk/workflows';
 
 const { createWorkflow, createStep } = init({ runner: mastraRunner });
 
@@ -51,6 +51,6 @@ import { resumeHook } from 'workflow/api';
 await resumeHook(`mastra:${runId}:approval`, { approved: true });
 ```
 
-**Supported:** `.then()`, `.parallel()`, `.branch()`, `.dowhile()`, `.dountil()`, `.foreach()`, `.sleep()`, `.sleepUntil()`, workflow state, `suspend()`/`resume()`, `bail()`, per-step retries, and event streaming.
+**Supported:** `.then()`, `.parallel()`, `.branch()`, `.dowhile()`, `.dountil()`, `.foreach()`, `.map()`, `.sleep()`, `.sleepUntil()`, nested workflows (including suspend/resume at any depth), workflow state, `suspend()`/`resume()` (with resume labels and optional `step`), `bail()`, `abort()`/`run.cancel()`, schema validation, step scorers, `onFinish`/`onError` callbacks, tracing, per-step retries, `perStep` execution mode, time travel (`run.timeTravel()` and `run.timeTravelStream()`), `run.restart()`, and event streaming.
 
-**Not supported yet:** nested workflows, time travel, `streamLegacy()`, and `perStep` each throw a clear error. The package is experimental and not ready for production use.
+**Not supported yet:** `streamLegacy()` throws a clear error. The package is experimental and not ready for production use.
