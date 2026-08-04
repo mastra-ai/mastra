@@ -635,6 +635,7 @@ async function saveTaskAndMaybeSendPushNotification({
   previousTask,
   nextTask,
   agentId,
+  expectedVersion,
   logger,
 }: {
   taskStore: InMemoryTaskStore;
@@ -642,9 +643,10 @@ async function saveTaskAndMaybeSendPushNotification({
   previousTask?: Task;
   nextTask: Task;
   agentId: string;
+  expectedVersion?: number;
   logger?: IMastraLogger;
 }) {
-  await taskStore.save({ agentId, data: nextTask });
+  await taskStore.save({ agentId, data: nextTask, expectedVersion });
 
   if (!shouldSendPushNotification(previousTask, nextTask)) {
     return;
@@ -1700,54 +1702,53 @@ export async function handleTaskCancel({
   taskId: string;
   logger?: IMastraLogger;
 }) {
-  // Load task and history
-  let data = await taskStore.load({
-    agentId,
-    taskId,
-  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const snapshot = taskStore.loadWithVersion({ agentId, taskId });
+    const data = snapshot?.task;
 
-  if (!data) {
-    throw MastraA2AError.taskNotFound(taskId);
+    if (!data) {
+      throw MastraA2AError.taskNotFound(taskId);
+    }
+
+    if (isTerminalTaskState(data.status.state)) {
+      logger?.info(`Task ${taskId} already in final state ${data.status.state}, cannot cancel.`);
+      throw MastraA2AError.taskNotCancelable(taskId);
+    }
+
+    taskStore.activeCancellations.add(taskId);
+
+    const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
+      state: 'canceled',
+      message: {
+        role: 'agent',
+        parts: [{ kind: 'text', text: 'Task cancelled by request.' }],
+        kind: 'message',
+        messageId: crypto.randomUUID(),
+      },
+    };
+    const canceledTask = applyUpdateToTask(data, cancelUpdate);
+
+    try {
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvePushNotificationPair({ pushNotificationSender }).pushNotificationSender,
+        previousTask: data,
+        nextTask: canceledTask,
+        agentId,
+        expectedVersion: snapshot.version,
+        logger,
+      });
+      return createSuccessResponse(requestId, canceledTask);
+    } catch (error) {
+      if (!(error instanceof TaskStoreVersionConflictError)) {
+        throw error;
+      }
+    } finally {
+      taskStore.activeCancellations.delete(taskId);
+    }
   }
 
-  // Check if cancelable (not already in a final state)
-  if (isTerminalTaskState(data.status.state)) {
-    logger?.info(`Task ${taskId} already in final state ${data.status.state}, cannot cancel.`);
-    throw MastraA2AError.taskNotCancelable(taskId);
-  }
-
-  // Signal cancellation
-  taskStore.activeCancellations.add(taskId);
-
-  // Apply 'canceled' state update
-  const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
-    state: 'canceled',
-    message: {
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Task cancelled by request.' }],
-      kind: 'message',
-      messageId: crypto.randomUUID(),
-    },
-  };
-
-  const previousTask = data;
-  data = applyUpdateToTask(data, cancelUpdate);
-
-  // Save the updated state
-  await saveTaskAndMaybeSendPushNotification({
-    taskStore,
-    pushNotificationSender: resolvePushNotificationPair({ pushNotificationSender }).pushNotificationSender,
-    previousTask,
-    nextTask: data,
-    agentId,
-    logger,
-  });
-
-  // Remove from active cancellations *after* saving
-  taskStore.activeCancellations.delete(taskId);
-
-  // Return the updated task object
-  return createSuccessResponse(requestId, data);
+  throw MastraA2AError.invalidRequest(`Task ${taskId} was updated concurrently. Retry the request.`);
 }
 
 export async function getAgentExecutionHandler({

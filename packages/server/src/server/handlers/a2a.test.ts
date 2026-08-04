@@ -2907,6 +2907,42 @@ describe('A2A Handler', () => {
       expect(updatedData?.status.state).toBe('completed');
     });
 
+    it('should preserve a concurrent terminal update instead of overwriting it with cancellation', async () => {
+      const requestId = 'test-request-id';
+      const taskId = 'test-task-id';
+      const agentId = 'test-agent';
+      const task: Task = {
+        id: taskId,
+        contextId: 'test-session-id',
+        status: { state: 'working' },
+        artifacts: [],
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId, data: task });
+
+      const originalSave = mockTaskStore.save.bind(mockTaskStore);
+      let injectConflict = true;
+      vi.spyOn(mockTaskStore, 'save').mockImplementation(async input => {
+        if (injectConflict && input.expectedVersion === 1) {
+          injectConflict = false;
+          await originalSave({
+            agentId,
+            data: { ...task, status: { state: 'completed' } },
+            expectedVersion: 1,
+          });
+        }
+        return originalSave(input);
+      });
+
+      await expect(handleTaskCancel({ requestId, taskStore: mockTaskStore, agentId, taskId })).rejects.toThrow(
+        MastraA2AError.taskNotCancelable(taskId),
+      );
+
+      expect((await mockTaskStore.load({ agentId, taskId }))?.status.state).toBe('completed');
+      expect(mockTaskStore.activeCancellations.has(taskId)).toBe(false);
+    });
+
     it('should throw error when canceling non-existent task', async () => {
       const requestId = 'test-request-id';
       const nonExistentTaskId = 'non-existent-task-id';
