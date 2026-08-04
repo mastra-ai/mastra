@@ -2,7 +2,7 @@ import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
+import { formatSpanDuration, getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -139,8 +139,7 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
-  const durationMs =
-    span.startedAt && span.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
+  const duration = formatSpanDuration(span.startedAt, span.endedAt);
   const usage = span.attributes?.usage as TokenUsage | undefined;
 
   const detailsBody = (
@@ -281,12 +280,10 @@ function SpanDataPanelContent({
             <DataKeysAndValues.Value>{format(new Date(span.endedAt), 'MMM dd, HH:mm:ss.SSS')}</DataKeysAndValues.Value>
           </>
         )}
-        {durationMs != null && (
+        {duration && (
           <>
             <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(2)}s`}
-            </DataKeysAndValues.Value>
+            <DataKeysAndValues.Value>{duration}</DataKeysAndValues.Value>
           </>
         )}
       </DataKeysAndValues>
