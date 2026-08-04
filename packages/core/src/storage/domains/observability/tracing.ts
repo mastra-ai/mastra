@@ -553,9 +553,11 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     error: span.error,
+    status: computeTraceStatus(span),
     entityType: span.entityType,
     entityId: span.entityId,
     entityName: span.entityName,
+    metadata: span.metadata,
     inputPreview: buildInputPreview(span.input),
     createdAt: span.createdAt,
     updatedAt: span.updatedAt,
@@ -564,7 +566,7 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
 
 /**
  * Lightweight span record containing only the fields needed for timeline rendering.
- * Excludes heavy fields: input, output, attributes, metadata, tags, links.
+ * Excludes heavy fields: input, output, attributes, tags, links.
  * This reduces per-span payload from ~17KB to ~370 bytes (~97% reduction).
  */
 export const lightSpanRecordSchema = z
@@ -581,10 +583,17 @@ export const lightSpanRecordSchema = z
     endedAt: endedAtField.nullish(),
     error: errorField.nullish(),
 
+    // Computed status, so trace lists can render their status column.
+    // Nullish so rows from stores/APIs that predate the field still validate.
+    status: traceStatusField.nullish(),
+
     // Entity context (needed by TraceKeysAndValues on root span)
     entityType: spanContextFields.entityType,
     entityId: spanContextFields.entityId,
     entityName: spanContextFields.entityName,
+
+    // Span metadata, so user-configured metadata columns can render on the light list
+    metadata: metadataField.nullish(),
 
     // Short text preview of `input`, so trace lists can render their preview column
     // without transferring the whole prompt. See `buildInputPreview`.
@@ -593,9 +602,7 @@ export const lightSpanRecordSchema = z
     // Database timestamps
     ...dbTimestamps,
   })
-  .describe(
-    'Lightweight span record for timeline rendering (excludes input, output, attributes, metadata, tags, links)',
-  );
+  .describe('Lightweight span record for timeline rendering (excludes input, output, attributes, tags, links)');
 
 /** Lightweight span record for timeline rendering */
 export type LightSpanRecord = z.infer<typeof lightSpanRecordSchema>;

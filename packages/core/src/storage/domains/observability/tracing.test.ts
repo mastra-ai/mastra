@@ -19,9 +19,11 @@ describe('lightSpanRecordSchema', () => {
     parentSpanId: 'parent-span-789',
     endedAt: new Date('2024-01-01T00:01:00Z'),
     error: { message: 'something failed' },
+    status: 'error',
     entityType: 'agent',
     entityId: 'agent-1',
     entityName: 'Test Agent',
+    metadata: { environment: 'production' },
     createdAt: new Date('2024-01-01T00:00:00Z'),
     updatedAt: new Date('2024-01-01T00:00:01Z'),
   };
@@ -37,9 +39,11 @@ describe('lightSpanRecordSchema', () => {
     expect(result.parentSpanId).toBe('parent-span-789');
     expect(result.endedAt).toEqual(new Date('2024-01-01T00:01:00Z'));
     expect(result.error).toEqual({ message: 'something failed' });
+    expect(result.status).toBe('error');
     expect(result.entityType).toBe('agent');
     expect(result.entityId).toBe('agent-1');
     expect(result.entityName).toBe('Test Agent');
+    expect(result.metadata).toEqual({ environment: 'production' });
     expect(result.createdAt).toEqual(new Date('2024-01-01T00:00:00Z'));
     expect(result.updatedAt).toEqual(new Date('2024-01-01T00:00:01Z'));
   });
@@ -61,9 +65,11 @@ describe('lightSpanRecordSchema', () => {
     expect(result.parentSpanId).toBeUndefined();
     expect(result.endedAt).toBeUndefined();
     expect(result.error).toBeUndefined();
+    expect(result.status).toBeUndefined();
     expect(result.entityType).toBeUndefined();
     expect(result.entityId).toBeUndefined();
     expect(result.entityName).toBeUndefined();
+    expect(result.metadata).toBeUndefined();
   });
 
   it('should reject records missing required fields', () => {
@@ -146,13 +152,12 @@ describe('lightSpanRecordSchema', () => {
     ).toThrow();
   });
 
-  it('should NOT include input, output, attributes, metadata, tags, links fields in the parsed result', () => {
+  it('should NOT include input, output, attributes, tags, links fields in the parsed result', () => {
     const withHeavyFields = {
       ...validLightSpan,
       input: { message: 'hello' },
       output: { result: 'world' },
       attributes: { model: 'gpt-4' },
-      metadata: { custom: 'data' },
       tags: ['production'],
       links: [{ traceId: 'other-trace' }],
     };
@@ -160,7 +165,6 @@ describe('lightSpanRecordSchema', () => {
     expect('input' in result).toBe(false);
     expect('output' in result).toBe(false);
     expect('attributes' in result).toBe(false);
-    expect('metadata' in result).toBe(false);
     expect('tags' in result).toBe(false);
     expect('links' in result).toBe(false);
   });

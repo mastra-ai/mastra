@@ -22,6 +22,7 @@ import type {
 import {
   BRANCH_SPAN_TYPES,
   buildInputPreview,
+  computeTraceStatus,
   listBranchesArgsSchema,
   listTracesArgsSchema,
   toTraceSpans,
@@ -137,8 +138,9 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT = `
 `;
 
 /**
- * Lightweight list variant — also reconstructs `input` so the row mapper can
- * derive `inputPreview` without shipping the blob to the caller.
+ * Lightweight list variant — also reconstructs `metadata` for the list's
+ * configurable columns and `input` so the row mapper can derive `inputPreview`
+ * without shipping the blob to the caller.
  */
 const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
   SELECT
@@ -153,6 +155,7 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
     ${argMaxNonNull('entityId')},
     ${argMaxNonNull('entityName')},
     ${argMaxNonNull('error')},
+    ${argMaxNonNull('metadata')},
     ${argMaxNonNull('input')}
   FROM span_events
 `;
@@ -252,8 +255,11 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
 }
 
 function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpanRecord {
+  const record = rowToLightSpanRecord(row);
   return {
-    ...rowToLightSpanRecord(row),
+    ...record,
+    status: computeTraceStatus(record),
+    metadata: parseJson(row.metadata) as Record<string, unknown> | null,
     inputPreview: buildInputPreview(row.input) ?? null,
   };
 }

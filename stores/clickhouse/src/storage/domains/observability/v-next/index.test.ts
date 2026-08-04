@@ -4131,7 +4131,7 @@ describe('listTracesLight projection', () => {
           serviceName: null,
           scope: null,
           links: null,
-          metadata: null,
+          metadata: { customer: 'acme' },
           tags: [],
           error: null,
           attributes: { model: 'claude-sonnet-5' },
@@ -4155,6 +4155,58 @@ describe('listTracesLight projection', () => {
     expect(row.output).toBeUndefined();
     expect(row.attributes).toBeUndefined();
     expect(row.inputPreview).toBe('summarize this');
+    expect(row.status).toBe('success');
+    expect(row.metadata).toEqual({ customer: 'acme' });
+  });
+
+  it('computes status on light rows matching the full listTraces status', async () => {
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'light-trace-error',
+          spanId: 'light-span-error',
+          parentSpanId: null,
+          name: 'agent run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt: new Date('2026-01-01T00:02:00Z'),
+          endedAt: new Date('2026-01-01T00:02:05Z'),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          links: null,
+          metadata: null,
+          tags: [],
+          error: { message: 'boom' },
+          attributes: null,
+          input: null,
+          output: null,
+        },
+      ],
+    });
+
+    const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+    const statusByTraceId = Object.fromEntries(spans.map(s => [s.traceId, s.status]));
+    expect(statusByTraceId).toEqual({
+      'light-trace-1': 'success',
+      'light-trace-error': 'error',
+    });
+
+    const full = await storage.listTraces({ pagination: { page: 0, perPage: 10 } });
+    const fullStatusByTraceId = Object.fromEntries(full.spans.map(s => [s.traceId, s.status]));
+    expect(statusByTraceId).toEqual(fullStatusByTraceId);
   });
 
   it('returns a deltaCursor on page 0 so live-tail polling stays enabled', async () => {
@@ -4194,7 +4246,7 @@ describe('listTracesLight projection', () => {
           serviceName: null,
           scope: null,
           links: null,
-          metadata: null,
+          metadata: { customer: 'acme' },
           tags: [],
           error: null,
           attributes: null,
@@ -4211,6 +4263,8 @@ describe('listTracesLight projection', () => {
     expect(row.input).toBeUndefined();
     expect(row.output).toBeUndefined();
     expect(row.inputPreview).toBe('summarize this');
+    expect(row.status).toBe('success');
+    expect(row.metadata).toEqual({ customer: 'acme' });
   });
 });
 

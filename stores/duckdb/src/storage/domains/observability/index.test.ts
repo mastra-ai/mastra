@@ -455,7 +455,7 @@ describe('ObservabilityStorageDuckDB', () => {
             serviceName: 'svc',
             scope: null,
             attributes: null,
-            metadata: null,
+            metadata: { customer: 'acme' },
             tags: ['v1'],
             links: null,
             input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
@@ -474,6 +474,73 @@ describe('ObservabilityStorageDuckDB', () => {
       expect((row as Record<string, unknown>).input).toBeUndefined();
       expect((row as Record<string, unknown>).output).toBeUndefined();
       expect(row.inputPreview).toBe('summarize this thread');
+      expect(row.status).toBe('success');
+      expect(row.metadata).toEqual({ customer: 'acme' });
+    });
+
+    it('listTracesLight computes status from error and endedAt', async () => {
+      const base = {
+        parentSpanId: null,
+        name: 'agent-run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        entityType: EntityType.AGENT,
+        entityId: 'agent-status',
+        entityName: 'myAgent',
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: 'production',
+        source: null,
+        serviceName: 'svc',
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: null,
+        links: null,
+        input: null,
+        output: null,
+      };
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...base,
+            traceId: 'trace-light-error',
+            spanId: 'root-light-error',
+            error: { message: 'boom' },
+            startedAt: new Date('2026-01-05T00:00:00Z'),
+            endedAt: new Date('2026-01-05T00:00:01Z'),
+          },
+          {
+            ...base,
+            traceId: 'trace-light-running',
+            spanId: 'root-light-running',
+            error: null,
+            startedAt: new Date('2026-01-05T00:01:00Z'),
+            endedAt: null,
+          },
+          {
+            ...base,
+            traceId: 'trace-light-success',
+            spanId: 'root-light-success',
+            error: null,
+            startedAt: new Date('2026-01-05T00:02:00Z'),
+            endedAt: new Date('2026-01-05T00:02:01Z'),
+          },
+        ],
+      });
+
+      const result = await storage.listTracesLight({});
+      const statusByTraceId = Object.fromEntries(result.spans.map(s => [s.traceId, s.status]));
+      expect(statusByTraceId).toMatchObject({
+        'trace-light-error': 'error',
+        'trace-light-running': 'running',
+        'trace-light-success': 'success',
+      });
     });
 
     it('listTracesLight serves delta polling with light rows', async () => {
@@ -505,7 +572,7 @@ describe('ObservabilityStorageDuckDB', () => {
           serviceName: 'svc',
           scope: null,
           attributes: null,
-          metadata: null,
+          metadata: { customer: 'acme' },
           tags: null,
           links: null,
           input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
@@ -524,6 +591,8 @@ describe('ObservabilityStorageDuckDB', () => {
       expect((row as Record<string, unknown>).input).toBeUndefined();
       expect((row as Record<string, unknown>).output).toBeUndefined();
       expect(row.inputPreview).toBe('summarize this thread');
+      expect(row.status).toBe('success');
+      expect(row.metadata).toEqual({ customer: 'acme' });
     });
 
     it('listTraces applies scalar prefilter and tag post-filter correctly', async () => {

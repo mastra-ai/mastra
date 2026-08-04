@@ -25,7 +25,7 @@ function makeRootSpan(traceId: string, startedAt: Date) {
     serviceName: 'test-service',
     scope: null,
     attributes: {},
-    metadata: {},
+    metadata: { customer: 'acme' },
     tags: [],
     links: null,
     input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
@@ -53,6 +53,26 @@ describe('ObservabilityInMemory listTracesLight', () => {
     expect(row.input).toBeUndefined();
     expect(row.output).toBeUndefined();
     expect(row.inputPreview).toBe('summarize this thread');
+    expect(row.metadata).toEqual({ customer: 'acme' });
+  });
+
+  it('computes status on light rows from error and endedAt', async () => {
+    const store = new InMemoryStore();
+    const obs = (await store.getStore('observability'))!;
+    await obs.createSpan({ span: { ...makeRootSpan('trace-error', T0), error: { message: 'boom' } } });
+    await obs.createSpan({
+      span: { ...makeRootSpan('trace-success', new Date(T0.getTime() + 1)), endedAt: new Date(T0.getTime() + 2) },
+    });
+    await obs.createSpan({ span: makeRootSpan('trace-running', new Date(T0.getTime() + 3)) });
+
+    const result = await obs.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+    const statusByTraceId = Object.fromEntries(result.spans.map(s => [s.traceId, s.status]));
+    expect(statusByTraceId).toEqual({
+      'trace-error': 'error',
+      'trace-success': 'success',
+      'trace-running': 'running',
+    });
   });
 
   it('returns delta metadata and light rows in delta mode', async () => {
@@ -72,5 +92,7 @@ describe('ObservabilityInMemory listTracesLight', () => {
     const row = poll.spans[0]! as Record<string, unknown>;
     expect(row.input).toBeUndefined();
     expect(row.inputPreview).toBe('summarize this thread');
+    expect(row.status).toBe('running');
+    expect(row.metadata).toEqual({ customer: 'acme' });
   });
 });

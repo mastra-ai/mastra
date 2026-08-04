@@ -80,6 +80,7 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'entityId',
   'entityName',
   'error',
+  'metadataRaw',
   'inputPreview',
 ];
 

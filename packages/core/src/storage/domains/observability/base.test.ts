@@ -282,6 +282,7 @@ describe('ObservabilityStorage base class', () => {
       input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
       output: { text: 'x'.repeat(10_000) },
       attributes: { model: 'claude-sonnet-5' },
+      metadata: { environment: 'production' },
     };
 
     // Mirrors what a backend without a dedicated lightweight query returns.
@@ -307,6 +308,31 @@ describe('ObservabilityStorage base class', () => {
       expect(row.attributes).toBeUndefined();
       // The preview column still renders — derived from `input` on the way out.
       expect(row.inputPreview).toBe('summarize this thread');
+      // Status and metadata survive projection so configurable list columns render.
+      expect(row.status).toBe('success');
+      expect(row.metadata).toEqual({ environment: 'production' });
+    });
+
+    it('computes status on projected rows from error and endedAt', async () => {
+      const rows = [
+        { ...fullTraceSpan, spanId: 'errored', error: { message: 'boom' }, status: 'error' as const },
+        { ...fullTraceSpan, spanId: 'running', endedAt: null, status: 'running' as const },
+        fullTraceSpan,
+      ];
+      class ThreeStates extends ObservabilityStorage {
+        override async listTraces() {
+          return {
+            pagination: { total: 3, page: 0, perPage: 10, hasMore: false },
+            spans: rows,
+          };
+        }
+      }
+      const s = new ThreeStates();
+
+      const { spans } = await s.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+      const statusBySpanId = Object.fromEntries(spans.map(row => [row.spanId, row.status]));
+      expect(statusBySpanId).toEqual({ errored: 'error', running: 'running', s1: 'success' });
     });
 
     it('preserves pagination metadata from listTraces', async () => {
@@ -336,6 +362,8 @@ describe('ObservabilityStorage base class', () => {
       const row = result.spans[0]! as Record<string, unknown>;
       expect(row.input).toBeUndefined();
       expect(row.inputPreview).toBe('summarize this thread');
+      expect(row.status).toBe('success');
+      expect(row.metadata).toEqual({ environment: 'production' });
     });
 
     it('still throws when the backend implements neither', async () => {

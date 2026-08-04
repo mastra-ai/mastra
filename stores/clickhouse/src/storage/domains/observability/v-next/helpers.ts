@@ -19,7 +19,7 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { buildInputPreview, EntityType } from '@mastra/core/storage';
+import { buildInputPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
 
 // ---------------------------------------------------------------------------
 // ClickHouse query settings
@@ -204,6 +204,7 @@ export function rowsToSpanRecords(rows: Record<string, any>[]): SpanRecord[] {
 export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
+  const error = parseJson(row.error) ?? undefined;
 
   return {
     traceId: row.traceId,
@@ -217,7 +218,9 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
-    error: parseJson(row.error) ?? undefined,
+    error,
+    status: computeTraceStatus({ error, endedAt }),
+    metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     // Written alongside `input` at insert time — see `spanRecordToRow`.
     inputPreview: nullableString(row.inputPreview),
     createdAt: startedAt,
