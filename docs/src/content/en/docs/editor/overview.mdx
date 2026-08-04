@@ -59,7 +59,12 @@ export const supportAgent = new Agent({
   name: 'Support agent',
   instructions: 'Help customers with Acme products.',
   model: '__GATEWAY_OPENAI_MODEL__',
-  editor: { instructions: true, tools: { description: true } },
+  editor: {
+    instructions: true,
+    tools: {
+      description: true,
+    },
+  },
 })
 ```
 
@@ -77,9 +82,15 @@ Studio shows everything else as read-only. See [editor overrides](/reference/age
 
 ## Instructions
 
-Instructions tell an agent how to behave. In the agent's **Instructions** section, collaborators can replace or extend the instructions originally defined in code. The change is stored in Editor rather than written back to the agent's TypeScript file.
+An agent's instructions are the system prompt sent to the model. They describe the agent's role, rules, and response style. For example:
 
-Instructions can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through request context. Display conditions can include an instruction only for a customer, role, or feature flag.
+```text
+You are an Acme support agent. Answer questions about Acme products and ask for an order number before checking an order.
+```
+
+In Studio, collaborators edit this content under **Instructions**. They can replace the instructions defined in code or add more instruction blocks. Editor stores those changes separately instead of rewriting the agent's TypeScript file.
+
+An instruction block can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through request context. A display condition can show a block only for a customer, role, or feature flag.
 
 ## Prompt blocks
 
