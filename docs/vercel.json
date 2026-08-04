@@ -867,7 +867,7 @@
     },
     {
       "source": "/docs/harness/modes",
-      "destination": "/docs/agent-controller/modes",
+      "destination": "/docs/agent-controller/overview#switch-modes-and-models",
       "permanent": true
     },
     {
@@ -877,22 +877,22 @@
     },
     {
       "source": "/docs/harness/session",
-      "destination": "/docs/agent-controller/session",
+      "destination": "/docs/agent-controller/overview#sessions-and-threads",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents",
-      "destination": "/docs/agent-controller/subagents",
+      "destination": "/docs/agent-controller/overview#delegate-to-subagents",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state",
-      "destination": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/agent-controller/overview#manage-threads-and-state",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals",
-      "destination": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/agent-controller/overview#approve-tools-and-resume-suspensions",
       "permanent": true
     },
     {
@@ -1133,6 +1133,36 @@
     {
       "source": "/docs/voice/:path*",
       "destination": "/guides/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/session",
+      "destination": "/docs/agent-controller/overview#sessions-and-threads",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/modes",
+      "destination": "/docs/agent-controller/overview#switch-modes-and-models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/agent-controller/overview#manage-threads-and-state",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/subagents",
+      "destination": "/docs/agent-controller/overview#delegate-to-subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/agent-controller/overview#approve-tools-and-resume-suspensions",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/channels",
+      "destination": "/docs/agent-controller/overview#connect-chat-channels",
       "permanent": true
     },
     {
@@ -1732,7 +1762,7 @@
     },
     {
       "source": "/docs/harness/modes/llms.txt",
-      "destination": "/docs/agent-controller/modes/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#switch-modes-and-models",
       "permanent": true
     },
     {
@@ -1742,22 +1772,22 @@
     },
     {
       "source": "/docs/harness/session/llms.txt",
-      "destination": "/docs/agent-controller/session/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#sessions-and-threads",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents/llms.txt",
-      "destination": "/docs/agent-controller/subagents/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#delegate-to-subagents",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state/llms.txt",
-      "destination": "/docs/agent-controller/threads-and-state/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#manage-threads-and-state",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals/llms.txt",
-      "destination": "/docs/agent-controller/tool-approvals/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#approve-tools-and-resume-suspensions",
       "permanent": true
     },
     {
@@ -1913,6 +1943,36 @@
     {
       "source": "/docs/voice/:path*/llms.txt",
       "destination": "/guides/voice/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/session/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#sessions-and-threads",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/modes/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#switch-modes-and-models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/threads-and-state/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#manage-threads-and-state",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/subagents/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#delegate-to-subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/tool-approvals/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#approve-tools-and-resume-suspensions",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/channels/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt#connect-chat-channels",
       "permanent": true
     }
   ]
