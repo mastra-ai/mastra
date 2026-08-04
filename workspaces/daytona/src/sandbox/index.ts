@@ -76,7 +76,7 @@ function validateMountPath(mountPath: string): void {
 /** Allowlist for marker filenames from ls output — e.g. "mount-abc123" */
 const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
 
-/** Patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
+/** Patterns indicating the sandbox is dead/gone. */
 const SANDBOX_DEAD_PATTERNS: RegExp[] = [
   /sandbox is not running/i,
   /sandbox already destroyed/i,
@@ -161,6 +161,8 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
   networkBlockAll?: boolean;
   /** Comma-separated list of allowed CIDR network addresses for the sandbox */
   networkAllowList?: string;
+  /** Comma-separated list of allowed domains for the sandbox */
+  domainAllowList?: string;
 }
 
 // =============================================================================
@@ -258,6 +260,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly sandboxPublic?: boolean;
   private readonly networkBlockAll?: boolean;
   private readonly networkAllowList?: string;
+  private readonly domainAllowList?: string;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
   private readonly _constructorOptions: DaytonaSandboxOptions;
 
@@ -289,6 +292,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this.sandboxPublic = options.public;
     this.networkBlockAll = options.networkBlockAll;
     this.networkAllowList = options.networkAllowList;
+    this.domainAllowList = options.domainAllowList;
 
     this.connectionOpts = {
       ...(options.apiKey !== undefined && { apiKey: options.apiKey }),
@@ -405,6 +409,7 @@ export class DaytonaSandbox extends MastraSandbox {
       public: this.sandboxPublic,
       networkBlockAll: this.networkBlockAll,
       networkAllowList: this.networkAllowList,
+      domainAllowList: this.domainAllowList,
     });
 
     // Snapshot takes precedence. Image alone (with optional resources) triggers image-based creation.

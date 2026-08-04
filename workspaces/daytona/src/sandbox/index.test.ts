@@ -186,7 +186,7 @@ describe('DaytonaSandbox', () => {
       expect((sandbox as any).resources).toEqual({ cpu: 2, memory: 4, disk: 6 });
     });
 
-    it('stores new options: name, user, public, autoDeleteInterval, networkBlockAll, networkAllowList, image', () => {
+    it('stores new options: name, user, public, autoDeleteInterval, networkBlockAll, networkAllowList, domainAllowList, image', () => {
       const sandbox = new DaytonaSandbox({
         name: 'my-sandbox',
         user: 'ubuntu',
@@ -194,6 +194,7 @@ describe('DaytonaSandbox', () => {
         autoDeleteInterval: 60,
         networkBlockAll: true,
         networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+        domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
         image: 'debian:12.9',
       });
 
@@ -203,6 +204,7 @@ describe('DaytonaSandbox', () => {
       expect((sandbox as any).autoDeleteInterval).toBe(60);
       expect((sandbox as any).networkBlockAll).toBe(true);
       expect((sandbox as any).networkAllowList).toBe('10.0.0.0/8,192.168.0.0/16');
+      expect((sandbox as any).domainAllowList).toBe('registry.npmjs.org,*.githubusercontent.com');
       expect((sandbox as any).image).toBe('debian:12.9');
     });
 
@@ -335,6 +337,7 @@ describe('DaytonaSandbox', () => {
         autoDeleteInterval: 60,
         networkBlockAll: true,
         networkAllowList: '10.0.0.0/8',
+        domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
       });
 
       await sandbox._start();
@@ -347,6 +350,7 @@ describe('DaytonaSandbox', () => {
           autoDeleteInterval: 60,
           networkBlockAll: true,
           networkAllowList: '10.0.0.0/8',
+          domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
         }),
       );
     });
@@ -363,6 +367,7 @@ describe('DaytonaSandbox', () => {
       expect(createCall).not.toHaveProperty('autoDeleteInterval');
       expect(createCall).not.toHaveProperty('networkBlockAll');
       expect(createCall).not.toHaveProperty('networkAllowList');
+      expect(createCall).not.toHaveProperty('domainAllowList');
       expect(createCall).not.toHaveProperty('autoArchiveInterval');
       expect(createCall).not.toHaveProperty('snapshot');
     });
@@ -1663,5 +1668,21 @@ describe('DaytonaSandbox.clone', () => {
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ apiKey: 'dt-key', autoStopInterval: 45, env: { BASE: '1' } });
+  });
+
+  it('preserves network policy options', () => {
+    const template = new DaytonaSandbox({
+      networkBlockAll: true,
+      networkAllowList: '10.0.0.0/8',
+      domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
+    });
+
+    const child = template.clone();
+
+    expect(child['_constructorOptions']).toMatchObject({
+      networkBlockAll: true,
+      networkAllowList: '10.0.0.0/8',
+      domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
+    });
   });
 });

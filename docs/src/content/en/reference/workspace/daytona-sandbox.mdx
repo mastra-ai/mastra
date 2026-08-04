@@ -242,16 +242,30 @@ await sandbox.mount(
 
 ### Network isolation
 
-Restrict outbound network access:
+Pass Daytona's outbound network policy when creating a sandbox:
 
 ```typescript
 const workspace = new Workspace({
   sandbox: new DaytonaSandbox({
     networkBlockAll: true,
     networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+    domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
   }),
 })
 ```
+
+After the sandbox starts, update its network policy through the underlying Daytona sandbox:
+
+```typescript
+const sandbox = new DaytonaSandbox({ language: 'typescript' })
+await sandbox.start()
+
+await sandbox.daytona.updateNetworkSettings({
+  domainAllowList: 'api.example.com,*.example.org',
+})
+```
+
+Daytona enforces both creation-time and runtime network policies.
 
 ## Constructor parameters
 
@@ -398,6 +412,12 @@ const workspace = new Workspace({
     description: 'Comma-separated list of allowed CIDR addresses when network access is restricted.',
     isOptional: true,
   },
+  {
+    name: 'domainAllowList',
+    type: 'string',
+    description: 'Comma-separated list of allowed domains for the sandbox.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -426,10 +446,15 @@ const workspace = new Workspace({
     description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
   },
   {
-    name: 'instance',
+    name: 'daytona',
     type: 'Sandbox',
     description:
       'The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
+  },
+  {
+    name: 'instance',
+    type: 'Sandbox',
+    description: 'Deprecated alias for daytona. Throws SandboxNotReadyError if the sandbox has not been started.',
   },
   {
     name: 'processes',
@@ -571,7 +596,7 @@ const workspace = new Workspace({
 Access the underlying Daytona `Sandbox` instance for filesystem, git, and other operations not exposed through the `WorkspaceSandbox` interface:
 
 ```typescript
-const daytonaSandbox = sandbox.instance
+const daytonaSandbox = sandbox.daytona
 
 // Upload a file
 await daytonaSandbox.fs.uploadFile(Buffer.from('hello'), '/tmp/hello.txt')
@@ -580,7 +605,7 @@ await daytonaSandbox.fs.uploadFile(Buffer.from('hello'), '/tmp/hello.txt')
 await daytonaSandbox.git.clone('https://github.com/org/repo', '/workspace/repo')
 ```
 
-The `instance` getter throws `SandboxNotReadyError` if the sandbox hasn't been started yet.
+The `daytona` getter throws `SandboxNotReadyError` if the sandbox hasn't been started yet. The `instance` getter is a deprecated alias.
 
 ## Sandbox creation modes
 

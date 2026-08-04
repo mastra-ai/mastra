@@ -217,14 +217,26 @@ await sandbox.mount(
 
 ### Network isolation
 
-Restrict outbound network access:
+Pass Daytona's outbound network policy when creating a sandbox:
 
 ```typescript
 const sandbox = new DaytonaSandbox({
   networkBlockAll: true,
   networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+  domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
 });
 ```
+
+After the sandbox starts, update its network policy through the underlying Daytona sandbox:
+
+```typescript
+await sandbox.start();
+await sandbox.daytona.updateNetworkSettings({
+  domainAllowList: 'api.example.com,*.example.org',
+});
+```
+
+Daytona enforces both creation-time and runtime network policies.
 
 ### With Agent
 
@@ -288,6 +300,7 @@ console.log(response.text);
 | `volumes`             | `array`   | —                     | `[{ volumeId, mountPath }]`                                                                                                                  |
 | `networkBlockAll`     | `boolean` | `false`               | Block all network access                                                                                                                     |
 | `networkAllowList`    | `string`  | —                     | Comma-separated allowed CIDR addresses                                                                                                       |
+| `domainAllowList`     | `string`  | —                     | Comma-separated allowed domains                                                                                                              |
 
 ## Mount Configuration
 
@@ -368,7 +381,7 @@ const workspace = new Workspace({
 Access the underlying Daytona `Sandbox` instance for filesystem, git, and other operations not exposed through WorkspaceSandbox:
 
 ```typescript
-const daytonaSandbox = sandbox.instance;
+const daytonaSandbox = sandbox.daytona;
 
 await daytonaSandbox.fs.uploadFile(Buffer.from('data'), '/tmp/file.txt');
 
