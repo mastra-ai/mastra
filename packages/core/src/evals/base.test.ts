@@ -1447,6 +1447,27 @@ describe('createScorer', () => {
       });
     });
 
+    it('should suppress addScore without leaking internal controls into the result', async () => {
+      const mockMastra = createMockMastra();
+      const scorer = createScorer({
+        id: 'non-persisted-scorer',
+        description: 'Non-persisted scorer',
+      }).generateScore(() => 0.8);
+
+      scorer.__registerMastra(mockMastra as any);
+
+      const result = await scorer.run({
+        ...testData.scoringInput,
+        scoreSource: 'experiment',
+        targetTraceId: 'trace-123',
+        _internal: { emitObservabilityScore: false },
+      });
+
+      expect(result.score).toBe(0.8);
+      expect(result).not.toHaveProperty('_internal');
+      expect(mockMastra.observability.addScore).not.toHaveBeenCalled();
+    });
+
     it('should emit addScore without a target trace id when unanchored scoring is allowed', async () => {
       const mockMastra = createMockMastra();
 
