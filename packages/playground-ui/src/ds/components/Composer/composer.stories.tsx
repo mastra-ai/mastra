@@ -3,7 +3,7 @@ import { ArrowUp, Paperclip } from 'lucide-react';
 
 import { Button } from '../Button';
 import { Chip } from '../Chip';
-import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput } from './composer';
+import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
 
 const meta: Meta<typeof Composer> = {
   title: 'Elements/Composer',
@@ -67,4 +67,29 @@ export const DisabledAndRunning: Story = {
       </ComposerBox>
     </Composer>
   ),
+};
+
+const RingStory = ({ busy }: { busy: boolean }) => (
+  <Composer aria-label="Message composer">
+    <ComposerRing busy={busy}>
+      <ComposerBox>
+        <ComposerInput aria-label="Message" placeholder="Enter your message..." />
+        <ComposerActions>
+          <span />
+          <Button type="submit" size="icon-md" aria-label="Send message">
+            <ArrowUp />
+          </Button>
+        </ComposerActions>
+      </ComposerBox>
+    </ComposerRing>
+  </Composer>
+);
+
+/** Hover the box and move around: the lit arc follows the cursor. */
+export const RingIdle: Story = {
+  render: () => <RingStory busy={false} />,
+};
+
+export const RingBusy: Story = {
+  render: () => <RingStory busy />,
 };

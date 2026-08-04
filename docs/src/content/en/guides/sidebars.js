@@ -63,6 +63,11 @@ const sidebars = {
           id: 'getting-started/electron',
           label: 'Electron',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/manual-install',
+          label: 'Manual Install',
+        },
       ],
     },
     {

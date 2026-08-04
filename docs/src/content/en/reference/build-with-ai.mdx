@@ -7,50 +7,7 @@ packages:
 
 # Build with AI
 
-AI agents may not have up-to-date knowledge about Mastra's APIs, patterns, and best practices. These resources give your AI tools direct access to current Mastra documentation, enabling them to generate accurate code and help you build faster.
-
-To give your agent access to Mastra's documentation, we recommend using **skills**. While the MCP docs server also provides this information, skills will perform better. Use the MCP docs server when you need its tools, e.g. the migration tool.
-
-## Mastra skills
-
-Agent Skills are folders of instructions, scripts, and resources that agents can discover and use to do things accurately and efficiently. Mastra skills contain setup instructions, best practices, CLI commands, and instructions on how to fetch up-to-date information from Mastra's documentation.
-
-To install all available Mastra skills, run the following command:
-
-```bash npm2yarn
-npx skills add mastra-ai/skills
-```
-
-Mastra skills work with any coding agent that supports the [Skills standard](https://agentskills.io/), including Claude Code, Cursor, Codex, OpenCode, and others.
-
-They're also available on [GitHub](https://github.com/mastra-ai/skills).
-
-### Update skill
-
-To update to the latest version of the Mastra skill, run:
-
-```bash npm2yarn
-npx skills update mastra
-```
-
-## Mastra CLI
-
-The [Mastra CLI](/reference/cli/mastra) gives your coding agent a direct line to your Mastra runtime.
-
-Agents can invoke other agents and run workflows. They can execute tools and inspect memory. They can also run evals or query traces and logs.
-
-```bash npm2yarn
-npm install mastra@latest -g
-```
-
-For example, your coding agent can run an agent, then pull traces to inspect the results:
-
-```bash
-mastra api --url http://localhost:4111 agent run weather-agent '{"messages":"What is the weather in London?"}'
-mastra api --url http://localhost:4111 trace list
-```
-
-Install the [Mastra skills](#mastra-skills) to teach your agent how to use the CLI. See the [CLI commands reference](/reference/cli/mastra) for the full list of available commands.
+For everyday AI-assisted development with Mastra skills and the CLI, see [Develop](/docs/getting-started/develop#build-with-ai). This page covers other ways to give coding agents access to Mastra documentation.
 
 ## Embedded package docs
 
@@ -75,11 +32,13 @@ Examples for the [introduction page](/docs):
 - [`/docs/llms.txt`](https://mastra.ai/docs/llms.txt)
 - [`/docs.md`](https://mastra.ai/docs.md)
 
-## Mastra's documentation
-
-In addition to the [context files](#context-files) each documentation page also features a "Copy markdown" button at the top of the page. It'll copy the streamlined markdown version to your clipboard. Beside it, you'll find a dropdown menu to open the page on GitHub, in ChatGPT, Claude, and others.
-
 ## MCP docs server
+
+:::warning
+
+The MCP docs server isn't recommended for everyday development. Use the [Mastra skill](/docs/getting-started/develop#mastra-skill) instead because it's more up to date and performs better.
+
+:::
 
 The `@mastra/mcp-docs-server` package provides direct local access to Mastra’s full documentation via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
 
@@ -89,7 +48,7 @@ If you're unable to use a local MCP server and need to connect to a remote serve
 
 ### Installation
 
-The [`create-mastra`](/reference/cli/create-mastra) command installs Mastra skills automatically. It doesn't configure the MCP docs server. Add the server manually when you need MCP-specific tools such as the migration tool.
+The [`create-mastra`](/reference/cli/create-mastra) command doesn't configure the MCP docs server. Add the server manually when you need MCP-specific tools such as the migration tool.
 
 If there are no specific instructions for your tool below, you may be able to add the MCP server with this common JSON configuration.
 
@@ -297,7 +256,7 @@ Once configured, you can ask your AI tool questions about Mastra or instruct it 
 - "How does working memory behave in Mastra and how can I use it to do `[task]`? It doesn't seem to work the way I expect."
 - "I saw there are new workflow features, explain them to me and then update `[workflow]` to use them."
 
-#### Troubleshooting
+### Troubleshooting
 
 1. **Server Not Starting**
    - Ensure [npx](https://docs.npmjs.com/cli/v11/commands/npx) is installed and working.

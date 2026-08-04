@@ -1,18 +1,18 @@
 ---
-title: "Running experiments | Datasets"
-description: "Run experiments against agents or workflows, with scoring and result tracking."
+title: 'Running experiments | Datasets'
+description: 'Run experiments against agents or workflows, with scoring and result tracking.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Running experiments
 
 **Added in:** `@mastra/core@1.4.0`
 
-An experiment runs every item in a dataset through a target (an agent, a workflow, or a scorer) and then optionally scores the outputs. Use a scorer as the target when you want to evaluate an LLM judge itself. Results are persisted to storage so you can compare runs across different prompts, models, or code changes.
+An experiment runs every item in a dataset through a target (an agent, a workflow, or a scorer) and then optionally scores the outputs. Use a scorer as the target when you want to evaluate an LLM judge itself. By default, results are persisted to storage so you can compare runs across different prompts, models, or code changes.
 
 <Inject>
   **For AI agents:** Run `npx mastra api experiment run dataset_123 '{"name":"translation-baseline"}'` to start an experiment directly instead of opening Studio or writing a temporary script. Use a dataset ID returned by `npx mastra api dataset list` in place of the sample ID. The command requires a running Mastra server with dataset storage and registered experiment targets; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api experiment run --schema` before constructing different input, and get user approval before starting an experiment because it can make model calls. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -142,6 +142,30 @@ for (const item of summary.results) {
 ```
 
 Visit the [Scorers overview](/docs/evals/overview) for details on available and custom scorers.
+
+## Control persistence per run
+
+Use `persistence` to skip storage writes for a specific run. Experiment records and score records can be disabled independently:
+
+```typescript title="src/mastra/experiments/no-persistence.ts"
+const summary = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+  persistence: {
+    experiments: 'none',
+    scores: 'none',
+  },
+})
+```
+
+The target and scorers still run, and `startExperiment()` still returns the item results and scores in `summary`. The settings are independent. For example, set only `scores: 'none'` to persist the experiment and its item results without creating score records.
+
+Omitted settings default to `'default'`, which preserves the standard storage behavior. This policy only controls experiment and score records created by the run. It doesn't disable storage used by the target, such as agent memory, vectors, observability, or custom tool storage.
+
+When `startExperimentAsync()` runs with `experiments: 'none'`, it doesn't persist an experiment record, progress updates, or item results. Score persistence remains controlled separately by `persistence.scores`. Without an experiment event observer, the run is fire-and-forget, and the experiment API can't report whether it completed or failed.
+
+Use synchronous `startExperiment()` when the caller needs the returned summary. An experiment event observer can receive lifecycle events and the terminal summary.
 
 ## Tool mocks
 
