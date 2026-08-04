@@ -467,7 +467,7 @@ describe('ObservabilityStorageDuckDB', () => {
         ],
       });
 
-      // On base the facade falls through to the base-class throw; after the fix it resolves.
+      // The facade resolves through the light list; previously this fell through to a throw.
       const result = await storage.listTracesLight({});
       expect(result.spans.map(s => s.traceId)).toContain('trace-light-1');
       const row = result.spans.find(s => s.traceId === 'trace-light-1')!;

@@ -576,7 +576,7 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
 }
 
 /**
- * Lightweight span record containing only the fields needed for timeline rendering.
+ * Lightweight span record containing only the fields trace lists and timelines render.
  * Excludes heavy fields: input, output, attributes, tags, links.
  * This keeps the per-span payload a small fraction of a full span record's.
  */
@@ -613,7 +613,7 @@ export const lightSpanRecordSchema = z
     // Database timestamps
     ...dbTimestamps,
   })
-  .describe('Lightweight span record for timeline rendering (excludes input, output, attributes, tags, links)');
+  .describe('Lightweight span record for trace lists and timelines (excludes input, output, attributes, tags, links)');
 
 /** Lightweight span record for timeline rendering */
 export type LightSpanRecord = z.infer<typeof lightSpanRecordSchema>;
