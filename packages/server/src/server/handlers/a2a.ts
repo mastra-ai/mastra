@@ -501,7 +501,7 @@ function applySuspensionToTask({
 
   const payload = suspendPayload as { toolCallId?: unknown } | undefined;
   nextTask.metadata = {
-    ...nextTask.metadata,
+    ...clearSuspensionMetadata(nextTask.metadata),
     [SUSPENDED_RUN_ID_METADATA_KEY]: runId,
     ...(typeof payload?.toolCallId === 'string' ? { [SUSPENDED_TOOL_CALL_ID_METADATA_KEY]: payload.toolCallId } : {}),
     ...(isApprovalSuspension(suspendPayload) ? { [SUSPENDED_REQUIRES_APPROVAL_METADATA_KEY]: true } : {}),

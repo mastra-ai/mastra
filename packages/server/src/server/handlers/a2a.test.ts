@@ -2525,15 +2525,17 @@ describe('A2A Handler', () => {
       },
     );
 
-    it('should support multiple suspend/resume rounds before completing', async () => {
+    it('should clear approval metadata when a resumed run suspends for free-form input', async () => {
       const generate = vi.fn().mockResolvedValue({
         text: '',
         finishReason: 'suspended',
         suspendPayload: {
           toolCallId: 'tc-round-1',
-          toolName: 'clarify',
-          suspendPayload: { message: 'Which city?' },
+          toolName: 'bookFlight',
+          args: { city: 'Paris' },
+          resumeSchema: '{"type":"object"}',
         },
+        resumeSchema: '{"type":"object"}',
         runId: 'run-round-1',
       });
       const resumeGenerate = vi
@@ -2544,7 +2546,7 @@ describe('A2A Handler', () => {
           suspendPayload: {
             toolCallId: 'tc-round-2',
             toolName: 'clarify',
-            suspendPayload: { message: 'Which date?' },
+            suspendPayload: { message: 'Is tomorrow acceptable?' },
           },
           runId: 'run-round-1',
         })
@@ -2574,13 +2576,15 @@ describe('A2A Handler', () => {
       const first: any = await sendMessage('round-message-1', 'Book a flight');
       expect(first.result.status.state).toBe('input-required');
       expect(first.result.metadata.suspendedToolCallId).toBe('tc-round-1');
+      expect(first.result.metadata.suspendedRequiresApproval).toBe(true);
 
-      const second: any = await sendMessage('round-message-2', '{"city":"Paris"}');
+      const second: any = await sendMessage('round-message-2', 'yes');
       expect(second.result.status.state).toBe('input-required');
-      expect(second.result.status.message.parts[0]).toEqual({ kind: 'text', text: 'Which date?' });
+      expect(second.result.status.message.parts[0]).toEqual({ kind: 'text', text: 'Is tomorrow acceptable?' });
       expect(second.result.metadata.suspendedToolCallId).toBe('tc-round-2');
+      expect(second.result.metadata.suspendedRequiresApproval).toBeUndefined();
 
-      const third: any = await sendMessage('round-message-3', '{"date":"2026-08-01"}');
+      const third: any = await sendMessage('round-message-3', 'yes');
       expect(third.result.status.state).toBe('completed');
       expect(third.result.metadata.suspendedRunId).toBeUndefined();
       expect(third.result.metadata.suspendedToolCallId).toBeUndefined();
@@ -2589,12 +2593,12 @@ describe('A2A Handler', () => {
       expect(resumeGenerate).toHaveBeenCalledTimes(2);
       expect(resumeGenerate).toHaveBeenNthCalledWith(
         1,
-        { city: 'Paris' },
+        { approved: true },
         expect.objectContaining({ runId: 'run-round-1', toolCallId: 'tc-round-1' }),
       );
       expect(resumeGenerate).toHaveBeenNthCalledWith(
         2,
-        { date: '2026-08-01' },
+        'yes',
         expect.objectContaining({ runId: 'run-round-1', toolCallId: 'tc-round-2' }),
       );
     });
