@@ -10,7 +10,7 @@ packages:
 
 # Editor
 
-Editor enables collaborators to update your agent without needing access to your codebase or the ability to write code. They can change its instructions and tools in Studio, then test a draft before publishing it.
+Editor enables collaborators to update your agent in Studio without needing access to your codebase or the ability to write code. They can change its instructions and tools, then test a draft before publishing it.
 
 TypeScript defines the agent's default values. Editor saves changes separately instead of updating the source code, so collaborators can improve the agent while developers retain control over its model, identity, and runtime.
 
@@ -98,7 +98,7 @@ See the [prompt blocks reference](/reference/editor/prompt-blocks) for template 
 
 ## Tools
 
-Tools let an agent take actions. Editor can use tools already registered in your project, tools from integration providers, and tools exposed by Model Context Protocol (MCP) servers.
+Tools let an agent take actions. Editor can use tools already registered on the agent, tools from integration providers, and tools exposed by MCP servers.
 
 Collaborators choose from the tools made available to Editor. They can't write a new tool implementation in Studio, but developers don't have to define every tool individually either:
 
