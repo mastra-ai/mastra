@@ -3773,6 +3773,16 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(buildRetentionDDL({})).toEqual([]);
     });
 
+    it('delta tables cast the DateTime64 cursor column in their TTL expression', () => {
+      const deltaDdl = buildAllTableDDL().filter(ddl => ddl.includes('_delta ('));
+      expect(deltaDdl).toHaveLength(6);
+
+      for (const ddl of deltaDdl) {
+        expect(ddl).toContain('TTL toDateTime(ingestedAt) + toIntervalDay(2)');
+        expect(ddl).not.toMatch(/TTL\s+ingestedAt/);
+      }
+    });
+
     it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
       const stmts = buildRetentionDDL({ tracing: 30 });
       expect(stmts).toHaveLength(3);

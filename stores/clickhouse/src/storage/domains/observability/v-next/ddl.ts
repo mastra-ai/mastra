@@ -363,6 +363,10 @@ WHERE spanType IN (${BRANCH_SPAN_TYPE_VALUES.map(v => `'${v}'`).join(', ')})
 `;
 
 const DELTA_INGESTED_AT_TYPE = `DateTime64(9, 'UTC')`;
+// ClickHouse before 25.6 rejects TTL expressions that evaluate to DateTime64
+// (BAD_TTL_EXPRESSION), so the cursor timestamp is cast down to second
+// precision here. The stored column keeps its full nanosecond precision.
+const DELTA_TTL_CLAUSE = `TTL toDateTime(ingestedAt) + toIntervalDay(2)`;
 const DELTA_CURSOR_EPOCH_MS = 1777852800000;
 const DELTA_CURSOR_SUFFIX_BITS = 26;
 const DELTA_CURSOR_SUFFIX_MASK = 67108863;
@@ -407,7 +411,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS_DELTA} (
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
 ORDER BY (cursorId)
-TTL ingestedAt + toIntervalDay(2)
+${DELTA_TTL_CLAUSE}
 `;
 }
 
@@ -453,7 +457,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES_DELTA} (
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
 ORDER BY (cursorId)
-TTL ingestedAt + toIntervalDay(2)
+${DELTA_TTL_CLAUSE}
 `;
 }
 
@@ -630,7 +634,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS_DELTA} (
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
 ORDER BY (cursorId)
-TTL ingestedAt + toIntervalDay(2)
+${DELTA_TTL_CLAUSE}
 `;
 }
 
@@ -734,7 +738,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA} (
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
 ORDER BY (cursorId)
-TTL ingestedAt + toIntervalDay(2)
+${DELTA_TTL_CLAUSE}
 SETTINGS allow_nullable_key = 1
 `;
 }
@@ -844,7 +848,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS_DELTA} (
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
 ORDER BY (cursorId)
-TTL ingestedAt + toIntervalDay(2)
+${DELTA_TTL_CLAUSE}
 SETTINGS allow_nullable_key = 1
 `;
 }
@@ -889,7 +893,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS_DELTA} (
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
 ORDER BY (cursorId)
-TTL ingestedAt + toIntervalDay(2)
+${DELTA_TTL_CLAUSE}
 `;
 }
 
