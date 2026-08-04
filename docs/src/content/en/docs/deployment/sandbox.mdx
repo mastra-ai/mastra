@@ -107,12 +107,14 @@ npm install --save-dev dotenv-cli
 ```json title="package.json"
 {
   "scripts": {
-    "build": "dotenv -e .env -- mastra build"
+    "deploy": "dotenv -e .env -- mastra build"
   }
 }
 ```
 
-Then run `npm run build` instead of `mastra build`. In continuous integration (CI), export the credentials as secrets instead. Whatever mechanism you use, the variables must exist in the shell environment, not only in the `.env` file.
+Then run `npm run deploy`. The script is named for what it does, since `mastra build` deploys once a `SandboxDeployer()` is configured. Keep it separate from a plain `build` script so a hosting platform or CI job that runs `npm run build` doesn't deploy a sandbox by accident.
+
+In continuous integration (CI), export the credentials as secrets instead. Whatever mechanism you use, the variables must exist in the shell environment, not only in the `.env` file.
 
 This applies to credentials the deployer needs on your machine. Variables the deployed server needs are handled separately: the deployer reads `.env`, `.env.production`, and `.env.local` and injects them into the sandbox. See [Security](#security).
 
