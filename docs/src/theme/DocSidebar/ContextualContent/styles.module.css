@@ -1,0 +1,28 @@
+.header {
+  padding: 0.25rem var(--ifm-menu-link-padding-horizontal) 0.75rem;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: var(--ifm-menu-link-padding-vertical) 0;
+  border: 0;
+  color: var(--ifm-menu-color);
+  background: transparent;
+  font: inherit;
+  font-weight: var(--ifm-font-weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.backButton:hover,
+.backButton:focus-visible {
+  color: var(--ifm-menu-color-active);
+}
+
+.heading {
+  margin: 0.5rem 0 0;
+  font-size: 1.125rem;
+}

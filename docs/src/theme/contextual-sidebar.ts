@@ -5,6 +5,7 @@ export type ContextualSidebarState = Readonly<{
   categoryLabel: string
   destinationPathnames: readonly string[]
   entryPathname: string
+  phase: 'pending' | 'active'
 }>
 
 export type SidebarClickEvent = Readonly<{
@@ -145,6 +146,7 @@ export function enterContextualSidebar(
     categoryLabel: category.label,
     destinationPathnames,
     entryPathname: normalizedEntryPathname,
+    phase: destinationPathnames.includes(normalizedEntryPathname) ? 'active' : 'pending',
   }
 }
 
@@ -161,11 +163,17 @@ export function observeContextualSidebarPathname(
     return undefined
   }
 
-  if (normalizedPathname === state.entryPathname || state.destinationPathnames.includes(normalizedPathname)) {
-    return state
+  if (state.phase === 'pending') {
+    if (normalizedPathname === state.entryPathname) {
+      return state
+    }
+    if (state.destinationPathnames.includes(normalizedPathname)) {
+      return { ...state, phase: 'active' }
+    }
+    return undefined
   }
 
-  return undefined
+  return state.destinationPathnames.includes(normalizedPathname) ? state : undefined
 }
 
 export function isContextualSidebarVisible(
@@ -173,7 +181,9 @@ export function isContextualSidebarVisible(
   pathname: string,
 ): state is ContextualSidebarState {
   const normalizedPathname = normalizePathname(pathname)
-  return Boolean(state && normalizedPathname && state.destinationPathnames.includes(normalizedPathname))
+  return Boolean(
+    state?.phase === 'active' && normalizedPathname && state.destinationPathnames.includes(normalizedPathname),
+  )
 }
 
 export function getContextualSidebarItems(

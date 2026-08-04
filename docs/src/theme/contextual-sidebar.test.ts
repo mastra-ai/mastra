@@ -128,10 +128,10 @@ describe('contextual sidebar model', () => {
     expect(observeContextualSidebarPathname(state, '/docs')).toBe(state)
 
     const promoted = observeContextualSidebarPathname(state, '/docs/agents/overview/')
-    expect(promoted).toBe(state)
+    expect(promoted).toEqual({ ...state, phase: 'active' })
     expect(isContextualSidebarVisible(promoted, '/docs/agents/overview/')).toBe(true)
     expect(isContextualSidebarVisible(promoted, '/docs/agents/overview-extra')).toBe(false)
-    expect(observeContextualSidebarPathname(promoted, '/docs/agents/using-tools')).toBe(state)
+    expect(observeContextualSidebarPathname(promoted, '/docs/agents/using-tools')).toBe(promoted)
     expect(observeContextualSidebarPathname(promoted, '/docs/workflows/overview')).toBeUndefined()
   })
 
@@ -141,6 +141,14 @@ describe('contextual sidebar model', () => {
     expect(observeContextualSidebarPathname(state, '/docs')).toBe(state)
     expect(observeContextualSidebarPathname(state, '/docs/workflows/overview')).toBeUndefined()
     expect(isContextualSidebarVisible(state, '/docs')).toBe(false)
+  })
+
+  it('clears active context when browser history returns to the entry pathname', () => {
+    const pending = enterContextualSidebar(createCategory(), '/docs', siteUrl)
+    const active = observeContextualSidebarPathname(pending, '/docs/agents/overview')
+
+    expect(active?.phase).toBe('active')
+    expect(observeContextualSidebarPathname(active, '/docs')).toBeUndefined()
   })
 
   it('activates immediately when entry starts on a category destination', () => {
