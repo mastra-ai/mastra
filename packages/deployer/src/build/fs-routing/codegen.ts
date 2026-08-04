@@ -98,6 +98,22 @@ async function emitAgentEntry(
     }
   }
 
+  // Schedules: `.ts`/`.js` modules are imported so handler-mode schedules keep
+  // a live function; markdown schedules are inlined as plain data.
+  const scheduleExprs: string[] = [];
+  const agentSchedules = agent.schedules ?? [];
+  for (let s = 0; s < agentSchedules.length; s++) {
+    const schedule = agentSchedules[s]!;
+    const keyField = `key: ${JSON.stringify(schedule.key)}`;
+    if (schedule.kind === 'module') {
+      const ident = sanitizeIdentifier(`${agent.name}_schedule`, 'schedule', `${idPath}_${s}`);
+      lines.push(`import ${ident} from ${JSON.stringify(schedule.path)};`);
+      scheduleExprs.push(`{ ${keyField}, schedule: ${ident} }`);
+    } else {
+      scheduleExprs.push(`{ ${keyField}, schedule: ${JSON.stringify(schedule.definition)} }`);
+    }
+  }
+
   let instructionsMd: string | undefined;
   if (agent.instructionsPath) {
     instructionsMd = await readFile(agent.instructionsPath, 'utf-8');
@@ -135,6 +151,9 @@ async function emitAgentEntry(
   if (scorerIdents.length > 0) {
     const scorerEntries = scorerIdents.map(({ key, ident }) => `{ key: ${JSON.stringify(key)}, scorer: ${ident} }`);
     entryFields.push(`scorers: [${scorerEntries.join(', ')}]`);
+  }
+  if (scheduleExprs.length > 0) {
+    entryFields.push(`schedules: [${scheduleExprs.join(', ')}]`);
   }
   if (subagentExprs.length > 0) {
     entryFields.push(`subagents: [${subagentExprs.join(', ')}]`);

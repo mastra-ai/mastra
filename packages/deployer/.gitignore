@@ -1,1 +1,4 @@
 .env.mastra
+
+# Fixture dirs for exec-codegen tests (inside the package so workspace resolution works)
+.tmp-fs-exec-*
