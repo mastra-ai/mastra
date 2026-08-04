@@ -82,13 +82,7 @@ Studio shows everything else as read-only. See [editor overrides](/reference/age
 
 ## Instructions
 
-An agent's instructions are the system prompt sent to the model. They describe the agent's role, rules, and response style. For example:
-
-```text
-You are an Acme support agent. Answer questions about Acme products and ask for an order number before checking an order.
-```
-
-In Studio, collaborators edit this content under **Instructions**. They can replace the instructions defined in code or add more instruction blocks. Editor stores those changes separately instead of rewriting the agent's TypeScript file.
+In the Studio Editor UI, **Instructions** is where collaborators edit the agent's system prompt. It shows the instructions defined in code and lets collaborators replace them or add more instruction blocks. Editor stores those changes separately instead of rewriting the agent's TypeScript file.
 
 An instruction block can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through request context. A display condition can show a block only for a customer, role, or feature flag.
 
