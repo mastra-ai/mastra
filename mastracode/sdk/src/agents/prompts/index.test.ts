@@ -194,15 +194,15 @@ describe('buildFullPrompt operator-machine instructions', () => {
     workingDir: projectDir,
   };
 
-  it('ingests operator instructions for interactive sessions', () => {
+  it('ingests operator instructions by default', () => {
     const prompt = buildFullPrompt({ ...baseCtx, state: { permissionRules: { tools: {} } } });
     expect(prompt).toContain('OPERATOR: answer in prose, never use headings');
   });
 
-  it('skips operator instructions for autonomous sessions but keeps project ones', () => {
+  it('skips operator instructions when the host opted out, keeping project ones', () => {
     const prompt = buildFullPrompt({
       ...baseCtx,
-      state: { permissionRules: { tools: {} }, autonomousSession: true },
+      state: { permissionRules: { tools: {} }, skipGlobalInstructions: true },
     });
     expect(prompt).not.toContain('OPERATOR: answer in prose, never use headings');
     expect(prompt).toContain('PROJECT: run the unit tests before pushing');
