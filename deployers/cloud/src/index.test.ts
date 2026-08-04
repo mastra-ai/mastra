@@ -217,6 +217,36 @@ describe('CloudDeployer', () => {
         frozen: true,
       });
     });
+
+    it('rejects an explicit non-npm bundle lock before installDeps runs', async () => {
+      // @ts-expect-error - accessing protected method for testing
+      await expect(
+        deployer.installDependencies('/test/output', '/test/root', undefined, {
+          packageManager: 'pnpm',
+          frozen: true,
+          generateSecondaryNpmLockfile: false,
+          explicitLockfile: { sourcePath: '/test/root/pnpm-lock.yaml', basename: 'pnpm-lock.yaml' },
+        }),
+      ).rejects.toThrow('Cloud only supports npm bundle lockfiles, got pnpm-lock.yaml');
+
+      expect(installDeps).not.toHaveBeenCalled();
+    });
+
+    it('passes an explicit npm bundle lock through to installDeps frozen', async () => {
+      // @ts-expect-error - accessing protected method for testing
+      await deployer.installDependencies('/test/output', '/test/root', undefined, {
+        packageManager: 'npm',
+        frozen: true,
+        generateSecondaryNpmLockfile: false,
+        explicitLockfile: { sourcePath: '/test/root/package-lock.json', basename: 'package-lock.json' },
+      });
+
+      expect(installDeps).toHaveBeenCalledWith({
+        path: join('/test/output', 'output'),
+        pm: 'npm',
+        frozen: true,
+      });
+    });
   });
 
   describe('bundle', () => {

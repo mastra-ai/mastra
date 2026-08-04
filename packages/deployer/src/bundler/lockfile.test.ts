@@ -133,14 +133,26 @@ describe('Bundler bundle lockfile authority', () => {
     expect(bundler.resolveState(tmpdir(), undefined, true).generateSecondaryNpmLockfile).toBe(false);
   });
 
-  it('rejects a manager mismatch and never reaches the installer', async () => {
-    const { projectRoot, outputDirectory, bundler } = await createBundleFixture({ lockfile: 'package-lock.json' });
-    await writeFile(join(projectRoot, 'package-lock.json'), '{}\n');
+  it('pins the explicit npm lock from a pnpm source without throwing and without secondary npm', async () => {
+    const { projectRoot, outputDirectory } = await createBundleFixture({ lockfile: 'package-lock.json' });
+    await writeFile(join(projectRoot, 'package-lock.json'), 'lock bytes\n');
 
-    await expect(
-      bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), { projectRoot, outputDirectory }),
-    ).rejects.toThrow('does not match the pnpm bundle installer');
-    expect(bundler.installs).toHaveLength(0);
+    class BaseManagerBundler extends LockfileTestBundler {
+      protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun') {
+        return Bundler.prototype.getBundleDependencyPackageManager.call(this, rootDir, explicitManager);
+      }
+    }
+
+    const bundler = new BaseManagerBundler({ lockfile: 'package-lock.json' });
+    await bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), { projectRoot, outputDirectory });
+
+    expect(bundler.installs).toHaveLength(1);
+    expect((bundler.installs[0]?.[3] as any).packageManager).toBe('npm');
+    expect((bundler.installs[0]?.[3] as any).frozen).toBe(true);
+    expect((bundler.installs[0]?.[3] as any).explicitLockfile.basename).toBe('package-lock.json');
+    expect(await readFile(join(outputDirectory, 'output', 'package-lock.json'), 'utf8')).toBe('lock bytes\n');
+    expect((bundler.installs[0]?.[3] as any).generateSecondaryNpmLockfile).toBe(false);
+    expect(bundler.getState()).toBeUndefined();
   });
 
   it('uses an explicit manager when the project has no source lock', async () => {
@@ -152,10 +164,7 @@ describe('Bundler bundle lockfile authority', () => {
     await writeFile(join(explicitRoot, 'pnpm-lock.yaml'), 'lock bytes\n');
 
     class NoSourceBundler extends LockfileTestBundler {
-      protected getBundleDependencyPackageManager(
-        rootDir: string,
-        explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun',
-      ) {
+      protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun') {
         return super.getBundleDependencyPackageManager(rootDir, explicitManager);
       }
     }

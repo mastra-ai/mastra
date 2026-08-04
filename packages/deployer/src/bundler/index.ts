@@ -455,13 +455,7 @@ export abstract class Bundler extends MastraBundler {
       throw new Error(`Bundle lockfile must be a file: ${sourcePath}`);
     }
 
-    const hasSourceLockfile = new DepsService(projectRoot).getLockFile() !== null;
-    const packageManager = hasSourceLockfile
-      ? this.getBundleDependencyPackageManager(projectRoot)
-      : this.getBundleDependencyPackageManager(projectRoot, explicitManager);
-    if (explicitManager !== packageManager) {
-      throw new Error(`Bundle lockfile ${basename} does not match the ${packageManager} bundle installer`);
-    }
+    const packageManager = this.getBundleDependencyPackageManager(projectRoot, explicitManager);
 
     return {
       packageManager,

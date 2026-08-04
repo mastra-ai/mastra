@@ -116,7 +116,7 @@ describe('DepsService explicit lock install commands', () => {
   });
 
   it.each([
-    ['npm', 'npm ci --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false'],
+    ['npm', 'npm ci --force --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false'],
     ['pnpm', 'pnpm install --frozen-lockfile --loglevel=error'],
     ['yarn', 'yarn install --frozen-lockfile'],
     ['bun', 'bun install --frozen-lockfile'],
