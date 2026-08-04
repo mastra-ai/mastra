@@ -36,7 +36,7 @@ When a generic stored resource has no active version, published resolution can f
 
 With `source: 'code'`, active agent overrides are serialized as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`.
 
-The initial agent is published to create the file. Later server updates create a draft by default and write the file when that version becomes active. Git versions are read-only in Studio. The default history scan reads up to 50 recent commits and skips consecutive commits whose parsed JSON snapshot is unchanged.
+The initial agent is published to create the file. Later server updates create a draft by default and write the file when that version becomes active. Git versions are read-only in Studio and use the commit message as their change message. The default history scan reads up to 50 recent commits and skips consecutive commits whose parsed JSON snapshot is unchanged.
 
 See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
 
@@ -61,7 +61,7 @@ See the [Client SDK agents reference](/reference/client-js/agents#version-manage
 
 ## Sub-agent versioning
 
-Version overrides propagate through supervisor-agent delegation in request context. Define selectors at three levels:
+Version overrides propagate through [supervisor-agent delegation](/docs/agents/supervisor-agents) in request context. Define selectors at three levels:
 
 1. `Mastra` instance `versions`: Defaults for every invocation
 1. Server request-body `versions`: Per-request values added to request context
@@ -129,6 +129,8 @@ The default Mastra server prefix is `/api`. A custom server prefix changes the p
 | `DELETE` | `/api/stored/agents/:storedAgentId` | Delete a stored agent |
 | `GET` | `/api/stored/agents/:storedAgentId/dependents` | List readable dependents and count hidden cross-workspace references |
 | `POST` | `/api/stored/agents/:storedAgentId/export` | Export the allowed override fields as deterministic JSON |
+
+The dependents response lists caller-readable agents by `id` and `name`. Its `hiddenCount` field counts cross-workspace references that the caller can't read, but only when the target agent is public.
 
 Version-management routes are nested under `/api/stored/agents/:storedAgentId/versions`. See [version management](/reference/client-js/agents#version-management) for operations and Client SDK methods.
 
