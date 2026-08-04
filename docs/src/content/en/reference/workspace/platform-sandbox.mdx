@@ -50,7 +50,7 @@ Configure the platform credentials. The access token, project ID, and environmen
   </TabItem>
 </Tabs>
 
-On a Mastra Platform deployment, `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID` are injected automatically. Set `MASTRA_PLATFORM_SECRET_KEY` as an environment variable on your project yourself; create the token on your project's settings page under **API Tokens**. With all three set, the constructor can be called with no options.
+On a Mastra Platform deployment, `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID` are injected automatically. Set `MASTRA_PLATFORM_SECRET_KEY` as an environment variable on your project yourself; create the token on your organization's settings page under **API Tokens**. With all three set, the constructor can be called with no options.
 
 ## Usage
 
@@ -176,8 +176,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'accessToken',
     type: 'string',
-    description:
-      'Platform secret key. Falls back to the MASTRA_PLATFORM_SECRET_KEY environment variable (MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated fallback).',
+    description: 'Platform secret key. Falls back to the MASTRA_PLATFORM_SECRET_KEY environment variable.',
     isOptional: true,
   },
   {

@@ -108,11 +108,11 @@ One variable is **not** injected and must be set on your project yourself:
 
 | Variable | Contents |
 | - | - |
-| `MASTRA_PLATFORM_SECRET_KEY` | Secret key the workspace providers use to authenticate. Create one on your project's settings page under **API Tokens** and store it as an environment variable on your project. `MASTRA_PLATFORM_ACCESS_TOKEN` is accepted as a deprecated alias. |
+| `MASTRA_PLATFORM_SECRET_KEY` | Secret key the workspace providers use to authenticate. Create one on your organization's settings page under **API Tokens** and store it as an environment variable on your project. |
 
 ## Local development
 
-Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's Workspaces tab, and the secret key from the settings page under **API Tokens**:
+Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's Workspaces tab, and create the secret key on your organization's settings page under **API Tokens**:
 
 ```bash title=".env"
 MASTRA_PLATFORM_SECRET_KEY=your-secret-key
