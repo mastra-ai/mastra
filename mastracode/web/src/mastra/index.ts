@@ -203,8 +203,14 @@ const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectio
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
-// password. Unset → per-process random secret (single-process local dev only).
-const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+// password, then the Slack signing secret so a Slack-only deployment still has
+// a stable signer. Unset → per-process random secret (single-process local dev
+// only).
+const stateSecret =
+  process.env.GITHUB_APP_WEBHOOK_SECRET ||
+  process.env.WORKOS_COOKIE_PASSWORD ||
+  process.env.SLACK_APP_SIGNING_SECRET ||
+  undefined;
 
 // Slack channels + account linking. Optional: the Slack adapter validates the
 // signing secret at construction, so the integration is only built when the
