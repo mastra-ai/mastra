@@ -772,12 +772,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/evals/datasets/overview",
+      "destination": "/docs/datasets/overview",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/evals/datasets/running-experiments",
+      "destination": "/docs/datasets/running-experiments",
       "permanent": true
     },
     {
@@ -1128,6 +1128,11 @@
     {
       "source": "/docs/voice/:path*",
       "destination": "/guides/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/:path*",
+      "destination": "/docs/datasets/:path*",
       "permanent": true
     }
   ]
