@@ -1,5 +1,5 @@
 import { AgentControllerChannels } from '@mastra/core/channels';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/slack', () => ({
   createSlackAdapter: vi.fn(() => ({ __adapter: true })),
@@ -22,6 +22,10 @@ function ctxWith(overrides: Record<string, unknown> = {}) {
     rules: { workItems: {} },
   } as any;
 }
+
+beforeEach(() => {
+  createGithubSourceControl.mockClear();
+});
 
 describe('SlackIntegration.channels', () => {
   it('returns a channels config (not a built instance) with the slack adapter entry in config form', () => {
@@ -49,7 +53,6 @@ describe('SlackIntegration.channels', () => {
   });
 
   it('wires no source-control adapter when the context has no source-control owner', () => {
-    createGithubSourceControl.mockClear();
     const integration = new SlackIntegration({ signingSecret: 'secret' });
 
     integration.channels(ctxWith());
