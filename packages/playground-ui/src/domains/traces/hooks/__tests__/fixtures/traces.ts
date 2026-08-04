@@ -5,7 +5,7 @@ import { TraceStatus } from '@mastra/core/storage';
 const timestamp = new Date('2026-06-10T00:00:00.000Z');
 const laterTimestamp = new Date('2026-06-10T00:05:00.000Z');
 
-export const lightSpanAlpha: LightSpanRecord = {
+const lightSpanAlpha: LightSpanRecord = {
   traceId: 'trace-alpha',
   spanId: 'span-alpha',
   parentSpanId: null,
@@ -21,7 +21,7 @@ export const lightSpanAlpha: LightSpanRecord = {
   updatedAt: timestamp,
 };
 
-export const lightSpanBravo: LightSpanRecord = {
+const lightSpanBravo: LightSpanRecord = {
   traceId: 'trace-bravo',
   spanId: 'span-bravo',
   parentSpanId: null,

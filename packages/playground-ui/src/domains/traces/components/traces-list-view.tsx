@@ -37,8 +37,6 @@ export type TracesListViewTrace = {
   inputPreview?: string | null;
   input?: unknown;
   metadata?: Record<string, unknown> | null;
-  /** Error info from the span — presence indicates failure. */
-  error?: unknown;
   startedAt?: Date | string | null;
   endedAt?: Date | string | null;
   createdAt: Date | string;

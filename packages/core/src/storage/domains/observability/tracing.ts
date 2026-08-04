@@ -492,8 +492,9 @@ function recoverUserTextFromPartialJson(raw: string): string {
 
 /**
  * Builds the short text shown in a trace list's input column, mirroring what the
- * full-payload list previously derived client-side. Stores call this when writing a
- * span so listing never has to read the `input` blob back.
+ * full-payload list previously derived client-side. Stores call this at read time,
+ * from their lightweight list row mappers, so the raw `input` blob never reaches
+ * the caller.
  *
  * Accepts a parsed `input` value or its JSON string, and tolerates a string that was
  * cut off mid-document (ingesters cap oversized fields).

@@ -24,8 +24,9 @@ const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, Del
 /**
  * Per-MastraClient light-list support cache. Sticks once the light endpoint
  * fails with a non-permission HTTP error (404 from servers without the route,
- * 500/501 from stores without the light projection), so every subsequent page
- * fetch, delta poll and periodic refresh uses the full list endpoint instead.
+ * 500 from servers whose store throws instead of serving the projection), so
+ * every subsequent page fetch, delta poll and periodic refresh uses the full
+ * list endpoint instead.
  */
 type LightListSupport = 'unknown' | 'unsupported';
 const lightListSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, LightListSupport>();
@@ -85,8 +86,9 @@ function isHttp501(error: unknown): boolean {
 }
 
 /** HTTP failures other than 403 mean the light endpoint isn't served (missing
- *  route or store without the projection). 403 is a permission denial that the
- *  full endpoint would hit too, so it must not trigger the fallback. */
+ *  route, or a store that throws instead of serving the projection). 403 is a
+ *  permission denial that the full endpoint would hit too, so it must not
+ *  trigger the fallback. */
 function isLightListUnsupportedError(error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status;
   return typeof status === 'number' && status !== 403;
