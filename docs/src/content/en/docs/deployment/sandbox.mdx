@@ -109,6 +109,18 @@ const deployer = new SandboxDeployer({
 
 Stopping a Daytona sandbox persists its filesystem but not running processes, so waking works like Vercel: the resolver relaunches the server on `wake: true`.
 
+Daytona filters outbound traffic per destination. Requests to some hosts connect over Transport Layer Security (TLS) normally, while others are reset during the handshake, which surfaces in an agent or a tool as Node's generic `fetch failed`. Rule out your code before debugging it, by running `curl` against the same host from inside the sandbox:
+
+```typescript
+const sandbox = new DaytonaSandbox({ id: 'my-preview' })
+await sandbox.start()
+
+const result = await sandbox.executeCommand('curl -v --max-time 10 https://api.example.com')
+console.info(result.stdout, result.stderr)
+```
+
+A `Connection reset by peer` during the TLS handshake points at the filtering rather than your agent. Ask Daytona support to allow the destination. Restricted Daytona tiers also block cloud storage endpoints, which the mount helpers report with a dedicated error.
+
 ## Deploying programmatically
 
 `deployToSandbox()` deploys a prebuilt output directory without the bundler. Unlike `SandboxDeployer()`, it doesn't include Studio unless you pass `studio: true`. Use it in CI or from agent code:
