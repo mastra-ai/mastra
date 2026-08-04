@@ -20,7 +20,7 @@ export interface CreateCommandOptions {
   git: boolean;
   template?: string | boolean;
   timeout: number;
-  skipInstall?: boolean;
+  install: boolean;
 }
 
 export interface NormalizedCreateOptions {
@@ -32,7 +32,7 @@ export interface NormalizedCreateOptions {
   git: boolean;
   template?: string | boolean;
   timeout: number;
-  skipInstall: boolean;
+  install: boolean;
 }
 
 export function parseCreateLLMProvider(value: string): CreateLLMProvider {
@@ -71,12 +71,12 @@ export function configureCreateCommand(command: Command) {
     .option('-k, --llm-api-key <key>', 'API key for the model provider')
     .option('--no-skills', 'Do not install Mastra skills')
     .option('--no-git', 'Do not initialize a git repository')
+    .option('--no-install', 'Skip installing dependencies')
     .option(
       '-t, --template [template]',
       'Create from a template slug or public GitHub URL, or select interactively when omitted',
     )
-    .option('--timeout <milliseconds>', 'Package installation timeout in milliseconds', parseCreateTimeout, 60_000)
-    .option('--skip-install', 'Skip installing dependencies');
+    .option('--timeout <milliseconds>', 'Package installation timeout in milliseconds', parseCreateTimeout, 60_000);
 }
 
 export function normalizeCreateCommandOptions(
@@ -92,7 +92,7 @@ export function normalizeCreateCommandOptions(
     git: options.git,
     template: options.template,
     timeout: options.timeout,
-    skipInstall: options.skipInstall ?? false,
+    install: options.install,
   };
 }
 
