@@ -16,14 +16,8 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'doc',
-      id: 'index',
-      label: 'Get Started',
-    },
-    {
       type: 'category',
-      label: 'Essentials',
-      collapsible: false,
+      label: 'Start',
       collapsed: false,
       customProps: {
         displayAsGroup: true,
@@ -31,31 +25,18 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'what-is-mastra',
-          label: 'What is Mastra?',
+          id: 'index',
+          label: 'Get Started',
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/build-with-ai',
-          label: 'Build with AI',
+          id: 'getting-started/develop',
+          label: 'Develop',
         },
         {
           type: 'doc',
           id: 'storage/overview',
           label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/file-based-agents',
-          label: 'File-based Agents',
-          customProps: {
-            tags: ['beta'],
-          },
         },
       ],
     },
@@ -281,23 +262,6 @@ const sidebars = {
               type: 'doc',
               id: 'studio/observability',
               label: 'Observability',
-            },
-            {
-              type: 'category',
-              label: 'Agent Builder',
-              items: [
-                { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-                { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-                { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-                { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-                { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-                { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-                { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-                { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-                { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-                { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-                { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-              ],
             },
             {
               type: 'doc',
