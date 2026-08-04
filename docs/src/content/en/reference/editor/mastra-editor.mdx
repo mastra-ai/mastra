@@ -454,7 +454,7 @@ await editor.agent.update({
 })
 ```
 
-`editor.agent.update()` creates a version and assigns it to `activeVersionId`. This differs from the stored-agent REST `PATCH` route, which creates an inactive draft unless `autoPublish` is enabled. See [Editor versioning](/reference/editor/versioning#database-lifecycle).
+`editor.agent.update()` creates a version and assigns it to `activeVersionId`. This differs from the stored-agent REST `PATCH` route, which creates an inactive draft unless `autoPublish` is enabled. See [Editor versioning](/docs/editor/overview#versioning).
 
 ## Methods
 
@@ -510,4 +510,4 @@ With `source: 'code'`, active agent overrides are written as deterministic JSON 
 
 Studio reads recent Git revisions of each file as read-only versions. The default scan includes up to 50 commits and skips consecutive commits with the same parsed JSON snapshot. Git manages rollback and release for code-backed overrides.
 
-See [Editor versioning](/reference/editor/versioning#code-source) for the complete code-source lifecycle.
+See [Editor storage options](/docs/editor/overview#choose-where-changes-are-stored) for the code-source workflow.

@@ -10,7 +10,7 @@ packages:
 
 Prompt blocks are reusable instruction templates managed by Editor. An agent's instructions can combine inline text, embedded prompt blocks, and references to independently versioned prompt blocks.
 
-See [Editor](/docs/editor/overview#edit-instructions) for the Studio workflow and common uses.
+See [Prompt blocks](/docs/editor/overview#prompt-blocks) for the Studio workflow and common uses.
 
 ## Block types
 
@@ -117,4 +117,4 @@ The default Mastra server prefix is `/api`. A custom server prefix changes the p
 
 Prompt blocks use the same draft and publish lifecycle as agents. Runtime references resolve the active published block. Editor previews resolve the latest draft, which lets authors test a change before it affects agents that reference the block.
 
-Restoring a historical prompt version creates a new draft. It doesn't replace the active version until that draft is published. See [Editor versioning](/reference/editor/versioning) for the shared lifecycle.
+Restoring a historical prompt version creates a new draft. It doesn't replace the active version until that draft is published. See [Editor versioning](/docs/editor/overview#versioning) for the shared lifecycle.

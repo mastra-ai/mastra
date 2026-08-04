@@ -14,15 +14,9 @@ Editor enables collaborators to update your agent without needing access to your
 
 Developers still define the agent in code. Editor saves changes separately, so collaborators can improve the agent while developers retain control over its model, identity, and runtime.
 
-## What collaborators can do
+## When to use Editor
 
-Editor doesn't rewrite your agent's source code. It adds an editable layer to the agents registered in your Mastra instance and applies those changes when an agent runs.
-
-From Studio, collaborators can:
-
-- **Change instructions**: Rewrite the agent's prompt or reuse instructions shared across several agents.
-- **Choose tools**: Add or remove available tools and explain when the agent should use them.
-- **Test before publishing**: Work on a draft without affecting the live version. Compare versions or restore an earlier one when needed.
+Use Editor when an agent is defined in code but the people responsible for its behavior shouldn't need to edit the codebase. It works well when instructions or tools change often and collaborators need to test those changes before they reach users. If developers own every change and always release agent configuration with the application, keep the configuration in code instead.
 
 ## Quickstart
 
@@ -81,27 +75,81 @@ This agent lets collaborators change its instructions and improve the descriptio
 
 Studio shows everything else as read-only. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
 
-## Edit instructions
+## Instructions
 
-Instructions tell an agent how to behave. Collaborators can write them directly in the agent or add prompt blocks saved elsewhere in Studio.
+Instructions tell an agent how to behave. In the agent's **Instructions** section, collaborators can replace or extend the instructions originally defined in code. The change is stored in Editor rather than written back to the agent's TypeScript file.
 
-A prompt block is a reusable piece of instruction text. Create one under **Prompts**, publish it, then open an agent's **Instructions** section and select **Add block**. When several agents use the same block, you can update that instruction in one place.
+Instructions can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through request context. Display conditions can include an instruction only for a customer, role, or feature flag.
+
+## Prompt blocks
+
+A prompt block is a saved piece of instruction text that can be used by more than one agent. Create one under **Prompts**, publish it, then open an agent's **Instructions** section and select **Add block**.
 
 For example, a support agent, returns agent, and order-status agent may all need the same refund policy. Save the policy as a prompt block and add it to each agent. When the policy changes, update and publish the block once instead of editing three agents.
 
-Prompt blocks can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through request context. A display condition can include a block only for a customer, role, or feature flag.
+When a prompt block changes, every agent that references its published version receives the update. Draft changes are used only while previewing, so they don't affect the live agents until the block is published.
 
 See the [prompt blocks reference](/reference/editor/prompt-blocks) for template syntax, conditions, versions, and APIs.
 
-## Choose tools
+## Tools
 
-Tools let an agent take actions. Collaborators can choose from tools already in your project, tools from providers such as Composio or Arcade, and tools exposed by Model Context Protocol (MCP) servers.
+Tools let an agent take actions. Editor can use tools already registered in your project, tools from integration providers, and tools exposed by Model Context Protocol (MCP) servers.
 
 In the agent's **Tools** section, add the tools it needs. You can also rewrite a tool's description for that agent. A more specific description helps the agent understand when to use the tool without changing the tool itself.
 
-Tools are saved as part of the agent's draft. You can test a different set of tools before publishing, then return to the previous version if the change doesn't work as expected.
+Tools are saved as part of the agent's draft. You can test a different set before publishing, then return to the previous version if the change doesn't work as expected.
 
-See the [Editor tools reference](/reference/editor/tools) to configure providers, MCP clients, conditions, and tool filtering.
+### Composio
+
+[Composio](https://composio.dev) provides tools for services such as GitHub, Slack, and Gmail. Register the provider with a Composio API key to make its tool catalog available in Editor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { ComposioToolProvider } from '@mastra/editor/composio'
+
+export const mastra = new Mastra({
+  agents: {/* your agents */},
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({
+        apiKey: process.env.COMPOSIO_API_KEY!,
+      }),
+    },
+  }),
+})
+```
+
+Composio tool IDs look like `GITHUB_CREATE_ISSUE`. By default, a selected tool uses the connection associated with the agent's author. See [connection scope](/docs/agent-builder/integrations#connection-scope) to use each caller's connection instead.
+
+### Arcade
+
+[Arcade](https://arcade.dev) provides another catalog of tools with built-in authentication. Register it with an Arcade API key:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { ArcadeToolProvider } from '@mastra/editor/arcade'
+
+export const mastra = new Mastra({
+  agents: {/* your agents */},
+  editor: new MastraEditor({
+    toolProviders: {
+      arcade: new ArcadeToolProvider({
+        apiKey: process.env.ARCADE_API_KEY!,
+      }),
+    },
+  }),
+})
+```
+
+Arcade tool IDs use `Toolkit.ToolName` format, such as `Github.GetRepository`.
+
+### MCP clients
+
+Collaborators can also create a reusable MCP client in Studio and add its tools to an agent. Stored clients can start a local `stdio` server or connect to a remote HTTP server. Tool filters let each agent use only the tools it needs from that server.
+
+See the [Editor tools reference](/reference/editor/tools) for provider options, MCP configuration, conditions, and tool filtering.
 
 ## Choose where changes are stored
 
@@ -180,13 +228,33 @@ When a collaborator saves in Studio, they can write the file to the local filesy
 
 See [`MastraEditor`](/reference/editor/mastra-editor#source) for file locations and source options.
 
-## Work with drafts and versions
+## Versioning
 
 With the database option, saving a change creates a draft version. The live agent keeps using the published version until you publish the draft.
 
 Publishing makes that version live. Restoring an older version creates another draft first, so you can test it before it replaces the current version.
 
-You can also choose a version for an individual request. This lets you:
+When Editor stores changes as files, Git provides the version history instead. Studio shows each committed change to an agent's JSON file as a read-only version.
+
+### Select a version
+
+Your application can choose a stored version for each request. Select it by status (`published` or `draft`) or by an exact version ID:
+
+```typescript title="Version selection"
+const publishedAgent = await mastra.getAgentById('support-agent', {
+  status: 'published',
+})
+
+const draftAgent = await mastra.getAgentById('support-agent', {
+  status: 'draft',
+})
+
+const versionedAgent = await mastra.getAgentById('support-agent', {
+  versionId: 'abc-123',
+})
+```
+
+Selecting versions lets you:
 
 - Compare two versions in an A/B test.
 - Give a draft to a small group before publishing it for everyone.
@@ -197,13 +265,38 @@ The same version controls work when a supervisor calls sub-agents. You can test 
 
 See the [Editor versioning reference](/reference/editor/versioning) for version selection, sub-agent behavior, REST endpoints, and SDK methods.
 
-## Use Editor from code
+## Programmatic access
 
-You don't have to make changes through Studio. Editor is also available through [`mastra.getEditor()`](/reference/core/getEditor), the Mastra server API, and the Client SDK.
+You aren't limited to Studio. You can update Editor resources from TypeScript through `mastra.getEditor()`, through the REST API, or through the Client SDK.
 
-These APIs are useful for bulk updates and automated experiments. For example, run a [dataset experiment](/docs/evals/datasets/running-experiments), then save a proposed instruction change as a draft. Compare its scores with the published agent before deciding whether to publish it.
+Call [`mastra.getEditor()`](/reference/core/getEditor) when your code has access to the Mastra instance:
 
-Use the stored-agent REST or Client SDK draft flow when an experiment must leave the live agent unchanged. The direct `editor.agent.update()` method activates its new version immediately.
+```typescript title="src/scripts/update-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: 'Help customers with Acme products. Reply in their language.',
+})
+```
+
+The direct `editor.agent.update()` method activates the new version immediately. To create a draft without changing the live agent, use the stored-agent REST API or Client SDK instead:
+
+```bash title="Create a draft through the REST API"
+curl -X PATCH http://localhost:4111/api/stored/agents/support-agent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "instructions": "Help customers with Acme products. Reply in their language."
+  }'
+```
+
+The default server prefix is `/api`. You can change it in your server configuration.
+
+Programmatic access is useful for bulk updates and automated experiments. For example, run a [dataset experiment](/docs/evals/datasets/running-experiments), save a proposed instruction change as a draft, and compare its scores with the published agent before deciding whether to publish it.
+
+See the [`MastraEditor` namespaces](/reference/editor/mastra-editor#namespaces) and [Client SDK agents API](/reference/client-js/agents#stored-agents) for available operations.
 
 ## Next steps
 
