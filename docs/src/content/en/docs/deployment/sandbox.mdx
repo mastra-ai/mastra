@@ -78,7 +78,7 @@ Redeploys to the same sandbox skip the dependency install when its inputs are un
 
 ### What the URLs serve
 
-Open the Studio URL, the sandbox root, in a browser. `SandboxDeployer()` includes Studio by default, so the root serves the Studio interface. With `studio: false`, the root serves the Mastra welcome page instead.
+The Studio URL is the sandbox root, without `/api`. Open it in a browser to use Studio. When the deploy runs with `studio: false`, the root serves the Mastra welcome page instead.
 
 The API URL is only a prefix for the endpoints below it, such as `/api/agents`. `/api` has no handler of its own, so opening it in a browser returns a "Not Found" response even though the server is healthy.
 
