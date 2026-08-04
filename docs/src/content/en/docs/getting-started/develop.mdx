@@ -87,15 +87,11 @@ See the [project structure reference](/reference/project-structure) for the defa
 
 ## File-based agents
 
-:::experimental
+File-based agents are an experimental, convention-based way to define Mastra agents and their primitives in files under `src/mastra/`, instead of registering them manually on your [`Mastra`](/reference/core/mastra-class) instance.
 
-File-based agents are in beta and may change before they're stable. Most examples in the documentation still define and register agents in code.
+This approach reduces glue code and makes the file system a direct representation of your project structure, so both you and your coding agent can understand it at a glance.
 
-:::
-
-By default, agents and their related primitives are imported and registered on your [`Mastra`](/reference/core/mastra-class) instance in `src/mastra/index.ts`. File-based agents are an experimental alternative that discovers them by convention from files under `src/mastra/`.
-
-This reduces glue code and keeps your project structure visible at a glance. You can adopt file-based agents incrementally, but unsupported features and runtime configuration still need code.
+You can use file-based agents throughout your project or adopt them incrementally alongside primitives defined in code. Because the feature is still in beta, it doesn't yet support every Mastra feature or use case.
 
 ### Basic layout
 
