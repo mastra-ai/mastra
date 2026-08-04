@@ -1,5 +1,7 @@
 import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
 import { getSignalHue } from '@mastra/playground-ui/ee/signals';
+import { ChevronDown } from 'lucide-react';
+import { useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { snapshotSummaryLabel } from './sankey-signals-data';
@@ -104,13 +106,27 @@ function SignalLifelines({
   snapshots: ThemeSnapshot[];
   positions: number[];
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const rows = buildThemeLifelines(flows, signalName);
   const hue = getSignalHue(signalName);
 
   return (
     <section aria-label={`${formatSignalName(signalName)} lifelines`} className="min-w-0">
-      <h3 className="text-neutral4 font-mono text-xs font-semibold tracking-widest uppercase">{signalName}</h3>
-      {rows.length === 0 ? (
+      <h3 className="text-neutral4 font-mono text-xs font-semibold tracking-widest uppercase">
+        <button
+          aria-expanded={!isCollapsed}
+          className="hover:text-neutral6 flex items-center gap-1.5 transition-colors"
+          onClick={() => setIsCollapsed(previous => !previous)}
+          type="button"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+          />
+          {signalName}
+        </button>
+      </h3>
+      {isCollapsed ? undefined : rows.length === 0 ? (
         <p className="text-neutral3 mt-2 text-xs">No themes in these landmarks.</p>
       ) : (
         <ul className="mt-2 space-y-0.5">

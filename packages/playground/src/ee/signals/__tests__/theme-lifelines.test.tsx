@@ -216,6 +216,35 @@ describe('SankeySignals lifelines mode', () => {
       expect(rowNames[rowNames.length - 1]).toBe('Legacy support request: present in 2 of 5 landmarks');
     });
 
+    it('collapses and reopens a signal section from its header', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
+      await within(goalSection).findByRole('listitem', {
+        name: 'Legacy support request: present in 2 of 5 landmarks',
+      });
+      const goalToggle = within(goalSection).getByRole('button', { name: 'goal' });
+      expect(goalToggle.getAttribute('aria-expanded')).toBe('true');
+
+      fireEvent.click(goalToggle);
+
+      expect(goalToggle.getAttribute('aria-expanded')).toBe('false');
+      expect(within(goalSection).queryAllByRole('listitem')).toHaveLength(0);
+      // Other sections stay open.
+      const outcomeSection = within(lifelines).getByRole('region', { name: 'Outcome lifelines' });
+      expect(within(outcomeSection).getAllByRole('listitem').length).toBeGreaterThan(0);
+
+      fireEvent.click(goalToggle);
+
+      expect(
+        within(goalSection).getByRole('listitem', { name: 'Legacy support request: present in 2 of 5 landmarks' }),
+      ).not.toBeNull();
+    });
+
     it('reuses the shared landmark timeline above the lifeline rows', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
