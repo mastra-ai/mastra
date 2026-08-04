@@ -123,6 +123,37 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Voice',
+          items: [
+            {
+              type: 'doc',
+              id: 'voice/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'voice/text-to-speech',
+              label: 'Text to Speech',
+            },
+            {
+              type: 'doc',
+              id: 'voice/speech-to-text',
+              label: 'Speech to Text',
+            },
+            {
+              type: 'doc',
+              id: 'voice/speech-to-speech',
+              label: 'Speech to Speech',
+            },
+            {
+              type: 'doc',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
+            },
+          ],
+        },
       ],
     },
     {

@@ -11,8 +11,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/voice/livekit",
-      "destination": "/docs/voice/realtime-voice",
+      "source": "/guides/voice/livekit",
+      "destination": "/guides/voice/realtime-voice",
       "permanent": true
     },
     {
@@ -102,7 +102,7 @@
     },
     {
       "source": "/docs/agents/adding-voice",
-      "destination": "/docs/voice/overview",
+      "destination": "/guides/voice/overview",
       "permanent": true
     },
     {
@@ -1113,6 +1113,11 @@
     {
       "source": "/docs/rag/:path*",
       "destination": "/guides/rag/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*",
+      "destination": "/guides/voice/:path*",
       "permanent": true
     }
   ]
