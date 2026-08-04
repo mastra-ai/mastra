@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useRef } from 'react'
 import clsx from 'clsx'
 import { NavbarSecondaryMenuFiller, type NavbarSecondaryMenuComponent, ThemeClassNames } from '@docusaurus/theme-common'
 import { useNavbarMobileSidebar } from '@docusaurus/theme-common/internal'
@@ -12,13 +12,8 @@ import { useContextualSidebar } from '../../contextual-sidebar-context'
 const DocSidebarMobileSecondaryMenu: NavbarSecondaryMenuComponent<Props> = ({ sidebar, path }) => {
   const mobileSidebar = useNavbarMobileSidebar()
   const navigationRef = useRef<HTMLDivElement>(null)
-  const { activeSidebar, clearSidebar, getSidebarItems, initializeSidebar } = useContextualSidebar()
-
-  useEffect(() => initializeSidebar(sidebar), [initializeSidebar, sidebar])
-
-  const contextualItems = getSidebarItems(sidebar)
-  const contextualSidebar =
-    activeSidebar && contextualItems ? { state: activeSidebar, items: contextualItems } : undefined
+  const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
+  const contextualSidebar = resolveSidebar(sidebar)
 
   const handleItemClick = (item: PropSidebarItem) => {
     // Mobile sidebar should only be closed if the category has a link
@@ -49,7 +44,10 @@ const DocSidebarMobileSecondaryMenu: NavbarSecondaryMenuComponent<Props> = ({ si
           items={contextualSidebar.items}
           label={contextualSidebar.state.categoryLabel}
           onBack={handleBack}
-          onItemClick={handleItemClick}
+          onItemClick={item => {
+            activateSidebar(contextualSidebar.state)
+            handleItemClick(item)
+          }}
         />
       ) : (
         <ul className={clsx(ThemeClassNames.docs.docSidebarMenu, 'menu__list')}>

@@ -1,4 +1,4 @@
-import React, { type ReactNode, useEffect, useRef, useState } from 'react'
+import React, { type ReactNode, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { ThemeClassNames } from '@docusaurus/theme-common'
 import { useAnnouncementBar, useScrollPosition } from '@docusaurus/theme-common/internal'
@@ -28,13 +28,8 @@ function useShowAnnouncementBar() {
 export default function DocSidebarDesktopContent({ path, sidebar, className }: Props): ReactNode {
   const showAnnouncementBar = useShowAnnouncementBar()
   const navigationRef = useRef<HTMLElement>(null)
-  const { activeSidebar, clearSidebar, getSidebarItems, initializeSidebar } = useContextualSidebar()
-
-  useEffect(() => initializeSidebar(sidebar), [initializeSidebar, sidebar])
-
-  const contextualItems = getSidebarItems(sidebar)
-  const contextualSidebar =
-    activeSidebar && contextualItems ? { state: activeSidebar, items: contextualItems } : undefined
+  const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
+  const contextualSidebar = resolveSidebar(sidebar)
 
   const handleBack = () => {
     clearSidebar()
@@ -64,6 +59,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
           items={contextualSidebar.items}
           label={contextualSidebar.state.categoryLabel}
           onBack={handleBack}
+          onItemClick={() => activateSidebar(contextualSidebar.state)}
         />
       ) : (
         <ul className={clsx(ThemeClassNames.docs.docSidebarMenu, 'menu__list')}>

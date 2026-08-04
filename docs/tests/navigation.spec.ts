@@ -290,6 +290,10 @@ test.describe('Contextual sidebar', () => {
   }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
 
+    const directResponse = await page.request.get('/docs/agents/overview')
+    expect(directResponse.ok()).toBe(true)
+    expect(await directResponse.text()).toMatch(/data-sidebar-pane=(?:"contextual"|contextual)/)
+
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await visibleSidebarPane(page, 'root').getByRole('link', { name: 'Agents', exact: true }).click()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()

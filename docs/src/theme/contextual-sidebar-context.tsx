@@ -11,12 +11,16 @@ import {
   type ContextualSidebarState,
 } from './contextual-sidebar'
 
+type ResolvedContextualSidebar = Readonly<{
+  items: readonly PropSidebarItem[]
+  state: ContextualSidebarState
+}>
+
 type ContextualSidebarContextValue = Readonly<{
-  activeSidebar: ContextualSidebarState | undefined
+  activateSidebar: (state: ContextualSidebarState) => void
   clearSidebar: () => void
   enterSidebar: (category: PropSidebarItemCategory) => void
-  getSidebarItems: (sidebar: readonly PropSidebarItem[]) => readonly PropSidebarItem[] | undefined
-  initializeSidebar: (sidebar: readonly PropSidebarItem[]) => void
+  resolveSidebar: (sidebar: readonly PropSidebarItem[]) => ResolvedContextualSidebar | undefined
 }>
 
 const ContextualSidebarContext = createContext<ContextualSidebarContextValue | undefined>(undefined)
@@ -26,8 +30,9 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
   const {
     siteConfig: { url: siteUrl },
   } = useDocusaurusContext()
+  const initialPathname = useRef(pathname).current
+  const [initialSidebarEnabled, setInitialSidebarEnabled] = useState(true)
   const [sidebarState, setSidebarState] = useState<ContextualSidebarState>()
-  const initializedSidebar = useRef(false)
   const observedState = observeContextualSidebarPathname(sidebarState, pathname)
 
   useEffect(() => {
@@ -36,31 +41,36 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
     }
   }, [observedState, sidebarState])
 
-  const initializeSidebar = useRef((sidebar: readonly PropSidebarItem[]) => {
-    if (initializedSidebar.current) {
-      return
-    }
-    initializedSidebar.current = true
-
-    const category = findInitialContextualSidebarCategory(sidebar, pathname, siteUrl)
-    if (category) {
-      setSidebarState(enterContextualSidebar(category, pathname, siteUrl))
-    }
-  }).current
-
   const activeSidebar = isContextualSidebarVisible(sidebarState, pathname) ? sidebarState : undefined
 
   const value: ContextualSidebarContextValue = {
-    activeSidebar,
-    clearSidebar: () => setSidebarState(undefined),
+    activateSidebar: state => {
+      setInitialSidebarEnabled(false)
+      setSidebarState(state)
+    },
+    clearSidebar: () => {
+      setInitialSidebarEnabled(false)
+      setSidebarState(undefined)
+    },
     enterSidebar: category => {
       const nextState = enterContextualSidebar(category, pathname, siteUrl)
       if (nextState) {
+        setInitialSidebarEnabled(false)
         setSidebarState(nextState)
       }
     },
-    getSidebarItems: sidebar => getContextualSidebarItems(sidebar, activeSidebar),
-    initializeSidebar,
+    resolveSidebar: sidebar => {
+      let state = activeSidebar
+      if (!state && initialSidebarEnabled && pathname === initialPathname) {
+        const category = findInitialContextualSidebarCategory(sidebar, pathname, siteUrl)
+        if (category) {
+          state = enterContextualSidebar(category, pathname, siteUrl)
+        }
+      }
+
+      const items = getContextualSidebarItems(sidebar, state)
+      return state && items ? { state, items } : undefined
+    },
   }
 
   return <ContextualSidebarContext.Provider value={value}>{children}</ContextualSidebarContext.Provider>
