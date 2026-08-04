@@ -10,7 +10,7 @@ packages:
 
 # Editor
 
-Editor enables collaborators to update your agent in Studio without needing access to your codebase or the ability to write code. They can change its instructions and tools, then test a draft before publishing it.
+Editor works like a content management system (CMS) for your agents. It enables collaborators to update an agent in Studio without needing access to your codebase or the ability to write code. They can change its instructions and tools, then test a draft before publishing it.
 
 TypeScript defines the agent's default values. Editor saves changes separately instead of updating the source code, so collaborators can improve the agent while developers retain control over its model, identity, and runtime.
 
@@ -49,7 +49,11 @@ export const mastra = new Mastra({
 })
 ```
 
-In [Studio](/docs/studio/overview), open an agent from **Agents** and select **Editor**. Change its instructions, then save your work as a draft. Publish the draft when you're ready for the agent to use it.
+## Use Editor in Studio
+
+In [Studio](/docs/studio/overview), open **Agents**, select an agent, then select **Editor**. From there, collaborators can update the agent's instructions and tools based on its Editor permissions.
+
+Save changes as a draft to test them without affecting the live agent. Publish the draft when it's ready to use.
 
 ## Decide what collaborators can edit
 
@@ -88,7 +92,7 @@ Studio shows everything else as read-only. See [editor overrides](/reference/age
 
 ## Instructions
 
-In the Studio Editor UI, **Instructions** is where collaborators edit the agent's system prompt. It shows the instructions defined in code and lets collaborators replace them or add more instruction blocks.
+The **Instructions** section shows the agent's system prompt defined in code. Collaborators can replace it or add more instruction blocks.
 
 An instruction block can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through [request context](/docs/server/request-context). A [display condition](/reference/editor/prompt-blocks#display-conditions) can show a block only for a customer, role, or feature flag.
 
@@ -227,7 +231,7 @@ export const mastra = new Mastra({
 
 ### Files in your repository
 
-Set `source: 'code'` when Editor changes should go through the same pull-request and deployment process as the rest of your code:
+The code source is best when overrides should live in your repository alongside the rest of your code, be reviewed through pull requests, and be deployed with your application:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -306,9 +310,9 @@ See the [Editor versioning reference](/reference/editor/versioning) for version 
 
 ## Programmatic access
 
-You aren't limited to Studio. You can update Editor resources from TypeScript through `mastra.getEditor()`, through the REST API, or through the Client SDK.
+Everything available in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor), the REST API, or the Client SDK. Use it to script bulk updates or seed stored configurations from code. It can also power automation that tunes agents based on [evaluation results](/docs/evals/datasets/running-experiments).
 
-Call [`mastra.getEditor()`](/reference/core/getEditor) when your code has access to the Mastra instance:
+Call `mastra.getEditor()` when your code has access to the Mastra instance:
 
 ```typescript title="src/scripts/update-agent.ts"
 import { mastra } from '../mastra'
@@ -332,8 +336,6 @@ curl -X PATCH http://localhost:4111/api/stored/agents/support-agent \
 ```
 
 The default server prefix is `/api`. You can change it in your server configuration.
-
-Programmatic access is useful for bulk updates and automated experiments. For example, run a [dataset experiment](/docs/evals/datasets/running-experiments), save a proposed instruction change as a draft, and compare its scores with the published agent before deciding whether to publish it.
 
 See the [`MastraEditor` namespaces](/reference/editor/mastra-editor#namespaces) and [Client SDK agents API](/reference/client-js/agents#stored-agents) for available operations.
 
