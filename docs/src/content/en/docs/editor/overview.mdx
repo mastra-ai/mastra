@@ -98,7 +98,7 @@ See the [prompt blocks reference](/reference/editor/prompt-blocks) for template 
 
 ## Tools
 
-Tools let an agent take actions. Editor can use tools already registered on the agent, tools from integration providers, and tools exposed by MCP servers.
+Tools let an agent take actions. Editor can use tools already registered on the Mastra instance, tools from integration providers, and tools exposed by MCP servers.
 
 Collaborators choose from the tools made available to Editor. They can't write a new tool implementation in Studio, but developers don't have to define every tool individually either:
 
@@ -131,8 +131,6 @@ export const mastra = new Mastra({
 ```
 
 The Studio tool picker now lists the tool. A collaborator can add it to an agent when that agent allows tool editing. The agent's Editor view also lists tools attached in code.
-
-See [Tools](/docs/agents/using-tools) for schemas, execution context, and other ways to define project tools.
 
 ### Composio
 
