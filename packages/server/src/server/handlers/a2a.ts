@@ -22,7 +22,7 @@ import { signAgentCard } from '../a2a/agent-card-signing';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
-import type { InMemoryTaskStore } from '../a2a/store';
+import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
@@ -555,7 +555,19 @@ async function claimInterruptedTaskResume({
     requiresApproval: task.metadata?.[SUSPENDED_REQUIRES_APPROVAL_METADATA_KEY] === true,
   };
 
-  await taskStore.save({ agentId, data: applyUpdateToTask(task, { state: 'working' }) });
+  try {
+    await taskStore.save({
+      agentId,
+      data: applyUpdateToTask(task, { state: 'working' }),
+      expectedVersion: snapshot.version,
+    });
+  } catch (error) {
+    if (error instanceof TaskStoreVersionConflictError) {
+      return undefined;
+    }
+    throw error;
+  }
+
   return claim;
 }
 
