@@ -157,7 +157,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-      return getWorkflowInfo(workflow);
+      return getWorkflowInfo(workflow, false);
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }
@@ -933,7 +933,9 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      void workflow.restartAllActiveWorkflowRuns();
+      void workflow.restartAllActiveWorkflowRuns().catch(error => {
+        mastra.getLogger().error('Failed to restart active workflow runs', { error, workflowId });
+      });
 
       return { message: 'All active workflow runs restarted' };
     } catch (error) {

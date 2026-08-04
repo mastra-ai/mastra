@@ -1,11 +1,16 @@
+import { githubNumberForItem } from '../boardItems';
 import type { WorkItem } from './workItems';
 
-function sourceNumber(item: WorkItem): string | undefined {
+/** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
+type IdentifiableItem = Pick<WorkItem, 'source' | 'metadata' | 'sourceKey'>;
+
+export function workItemNumber(item: IdentifiableItem): string | undefined {
+  const githubNumber = githubNumberForItem(item);
+  if (githubNumber !== undefined) return String(githubNumber);
+
   const number = item.metadata.number;
   if (typeof number === 'number' || typeof number === 'string') return String(number);
-
-  const sourceKeyNumber = item.sourceKey?.split(':').at(-1);
-  return sourceKeyNumber || undefined;
+  return item.sourceKey?.split(':').at(-1) || undefined;
 }
 
 function sessionBranches(item: WorkItem): Set<string> {
@@ -29,7 +34,10 @@ export function relatedWorkItems(item: WorkItem, allItems: WorkItem[]): WorkItem
   });
 }
 
-export function inferredParentWorkItemId(metadata: Record<string, unknown>, allItems: WorkItem[]): string | undefined {
+export function inferredParentWorkItemId(
+  metadata: Record<string, unknown>,
+  allItems: readonly WorkItem[],
+): string | undefined {
   const headBranch = metadata.headBranch;
   if (typeof headBranch !== 'string') return undefined;
   return allItems.find(
@@ -37,17 +45,32 @@ export function inferredParentWorkItemId(metadata: Record<string, unknown>, allI
   )?.id;
 }
 
-export function relationshipPath(item: WorkItem, factoryId: string): string {
+export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: string): string {
   return item.source === 'github-pr' ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`;
 }
 
 export function relationshipLabel(item: WorkItem): string {
-  const number = sourceNumber(item);
+  const number = workItemNumber(item);
   if (item.source === 'github-pr') return number ? `Review: PR #${number}` : `Review: ${item.title}`;
   if (item.source === 'github-issue') return number ? `Work item: Issue #${number}` : `Work item: ${item.title}`;
   if (item.source === 'linear-issue') {
-    const identifier = typeof item.metadata.identifier === 'string' ? item.metadata.identifier : number;
+    const identifier = linearIdentifier(item) ?? number;
     return identifier ? `Work item: ${identifier}` : `Work item: ${item.title}`;
   }
   return `Work item: ${item.title}`;
+}
+
+function linearIdentifier(item: IdentifiableItem): string | undefined {
+  return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : undefined;
+}
+
+/** What a person types to find the item: `#20456` on GitHub, the team key `ENG-123` on Linear. */
+export function workItemIdentifier(item: IdentifiableItem): string | undefined {
+  // Linear source key already reads `linear:ENG-123` — hashing it would invent `#ENG-123`.
+  if (item.source === 'linear-issue') return linearIdentifier(item) ?? workItemNumber(item);
+  if (item.source === 'github-pr' || item.source === 'github-issue') {
+    const number = workItemNumber(item);
+    return number ? `#${number}` : undefined;
+  }
+  return undefined;
 }

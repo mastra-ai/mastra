@@ -1,6 +1,24 @@
-import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeNode, ThemeSnapshotsResponse } from '@mastra/client-js';
+import type {
+  EntityLearningProgressResponse,
+  ThemeEntitiesResponse,
+  ThemeFlowResponse,
+  ThemeNode,
+  ThemeSnapshotsResponse,
+} from '@mastra/client-js';
 
 export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
+
+export const processingProgressResponse: EntityLearningProgressResponse = {
+  status: 'processing',
+  traceCount: 87,
+  signals: {
+    goal: { generated: 87, embedded: 84 },
+    outcome: { generated: 87, embedded: 40 },
+    behavior: { generated: 52, embedded: 12 },
+    sentiment: { generated: 0, embedded: 0 },
+  },
+  availableSignals: ['goal'],
+};
 
 export const populatedThemeEntitiesResponse: ThemeEntitiesResponse = {
   entities: [

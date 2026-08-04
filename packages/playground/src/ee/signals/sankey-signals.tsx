@@ -15,6 +15,7 @@ import { ArrowLeftRight, ChartNoAxesGantt, Waypoints, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
+import { useEntityLearningProgress } from './hooks/use-entity-learning-progress';
 import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemePaths } from './hooks/use-theme-paths';
@@ -267,6 +268,12 @@ export function SankeySignals({
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
   }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
+  const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
+  const shouldLoadProgress =
+    snapshotsQuery.isSuccess &&
+    !snapshotsQuery.isError &&
+    (!snapshot || Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
+  const progressQuery = useEntityLearningProgress(entityId, entityType, shouldLoadProgress);
   const isPlaybackBlockedByDrillIn = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
   const hasActivePathsError = drillIn !== undefined && pathsQuery.isError;
 
@@ -352,7 +359,7 @@ export function SankeySignals({
     return (
       <>
         {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
-        <SignalsEmptyState LinkComponent={Link} />
+        <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} isRangeEmpty />
       </>
     );
   }
@@ -377,13 +384,11 @@ export function SankeySignals({
     );
   }
 
-  const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
-
   if (!currentFlow || !flow || !graphSummary || populatedStageCount < 2) {
     return (
       <>
         {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
-        <SignalsEmptyState LinkComponent={Link} />
+        <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />
       </>
     );
   }
@@ -510,12 +515,12 @@ export function SankeySignals({
             <>
               {perspectiveMutation.isPending ? (
                 <p className="text-neutral3 font-mono text-xs" role="status">
-                  Reloading snapshots for new signal perspective…
+                  Reloading snapshots for new trace signal perspective…
                 </p>
               ) : null}
               {perspectiveMutation.isError ? (
                 <p className="text-xs text-red-500" role="alert">
-                  Unable to load that signal perspective. Try reordering the columns again.
+                  Unable to load that trace signal perspective. Try reordering the columns again.
                 </p>
               ) : null}
               <SignalDistributions

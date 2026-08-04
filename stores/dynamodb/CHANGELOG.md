@@ -1,5 +1,40 @@
 # @mastra/dynamodb
 
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- Fixed nine storage adapters declaring a `@mastra/core` peer range that permitted core versions too old to load them. Each adapter imports `storageMessageMatchesMetadataFilter` from `@mastra/core/storage`, which core only exports from 1.53.0, but every one of them still advertised a floor below that — as low as `>=1.0.0-0`. Package managers accepted the incompatible pair without a warning and the install then failed at import time: ([#20591](https://github.com/mastra-ai/mastra/pull/20591))
+
+  ```
+  SyntaxError: The requested module '@mastra/core/storage' does not provide an export named 'storageMessageMatchesMetadataFilter'
+  ```
+
+  All nine now declare `>=1.53.0-0 <2.0.0-0`, so npm and pnpm surface a peer conflict at install time instead of letting the project break on first import.
+
+  Fixes [#20586](https://github.com/mastra-ai/mastra/issues/20586).
+
+- Updated dependencies [[`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866)]:
+  - @mastra/core@1.56.0-alpha.6
+
+## 1.2.1
+
+### Patch Changes
+
+- dependencies updates: ([#19779](https://github.com/mastra-ai/mastra/pull/19779))
+  - Updated dependency [`electrodb@^3.9.1` ↗︎](https://www.npmjs.com/package/electrodb/v/3.9.1) (from `^3.7.2`, in `dependencies`)
+- Updated dependencies [[`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d), [`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`35b929b`](https://github.com/mastra-ai/mastra/commit/35b929b7abc3d20d85c7985880960ac2d04a6c86), [`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`9b3626a`](https://github.com/mastra-ai/mastra/commit/9b3626aeb1d16fcd34b0a8e94c114ddb80a3b240), [`4696963`](https://github.com/mastra-ai/mastra/commit/469696312ac4c618bc8475b0c5ed7949b8a3455e), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0
+
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#19779](https://github.com/mastra-ai/mastra/pull/19779))
+  - Updated dependency [`electrodb@^3.9.1` ↗︎](https://www.npmjs.com/package/electrodb/v/3.9.1) (from `^3.7.2`, in `dependencies`)
+- Updated dependencies [[`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73)]:
+  - @mastra/core@1.55.0-alpha.3
+
 ## 1.2.0
 
 ### Minor Changes

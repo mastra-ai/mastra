@@ -1,5 +1,23 @@
 # @mastra/mcp
 
+## 1.15.1-alpha.1
+
+### Patch Changes
+
+- Fixed concurrent MCP tool calls failing while the client reconnects after a dropped connection. ([#20530](https://github.com/mastra-ai/mastra/pull/20530))
+
+- Updated dependencies [[`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866)]:
+  - @mastra/core@1.56.0-alpha.6
+
+## 1.15.1-alpha.0
+
+### Patch Changes
+
+- Speed up MCP discovery when an `MCPClient` is configured with multiple servers. `listTools()`, `listToolsets()`, `resources.list()`, `resources.templates()`, and `prompts.list()` now query all configured servers concurrently instead of one at a time, so total discovery time is roughly the slowest single server rather than the sum of all of them, and one slow or unresponsive server no longer stalls discovery for the rest. Tool, resource, and prompt ordering and per-server error reporting are unchanged. ([#19919](https://github.com/mastra-ai/mastra/pull/19919))
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+
 ## 1.15.0
 
 ### Minor Changes

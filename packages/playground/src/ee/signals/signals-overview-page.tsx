@@ -4,6 +4,7 @@ import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/
 import { useState } from 'react';
 
 import { Link } from '../../lib/link';
+import { useEntityLearningProgress } from './hooks';
 import { SankeySignals } from './sankey-signals';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
@@ -11,10 +12,6 @@ import type { TraceSignalName } from './types';
 import { useSelectedThemeEntity } from './use-selected-theme-entity';
 
 const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
-
-function formatSignalName(signalName: TraceSignalName) {
-  return signalName.charAt(0).toUpperCase() + signalName.slice(1);
-}
 
 export function SignalsOverviewPage() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();
@@ -25,6 +22,12 @@ export function SignalsOverviewPage() {
     if (type === 'from') setDateFrom(value);
     else setDateTo(value);
   };
+  const signalNames = entity ? SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName)) : [];
+  const progressQuery = useEntityLearningProgress(
+    entity?.entityId,
+    entity?.entityType ?? 'agent',
+    !entitiesQuery.isPending && !entitiesQuery.isError && signalNames.length < 2,
+  );
 
   if (entitiesQuery.isPending) {
     return <SignalsLoadingSkeleton />;
@@ -32,10 +35,7 @@ export function SignalsOverviewPage() {
 
   if (entitiesQuery.isError) {
     return (
-      <SignalsErrorState
-        message="Unable to load trace intelligence entities."
-        onRetry={() => void entitiesQuery.refetch()}
-      />
+      <SignalsErrorState message="Unable to load trace signal entities." onRetry={() => void entitiesQuery.refetch()} />
     );
   }
 
@@ -43,25 +43,8 @@ export function SignalsOverviewPage() {
     return <SignalsEmptyState LinkComponent={Link} />;
   }
 
-  const signalNames = SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName));
-
   if (signalNames.length < 2) {
-    return (
-      <section
-        className="border-border1 bg-surface2 m-4 rounded-lg border p-6 lg:m-6"
-        aria-labelledby="signals-data-heading"
-      >
-        <h1 className="text-neutral6 text-lg font-semibold" id="signals-data-heading">
-          Not enough trace signal data yet
-        </h1>
-        <p className="text-neutral3 mt-2 text-sm">
-          At least two trace signal types are needed to show how themes connect across traces.
-        </p>
-        <p className="text-neutral4 mt-4 text-xs">
-          Available trace signals: {signalNames.length > 0 ? signalNames.map(formatSignalName).join(', ') : 'None'}
-        </p>
-      </section>
-    );
+    return <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />;
   }
 
   return (

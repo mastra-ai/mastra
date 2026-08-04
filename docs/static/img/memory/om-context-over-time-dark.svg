@@ -1,0 +1,75 @@
+<svg width="760" height="500" viewBox="0 0 760 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="How the context window changes over time with Observational Memory enabled">
+  <style>
+    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .header { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; fill: #cfcfcf; }
+    .header-desc { font-size: 11px; fill: #8a8a8a; }
+    .title { font-size: 13px; font-weight: 600; fill: #f2f2f2; }
+    .desc { font-size: 13px; fill: #9a9a9a; }
+    .num-mem { font-size: 11px; font-weight: 600; fill: #2aed73; }
+    .legend { font-size: 12px; fill: #9a9a9a; }
+    .flow-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; fill: #7a7a7a; }
+    .axis-label { font-size: 11px; fill: #8a8a8a; }
+    .thresh-label { font-size: 10.5px; font-weight: 600; fill: #8a8a8a; }
+    .thresh-label-mem { font-size: 10.5px; font-weight: 600; fill: #2aed73; }
+    .outer { fill: #0e0e0e; stroke: #262626; }
+    .chip-mem { fill: #143621; }
+    .hist { stroke: #a8a8a8; stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+    .obs { stroke: #2aed73; stroke-width: 2.25; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+    .axis { stroke: #333333; stroke-width: 1; }
+    .thresh { stroke: #3a3a3a; stroke-width: 1.25; stroke-dasharray: 5 4; fill: none; }
+    .thresh-mem { stroke: #2e6b40; stroke-width: 1.25; stroke-dasharray: 5 4; fill: none; }
+    .leader { stroke: #6a6a6a; stroke-width: 1; }
+  </style>
+
+  <!-- Frame -->
+  <rect x="16" y="12" width="728" height="440" rx="16" class="outer"/>
+  <text x="36" y="40" class="header">CONTEXT OVER TIME</text>
+  <text x="724" y="40" text-anchor="end" class="header-desc">default settings · illustrative, not to scale</text>
+
+  <!-- Threshold lines -->
+  <line x1="96" y1="108" x2="704" y2="108" class="thresh-mem"/>
+  <text x="100" y="101" class="thresh-label-mem">reflection threshold · 40k</text>
+  <line x1="96" y1="168" x2="704" y2="168" class="thresh"/>
+  <text x="100" y="161" class="thresh-label">observation threshold · 30k</text>
+
+  <!-- Axes -->
+  <line x1="96" y1="348" x2="704" y2="348" class="axis"/>
+  <text x="86" y="112" text-anchor="end" class="axis-label">40k</text>
+  <text x="86" y="172" text-anchor="end" class="axis-label">30k</text>
+  <text x="86" y="316" text-anchor="end" class="axis-label">6k</text>
+  <text x="86" y="352" text-anchor="end" class="axis-label">0</text>
+
+  <!-- Observation log (green, stepped) -->
+  <polyline class="obs" points="96,348 240,348 240,276 360,276 360,204 480,204 480,144 600,144 600,108 620,108 620,264 704,264"/>
+
+  <!-- Message history (gray, sawtooth) -->
+  <polyline class="hist" points="96,348 240,168 246,312 360,168 366,312 480,168 486,312 600,168 606,312 704,222"/>
+
+  <!-- Marker 1: first activation -->
+  <circle cx="243" cy="138" r="10" class="chip-mem"/>
+  <text x="243" y="142" text-anchor="middle" class="num-mem">1</text>
+  <line x1="243" y1="148" x2="243" y2="164" class="leader"/>
+
+  <!-- Marker 2: reflection -->
+  <circle cx="610" cy="84" r="10" class="chip-mem"/>
+  <text x="610" y="88" text-anchor="middle" class="num-mem">2</text>
+  <line x1="610" y1="94" x2="610" y2="104" class="leader"/>
+
+  <!-- X axis label -->
+  <text x="400" y="374" text-anchor="middle" class="flow-label">CONVERSATION PROGRESSES →</text>
+
+  <!-- Marker explanations -->
+  <circle cx="45" cy="398" r="10" class="chip-mem"/>
+  <text x="45" y="402" text-anchor="middle" class="num-mem">1</text>
+  <text x="63" y="403"><tspan class="title">History hits 30k</tspan><tspan class="desc"> — observations activate and observed messages drop out; ~6k of recent history stays</tspan></text>
+
+  <circle cx="45" cy="426" r="10" class="chip-mem"/>
+  <text x="45" y="430" text-anchor="middle" class="num-mem">2</text>
+  <text x="63" y="431"><tspan class="title">Observation log hits 40k</tspan><tspan class="desc"> — the Reflector condenses it into reflections</tspan></text>
+
+  <!-- Legend -->
+  <line x1="24" y1="474" x2="56" y2="474" class="hist"/>
+  <text x="64" y="478" class="legend">Message history (raw tokens)</text>
+  <line x1="300" y1="474" x2="332" y2="474" class="obs"/>
+  <text x="340" y="478" class="legend">Observation log</text>
+</svg>

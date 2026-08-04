@@ -1,9 +1,9 @@
 import type {
-  LightSpanRecord,
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
+  TraceSpan,
 } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
@@ -122,7 +122,7 @@ function getPageSpans(page: TracesPageResponse) {
 /** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
  *  Also surfaces page 0's deltaCursor so the live-tail query can read it reactively. */
 export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
-  spans: LightSpanRecord[];
+  spans: TraceSpan[];
   deltaCursor: string | undefined;
 } {
   const seen = new Set<string>();
@@ -242,7 +242,7 @@ export interface UseTracesArgs extends TracesFilters {
 }
 
 interface UseTracesReturn {
-  data: { spans: LightSpanRecord[]; deltaCursor: string | undefined } | undefined;
+  data: { spans: TraceSpan[]; deltaCursor: string | undefined } | undefined;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;

@@ -91,7 +91,7 @@ async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
   );
   distributionCards.forEach((card, index) => {
     const draggable = card.parentElement;
-    if (!draggable) throw new Error('Signal distribution draggable was not rendered');
+    if (!draggable) throw new Error('Trace signal distribution draggable was not rendered');
     vi.spyOn(draggable, 'getBoundingClientRect').mockReturnValue(rectangle(index * 250, 240, 300));
   });
   vi.spyOn(screen.getByRole('region', { name: 'Trace signal distributions' }), 'getBoundingClientRect').mockReturnValue(
@@ -219,7 +219,7 @@ describe('stabilizeThemeFlow', () => {
 
 describe('SankeySignals', () => {
   describe('when the snapshot request is pending', () => {
-    it('shows the Signals loading state', async () => {
+    it('shows the Trace Intelligence loading state', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, async () => {
           await new Promise(() => {});
@@ -234,7 +234,7 @@ describe('SankeySignals', () => {
   });
 
   describe('when the flow request is pending', () => {
-    it('shows the Signals loading state', async () => {
+    it('shows the Trace Intelligence loading state', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
           HttpResponse.json(themeSnapshotsResponse),
@@ -338,7 +338,7 @@ describe('SankeySignals', () => {
   });
 
   describe('when the snapshot request fails', () => {
-    it('shows the signal flow error state', async () => {
+    it('shows the trace signal flow error state', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
           HttpResponse.json({ error: 'Snapshot unavailable' }, { status: 500 }),
@@ -386,7 +386,7 @@ describe('SankeySignals', () => {
     });
   });
 
-  describe('when a snapshot contains four populated signal stages', () => {
+  describe('when a snapshot contains four populated trace signal stages', () => {
     beforeEach(() => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -406,6 +406,7 @@ describe('SankeySignals', () => {
       expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
       expect(screen.queryByTestId('signals-page-header')).toBeNull();
       expect(screen.queryByRole('list', { name: 'Trace intelligence metrics' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Trace intelligence documentation' })).toBeNull();
     });
 
     it('shows date, trace count, and theme count below the timeline', async () => {
@@ -429,7 +430,7 @@ describe('SankeySignals', () => {
       const column = columns[0];
       expect(record).toBeDefined();
       expect(column).toBeDefined();
-      if (!record || !column) throw new Error('Expected a signal flow record and column');
+      if (!record || !column) throw new Error('Expected a trace signal flow record and column');
       expect(getSignalRecordNodeLabel(record, column)).toBe(
         'Resolve support request\nThe user wants help resolving a support issue.',
       );
@@ -503,7 +504,7 @@ describe('SankeySignals', () => {
     });
   });
 
-  describe('when a signal distribution is reordered', () => {
+  describe('when a trace signal distribution is reordered', () => {
     it('keeps the selected snapshot range on the perspective request', async () => {
       const snapshotRanges: Array<[string | null, string | null]> = [];
       const reorderedSnapshot = {
@@ -644,7 +645,7 @@ describe('SankeySignals', () => {
 
       await reorderOutcomeAfterBehavior();
 
-      expect(await screen.findByText('Reloading snapshots for new signal perspective…')).not.toBeNull();
+      expect(await screen.findByText('Reloading snapshots for new trace signal perspective…')).not.toBeNull();
       expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
       expect(
         within(screen.getByRole('region', { name: 'Trace signal distributions' }))
@@ -1067,7 +1068,7 @@ describe('SankeySignals', () => {
     });
   });
 
-  describe('when themes in one signal stage share a display label', () => {
+  describe('when themes in one trace signal stage share a display label', () => {
     beforeEach(() => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -1101,7 +1102,7 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('renders the flow with the signal and theme labels', async () => {
+    it('renders the flow with the trace signal and theme labels', async () => {
       renderSankeySignals();
 
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
@@ -1118,7 +1119,7 @@ describe('SankeySignals', () => {
       ).toEqual(['Goal', 'Outcome']);
     });
 
-    it('preserves the API-defined signal order', () => {
+    it('preserves the API-defined trace signal order', () => {
       const { columns } = themeFlowToSankeyData(themeFlowResponse);
 
       expect(columns).toEqual([
