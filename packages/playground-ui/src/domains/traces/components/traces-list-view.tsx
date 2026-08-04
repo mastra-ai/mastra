@@ -33,6 +33,8 @@ export type TracesListViewTrace = {
   entityName?: string | null;
   status?: string | null;
   attributes?: TraceAttributes | null;
+  /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
+  inputPreview?: string | null;
   input?: unknown;
   metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
@@ -194,7 +196,7 @@ export function TracesListView({
                   showLevelTooltip={isBranchesMode}
                 />
                 {hasTraceColumn(columnPreferences, 'input') && (
-                  <TracesDataList.InputCell input={getInputPreview(trace.input)} />
+                  <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
                 {hasTraceColumn(columnPreferences, 'entity') && (
                   <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />

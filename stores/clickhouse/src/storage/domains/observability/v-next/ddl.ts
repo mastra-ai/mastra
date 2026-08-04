@@ -176,6 +176,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   scope              Nullable(String),
   links              Nullable(String),
   input              Nullable(String),
+  -- Short text preview of the input column, written alongside it. Trace lists read
+  -- this instead, so listing never pulls the full prompt off disk.
+  inputPreview       Nullable(String),
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
@@ -247,6 +250,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   scope              Nullable(String),
   links              Nullable(String),
   input              Nullable(String),
+  -- Short text preview of the input column, written alongside it. Trace lists read
+  -- this instead, so listing never pulls the full prompt off disk.
+  inputPreview       Nullable(String),
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
@@ -339,6 +345,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   scope              Nullable(String),
   links              Nullable(String),
   input              Nullable(String),
+  -- Short text preview of the input column, written alongside it. Trace lists read
+  -- this instead, so listing never pulls the full prompt off disk.
+  inputPreview       Nullable(String),
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
@@ -1110,6 +1119,11 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  // Stored `input` preview, so trace lists never read the `input` blob.
+  // Rows written before this migration keep a null preview and age out with retention.
+  addColumn(TABLE_SPAN_EVENTS, 'inputPreview', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'inputPreview', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'inputPreview', 'Nullable(String)'),
   // Trace roots
   addColumn(TABLE_TRACE_ROOTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_TRACE_ROOTS, 'parentEntityVersionId', 'Nullable(String)'),

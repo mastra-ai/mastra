@@ -427,6 +427,123 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
+/** Maximum length of the rendered `inputPreview` text. */
+export const INPUT_PREVIEW_MAX_LENGTH = 100;
+
+const inputPreviewField = z.string().describe('Short text preview of the span input');
+
+type PreviewMessage = { role?: string; content?: unknown };
+
+/** Matches a user message's text inside JSON that may have been cut off mid-document. */
+const USER_CONTENT_PATTERN = /"role"\s*:\s*"user"[\s\S]*?"(?:content|text)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+
+function truncatePreview(text: string, maxLength: number): string | undefined {
+  if (!text) return undefined;
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+function previewTextFromContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map(part => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && (part as { type?: unknown }).type === 'text') {
+        const text = (part as { text?: unknown }).text;
+        return typeof text === 'string' ? text : '';
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join(' ');
+}
+
+function recoverUserTextFromPartialJson(raw: string): string {
+  const parts: string[] = [];
+  for (const match of raw.matchAll(USER_CONTENT_PATTERN)) {
+    const captured = match[1];
+    if (!captured) continue;
+    try {
+      parts.push(JSON.parse(`"${captured}"`) as string);
+    } catch {
+      parts.push(captured);
+    }
+  }
+  return parts.join(' | ');
+}
+
+/**
+ * Builds the short text shown in a trace list's input column, mirroring what the
+ * full-payload list previously derived client-side. Stores call this when writing a
+ * span so listing never has to read the `input` blob back.
+ *
+ * Accepts a parsed `input` value or its JSON string, and tolerates a string that was
+ * cut off mid-document (ingesters cap oversized fields).
+ */
+export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_LENGTH): string | undefined {
+  if (input == null) return undefined;
+
+  let value = input;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        // The store sliced `input` mid-JSON — recover whatever user text is intact.
+        return truncatePreview(recoverUserTextFromPartialJson(trimmed), maxLength);
+      }
+    }
+  }
+
+  const messages = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
+      ? (value as { messages: unknown[] }).messages
+      : null;
+
+  if (messages) {
+    const text = (messages as PreviewMessage[])
+      .filter(m => m?.role === 'user')
+      .map(m => previewTextFromContent(m.content))
+      .filter(Boolean)
+      .join(' | ');
+    return truncatePreview(text, maxLength);
+  }
+
+  if (typeof value === 'string') return truncatePreview(value, maxLength);
+  return truncatePreview(JSON.stringify(value) ?? '', maxLength);
+}
+
+/**
+ * Projects a full span record down to the lightweight row a trace list renders,
+ * deriving `inputPreview` from `input`.
+ *
+ * This is the read-time fallback. Backends that can project inside the query should
+ * do so instead — that is what keeps the blob columns off the read path — but every
+ * backend can serve a correct lightweight list through this.
+ */
+export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
+  return {
+    traceId: span.traceId,
+    spanId: span.spanId,
+    parentSpanId: span.parentSpanId,
+    name: span.name,
+    spanType: span.spanType,
+    isEvent: span.isEvent,
+    startedAt: span.startedAt,
+    endedAt: span.endedAt,
+    error: span.error,
+    entityType: span.entityType,
+    entityId: span.entityId,
+    entityName: span.entityName,
+    inputPreview: buildInputPreview(span.input),
+    createdAt: span.createdAt,
+    updatedAt: span.updatedAt,
+  };
+}
+
 /**
  * Lightweight span record containing only the fields needed for timeline rendering.
  * Excludes heavy fields: input, output, attributes, metadata, tags, links.
@@ -450,6 +567,10 @@ export const lightSpanRecordSchema = z
     entityType: spanContextFields.entityType,
     entityId: spanContextFields.entityId,
     entityName: spanContextFields.entityName,
+
+    // Short text preview of `input`, so trace lists can render their preview column
+    // without transferring the whole prompt. See `buildInputPreview`.
+    inputPreview: inputPreviewField.nullish(),
 
     // Database timestamps
     ...dbTimestamps,
@@ -556,11 +677,13 @@ export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 
 /** Schema for listTracesLight operation response */
 export const listTracesLightResponseSchema = z.object({
-  pagination: paginationInfoSchema,
+  pagination: paginationInfoSchema.optional(),
+  delta: deltaInfoSchema.optional(),
+  deltaCursor: deltaCursorSchema.optional(),
   spans: z.array(lightSpanRecordSchema),
 });
 
-/** Response containing paginated lightweight root spans */
+/** Response containing paginated lightweight root spans. Delta mode returns only new trace rows. */
 export type ListTracesLightResponse = z.infer<typeof listTracesLightResponseSchema>;
 
 // ============================================================================

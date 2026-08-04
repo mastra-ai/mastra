@@ -4084,6 +4084,136 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 });
 
+describe('listTracesLight projection', () => {
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  const bigInput = {
+    messages: [
+      { role: 'user', content: 'summarize this' },
+      { role: 'assistant', content: 'x'.repeat(50_000) },
+    ],
+  };
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    await storage.init();
+  });
+
+  beforeEach(async () => {
+    await storage.dangerouslyClearAll();
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'light-trace-1',
+          spanId: 'light-span-1',
+          parentSpanId: null,
+          name: 'agent run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt: new Date('2026-01-01T00:00:00Z'),
+          endedAt: new Date('2026-01-01T00:00:05Z'),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          links: null,
+          metadata: null,
+          tags: [],
+          error: null,
+          attributes: { model: 'claude-sonnet-5' },
+          input: bigInput,
+          output: { text: 'y'.repeat(50_000) },
+        },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  it('omits the heavy blobs and carries a short inputPreview instead', async () => {
+    const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+    expect(spans).toHaveLength(1);
+    const row = spans[0]! as Record<string, unknown>;
+    expect(row.input).toBeUndefined();
+    expect(row.output).toBeUndefined();
+    expect(row.attributes).toBeUndefined();
+    expect(row.inputPreview).toBe('summarize this');
+  });
+
+  it('returns a deltaCursor on page 0 so live-tail polling stays enabled', async () => {
+    const page = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+    expect(page.deltaCursor).toBeDefined();
+  });
+
+  it('serves delta mode with the same lightweight projection', async () => {
+    const seed = await storage.listTracesLight({ mode: 'delta' });
+    expect(seed.spans).toEqual([]);
+    expect(seed.deltaCursor).toBeDefined();
+
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'light-trace-2',
+          spanId: 'light-span-2',
+          parentSpanId: null,
+          name: 'agent run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt: new Date('2026-01-01T00:01:00Z'),
+          endedAt: new Date('2026-01-01T00:01:05Z'),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          links: null,
+          metadata: null,
+          tags: [],
+          error: null,
+          attributes: null,
+          input: bigInput,
+          output: { text: 'z'.repeat(50_000) },
+        },
+      ],
+    });
+
+    const delta = await storage.listTracesLight({ mode: 'delta', after: seed.deltaCursor, limit: 100 });
+
+    expect(delta.spans.map(s => s.traceId)).toContain('light-trace-2');
+    const row = delta.spans.find(s => s.traceId === 'light-trace-2')! as Record<string, unknown>;
+    expect(row.input).toBeUndefined();
+    expect(row.output).toBeUndefined();
+    expect(row.inputPreview).toBe('summarize this');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------

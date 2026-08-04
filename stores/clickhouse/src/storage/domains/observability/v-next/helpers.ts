@@ -19,7 +19,7 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { EntityType } from '@mastra/core/storage';
+import { buildInputPreview, EntityType } from '@mastra/core/storage';
 
 // ---------------------------------------------------------------------------
 // ClickHouse query settings
@@ -218,6 +218,8 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
     error: parseJson(row.error) ?? undefined,
+    // Written alongside `input` at insert time — see `spanRecordToRow`.
+    inputPreview: nullableString(row.inputPreview),
     createdAt: startedAt,
     updatedAt: null,
   };
@@ -267,6 +269,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     attributes: jsonEncode(span.attributes),
     links: jsonEncode(span.links),
     input: jsonEncode(span.input),
+    inputPreview: buildInputPreview(span.input) ?? null,
     output: jsonEncode(span.output),
     error: jsonEncode(span.error),
     requestContext: jsonEncode(span.requestContext),

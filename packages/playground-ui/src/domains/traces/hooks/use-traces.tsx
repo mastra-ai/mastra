@@ -1,9 +1,9 @@
 import type {
+  LightSpanRecord,
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
-  ListTracesResponse,
-  TraceSpan,
+  ListTracesLightResponse,
 } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
@@ -90,7 +90,9 @@ const fetchTracesFn = async (args: FetchTracesFnArgs) => {
     return client.listBranches(params as ListBranchesArgs);
   }
 
-  return client.listTraces(params as ListTracesArgs);
+  // The list only renders identity, timing, status and a short input preview, so ask
+  // for the lightweight projection. Selecting a row fetches the full record separately.
+  return client.listTracesLight(params as ListTracesArgs);
 };
 
 export const TRACES_PER_PAGE = 25;
@@ -102,7 +104,7 @@ export interface TracesFilters {
 
 /** Returns the next page number if the server indicates more pages are available. */
 export function getTracesNextPageParam(
-  lastPage: ListTracesResponse | ListBranchesResponse | undefined,
+  lastPage: ListTracesLightResponse | ListBranchesResponse | undefined,
   _allPages: unknown,
   lastPageParam: number,
 ) {
@@ -112,9 +114,11 @@ export function getTracesNextPageParam(
   return undefined;
 }
 
-type TracesPageResponse = ListTracesResponse | ListBranchesResponse;
+type TracesPageResponse = ListTracesLightResponse | ListBranchesResponse;
 
-function getPageSpans(page: TracesPageResponse) {
+/** Branch rows are full spans and trace rows are lightweight; the list only reads the
+ *  fields they share, so both are surfaced as `LightSpanRecord`. */
+function getPageSpans(page: TracesPageResponse): LightSpanRecord[] {
   if ('branches' in page) return page.branches ?? [];
   return page.spans ?? [];
 }
@@ -122,7 +126,7 @@ function getPageSpans(page: TracesPageResponse) {
 /** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
  *  Also surfaces page 0's deltaCursor so the live-tail query can read it reactively. */
 export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
-  spans: TraceSpan[];
+  spans: LightSpanRecord[];
   deltaCursor: string | undefined;
 } {
   const seen = new Set<string>();
@@ -138,6 +142,16 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
   return { spans, deltaCursor: data.pages[0]?.deltaCursor };
 }
 
+type RowIdentity = { traceId: string; spanId?: string | null };
+
+function rowKey(row: RowIdentity): string {
+  return `${row.traceId}:${row.spanId}`;
+}
+
+function indexRowsByKey<TRow extends RowIdentity>(rows: TRow[]): Map<string, TRow> {
+  return new Map(rows.map(row => [rowKey(row), row]));
+}
+
 /** Replaces existing page-0 rows in place (keyed by traceId:spanId) with
  *  refreshed copies from the server. Rows the server doesn't return are kept
  *  as-is so delta-accumulated rows that have aged off the server's page 0
@@ -145,40 +159,29 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
  *  delivers those. */
 export function refreshPage0Rows(
   old: InfiniteData<TracesPageResponse> | undefined,
-  refreshed: ListTracesResponse | ListBranchesResponse,
+  refreshed: ListTracesLightResponse | ListBranchesResponse,
   listMode: TraceListMode,
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
   if (!firstPage) return old;
 
-  const refreshedRows =
-    listMode === 'branches' && 'branches' in refreshed
-      ? (refreshed.branches ?? [])
-      : 'spans' in refreshed
-        ? (refreshed.spans ?? [])
-        : [];
-
-  if (refreshedRows.length === 0) return old;
-
-  const refreshedByKey = new Map<string, (typeof refreshedRows)[number]>();
-  for (const row of refreshedRows) {
-    refreshedByKey.set(`${row.traceId}:${row.spanId}`, row);
-  }
-
+  // Branch and trace rows have different row shapes, so each mode keys its own map.
   let updatedFirst: TracesPageResponse;
-  if (listMode === 'branches' && 'branches' in firstPage) {
-    const updated = (firstPage.branches ?? []).map(existing => {
-      const fresh = refreshedByKey.get(`${existing.traceId}:${existing.spanId}`);
-      return fresh ?? existing;
-    });
-    updatedFirst = { ...firstPage, branches: updated };
-  } else if ('spans' in firstPage) {
-    const updated = (firstPage.spans ?? []).map(existing => {
-      const fresh = refreshedByKey.get(`${existing.traceId}:${existing.spanId}`);
-      return fresh ?? existing;
-    });
-    updatedFirst = { ...firstPage, spans: updated };
+  if (listMode === 'branches' && 'branches' in firstPage && 'branches' in refreshed) {
+    const refreshedByKey = indexRowsByKey(refreshed.branches ?? []);
+    if (refreshedByKey.size === 0) return old;
+    updatedFirst = {
+      ...firstPage,
+      branches: (firstPage.branches ?? []).map(existing => refreshedByKey.get(rowKey(existing)) ?? existing),
+    };
+  } else if ('spans' in firstPage && 'spans' in refreshed) {
+    const refreshedByKey = indexRowsByKey(refreshed.spans ?? []);
+    if (refreshedByKey.size === 0) return old;
+    updatedFirst = {
+      ...firstPage,
+      spans: (firstPage.spans ?? []).map(existing => refreshedByKey.get(rowKey(existing)) ?? existing),
+    };
   } else {
     return old;
   }
@@ -205,7 +208,7 @@ function sortRowsByStartedAtDesc<T extends { startedAt?: unknown }>(rows: T[]): 
  *  selectUniqueTraces. */
 export function mergeDeltaIntoPage0(
   old: InfiniteData<TracesPageResponse> | undefined,
-  delta: ListTracesResponse | ListBranchesResponse,
+  delta: ListTracesLightResponse | ListBranchesResponse,
   listMode: TraceListMode,
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
@@ -222,7 +225,7 @@ export function mergeDeltaIntoPage0(
       deltaCursor: nextCursor,
     };
   } else if ('spans' in firstPage) {
-    const newRows = (delta as ListTracesResponse).spans ?? [];
+    const newRows = (delta as ListTracesLightResponse).spans ?? [];
     updatedFirst = {
       ...firstPage,
       spans: sortRowsByStartedAtDesc([...newRows, ...(firstPage.spans ?? [])]),
@@ -242,7 +245,7 @@ export interface UseTracesArgs extends TracesFilters {
 }
 
 interface UseTracesReturn {
-  data: { spans: TraceSpan[]; deltaCursor: string | undefined } | undefined;
+  data: { spans: LightSpanRecord[]; deltaCursor: string | undefined } | undefined;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
@@ -353,7 +356,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
     retry: false,
     refetchInterval: q => {
       if (q.state.error) return false;
-      const data = q.state.data as ListTracesResponse | ListBranchesResponse | null | undefined;
+      const data = q.state.data as ListTracesLightResponse | ListBranchesResponse | null | undefined;
       if (data?.delta?.hasMore) return deltaChaseIntervalMs;
       return deltaPollIntervalMs;
     },
@@ -371,7 +374,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       mergeDeltaIntoPage0(old, result, listMode),
     );
 
-    const newRows =
+    const newRows: RowIdentity[] =
       listMode === 'branches' && 'branches' in result
         ? (result.branches ?? [])
         : 'spans' in result

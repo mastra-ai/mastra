@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { SpanType } from '../../../observability/types';
-import { extractBranchSpans, lightSpanRecordSchema, getTraceLightResponseSchema } from './tracing';
+import {
+  buildInputPreview,
+  extractBranchSpans,
+  getTraceLightResponseSchema,
+  INPUT_PREVIEW_MAX_LENGTH,
+  lightSpanRecordSchema,
+} from './tracing';
 
 describe('lightSpanRecordSchema', () => {
   const validLightSpan = {
@@ -246,5 +252,61 @@ describe('extractBranchSpans (helper)', () => {
     const visited = new Set(branch.map(s => s.spanId));
     expect(visited.size).toBe(branch.length);
     expect(branch[0]!.spanId).toBe('A');
+  });
+});
+
+describe('buildInputPreview', () => {
+  it('joins user message text and ignores assistant turns', () => {
+    const input = {
+      messages: [
+        { role: 'user', content: 'first question' },
+        { role: 'assistant', content: 'an answer nobody previews' },
+        { role: 'user', content: 'second question' },
+      ],
+    };
+
+    expect(buildInputPreview(input)).toBe('first question | second question');
+  });
+
+  it('accepts the raw JSON string a store hands back', () => {
+    const input = JSON.stringify({ messages: [{ role: 'user', content: 'from the wire' }] });
+
+    expect(buildInputPreview(input)).toBe('from the wire');
+  });
+
+  it('reads text parts out of structured content', () => {
+    const input = [{ role: 'user', content: [{ type: 'text', text: 'part one' }, { type: 'image' }] }];
+
+    expect(buildInputPreview(input)).toBe('part one');
+  });
+
+  it('recovers user text when the store sliced the JSON mid-document', () => {
+    const full = JSON.stringify({
+      messages: [
+        { role: 'user', content: 'survives truncation' },
+        { role: 'assistant', content: 'x'.repeat(500) },
+      ],
+    });
+
+    expect(buildInputPreview(full.slice(0, 80))).toBe('survives truncation');
+  });
+
+  it('truncates past the max length with an ellipsis', () => {
+    const preview = buildInputPreview({ messages: [{ role: 'user', content: 'a'.repeat(400) }] });
+
+    expect(preview).toHaveLength(INPUT_PREVIEW_MAX_LENGTH + 1);
+    expect(preview?.endsWith('…')).toBe(true);
+  });
+
+  it('returns undefined for empty or missing input', () => {
+    expect(buildInputPreview(null)).toBeUndefined();
+    expect(buildInputPreview(undefined)).toBeUndefined();
+    expect(buildInputPreview('   ')).toBeUndefined();
+    expect(buildInputPreview({ messages: [{ role: 'assistant', content: 'no user turn' }] })).toBeUndefined();
+  });
+
+  it('falls back to the raw value when input is not a message list', () => {
+    expect(buildInputPreview('plain prompt text')).toBe('plain prompt text');
+    expect(buildInputPreview({ query: 'lookup' })).toBe('{"query":"lookup"}');
   });
 });

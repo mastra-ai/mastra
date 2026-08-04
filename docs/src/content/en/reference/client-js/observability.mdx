@@ -1,8 +1,8 @@
 ---
-title: "Reference: Observability API | Client SDK"
+title: 'Reference: Observability API | Client SDK'
 description: Learn how to retrieve traces, monitor application performance, score traces, and record feedback using the client-js SDK.
 packages:
-  - "@mastra/client-js"
+  - '@mastra/client-js'
 ---
 
 # Observability API
@@ -14,7 +14,7 @@ The Observability API provides methods to retrieve traces, monitor application p
 Retrieve a specific trace by its ID, including all its spans and details:
 
 ```typescript
-const trace = await mastraClient.getTrace('trace-id-123')
+const trace = await mastraClient.getTrace('trace-id-123');
 ```
 
 ## Getting traces with filtering
@@ -37,14 +37,36 @@ const traces = await mastraClient.getTraces({
     entityId: 'weather-agent-id', // Filter by entity ID
     entityType: 'agent', // Filter by entity type
   },
-})
+});
 
-console.log(`Found ${traces.spans.length} root spans`)
-console.log(`Total pages: ${traces.pagination.totalPages}`)
+console.log(`Found ${traces.spans.length} root spans`);
+console.log(`Total pages: ${traces.pagination.totalPages}`);
 
 // To get the complete trace with all spans, use getTrace
-const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId)
+const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId);
 ```
+
+## Listing traces for a list view
+
+`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries a short `inputPreview` string instead, so a list can render a preview column without transferring the whole prompt.
+
+Prefer it whenever you are rendering many traces at once, and fetch the full record only when a row is opened:
+
+```typescript
+const list = await mastraClient.listTracesLight({
+  pagination: { page: 0, perPage: 25 },
+  filters: { entityType: 'agent' },
+});
+
+for (const span of list.spans) {
+  console.log(span.name, span.inputPreview);
+}
+
+// Fetch the full payload only for the trace the user selects
+const selected = await mastraClient.getTrace(list.spans[0].traceId);
+```
+
+It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
 
 ## Scoring traces
 
@@ -57,7 +79,7 @@ const result = await mastraClient.score({
     { traceId: 'trace-1', spanId: 'span-1' }, // Score specific span
     { traceId: 'trace-2' }, // Score specific span which defaults to the parent span
   ],
-})
+});
 ```
 
 ## Getting scores by span
@@ -70,7 +92,7 @@ const scores = await mastraClient.listScoresBySpan({
   spanId: 'span-456',
   page: 1,
   perPage: 20,
-})
+});
 ```
 
 ## Feedback
@@ -91,7 +113,7 @@ const response = await mastraClient.createFeedback({
     value: 1,
     comment: 'Helpful answer.',
   },
-})
+});
 ```
 
 ### Listing feedback
@@ -106,7 +128,7 @@ const feedback = await mastraClient.listFeedback({
   },
   pagination: { page: 0, perPage: 20 },
   orderBy: { field: 'timestamp', direction: 'DESC' },
-})
+});
 ```
 
 ### Aggregating feedback
@@ -118,7 +140,7 @@ const averageRating = await mastraClient.getFeedbackAggregate({
   feedbackType: 'rating',
   aggregation: 'avg',
   comparePeriod: 'previous_day',
-})
+});
 ```
 
 ### Grouping feedback
@@ -130,7 +152,7 @@ const ratingsByAgent = await mastraClient.getFeedbackBreakdown({
   feedbackType: 'rating',
   groupBy: ['entityName'],
   aggregation: 'avg',
-})
+});
 ```
 
 ### Querying feedback over time
@@ -143,7 +165,7 @@ const ratingsOverTime = await mastraClient.getFeedbackTimeSeries({
   interval: '1h',
   aggregation: 'avg',
   groupBy: ['feedbackSource'],
-})
+});
 ```
 
 ### Querying feedback percentiles
@@ -155,7 +177,7 @@ const ratingPercentiles = await mastraClient.getFeedbackPercentiles({
   feedbackType: 'rating',
   percentiles: [0.5, 0.95],
   interval: '1d',
-})
+});
 ```
 
 ## Related
