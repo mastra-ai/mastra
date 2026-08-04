@@ -9,28 +9,15 @@ import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 
-/** The env that gates SlackIntegration registration in the server entry. */
-const SLACK_ENV_VARS = [
-  'SLACK_APP_SIGNING_SECRET',
-  'SLACK_APP_BOT_TOKEN',
-  'SLACK_APP_CLIENT_ID',
-  'SLACK_APP_CLIENT_SECRET',
-];
-
 /**
- * Shown when Slack isn't available on this server, instead of a Connect
- * button that would 404. Two flavors:
- * - `not_registered`: the server said so explicitly (modern factory stub) —
- *   state the fact, and name the env as the enable path (the template entry
- *   gates SlackIntegration registration on it).
- * - default (old server, 404/HTML fallback): no stub to tell us why, so the
- *   copy mentions both the integration and the env without claiming either.
+ * Shown when Slack isn't available on this server, instead of a Connect button
+ * that would 404. Deliberately says nothing about how to enable it: naming the
+ * env vars would be a half-truth, since they only turn Slack on in deployments
+ * whose entry actually registers `SlackIntegration`, and the server can't see
+ * whether this one does. Link a setup guide here once factory Slack docs exist
+ * — the published channels page documents the raw adapter, not this.
  */
-export function SlackNotConfigured({ reason }: { reason?: 'not_registered' }) {
-  const description =
-    reason === 'not_registered'
-      ? `The Slack integration is not registered on this server. To enable it, set ${SLACK_ENV_VARS.join(', ')} so the server registers SlackIntegration.`
-      : `Slack is not available on this server: the Slack integration is not registered or its environment variables (${SLACK_ENV_VARS.join(', ')}) are not set.`;
+export function SlackNotConfigured() {
   return (
     <SettingsCard>
       <SettingsRow
@@ -46,7 +33,7 @@ export function SlackNotConfigured({ reason }: { reason?: 'not_registered' }) {
               </Txt>
             </span>
             <Txt as="span" variant="ui-xs" className="text-icon3 max-w-80 pl-3">
-              {description}
+              Slack channels aren't set up for this factory.
             </Txt>
           </span>
         }
@@ -79,8 +66,9 @@ export function ConnectedAccountsSection() {
     );
   }
 
-  if (accountsQuery.data?.reason === 'not_registered') return <SlackNotConfigured reason="not_registered" />;
-  if (accountsQuery.data?.unavailable) return <SlackNotConfigured />;
+  if (accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable) {
+    return <SlackNotConfigured />;
+  }
 
   const slackLabel = (
     <span className="flex items-center gap-3">

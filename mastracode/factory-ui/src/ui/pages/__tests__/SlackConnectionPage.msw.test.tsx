@@ -54,7 +54,7 @@ function renderPage(slackWorkItemsEnabled = false) {
 }
 
 describe('SlackConnectionPage', () => {
-  it('given an old server with no channel route, when rendered, then it explains both possible causes instead of a parse error', async () => {
+  it('given an old server with no channel route, when rendered, then it shows the not-configured card instead of a parse error', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
         HttpResponse.html('<!doctype html><html><body>app shell</body></html>'),
@@ -64,16 +64,12 @@ describe('SlackConnectionPage', () => {
     renderPage();
 
     expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /^Slack is not available on this server: the Slack integration is not registered or its environment variables/,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Slack channels aren't set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
 
-  it('given the server reports the Slack integration is not registered, when rendered, then it says so precisely', async () => {
+  it('given the server reports the Slack integration is not registered, when rendered, then it states the fact without naming env vars', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
         HttpResponse.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
@@ -83,11 +79,8 @@ describe('SlackConnectionPage', () => {
     renderPage();
 
     expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /^The Slack integration is not registered on this server\. To enable it, set SLACK_APP_SIGNING_SECRET/,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Slack channels aren't set up for this factory/)).toBeInTheDocument();
+    expect(screen.queryByText(/SLACK_APP_SIGNING_SECRET/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
 
