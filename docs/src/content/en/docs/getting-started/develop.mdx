@@ -105,7 +105,7 @@ Watch [AI Search](https://youtu.be/sj4yondKtMs) for a video walkthrough of file-
 
 :::
 
-### Start with two files
+### Create your first agent
 
 A file-based agent lives in its own directory under `src/mastra/agents/`. To create a working agent, add a `config.ts` file for its model and runtime options and an `instructions.md` file for its always-on prompt:
 
@@ -136,13 +136,13 @@ Run `mastra dev`, open Studio, and select `writing-assistant`. Try asking it:
 Rewrite this sentence: Our platform provides users with the ability to build agents quickly.
 ```
 
-### Paths provide identity
+### How discovery works
 
 Mastra uses paths to discover and name file-based capabilities. An agent directory supplies the default agent `id` and `name`. Inside the agent, `tools/search_docs.ts` registers the tool as `search_docs`, while `skills/style-guide.md` registers the skill as `style-guide`.
 
-### Add capabilities when needed
+### Extend your agent
 
-Start with configuration and instructions, then add files or directories as the agent needs more capabilities:
+Add files or directories when your agent needs more functionality:
 
 | Path | What it adds |
 | - | - |
