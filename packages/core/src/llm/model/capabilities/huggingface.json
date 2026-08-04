@@ -16,6 +16,7 @@
     "moonshotai/Kimi-K3",
     "stepfun-ai/Step-3.7-Flash",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-Small",
     "zai-org/GLM-4.5V"
   ],
   "temperature": [
@@ -46,6 +47,7 @@
     "deepseek-ai/DeepSeek-R1-0528",
     "deepseek-ai/DeepSeek-V3.2",
     "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro",
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
@@ -61,6 +63,7 @@
     "stepfun-ai/Step-3.7-Flash",
     "tencent/Hy3",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-Small",
     "zai-org/GLM-4.5",
     "zai-org/GLM-4.5-Air",
     "zai-org/GLM-4.5V",
@@ -87,6 +90,7 @@
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "deepseek-ai/DeepSeek-R1",
     "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro",
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
