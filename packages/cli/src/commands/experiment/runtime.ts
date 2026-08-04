@@ -31,6 +31,13 @@ type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string
 type Target = { type: 'agent' | 'workflow'; id: string };
 type Correlation = { experimentId: string; jobId: string; attempt: number; idempotencyKey: string };
 
+type DatasetToolMock = {
+  toolId: string;
+  args: Record<string, JsonValue>;
+  output: JsonValue;
+  matchArgs?: 'strict' | 'ignore';
+};
+
 type DatasetItem = {
   id?: string;
   input: JsonValue;
@@ -39,7 +46,7 @@ type DatasetItem = {
   requestContext?: Record<string, JsonValue>;
   expectedTrajectory?: JsonValue;
   source?: JsonValue;
-  toolMocks?: Array<{ toolId: string; [key: string]: unknown }>;
+  toolMocks?: DatasetToolMock[];
 };
 
 type ExperimentPacket = {
@@ -212,7 +219,14 @@ function validateRunRequest(value: unknown, build: ExperimentWorkerBuildIdentity
         (item.requestContext === undefined || isRecord(item.requestContext)) &&
         (item.toolMocks === undefined ||
           (Array.isArray(item.toolMocks) &&
-            item.toolMocks.every(mock => isRecord(mock) && typeof mock.toolId === 'string'))),
+            item.toolMocks.every(
+              mock =>
+                isRecord(mock) &&
+                typeof mock.toolId === 'string' &&
+                isRecord(mock.args) &&
+                'output' in mock &&
+                (mock.matchArgs === undefined || mock.matchArgs === 'strict' || mock.matchArgs === 'ignore'),
+            ))),
     ) ||
     dataset.itemCount !== dataset.items.length
   ) {
@@ -265,8 +279,15 @@ function validateRunRequest(value: unknown, build: ExperimentWorkerBuildIdentity
   const mockedToolIds = new Set(
     dataset.items.flatMap(item => (Array.isArray(item.toolMocks) ? item.toolMocks.map(mock => mock.toolId) : [])),
   );
-  if (packet.policies.allowedToolIds.some(toolId => !mockedToolIds.has(toolId))) {
-    return 'allowed tools must have deterministic mocks';
+  const allowedToolIds = new Set(packet.policies.allowedToolIds);
+  if (packet.target.type !== 'agent' && (mockedToolIds.size > 0 || allowedToolIds.size > 0)) {
+    return 'tool policies are supported only for agent targets';
+  }
+  if (
+    packet.policies.allowedToolIds.some(toolId => !mockedToolIds.has(toolId)) ||
+    [...mockedToolIds].some(toolId => !allowedToolIds.has(toolId))
+  ) {
+    return 'allowed tools and deterministic mocks must match';
   }
 }
 
@@ -360,7 +381,9 @@ export async function runExperimentWorker({
     }
   };
   const writeEvent = (type: string, payload: Record<string, unknown>) => {
-    if (!correlation || terminal || (type === 'heartbeat' && heartbeatQueued)) return writeTail;
+    if (!correlation || terminal || (finishing && type !== 'terminal') || (type === 'heartbeat' && heartbeatQueued)) {
+      return writeTail;
+    }
     const event = {
       ...correlation,
       eventId: createEventId(),
@@ -405,6 +428,7 @@ export async function runExperimentWorker({
   ) => {
     if (terminal || finishing) return;
     finishing = true;
+    clearInterval(heartbeat);
     try {
       await writeEvent('terminal', {
         status,
@@ -503,6 +527,16 @@ export async function runExperimentWorker({
               ...(item.expectedTrajectory !== undefined ? { expectedTrajectory: item.expectedTrajectory } : {}),
               ...(item.source !== undefined ? { source: item.source } : {}),
             },
+            ...(item.toolMocks
+              ? {
+                  toolMocks: item.toolMocks.map(mock => ({
+                    toolName: mock.toolId,
+                    args: mock.args,
+                    output: mock.output,
+                    ...(mock.matchArgs ? { matchArgs: mock.matchArgs } : {}),
+                  })),
+                }
+              : {}),
           })),
           targetType: packet.target.type,
           targetId: packet.target.id,

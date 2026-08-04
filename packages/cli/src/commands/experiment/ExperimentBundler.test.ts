@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -47,6 +47,8 @@ describe('ExperimentBundler', () => {
     expect(entry).toContain('await runExperimentWorker({');
     expect(entry).toContain('console.log = (...args) => console.error(...args)');
     expect(entry).toContain('console.info = (...args) => console.error(...args)');
+    expect(entry).toContain('process.stdout.end(resolve)');
+    expect(entry).toContain('setTimeout(resolve, 5_000)');
     expect(entry).toContain('process.exit(exitCode)');
   });
 
@@ -89,6 +91,27 @@ describe('ExperimentBundler', () => {
       contentDigest: expectedContentDigest,
       excludes: ['experiment-worker-manifest.json'],
     });
+  });
+
+  it('excludes only the root artifact manifest from digests', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const nestedDirectory = join(output, 'nested');
+    await mkdir(nestedDirectory);
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await writeFile(join(output, 'experiment-worker-manifest.json'), 'stale root manifest');
+    await writeFile(join(nestedDirectory, 'experiment-worker-manifest.json'), 'nested artifact');
+
+    await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
+
+    const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+    expect(manifest.files.map((file: { path: string }) => file.path)).toContain(
+      'nested/experiment-worker-manifest.json',
+    );
+    expect(
+      manifest.files.filter((file: { path: string }) => file.path === 'experiment-worker-manifest.json'),
+    ).toHaveLength(0);
   });
 
   it.each(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'])(

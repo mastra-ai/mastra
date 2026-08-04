@@ -100,7 +100,10 @@ const exitCode = await runExperimentWorker({
   runExperiment,
   build: ${JSON.stringify(this.buildIdentity)},
 });
-await new Promise(resolve => process.stdout.end(resolve));
+await Promise.race([
+  new Promise(resolve => process.stdout.end(resolve)),
+  new Promise(resolve => setTimeout(resolve, 5_000)),
+]);
 process.exit(exitCode);
 `;
   }
@@ -123,9 +126,11 @@ async function collectFileDigests(root: string): Promise<Array<{ path: string; s
       const fullPath = join(directory, entry.name);
       if (entry.isDirectory()) {
         await visit(fullPath);
-      } else if (entry.name !== 'experiment-worker-manifest.json') {
+      } else {
+        const artifactPath = relative(root, fullPath).replaceAll('\\', '/');
+        if (artifactPath === 'experiment-worker-manifest.json') continue;
         files.push({
-          path: relative(root, fullPath).replaceAll('\\', '/'),
+          path: artifactPath,
           sha256: createHash('sha256')
             .update(await readFile(fullPath))
             .digest('hex'),

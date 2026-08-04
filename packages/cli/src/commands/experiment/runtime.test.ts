@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PassThrough } from 'node:stream';
+import { ToolMockMatcher } from '@mastra/core/datasets';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -192,24 +193,31 @@ describe('runExperimentWorker', () => {
     expect(terminal.payload).toMatchObject({ status: 'failed', retryable: true });
   });
 
-  it('maps workflow, scorer provenance, and tool mocks into the public experiment configuration', async () => {
+  it('maps scorer provenance and agent tool mocks into the public experiment configuration', async () => {
     const request: any = createRequest();
-    request.packet.target = { type: 'workflow', id: 'workflow-1' };
     request.packet.scorers = [{ id: 'quality', version: 'v1' }];
-    request.packet.dataset.items[0].toolMocks = [{ toolId: 'lookup', output: { value: 1 } }];
+    request.packet.dataset.items[0].toolMocks = [
+      { toolId: 'lookup', args: { query: 'value' }, output: { value: 1 }, matchArgs: 'strict' },
+    ];
     request.packet.policies.allowedToolIds = ['lookup'];
     const digest = createHash('sha256').update(canonicalize(request.packet.dataset.items)).digest('hex');
     request.packet.dataset.digest = digest;
     request.datasetAttestation.digest = digest;
     const runExperiment = vi.fn(async (_mastra, config) => {
       expect(config).toMatchObject({
-        targetType: 'workflow',
-        targetId: 'workflow-1',
+        targetType: 'agent',
+        targetId: 'test-agent',
         scorers: ['quality'],
         unmockedToolPolicy: 'deny',
         metadata: { scorerVersions: { quality: 'v1' } },
       });
-      expect(config.data[0]).toMatchObject({ toolMocks: [{ toolId: 'lookup', output: { value: 1 } }] });
+      expect(config.data[0]).toMatchObject({
+        toolMocks: [{ toolName: 'lookup', args: { query: 'value' }, output: { value: 1 }, matchArgs: 'strict' }],
+      });
+      const matcher = new ToolMockMatcher(
+        config.data[0]!.toolMocks as ConstructorParameters<typeof ToolMockMatcher>[0],
+      );
+      expect(matcher.resolve('lookup', { query: 'value' })).toEqual({ kind: 'serve', output: { value: 1 } });
       await config.onEvent({
         type: 'experiment.run.finished',
         version: 1,
@@ -226,6 +234,32 @@ describe('runExperimentWorker', () => {
 
     await expect(harness.result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.completed);
     expect(runExperiment).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [
+      'workflow tool mocks',
+      (request: any) => (request.packet.target = { type: 'workflow', id: 'workflow-1' }),
+      'tool policies are supported only for agent targets',
+    ],
+    [
+      'mocked tools outside the allowlist',
+      (request: any) => (request.packet.policies.allowedToolIds = []),
+      'allowed tools and deterministic mocks must match',
+    ],
+  ])('rejects %s', async (_name, mutate, expectedError) => {
+    const request: any = createRequest();
+    request.packet.dataset.items[0].toolMocks = [{ toolId: 'lookup', args: { query: 'value' }, output: { value: 1 } }];
+    request.packet.policies.allowedToolIds = ['lookup'];
+    mutate(request);
+    const digest = createHash('sha256').update(canonicalize(request.packet.dataset.items)).digest('hex');
+    request.packet.dataset.digest = digest;
+    request.datasetAttestation.digest = digest;
+    const harness = createHarness(vi.fn());
+    harness.stdin.end(`${JSON.stringify(request)}\n`);
+
+    await expect(harness.result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.protocol);
+    expect(harness.errors()).toContain(expectedError);
   });
 
   it('finishes without waiting for stdin to close after writing the terminal event', async () => {
