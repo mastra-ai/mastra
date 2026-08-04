@@ -853,6 +853,26 @@ describe('A2AAgent', () => {
     });
   });
 
+  it('accepts a JSON-RPC success response with a null error field', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: '1',
+          result: createMessage('Successful response'),
+          error: null,
+        }),
+        { status: 200 },
+      ),
+    ]);
+    const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
+
+    await expect(agent.generate('Accept null error')).resolves.toMatchObject({ text: 'Successful response' });
+  });
+
   it('throws JSON-RPC errors received through SSE', async () => {
     const encoder = new TextEncoder();
     const fetchMock = createFetchMock([

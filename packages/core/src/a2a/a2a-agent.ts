@@ -166,8 +166,11 @@ function throwIfA2AErrorResponse(response: unknown): void {
   }
 
   const error = response.error;
+  if (error == null) {
+    return;
+  }
+
   if (
-    !error ||
     typeof error !== 'object' ||
     !('code' in error) ||
     typeof error.code !== 'number' ||
