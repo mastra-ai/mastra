@@ -194,6 +194,31 @@ The database option is the default. Editor uses the storage configured on your `
 
 To use a separate backend for Editor data, set the `editor` option on [`MastraCompositeStore`](/reference/storage/composite#options). Storage domains without an explicit route continue to use its `default` store.
 
+The following example keeps application and Editor data in separate LibSQL files:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MastraEditor } from '@mastra/editor'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  agents: {/* your existing agents */},
+  storage: new MastraCompositeStore({
+    id: 'mastra-storage',
+    default: new LibSQLStore({
+      id: 'app-storage',
+      url: 'file:./mastra.db',
+    }),
+    editor: new LibSQLStore({
+      id: 'editor-storage',
+      url: 'file:./editor.db',
+    }),
+  }),
+  editor: new MastraEditor(),
+})
+```
+
 ### Files in your repository
 
 Set `source: 'code'` when Editor changes should go through the same pull-request and deployment process as the rest of your code:
