@@ -175,9 +175,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
-  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  if (!context?.getState().projectRepositoryId || !sessionOrgId(requestContext) || !sessionUserId(requestContext))
-    return {};
+  if (!isGithubProjectSession(requestContext)) return {};
 
   return {
     github_refresh_token: createTool({
