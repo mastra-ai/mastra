@@ -211,7 +211,7 @@ if (result.finishReason === 'suspended') {
 
 Follow-up messages for an `input-required` task can carry the resume data as a structured data part, or as JSON or plain text in a text part.
 
-When a resumed run needs input again, the task returns to `input-required` and the flow repeats. Resuming a suspended run requires storage configured on the Mastra server so the suspended run state can be restored across requests.
+When a resumed run requires additional input, the task returns to `input-required` and the flow repeats. Resuming a suspended run requires storage configured on the Mastra server so the suspended run state can be restored across requests.
 
 :::note
 A2A task records live in an in-memory store, so a paused task can only be resumed by the same server process that suspended it. A server restart or a horizontally scaled deployment without sticky routing loses the task record, and a follow-up message fails with a task-not-found error.
