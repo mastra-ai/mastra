@@ -18,7 +18,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Start',
-      collapsible: false,
       collapsed: false,
       customProps: {
         displayAsGroup: true,

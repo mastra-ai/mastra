@@ -203,17 +203,6 @@ function DocSidebarItemCategoryCollapsible({
     }
   }
 
-  const categoryLinkClassName = clsx(styles.categoryLink, 'menu__link', {
-    'menu__link--sublist': collapsible,
-    'menu__link--sublist-caret': !href && collapsible,
-    'menu__link--active': isActive,
-  })
-  const categoryLabel = (
-    <span title={label} className={styles.categoryLinkLabel}>
-      {label} {badgeType && <SidebarBadge type={badgeType} />}
-    </span>
-  )
-
   return (
     <li
       className={clsx(
@@ -231,21 +220,23 @@ function DocSidebarItemCategoryCollapsible({
           'menu__list-item-collapsible--active': isCurrentPage,
         })}
       >
-        {!collapsible && !href ? (
-          <div className={categoryLinkClassName}>{categoryLabel}</div>
-        ) : (
-          <Link
-            className={categoryLinkClassName}
-            onClick={handleItemClick}
-            aria-current={isCurrentPage ? 'page' : undefined}
-            role={collapsible && !href ? 'button' : undefined}
-            aria-expanded={collapsible && !href ? !collapsed : undefined}
-            href={collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback}
-            {...props}
-          >
-            {categoryLabel}
-          </Link>
-        )}
+        <Link
+          className={clsx(styles.categoryLink, 'menu__link', {
+            'menu__link--sublist': collapsible,
+            'menu__link--sublist-caret': !href && collapsible,
+            'menu__link--active': isActive,
+          })}
+          onClick={handleItemClick}
+          aria-current={isCurrentPage ? 'page' : undefined}
+          role={collapsible && !href ? 'button' : undefined}
+          aria-expanded={collapsible && !href ? !collapsed : undefined}
+          href={collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback}
+          {...props}
+        >
+          <span title={label} className={styles.categoryLinkLabel}>
+            {label} {badgeType && <SidebarBadge type={badgeType} />}
+          </span>
+        </Link>
         {href && collapsible && (
           <CollapseButton
             collapsed={collapsed}

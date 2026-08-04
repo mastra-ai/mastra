@@ -56,8 +56,8 @@ Use the [`mastra` CLI](/reference/cli/mastra) to give your coding agent a feedba
 For example, your coding agent can run an agent, then pull traces to inspect the results:
 
 ```bash
-mastra api --url http://localhost:4111 agent run agent '{"messages":"Hello"}'
-mastra api --url http://localhost:4111 trace list
+npx mastra api --url http://localhost:4111 agent run agent '{"messages":"Hello"}'
+npx mastra api --url http://localhost:4111 trace list
 ```
 
 Remember to install the [Mastra skill](#mastra-skill) to teach your coding agent how to use the CLI.
@@ -130,7 +130,7 @@ export default agentConfig({
 You are a writing assistant. Rewrite text so it is clear, concise, and direct.
 ```
 
-Run `mastra dev`, open Studio, and select `writing-assistant`. Try asking it:
+Run `npx mastra dev`, open Studio, and select `writing-assistant`. Try asking it:
 
 ```text
 Rewrite this sentence: Our platform provides users with the ability to build agents quickly.

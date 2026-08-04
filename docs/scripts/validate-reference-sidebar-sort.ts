@@ -9,12 +9,11 @@ import { fileURLToPath } from 'url'
  * Rules (applied recursively at every level):
  *   1. "Overview" labeled items always come first.
  *   2. "Configuration" labeled items come right after Overview.
- *   3. "Project Structure" comes after Configuration.
- *   4. Standalone doc pages (non-dot labels) come before subcategories.
- *   5. Subcategories are sorted alphabetically by label (case-insensitive).
- *   6. Within doc pages, non-dot items come before dot-prefixed items.
- *   7. Non-dot items are sorted alphabetically (case-insensitive).
- *   8. Dot-prefixed items are sorted alphabetically (case-insensitive).
+ *   3. Standalone doc pages (non-dot labels) come before subcategories.
+ *   4. Subcategories are sorted alphabetically by label (case-insensitive).
+ *   5. Within doc pages, non-dot items come before dot-prefixed items.
+ *   6. Non-dot items are sorted alphabetically (case-insensitive).
+ *   7. Dot-prefixed items are sorted alphabetically (case-insensitive).
  *
  * Usage:
  *   pnpm validate:reference-sidebar        # validate only
@@ -60,7 +59,7 @@ function isDotLabel(label: string): boolean {
 }
 
 function isPinnedLabel(label: string): boolean {
-  return label === 'Overview' || label === 'Configuration' || label === 'Project Structure'
+  return label === 'Overview' || label === 'Configuration'
 }
 
 function sortKey(label: string): string {
@@ -82,8 +81,7 @@ function escapeJsString(s: string): string {
 function pinnedOrder(label: string): number {
   if (label === 'Overview') return 0
   if (label === 'Configuration') return 1
-  if (label === 'Project Structure') return 2
-  return 3
+  return 2
 }
 
 function buildExpectedOrder(items: SidebarItem[]): SidebarItem[] {

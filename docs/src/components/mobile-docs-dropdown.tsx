@@ -10,7 +10,7 @@ const docsTabs = [
   {
     id: 'Docs',
     label: 'Docs',
-    href: '/docs',
+    href: '/docs/',
     basePath: '/docs',
   },
   {
