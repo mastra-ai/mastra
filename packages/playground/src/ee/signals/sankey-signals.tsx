@@ -6,8 +6,12 @@ import type {
   SankeyChartNodeSelection,
   SankeyChartRecord,
 } from '@mastra/playground-ui/components/SankeyChart';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
@@ -33,6 +37,7 @@ import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findThemeSelection } from './theme-drilldown-data';
 import type { ThemeSelection } from './theme-drilldown-data';
+import { ThemeLifelines } from './theme-lifelines';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
 
@@ -46,6 +51,19 @@ export interface SankeySignalsProps {
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
+
+type SignalsViewMode = 'flow' | 'compare' | 'lifelines';
+
+function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; icon: React.ReactNode; label: string }) {
+  return (
+    <Tab value={value} className="px-3 py-2">
+      <Icon size="sm">{icon}</Icon>
+      <Txt variant="ui-sm" className="text-inherit">
+        {label}
+      </Txt>
+    </Tab>
+  );
+}
 
 function FlowCard({
   columns,
@@ -135,7 +153,7 @@ export function SankeySignals({
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
-  const [viewMode, setViewMode] = useState<'flow' | 'compare'>('flow');
+  const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
   const [drillIn, setDrillIn] = useState<ThemeSelection>();
   const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
@@ -144,6 +162,10 @@ export function SankeySignals({
   const snapshot = snapshots[selectedSnapshotIndex];
   const totalSnapshots = snapshotsQuery.data?.totalSnapshots ?? snapshot?.total ?? 0;
   const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);
+  const handleViewModeChange = (nextViewMode: SignalsViewMode) => {
+    if (nextViewMode !== 'flow') setIsPlaying(false);
+    setViewMode(nextViewMode);
+  };
   const handlePlayingChange = (nextIsPlaying: boolean) => {
     // Restart from the first landmark when play is pressed at the end.
     if (nextIsPlaying && selectedSnapshotIndex === snapshots.length - 1) selectSnapshot(0);
@@ -342,29 +364,13 @@ export function SankeySignals({
           </li>
         </ul>
       </header>
-      <div aria-label="Signals view mode" className="flex gap-1" role="group">
-        <Button
-          aria-pressed={viewMode === 'flow'}
-          onClick={() => setViewMode('flow')}
-          size="sm"
-          type="button"
-          variant={viewMode === 'flow' ? 'outline' : 'ghost'}
-        >
-          Flow
-        </Button>
-        <Button
-          aria-pressed={viewMode === 'compare'}
-          onClick={() => {
-            setIsPlaying(false);
-            setViewMode('compare');
-          }}
-          size="sm"
-          type="button"
-          variant={viewMode === 'compare' ? 'outline' : 'ghost'}
-        >
-          Compare
-        </Button>
-      </div>
+      <Tabs<SignalsViewMode> value={viewMode} defaultTab="flow" onValueChange={handleViewModeChange} className="w-fit">
+        <TabList variant="pill-ghost">
+          <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
+          <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
+          <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+        </TabList>
+      </Tabs>
       {viewMode === 'compare' ? (
         <ThemeCompare
           entityId={entityId}
@@ -373,6 +379,8 @@ export function SankeySignals({
           snapshots={snapshots}
           totalSnapshots={totalSnapshots}
         />
+      ) : viewMode === 'lifelines' ? (
+        <ThemeLifelines entityId={entityId} entityType={entityType} signalNames={signalNames} snapshots={snapshots} />
       ) : (
         <>
           <SnapshotTimeline

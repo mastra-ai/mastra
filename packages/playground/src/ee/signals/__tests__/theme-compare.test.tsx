@@ -143,7 +143,7 @@ describe('SankeySignals compare mode', () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
 
       const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
       expect(screen.queryByRole('region', { name: 'Trace signal theme flow' })).toBeNull();
@@ -156,7 +156,7 @@ describe('SankeySignals compare mode', () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
 
       const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
       expect(within(comparison).getByText('Jun 24–Jul 1, 2026')).not.toBeNull();
@@ -169,7 +169,7 @@ describe('SankeySignals compare mode', () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
 
       const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
       const legacyRow = within(goalColumn).getByTitle('Legacy support request').closest('li');
@@ -182,10 +182,10 @@ describe('SankeySignals compare mode', () => {
     it('returns to the flow chart when the user switches back', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
-      fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
       await screen.findByRole('region', { name: 'Snapshot comparison' });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Flow' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Flow' }));
 
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
       expect(screen.queryByRole('region', { name: 'Snapshot comparison' })).toBeNull();
