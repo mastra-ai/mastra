@@ -21,8 +21,3 @@
 .backButton:focus-visible {
   color: var(--ifm-menu-color-active);
 }
-
-.heading {
-  margin: 0.5rem 0 0;
-  font-size: 1.125rem;
-}

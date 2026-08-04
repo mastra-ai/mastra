@@ -239,6 +239,9 @@ test.describe('Contextual sidebar', () => {
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
     await expect(page).toHaveURL(new RegExp('/docs/agents/overview$'))
+    const backButton = contextualPane.getByRole('button', { name: 'Back to Agents' })
+    await expect(backButton).toHaveText(/←\s*Agents/)
+    await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
 
     const topLevelLinks = contextualPane.locator(
       ':scope > ul.menu__list > li > a.menu__link, :scope > ul.menu__list > li > .menu__list-item-collapsible > a.menu__link',
@@ -262,7 +265,6 @@ test.describe('Contextual sidebar', () => {
       visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Tools', exact: true }),
     ).toHaveAttribute('aria-current', 'page')
 
-    const backButton = visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to docs' })
     const urlBeforeBack = page.url()
     await backButton.focus()
     await backButton.press('Enter')
@@ -310,7 +312,7 @@ test.describe('Contextual sidebar', () => {
 
     await page.reload()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to docs' }).click()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to Agents' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
     await expect(page).toHaveURL('/docs/agents/overview')
 
@@ -321,7 +323,7 @@ test.describe('Contextual sidebar', () => {
     ).toHaveAttribute('aria-current', 'page')
     await page.reload()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to docs' }).click()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to Agents' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
     await expect(page).toHaveURL('/docs/agents/skills')
   })
@@ -420,7 +422,7 @@ test.describe('Contextual sidebar', () => {
 
     await openMobileSidebar(page)
     const urlBeforeBack = page.url()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to docs' }).click()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to Agents' }).click()
     const rootPane = visibleSidebarPane(page, 'root')
     await expect(rootPane).toBeVisible()
     await expect(page.locator('.navbar-sidebar')).toBeVisible()

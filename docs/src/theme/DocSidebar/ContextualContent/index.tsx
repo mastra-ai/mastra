@@ -18,11 +18,10 @@ export default function ContextualContent({ activePath, items, label, onBack, on
   return (
     <>
       <div className={styles.header}>
-        <button className={styles.backButton} type="button" onClick={onBack}>
+        <button className={styles.backButton} type="button" aria-label={`Back to ${label}`} onClick={onBack}>
           <span aria-hidden="true">←</span>
-          Back to docs
+          {label}
         </button>
-        <h2 className={styles.heading}>{label}</h2>
       </div>
       <ContextualSidebarPaneProvider>
         <ul className={`${ThemeClassNames.docs.docSidebarMenu} menu__list`}>
