@@ -415,37 +415,6 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'RAG',
-          items: [
-            {
-              type: 'doc',
-              id: 'rag/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'rag/chunking-and-embedding',
-              label: 'Chunking and Embedding',
-            },
-            {
-              type: 'doc',
-              id: 'rag/vector-databases',
-              label: 'Vector Databases',
-            },
-            {
-              type: 'doc',
-              id: 'rag/retrieval',
-              label: 'Retrieval',
-            },
-            {
-              type: 'doc',
-              id: 'rag/graph-rag',
-              label: 'GraphRAG',
-            },
-          ],
-        },
-        {
-          type: 'category',
           label: 'Voice',
           items: [
             {
