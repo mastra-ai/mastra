@@ -64,6 +64,7 @@ function renderSignalsPageWithShell() {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -351,7 +352,10 @@ describe('Trace Intelligence page', () => {
 
   describe('when a custom snapshot date range is applied', () => {
     it('requests snapshots with inclusive start and end timestamps', async () => {
-      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
+      // The calendar builds its month from `new Date()`, so pinning Date.now
+      // alone left it on the real month and day 25 was the wrong one.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
       const snapshotRequests: URL[] = [];
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
