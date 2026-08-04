@@ -93,15 +93,15 @@ File-based agents are in beta and may change before they're stable.
 
 :::
 
-File-based agents are an experimental, convention-based way to define Mastra agents and their primitives in files under `src/mastra/`, instead of registering them manually on your [`Mastra`](/reference/core/mastra-class) instance.
+With file-based agents, Mastra automatically discovers agents and related primitives from supported files under `src/mastra/`. You organize those files by convention instead of importing and registering each primitive on your [`Mastra`](/reference/core/mastra-class) instance. Discovery runs when you start or build your project with the Mastra CLI. [Learn more about the discovery lifecycle](/reference/file-based-agents/config#discovery-lifecycle).
 
-This approach reduces glue code and makes the file system a direct representation of your project structure, so both you and your coding agent can understand it at a glance.
+The file system becomes a direct representation of your project structure, so you and your coding agent can understand how the project fits together without tracing registration code.
 
-You can use file-based agents throughout your project or adopt them incrementally alongside primitives defined in code. The feature doesn't yet support every Mastra feature or use case.
+You can use file-based agents throughout your project or adopt them incrementally alongside primitives defined in code. Not every Mastra feature or use case is supported yet.
 
 :::tip[📹 Watch]
 
-Watch [AI Search](https://youtu.be/sj4yondKtMs) for a video walkthrough of file-based agents.
+Watch [File-Based Agents in Mastra](https://www.youtube.com/watch?v=5Kfn-oYkJNg\&t=18s) for a video walkthrough.
 
 :::
 
@@ -127,14 +127,10 @@ export default agentConfig({
 ```
 
 ```markdown title="src/mastra/agents/writing-assistant/instructions.md"
-You are a writing assistant. Rewrite text so it is clear, concise, and direct.
+Rewrite text clearly and concisely.
 ```
 
-Run `npx mastra dev`, open Studio, and select `writing-assistant`. Try asking it:
-
-```text
-Rewrite this sentence: Our platform provides users with the ability to build agents quickly.
-```
+Run `npx mastra dev`, open Studio, and select `writing-assistant` to test it.
 
 ### How discovery works
 
