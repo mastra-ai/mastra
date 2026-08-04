@@ -148,7 +148,7 @@ export interface SkillMetadata {
   name: string;
   /** Path to skill directory (relative to workspace root) */
   path: string;
-  /** Description of what the skill does and when to use it (1-1024 chars) */
+  /** Description of what the skill does and when to use it (1-2048 chars) */
   description: string;
   /** Optional license */
   license?: string;

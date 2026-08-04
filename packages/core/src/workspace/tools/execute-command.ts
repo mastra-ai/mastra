@@ -4,7 +4,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
-import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { DEFAULT_HEAD_LINES, DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
 /**
@@ -24,7 +24,7 @@ export const executeCommandInputSchema = z.object({
     .preprocess(coerceNumericString, z.number())
     .nullish()
     .describe(
-      `For foreground commands: limit output to the last N lines, similar to tail -n. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
+      `For foreground commands: limit output to the last N lines, similar to tail -n. Omit to keep the first ${DEFAULT_HEAD_LINES} and last ${DEFAULT_TAIL_LINES} lines. Use 0 for no limit.`,
     ),
 });
 

@@ -11,7 +11,7 @@ describe('schemas', () => {
       expect(SKILL_LIMITS.MAX_INSTRUCTION_TOKENS).toBe(5000);
       expect(SKILL_LIMITS.MAX_INSTRUCTION_LINES).toBe(500);
       expect(SKILL_LIMITS.MAX_NAME_LENGTH).toBe(64);
-      expect(SKILL_LIMITS.MAX_DESCRIPTION_LENGTH).toBe(1024);
+      expect(SKILL_LIMITS.MAX_DESCRIPTION_LENGTH).toBe(2048);
       expect(SKILL_LIMITS.MAX_COMPATIBILITY_LENGTH).toBe(500);
     });
   });
@@ -135,9 +135,14 @@ describe('schemas', () => {
         expect(result.valid).toBe(true);
       });
 
-      it('should accept description at max length (1024 chars)', () => {
-        const maxDesc = 'a'.repeat(1024);
+      it('should accept description at max length (2048 chars)', () => {
+        const maxDesc = 'a'.repeat(2048);
         const result = validateSkillMetadata({ name: validName, description: maxDesc });
+        expect(result.valid).toBe(true);
+      });
+
+      it('should accept a description longer than the spec-recommended 1024 characters', () => {
+        const result = validateSkillMetadata({ name: validName, description: 'a'.repeat(1128) });
         expect(result.valid).toBe(true);
       });
 
@@ -156,10 +161,10 @@ describe('schemas', () => {
       });
 
       it('should reject description exceeding max length', () => {
-        const longDesc = 'a'.repeat(1025);
+        const longDesc = 'a'.repeat(2049);
         const result = validateSkillMetadata({ name: validName, description: longDesc });
         expect(result.valid).toBe(false);
-        expect(result.errors.some(e => e.includes('1024 characters or less'))).toBe(true);
+        expect(result.errors.some(e => e.includes('2048 characters or less'))).toBe(true);
       });
 
       it('should reject whitespace-only description', () => {

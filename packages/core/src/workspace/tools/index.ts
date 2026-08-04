@@ -29,11 +29,14 @@ export { lspInspectTool } from './lsp-inspect';
 export { requireWorkspace, requireFilesystem, requireSandbox, emitWorkspaceMetadata } from './helpers';
 export {
   applyTail,
+  applyLineSandwich,
   applyTokenLimit,
   applyTokenLimitSandwich,
   truncateOutput,
   DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_TAIL_LINES,
+  DEFAULT_HEAD_LINES,
+  DEFAULT_HEAD_RATIO,
 } from './output-helpers';
 
 // Tracing

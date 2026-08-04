@@ -15,8 +15,13 @@
   "engines": {
     "node": ">=22.13.0"
   },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core"
+    }
+  },
   "dependencies": {
-    "@mastra/core": "latest",
+    "@mastra/core": "link:../../packages/core",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",

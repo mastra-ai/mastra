@@ -20,8 +20,15 @@ export const SKILL_LIMITS = {
   MAX_INSTRUCTION_LINES: 500,
   /** Max characters for name field */
   MAX_NAME_LENGTH: 64,
-  /** Max characters for description field */
-  MAX_DESCRIPTION_LENGTH: 1024,
+  /**
+   * Max characters for description field.
+   *
+   * The Agent Skills spec recommends 1024. This is deliberately more permissive: a description is
+   * the only thing a model sees before deciding whether to activate a skill, so authors write
+   * trigger phrases into it, and published skills run past 1024 in practice. Rejecting one costs
+   * the whole skill, which is a steep price for a verbose sentence.
+   */
+  MAX_DESCRIPTION_LENGTH: 2048,
   /** Max characters for compatibility field */
   MAX_COMPATIBILITY_LENGTH: 500,
 } as const;
@@ -36,7 +43,7 @@ export const SKILL_LIMITS = {
 export interface SkillMetadataInput {
   /** Skill name (1-64 chars, lowercase letters/numbers/hyphens only, must match directory name) */
   name: string;
-  /** Description of what the skill does and when to use it (1-1024 characters) */
+  /** Description of what the skill does and when to use it (1-2048 characters) */
   description: string;
   /** License for the skill (e.g., "Apache-2.0", "MIT") */
   license?: string;
@@ -116,8 +123,8 @@ function validateSkillName(name: unknown): string[] {
 }
 
 /**
- * Validate skill description according to spec:
- * - 1-1024 characters
+ * Validate skill description:
+ * - 1-2048 characters (the spec recommends 1024; see SKILL_LIMITS)
  * - Cannot be empty or only whitespace
  *
  * @param description - The description to validate

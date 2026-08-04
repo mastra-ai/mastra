@@ -3,8 +3,28 @@ import { estimateTokenCount, sliceByTokens } from 'tokenx';
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
 
+/**
+ * Default number of leading lines kept alongside the tail when the caller did not ask for a
+ * specific tail.
+ *
+ * A tail is the right shape for a log, where the interesting part is the end. It is the wrong
+ * shape for structured output — a JSON document opens with what it is and closes with brackets, so
+ * tailing it returns the brackets. Keeping both ends costs a bounded number of lines and leaves
+ * the model something it can act on either way.
+ */
+export const DEFAULT_HEAD_LINES = 200;
+
 /** Default estimated token limit for tool output. Safety net on top of line-based tail. */
 export const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
+
+/**
+ * Share of the token budget given to the head in sandwich truncation.
+ *
+ * Weighted towards the tail, because errors and results arrive at the end of a command's output,
+ * but large enough that the head is still worth reading — a head of a few hundred tokens is
+ * usually the difference between seeing a payload's shape and seeing its first brace.
+ */
+export const DEFAULT_HEAD_RATIO = 0.3;
 
 // ---------------------------------------------------------------------------
 // ANSI stripping
@@ -62,6 +82,28 @@ export function applyTail(output: string, tail: number | null | undefined): stri
   return `[showing last ${n} of ${lines.length} lines]\n${body}`;
 }
 
+/**
+ * Keep the first `head` and last `tail` lines, with a notice for what was dropped in between.
+ *
+ * Line-level, so it is cheap on very large output and bounds how much text the token pass below
+ * has to estimate over.
+ */
+export function applyLineSandwich(
+  output: string,
+  head: number = DEFAULT_HEAD_LINES,
+  tail: number = DEFAULT_TAIL_LINES,
+): string {
+  if (!output) return output;
+  const trailingNewline = output.endsWith('\n');
+  const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
+  if (lines.length <= head + tail) return output;
+
+  const omitted = lines.length - head - tail;
+  const body = [...lines.slice(0, head), `[... ${omitted} lines omitted ...]`, ...lines.slice(-tail)].join('\n');
+  const withNewline = trailingNewline ? body + '\n' : body;
+  return `[showing first ${head} and last ${tail} of ${lines.length} lines]\n${withNewline}`;
+}
+
 // ---------------------------------------------------------------------------
 // Token-based truncation (uses tokenx for fast, lightweight estimation)
 // ---------------------------------------------------------------------------
@@ -102,12 +144,12 @@ export async function applyTokenLimit(
  *
  * @param output - The text to truncate
  * @param limit - Maximum tokens (default: DEFAULT_MAX_OUTPUT_TOKENS)
- * @param headRatio - Fraction of the token budget to allocate to the head (default: 0.1 = 10%)
+ * @param headRatio - Fraction of the token budget to allocate to the head (default: DEFAULT_HEAD_RATIO)
  */
 export async function applyTokenLimitSandwich(
   output: string,
   limit: number = DEFAULT_MAX_OUTPUT_TOKENS,
-  headRatio: number = 0.1,
+  headRatio: number = DEFAULT_HEAD_RATIO,
 ): Promise<string> {
   if (!output) return output;
 
@@ -124,7 +166,12 @@ export async function applyTokenLimitSandwich(
 }
 
 /**
- * Apply both tail (line-based) and token limit (safety net) to output.
+ * Apply both line-based and token limits (safety net) to output.
+ *
+ * A caller asking to keep both ends gets both ends: the line pass keeps a head as well as a tail
+ * unless a specific tail was requested. Tailing first would decide the question before the token
+ * pass ever saw the head — there is nothing for a sandwich to keep once the front of the output
+ * has already been thrown away.
  */
 export async function truncateOutput(
   output: string,
@@ -132,9 +179,9 @@ export async function truncateOutput(
   tokenLimit?: number,
   tokenFrom?: 'start' | 'end' | 'sandwich',
 ): Promise<string> {
-  const tailed = applyTail(output, tail);
   if (tokenFrom === 'sandwich') {
-    return applyTokenLimitSandwich(tailed, tokenLimit);
+    const bounded = tail == null ? applyLineSandwich(output) : applyTail(output, tail);
+    return applyTokenLimitSandwich(bounded, tokenLimit);
   }
-  return applyTokenLimit(tailed, tokenLimit, tokenFrom);
+  return applyTokenLimit(applyTail(output, tail), tokenLimit, tokenFrom);
 }
