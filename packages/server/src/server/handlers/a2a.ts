@@ -23,6 +23,7 @@ import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
+import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
 import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
@@ -727,14 +728,6 @@ function isSuspensionChunk(value: unknown): boolean {
 
   const type = (value as { type: string }).type;
   return type === 'tool-call-suspended' || type === 'tool-call-approval';
-}
-
-function isTerminalTaskState(state: TaskState) {
-  return ['completed', 'failed', 'canceled', 'rejected'].includes(state);
-}
-
-function isInterruptedTaskState(state: TaskState) {
-  return state === 'input-required' || state === 'auth-required';
 }
 
 function artifactIdentity(artifact: Artifact) {

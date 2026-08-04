@@ -2,6 +2,7 @@ import type { Message, Task, TaskStatus, TaskContext, TaskArtifactUpdateEvent, A
 import { MastraA2AError } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { InMemoryTaskStore } from './store';
+import { isTerminalTaskState } from './task-state';
 
 function isTaskStatusUpdate(update: TaskStatus | TaskArtifactUpdateEvent): update is Omit<TaskStatus, 'timestamp'> {
   return 'state' in update && !('parts' in update);
@@ -107,7 +108,7 @@ export async function loadOrCreateTask({
   logger?.info(`[Task ${taskId}] Loaded existing task.`);
 
   const { status } = data;
-  if (['completed', 'failed', 'canceled', 'rejected'].includes(status.state)) {
+  if (isTerminalTaskState(status.state)) {
     throw MastraA2AError.invalidRequest(`Task ${taskId} is in terminal state ${status.state} and cannot be restarted.`);
   }
 
