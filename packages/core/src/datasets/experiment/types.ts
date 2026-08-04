@@ -59,6 +59,29 @@ export interface DataItem<I = unknown, E = unknown> {
 }
 
 /**
+ * Per-domain persistence selection for a single experiment run.
+ *
+ * - `default` — write through the `Mastra` instance's configured storage (current behavior).
+ * - `none` — perform no writes for that domain for this run. Execution, scoring, and the
+ *   returned {@link ExperimentSummary} are unaffected; only the storage writes are skipped.
+ *
+ * The two domains are independent: selecting `none` for one does not change the other.
+ *
+ * This policy governs *experiment bookkeeping* only. It does not disable unrelated
+ * application storage the target itself may use — agent memory, vectors, working memory,
+ * observability traces, or arbitrary code the target runs. It is not a sandbox.
+ */
+export interface ExperimentPersistencePolicy {
+  /**
+   * Experiment records, progress updates, and per-item results
+   * (`mastra_experiments` / `mastra_experiment_results`). Default: `default`.
+   */
+  experiments?: 'default' | 'none';
+  /** Scores emitted by experiment scorers. Default: `default`. */
+  scores?: 'default' | 'none';
+}
+
+/**
  * Internal configuration for running a dataset experiment.
  * Not publicly exported — users interact via Dataset.startExperiment().
  * All new fields are optional — existing internal callers are unaffected.
@@ -103,6 +126,25 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
+  /**
+   * Per-run, per-domain persistence policy. Omitted or partially specified fields
+   * default to `default`, so omitting this preserves existing behavior exactly.
+   *
+   * Selecting `none` lets a caller own persistence itself — for example a run
+   * executing inside a sandbox whose results are recorded by the host rather than
+   * through the bundled `Mastra` instance's storage.
+   *
+   * @example
+   * ```ts
+   * await runExperiment(mastra, {
+   *   data: items,
+   *   targetType: 'agent',
+   *   targetId: 'my-agent',
+   *   persistence: { experiments: 'none', scores: 'none' },
+   * });
+   * ```
+   */
+  persistence?: ExperimentPersistencePolicy;
   /** Default handling for agent tool calls not declared in an item's `toolMocks` (default: `allow`). */
   unmockedToolPolicy?: UnmockedToolPolicy;
   /** Pre-created experiment ID (for async trigger — skips experiment creation). */

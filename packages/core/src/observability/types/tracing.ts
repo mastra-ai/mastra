@@ -69,7 +69,9 @@ export enum SpanType {
    * Provider-executed (server-side) tool span. Reconstructed from
    * tool-call and tool-result stream chunks for tools the model
    * provider executes (e.g. Anthropic code execution, server-side
-   * web search). Opened on tool-call chunk, closed on tool-result.
+   * web search). Created on the tool-result chunk under the model
+   * step that delivered it, with the start time backdated to the
+   * tool-call chunk.
    */
   PROVIDER_TOOL_CALL = 'provider_tool_call',
   /** Workflow run - root span for workflow processes */
@@ -1207,7 +1209,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   parentSpanId?: string;
   /**
    * Start time for this span.
-   * Only used when rebuilding a span from cached data.
+   * Used when rebuilding a span from cached data, or when a span is created
+   * after the work it represents began (e.g. backdated PROVIDER_TOOL_CALL spans).
    */
   startTime?: Date;
   /** Trace-level state shared across all spans in this trace */
@@ -1232,6 +1235,12 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
   input?: any;
+  /**
+   * Start time for this span.
+   * Used when a span is created after the work it represents began
+   * (e.g. PROVIDER_TOOL_CALL spans created when the tool result arrives).
+   */
+  startTime?: Date;
 }
 
 /**

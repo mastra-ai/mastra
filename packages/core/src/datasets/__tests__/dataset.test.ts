@@ -344,6 +344,26 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
+  it('startExperimentAsync skips experiment storage when experiment persistence is disabled', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+    const task = vi.fn().mockResolvedValue('ok');
+
+    const { experimentId, status, totalItems } = await ds.startExperimentAsync({
+      task,
+      scorers: [],
+      persistence: { experiments: 'none' },
+    });
+
+    expect(status).toBe('pending');
+    expect(experimentId).toBeTruthy();
+    expect(totalItems).toBe(1);
+    expect(mockStorage.getStore).not.toHaveBeenCalledWith('experiments');
+
+    await vi.waitFor(() => expect(task).toHaveBeenCalledOnce());
+    expect(db.experiments.size).toBe(0);
+    expect(db.experimentResults.size).toBe(0);
+  });
+
   it('startExperimentAsync throws EXPERIMENT_NO_ITEMS on empty dataset', async () => {
     await expect(
       ds.startExperimentAsync({
