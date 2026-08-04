@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Added the Slack integration to `@mastra/factory`, so every factory and create-factory deployment can offer Slack channels out of the box. Import it from the new subpath and register it like the built-in GitHub and Linear integrations:
+Added a built-in Slack integration, so every factory and create-factory deployment can offer Slack channels without vendoring the integration itself. Register it alongside the built-in GitHub and Linear integrations:
 
 ```ts
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
@@ -12,16 +12,6 @@ new MastraFactory({
 });
 ```
 
-**Slack sessions wire up source control automatically.** The factory now exposes its source-control owner on `IntegrationContext` (`ctx.storage.sourceControlOwner`), and the Slack integration uses it to make Slack-started sessions repo-backed. The `sourceControl` config field is gone — you no longer hand-wire a GitHub adapter into the Slack integration:
+Slack-started sessions are repo-backed automatically: the factory exposes its source-control owner on `IntegrationContext` (`ctx.storage.sourceControlOwner`) and the integration wires itself up from there.
 
-```ts
-// Before
-new SlackIntegration({ ...secrets, sourceControl: github ? createGithubSourceControl(github) : undefined });
-
-// After
-new SlackIntegration({ ...secrets });
-```
-
-**`FactoryIntegration.channels()` now returns a config object** (`FactoryChannelsConfig`) instead of a built `AgentControllerChannels` instance; the factory constructs the instance at the attach site. Adapter-map entries must use the config form (`{ adapter, ... }`) — the bare adapter-instance shorthand core accepts is deliberately excluded so future per-platform options have a home. One integration providing one platform entry is the norm; the factory still rejects more than one channels-providing integration.
-
-**Honest "not configured" answer for Slack.** When no Slack integration is registered, the factory serves a stub for `GET /web/channel-accounts` answering `{ accounts: [], canConnect: false, reason: 'not_registered' }`. The Connections UI now reports that Slack is not set up instead of telling you to set environment variables, which only enable Slack in deployments whose entry actually registers the integration.
+Two related changes come with it. `FactoryIntegration.channels()` now returns a config object (`FactoryChannelsConfig`) instead of a built `AgentControllerChannels` instance, and the factory constructs the instance at the attach site. And when no Slack integration is registered, the factory answers `GET /web/channel-accounts` with `{ accounts: [], canConnect: false, reason: 'not_registered' }`, so the Connections UI can say Slack is not set up instead of telling you to set environment variables that would not enable it.
