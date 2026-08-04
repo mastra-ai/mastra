@@ -191,7 +191,7 @@ export function ThemeCompare({
 
   return (
     <section aria-label="Snapshot comparison" className="space-y-4">
-      <div className="border-border1 bg-surface2 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5 sm:px-4">
+      <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 sm:px-4">
         <TimelineTrack
           snapshots={snapshots}
           totalCount={totalSnapshots}

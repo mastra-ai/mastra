@@ -116,10 +116,7 @@ export function SnapshotTimeline({
   ];
 
   return (
-    <section
-      aria-label="Snapshot timeline"
-      className="border-border1 bg-surface2 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5 sm:px-4"
-    >
+    <section aria-label="Snapshot timeline" className="flex flex-wrap items-center gap-3 px-3 py-2.5 sm:px-4">
       {snapshots.length > 1 ? (
         <>
           <Button
