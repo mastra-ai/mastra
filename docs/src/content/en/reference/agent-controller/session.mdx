@@ -821,9 +821,9 @@ const added = await session.state.update(current => ({
 
 ## Persistence boundaries
 
-A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission grants, pending approvals, suspensions, follow-ups, run state, stream state, and token counters don't automatically survive controller or process recreation.
+A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation.
 
-With configured storage, threads and messages persist. Thread settings restore mode and model choices. They can also restore observational memory settings and subagent model selections, including per-agent-type overrides. A chat channel can map back to stored threads, but channel-to-session and auto-approval state held by `AgentControllerChannels` remains in memory.
+With configured storage, threads, messages, and token usage persist. Thread settings restore mode and model choices. They can also restore observational memory settings and subagent model selections, including per-agent-type overrides. A chat channel can map back to stored threads, but channel-to-session and auto-approval state held by `AgentControllerChannels` remains in memory.
 
 ## Related
 
