@@ -71,12 +71,15 @@ const sidebars = {
         {
           type: 'category',
           label: 'Agents',
+          link: {
+            type: 'doc',
+            id: 'agents/overview',
+          },
+          collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'agents/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'agents/using-tools',
