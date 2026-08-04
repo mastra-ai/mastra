@@ -71,6 +71,30 @@ The manifest includes `expiresAt` when the sandbox provider reports an expiratio
 
 Redeploys to the same sandbox skip the dependency install when its inputs are unchanged. These inputs are `package.json`, the bundled lockfiles, and the install command.
 
+### Provider credentials
+
+Unlike `mastra dev`, `mastra build` doesn't load `.env` files. The deploy happens inside the build, so a sandbox provider that reads its credentials from the environment, such as E2B with `E2B_API_KEY`, sees an empty value and the deploy fails with an authentication error.
+
+Adding `import 'dotenv/config'` to `src/mastra/index.ts` doesn't fix this. To find the deployer, the build extracts only the `deployer` option from your entry file and tree-shakes everything else away, including that import.
+
+Load the `.env` file into the shell environment before the build runs. [`dotenv-cli`](https://www.npmjs.com/package/dotenv-cli) is one way to do that:
+
+```bash npm2yarn
+npm install --save-dev dotenv-cli
+```
+
+```json title="package.json"
+{
+  "scripts": {
+    "build": "dotenv -e .env -- mastra build"
+  }
+}
+```
+
+Then run `npm run build` instead of `mastra build`. In continuous integration (CI), export the credentials as secrets instead. Whatever mechanism you use, the variables must exist in the shell environment, not only in the `.env` file.
+
+This applies to credentials the deployer needs on your machine. Variables the deployed server needs are handled separately: the deployer reads `.env`, `.env.production`, and `.env.local` and injects them into the sandbox. See [Security](#security).
+
 ### Using E2B
 
 For E2B, the `id` identifies the deployment, so subsequent deployments with the same value reconnect to the existing sandbox, whether it's running or paused.
