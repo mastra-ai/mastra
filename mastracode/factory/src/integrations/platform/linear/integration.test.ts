@@ -70,7 +70,7 @@ function json(data: unknown, status = 200): Response {
 
 beforeEach(() => {
   vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
-  vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
+  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', config.accessToken);
 });
 
 afterEach(() => {
@@ -84,7 +84,7 @@ function createIntegration(fetchImpl?: typeof fetch): PlatformLinearIntegration 
 }
 
 describe('PlatformLinearIntegration', () => {
-  it('does not expose the Platform secret through synthetic Linear connections', async () => {
+  it('does not expose the Platform access token through synthetic Linear connections', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
     const integration = createIntegration(fetchImpl);
 
@@ -549,15 +549,15 @@ describe('PlatformLinearIntegration', () => {
     );
   });
 
-  it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
+  it('defaults the Platform base URL and requires MASTRA_PLATFORM_ACCESS_TOKEN', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
     expect(new PlatformLinearIntegration().diagnostics()).toEqual({
       mode: 'platform',
       endpointHost: 'platform.mastra.ai',
     });
 
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'secret-key');
+    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
 });

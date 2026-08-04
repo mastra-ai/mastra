@@ -202,8 +202,8 @@ export interface MastraFactorySandboxConfig {
 
 const CONTROLLER_ID = 'code';
 
-function hasPlatformSecretKey(): boolean {
-  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
+function hasPlatformAccessToken(): boolean {
+  return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim());
 }
 
 /**
@@ -336,7 +336,7 @@ export class MastraFactory {
     // Explicit integrations win. Platform credentials fill only missing GitHub
     // and Linear slots so callers can override either provider independently.
     const integrations = [...(this.#config.integrations ?? [])];
-    if (hasPlatformSecretKey()) {
+    if (hasPlatformAccessToken()) {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(
           new PlatformGithubIntegration({

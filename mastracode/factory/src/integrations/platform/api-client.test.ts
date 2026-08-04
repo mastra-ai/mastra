@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from './api-client.js';
 
-const accessToken = 'platform-secret-token';
+const accessToken = 'platform-access-token';
 
 function client(fetchImpl: typeof fetch) {
   return new PlatformApiClient({ baseUrl: 'https://platform.example.com/', accessToken, fetchImpl });
@@ -17,7 +17,7 @@ afterEach(() => {
 describe('PlatformApiClient', () => {
   it('resolves config from MASTRA_SHARED_API_URL and normalizes the /v1 root', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1/');
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', accessToken);
 
     expect(platformApiClientConfigFromEnv()).toEqual({
       baseUrl: 'https://platform.example.com',
@@ -25,20 +25,19 @@ describe('PlatformApiClient', () => {
     });
   });
 
-  it('defaults shared API config to platform.mastra.ai and requires a secret key', () => {
+  it('defaults shared API config to platform.mastra.ai and requires an access token', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', accessToken);
     expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://platform.mastra.ai' });
 
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
-    expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
+    expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
 
-  it('requires MASTRA_PLATFORM_SECRET_KEY even when the deprecated access token is set', () => {
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
+  it('does not use MASTRA_PLATFORM_SECRET_KEY', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'secret-key');
+    expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
 
   it('uses bearer authentication without ambient cookie credentials', async () => {
