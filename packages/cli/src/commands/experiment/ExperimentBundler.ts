@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
@@ -57,7 +57,8 @@ export class ExperimentBundler extends Bundler {
 
   async writeArtifactManifest(outputDirectory: string, cliVersion: string): Promise<void> {
     const files = await collectFileDigests(outputDirectory);
-    const lockfile = files.find(file => file.path === 'package-lock.json')?.path;
+    const lockfileNames = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb']);
+    const lockfile = files.find(file => lockfileNames.has(file.path))?.path;
     const contentDigest = createHash('sha256')
       .update(files.map(file => `${file.path}\0${file.sha256}\n`).join(''))
       .digest('hex');
@@ -83,9 +84,9 @@ export class ExperimentBundler extends Bundler {
   }
 
   protected getEntry(): string {
-    const runtimeUrl = pathToFileURL(resolveRuntimePath()).href;
+    const runtimePath = resolveRuntimePath();
     return `
-import { runExperimentWorker } from ${JSON.stringify(runtimeUrl)};
+import { runExperimentWorker } from ${JSON.stringify(runtimePath)};
 
 console.log = (...args) => console.error(...args);
 console.info = (...args) => console.error(...args);
@@ -99,26 +100,26 @@ const exitCode = await runExperimentWorker({
   runExperiment,
   build: ${JSON.stringify(this.buildIdentity)},
 });
-await Promise.race([
-  new Promise(resolve => process.stdout.end(resolve)),
-  new Promise(resolve => setTimeout(resolve, 1_000)),
-]);
+await new Promise(resolve => process.stdout.end(resolve));
 process.exit(exitCode);
 `;
   }
 }
 
-function resolveRuntimePath(): string {
-  const sourcePath = fileURLToPath(new URL('./runtime.ts', import.meta.url));
-  if (existsSync(sourcePath)) return sourcePath;
-  return fileURLToPath(new URL('./runtime.js', import.meta.url));
+export function resolveRuntimePath(
+  moduleUrl = import.meta.url,
+  fileExists: (path: string) => boolean = existsSync,
+): string {
+  const sourcePath = fileURLToPath(new URL('./runtime.ts', moduleUrl));
+  if (fileExists(sourcePath)) return sourcePath;
+  return fileURLToPath(new URL('./commands/experiment/runtime.js', moduleUrl));
 }
 
 async function collectFileDigests(root: string): Promise<Array<{ path: string; sha256: string }>> {
   const files: Array<{ path: string; sha256: string }> = [];
   const visit = async (directory: string) => {
     const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
       const fullPath = join(directory, entry.name);
       if (entry.isDirectory()) {
         await visit(fullPath);

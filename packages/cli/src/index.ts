@@ -443,7 +443,7 @@ serverEnvCommand
   .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
   .action(wrapAction(envPullAction));
 
-program.parse(process.argv);
+await program.parseAsync(process.argv);
 
 export { PosthogAnalytics } from './analytics/index';
 export { create } from './commands/create/create';

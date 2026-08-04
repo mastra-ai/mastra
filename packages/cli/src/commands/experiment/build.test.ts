@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -40,12 +42,13 @@ describe('buildExperimentWorker', () => {
 
     await buildExperimentWorker({ root: '/project' });
 
-    expect(mocks.prepare).toHaveBeenCalledWith('/project/.mastra/experiment-worker');
-    expect(mocks.bundle).toHaveBeenCalledWith('/project/src/mastra/index.ts', '/project/.mastra/experiment-worker', {
+    const outputDirectory = join('/project', '.mastra', 'experiment-worker');
+    expect(mocks.prepare).toHaveBeenCalledWith(outputDirectory);
+    expect(mocks.bundle).toHaveBeenCalledWith('/project/src/mastra/index.ts', outputDirectory, {
       toolsPaths: [],
       projectRoot: '/project',
     });
-    expect(mocks.writeArtifactManifest).toHaveBeenCalledWith('/project/.mastra/experiment-worker', expect.any(String));
+    expect(mocks.writeArtifactManifest).toHaveBeenCalledWith(outputDirectory, expect.any(String));
   });
 
   it('resolves a relative custom output directory from the project root', async () => {
@@ -53,7 +56,24 @@ describe('buildExperimentWorker', () => {
 
     await buildExperimentWorker({ root: '/project', outputDir: 'artifacts/worker' });
 
-    expect(mocks.prepare).toHaveBeenCalledWith('/project/artifacts/worker');
+    expect(mocks.prepare).toHaveBeenCalledWith(join('/project', 'artifacts', 'worker'));
+  });
+
+  it.each([
+    ['the project root', '.'],
+    ['an ancestor of the Mastra source directory', 'src'],
+    ['the Mastra source directory', join('src', 'mastra')],
+  ])('rejects %s as the output directory before preparing it', async (_name, outputDir) => {
+    const { buildExperimentWorker } = await import('./build');
+
+    await buildExperimentWorker({ root: '/project', outputDir });
+
+    expect(process.exitCode).toBe(1);
+    expect(mocks.error).toHaveBeenCalledWith(
+      expect.stringContaining('Output directory must not be the project root'),
+      expect.objectContaining({ stack: expect.any(String) }),
+    );
+    expect(mocks.prepare).not.toHaveBeenCalled();
   });
 
   it('reports build failures without emitting a partial success message', async () => {

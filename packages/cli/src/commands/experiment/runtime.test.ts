@@ -162,6 +162,7 @@ describe('runExperimentWorker', () => {
       'invalid experiment configuration',
     ],
     ['negative timeout', (request: any) => (request.packet.limits.timeoutMs = -1), 'invalid experiment configuration'],
+    ['null dataset item', (request: any) => (request.packet.dataset.items[0] = null), 'invalid dataset'],
   ])('rejects %s deterministically', async (_name, mutate, expectedError) => {
     const request = createRequest();
     mutate(request);
@@ -171,6 +172,24 @@ describe('runExperimentWorker', () => {
     await expect(harness.result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.protocol);
     expect(harness.output()).toBe('');
     expect(harness.errors()).toContain(expectedError);
+  });
+
+  it('uses the retryable exit code for retryable experiment failures', async () => {
+    const request = createRequest();
+    const error = Object.assign(new Error('temporary failure'), { retryable: true });
+    const harness = createHarness(async () => {
+      throw error;
+    });
+    harness.stdin.end(`${JSON.stringify(request)}\n`);
+
+    await expect(harness.result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.retryable);
+    const terminal = harness
+      .output()
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line))
+      .at(-1);
+    expect(terminal.payload).toMatchObject({ status: 'failed', retryable: true });
   });
 
   it('maps workflow, scorer provenance, and tool mocks into the public experiment configuration', async () => {

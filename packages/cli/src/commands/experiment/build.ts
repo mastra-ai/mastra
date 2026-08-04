@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import pkgJson from '../../../package.json';
 import { FileService } from '../../services/service.file';
 import { createLogger } from '../../utils/logger';
@@ -25,6 +25,16 @@ export async function buildExperimentWorker({
   const logger = createLogger(debug ?? false);
 
   try {
+    const outputFromRoot = relative(resolve(rootDir), outputDirectory);
+    const mastraFromOutput = relative(outputDirectory, resolve(mastraDir));
+    if (
+      outputFromRoot === '' ||
+      mastraFromOutput === '' ||
+      (!mastraFromOutput.startsWith('..') && !isAbsolute(mastraFromOutput))
+    ) {
+      throw new Error('Output directory must not be the project root or contain the Mastra source directory');
+    }
+
     const fs = new FileService();
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
     const bundler = new ExperimentBundler();

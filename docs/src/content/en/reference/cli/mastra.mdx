@@ -223,7 +223,7 @@ The command writes the worker to `.mastra/experiment-worker` by default. The dir
 
 `experiment-worker-manifest.json` identifies the artifact as `mastra-experiment-worker` version `1` and provides:
 
-- The CLI version, creation time, and stable build ID embedded in the executable.
+- The CLI version, creation time, and unique build ID embedded in the executable.
 - Supported protocol and dataset canonicalization versions.
 - The executable, arguments, and working directory required to launch the worker.
 - The dependency manifest and generated lockfile paths.
@@ -254,7 +254,7 @@ Protocol exit codes are:
 
 The worker passes target identity, ordered inline dataset items, scorer IDs, concurrency, timeout, experiment metadata, request context, tool mocks, and cancellation to `runExperiment`. Scorer versions and artifact provenance are retained as experiment metadata. Scorer code provenance is enforced by artifact admission rather than runtime scorer lookup.
 
-Version `1` uses deterministic undeclared-tool denial. Non-empty network allowlists and secret references are rejected with a policy failure because network enforcement and secret materialization belong to the process sandbox. Dataset item source and expected-trajectory fields are provenance-only and aren't passed to `runExperiment`.
+Version `1` uses deterministic undeclared-tool denial. Non-empty network allowlists and secret references are rejected with a policy failure because network enforcement and secret materialization belong to the process sandbox. Dataset item source and expected-trajectory fields are preserved as item metadata when passed to `runExperiment`.
 
 ### Flags
 

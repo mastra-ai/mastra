@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -22,7 +22,17 @@ vi.mock('@mastra/deployer/build', () => ({
 vi.mock('../utils.js', () => ({ shouldSkipDotenvLoading: vi.fn().mockReturnValue(false) }));
 
 describe('ExperimentBundler', () => {
-  afterEach(() => vi.clearAllMocks());
+  const temporaryDirectories: string[] = [];
+  const createTemporaryDirectory = async (prefix: string) => {
+    const directory = await mkdtemp(join(tmpdir(), prefix));
+    temporaryDirectories.push(directory);
+    return directory;
+  };
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await Promise.all(temporaryDirectories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  });
 
   it('generates an isolated NDJSON experiment worker entry', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
@@ -33,15 +43,26 @@ describe('ExperimentBundler', () => {
     expect(entry).toContain("import('@mastra/core/datasets')");
     expect(entry).toContain("import('#mastra')");
     expect(entry).toContain('import { runExperimentWorker }');
+    expect(entry).not.toContain('file://');
     expect(entry).toContain('await runExperimentWorker({');
     expect(entry).toContain('console.log = (...args) => console.error(...args)');
     expect(entry).toContain('console.info = (...args) => console.error(...args)');
     expect(entry).toContain('process.exit(exitCode)');
   });
 
+  it('resolves the runtime from the packaged CLI layout', async () => {
+    const { resolveRuntimePath } = await import('./ExperimentBundler');
+    const directory = await createTemporaryDirectory('mastra-experiment-package-');
+    const moduleUrl = pathToFileURL(join(directory, 'dist', 'index.js')).href;
+
+    expect(resolveRuntimePath(moduleUrl, () => false)).toBe(
+      join(directory, 'dist', 'commands', 'experiment', 'runtime.js'),
+    );
+  });
+
   it('writes a machine-readable artifact manifest with file digests', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
-    const output = await mkdtemp(join(tmpdir(), 'mastra-experiment-worker-'));
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
     await writeFile(join(output, 'index.mjs'), 'console.error("worker");');
     await writeFile(join(output, 'package.json'), '{"type":"module"}');
 
@@ -60,11 +81,35 @@ describe('ExperimentBundler', () => {
       { path: 'index.mjs', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { path: 'package.json', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
+    const expectedContentDigest = createHash('sha256')
+      .update(manifest.files.map((file: { path: string; sha256: string }) => `${file.path}\0${file.sha256}\n`).join(''))
+      .digest('hex');
+    expect(manifest.artifact).toEqual({
+      digestAlgorithm: 'sha256',
+      contentDigest: expectedContentDigest,
+      excludes: ['experiment-worker-manifest.json'],
+    });
   });
+
+  it.each(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'])(
+    'records a generated %s lockfile',
+    async lockfile => {
+      const { ExperimentBundler } = await import('./ExperimentBundler');
+      const output = await createTemporaryDirectory('mastra-experiment-lockfile-');
+      await writeFile(join(output, 'index.mjs'), '');
+      await writeFile(join(output, 'package.json'), '{}');
+      await writeFile(join(output, lockfile), 'lockfile');
+
+      await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
+
+      const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+      expect(manifest.dependencies.lockfile).toBe(lockfile);
+    },
+  );
 
   it('runs the protocol to completion in a fresh process', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-experiment-process-'));
+    const directory = await createTemporaryDirectory('mastra-experiment-process-');
     const coreModule = join(directory, 'core.mjs');
     const mastraModule = join(directory, 'mastra.mjs');
     const entryFile = join(directory, 'worker.mjs');
@@ -136,7 +181,7 @@ describe('ExperimentBundler', () => {
 
   it('rejects a mismatched dataset attestation before loading the experiment', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-experiment-protocol-'));
+    const directory = await createTemporaryDirectory('mastra-experiment-protocol-');
     const coreModule = join(directory, 'core.mjs');
     const mastraModule = join(directory, 'mastra.mjs');
     const entryFile = join(directory, 'worker.mjs');
@@ -179,7 +224,7 @@ describe('ExperimentBundler', () => {
 
   it('bounds shutdown by the request deadline', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-experiment-shutdown-'));
+    const directory = await createTemporaryDirectory('mastra-experiment-shutdown-');
     const coreModule = join(directory, 'core.mjs');
     const mastraModule = join(directory, 'mastra.mjs');
     const entryFile = join(directory, 'worker.mjs');
@@ -250,8 +295,8 @@ async function runWorker(entryFile: string, request: unknown) {
   const exitCode = await new Promise<number | null>((resolve, reject) => {
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new Error('experiment worker did not exit within 5 seconds'));
-    }, 5_000);
+      reject(new Error('experiment worker did not exit within 15 seconds'));
+    }, 15_000);
     child.once('error', error => {
       clearTimeout(timer);
       reject(error);

@@ -203,6 +203,17 @@ function validateRunRequest(value: unknown, build: ExperimentWorkerBuildIdentity
     !isRecord(packet) ||
     !isRecord(dataset) ||
     !Array.isArray(dataset.items) ||
+    !dataset.items.every(
+      item =>
+        isRecord(item) &&
+        typeof item.id === 'string' &&
+        'input' in item &&
+        (item.metadata === undefined || isRecord(item.metadata)) &&
+        (item.requestContext === undefined || isRecord(item.requestContext)) &&
+        (item.toolMocks === undefined ||
+          (Array.isArray(item.toolMocks) &&
+            item.toolMocks.every(mock => isRecord(mock) && typeof mock.toolId === 'string'))),
+    ) ||
     dataset.itemCount !== dataset.items.length
   ) {
     return 'invalid dataset';
@@ -464,6 +475,7 @@ export async function runExperimentWorker({
     const packet = request.packet;
     let finishedEvent: ExperimentEvent | undefined;
     let runError: Error | undefined;
+    let runErrorRetryable = false;
     await writeEvent('accepted', {
       protocolVersion: build.protocolVersion,
       datasetCanonicalizationVersion: build.datasetCanonicalizationVersion,
@@ -527,6 +539,7 @@ export async function runExperimentWorker({
         deadlinePromise,
       ]);
     } catch (error) {
+      runErrorRetryable = isRecord(error) && error.retryable === true;
       runError = error instanceof Error ? error : new Error(String(error));
     } finally {
       clearDeadlineTimer?.();
@@ -570,7 +583,10 @@ export async function runExperimentWorker({
           ? EXPERIMENT_WORKER_EXIT_CODES.timedOut
           : cancelled
             ? EXPERIMENT_WORKER_EXIT_CODES.cancelled
-            : EXPERIMENT_WORKER_EXIT_CODES.fatal,
+            : runErrorRetryable
+              ? EXPERIMENT_WORKER_EXIT_CODES.retryable
+              : EXPERIMENT_WORKER_EXIT_CODES.fatal,
+        retryable: !timedOut && !cancelled && runErrorRetryable,
       } satisfies Completion;
     }
     const status =
@@ -660,6 +676,7 @@ export async function runExperimentWorker({
         ])
       : { type: 'input' as const, input: await nextChunk };
     if (result.type === 'run-complete') {
+      void nextChunk.catch(() => undefined);
       (stdin as NodeJS.ReadableStream & { destroy?(): void }).destroy?.();
       if (pending.byteLength > 0 && activeRequest) {
         abortForProtocolFailure('truncated frame: final newline is required');
@@ -689,12 +706,23 @@ export async function runExperimentWorker({
       abortForProtocolFailure('frame exceeds maximum size');
     }
   }
-  if (!protocolFailure && pending.byteLength > 0) abortForProtocolFailure('truncated frame: final newline is required');
+  const hasTruncatedFrame = pending.byteLength > 0;
+  if (!protocolFailure && hasTruncatedFrame) abortForProtocolFailure('truncated frame: final newline is required');
   if (!correlation) {
     report(protocolFailure?.message ?? 'stdin closed before run request');
     return EXPERIMENT_WORKER_EXIT_CODES.protocol;
   }
   await runPromise;
+  if (hasTruncatedFrame && activeRequest) {
+    const error = protocolFailure ?? new Error('truncated frame: final newline is required');
+    await writeEvent('process-failure', { error: { name: error.name, message: error.message } });
+    completion = {
+      status: 'failed',
+      semanticEvent: failedSemanticEvent(activeRequest, error),
+      exitCode: EXPERIMENT_WORKER_EXIT_CODES.protocol,
+      retryable: false,
+    };
+  }
   if (!completion) return EXPERIMENT_WORKER_EXIT_CODES.fatal;
   return emitCompletion(completion);
 }
