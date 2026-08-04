@@ -112,6 +112,54 @@ In the agent's **Tools** section, add the tools it needs. You can also rewrite a
 
 Tools are saved as part of the agent's draft. You can test a different set before publishing, then return to the previous version if the change doesn't work as expected.
 
+### Project tools
+
+The most direct way to add a tool is to define it in your project with `createTool()`:
+
+```typescript title="src/mastra/tools/search-orders.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const searchOrders = createTool({
+  id: 'search-orders',
+  description: 'Look up an order by its number',
+  inputSchema: z.object({
+    orderNumber: z.string(),
+  }),
+  outputSchema: z.object({
+    status: z.string(),
+  }),
+  execute: async ({ orderNumber }) => {
+    const response = await fetch(`${process.env.ORDERS_API_URL}/${orderNumber}`)
+    const order = await response.json()
+
+    return {
+      status: order.status,
+    }
+  },
+})
+```
+
+Register the tool on your `Mastra` instance to make it available in Editor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { searchOrders } from './tools/search-orders'
+
+export const mastra = new Mastra({
+  tools: {
+    searchOrders,
+  },
+  agents: {/* your agents */},
+  editor: new MastraEditor(),
+})
+```
+
+The Studio tool picker now lists the tool. A collaborator can add it to an agent when that agent allows tool editing. The agent's Editor view also lists tools attached in code.
+
+See [Tools](/docs/agents/using-tools) for schemas, execution context, and other ways to define project tools.
+
 ### Composio
 
 [Composio](https://composio.dev) provides tools for services such as GitHub, Slack, and Gmail. Register the provider with a Composio API key to make its tool catalog available in Editor:
