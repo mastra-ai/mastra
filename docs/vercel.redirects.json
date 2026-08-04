@@ -11,7 +11,7 @@
       "permanent": true
     },
     {
-      "source": "/guides/voice/livekit",
+      "source": "/docs/voice/livekit",
       "destination": "/guides/voice/realtime-voice",
       "permanent": true
     },
