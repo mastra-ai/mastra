@@ -100,6 +100,14 @@ See the [prompt blocks reference](/reference/editor/prompt-blocks) for template 
 
 Tools let an agent take actions. Editor can use tools already registered in your project, tools from integration providers, and tools exposed by Model Context Protocol (MCP) servers.
 
+Collaborators choose from the tools made available to Editor. They can't write a new tool implementation in Studio, but developers don't have to define every tool individually either:
+
+- **Project tools** must be implemented and registered in the Mastra project by a developer.
+- **Integration tools** become available after a developer registers a provider such as Composio or Arcade. Collaborators can then browse the provider's catalog and add tools without each tool being added in code first.
+- **MCP tools** become available when an MCP client is configured. A collaborator with access can create the client in Studio, then choose from the tools exposed by its servers.
+
+The agent's `editor` setting still controls what collaborators can do. With `tools: true`, they can add or remove available tools. With `tools: { description: true }`, they can only edit descriptions for tools already added in code.
+
 In the agent's **Tools** section, add the tools it needs. You can also rewrite a tool's description for that agent. A more specific description helps the agent understand when to use the tool without changing the tool itself.
 
 Tools are saved as part of the agent's draft. You can test a different set before publishing, then return to the previous version if the change doesn't work as expected.

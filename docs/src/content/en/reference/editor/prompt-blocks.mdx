@@ -42,13 +42,12 @@ await editor.agent.update({
 
 Templates resolve values from the request context at runtime.
 
-```text
-You are helping {{user.name}} with their {{task || 'request'}}.
-```
-
-- <code>{'{{variableName}}'}</code>: Resolves a top-level request-context value.
-- <code>{'{{nested.path.value}}'}</code>: Resolves a value by dot path.
-- <code>{"{{variable || 'default'}}"}</code>: Uses a quoted string when the value is `null`, `undefined`, or missing.
+| Syntax | Request context | Output |
+| - | - | - |
+| <code>{'{{userName}}'}</code> | `{ userName: 'Maya' }` | `Maya` |
+| <code>{'{{user.name}}'}</code> | `{ user: { name: 'Maya' } }` | `Maya` |
+| <code>{"{{task \u007c\u007c 'request'}}"}</code> | `{}` | `request` |
+| <code>{'{{missingValue}}'}</code> | `{}` | `{{missingValue}}` |
 
 Variable names must begin with a letter or underscore. Fallbacks must be single-quoted or double-quoted strings. Unresolved placeholders without a fallback remain unchanged. Objects and arrays are serialized as JSON. Other values are converted to strings.
 
@@ -56,16 +55,42 @@ Pass values through [request context](/docs/server/request-context). Editor does
 
 ## Display conditions
 
-A prompt block can include a rule group that controls whether it's included in the final instructions. Rules read values from request context and support nested `AND` and `OR` groups.
+A prompt block can include a display condition that controls whether it's included in the final instructions. Each condition has three parts:
 
-| Operator | Behavior |
-| - | - |
-| `equals` / `not_equals` | Uses strict equality |
-| `contains` / `not_contains` | Checks string inclusion or array membership |
-| `greater_than` / `less_than` | Compares two numbers without coercion |
-| `greater_than_or_equal` / `less_than_or_equal` | Compares two numbers and includes equality |
-| `in` / `not_in` | Checks whether the context value occurs in the rule's array |
-| `exists` / `not_exists` | Checks whether the value is neither `null` nor `undefined` |
+- **Key**: The request-context field to check, such as `user.role` or `account.plan`.
+- **Operator**: The comparison to make, such as `equals`, `contains`, or `exists`.
+- **Value**: The value to compare against. The `exists` and `not_exists` operators don't need one.
+
+For example, the condition `user.role` `equals` `admin` includes the block only when request context contains `{ user: { role: 'admin' } }`.
+
+| Operator | Example | The block is included when |
+| - | - | - |
+| `equals` / `not_equals` | `user.role` equals `admin` | The field strictly equals, or doesn't equal, the value |
+| `contains` / `not_contains` | `user.tags` contains `beta` | A string contains the value or an array contains the item |
+| `greater_than` / `less_than` | `order.total` greater than `100` | The numeric field is above or below the value |
+| `greater_than_or_equal` / `less_than_or_equal` | `account.seats` greater than or equal to `10` | The numeric field is at or beyond the value |
+| `in` / `not_in` | `user.region` in `['US', 'CA']` | The field is, or isn't, in the supplied array |
+| `exists` / `not_exists` | `account.plan` exists | The field has, or doesn't have, a non-null value |
+
+Groups combine conditions with `AND` or `OR`. For example, this group includes a block for admins on a paid plan:
+
+```typescript
+const rules = {
+  operator: 'AND',
+  conditions: [
+    {
+      field: 'user.role',
+      operator: 'equals',
+      value: 'admin',
+    },
+    {
+      field: 'account.plan',
+      operator: 'in',
+      value: ['pro', 'enterprise'],
+    },
+  ],
+}
+```
 
 Dot paths are supported. An empty group evaluates to `true`, and an unknown operator evaluates to `false`. The storage type supports up to three nested group levels.
 
