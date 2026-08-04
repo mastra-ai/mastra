@@ -443,7 +443,7 @@ describe('SankeySignals', () => {
       expect(within(chart).getByText('GOAL')).not.toBeNull();
       expect(within(chart).queryByText(/GOAL \d+ themes?/)).toBeNull();
       expect(within(chart).getByText('RIBBON WIDTH = TRACE COUNT')).not.toBeNull();
-      expect(within(chart).getByText('HOVER OR FOCUS TO ISOLATE FLOW')).not.toBeNull();
+      expect(within(chart).getByText('HOVER OR FOCUS TO ISOLATE FLOW · CLICK TO ISOLATE THEME')).not.toBeNull();
     });
 
     it('places a compact square-swatch legend at the right of the chart footer', async () => {

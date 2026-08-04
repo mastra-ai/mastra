@@ -176,7 +176,7 @@ function FlowCard({
       <CardFooter className="border-border1 bg-surface2 flex flex-wrap justify-between gap-3 border-t px-4 py-3">
         <div className="text-neutral3 flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[10px] tracking-wider">
           <span>RIBBON WIDTH = TRACE COUNT</span>
-          <span>HOVER OR FOCUS TO ISOLATE FLOW</span>
+          <span>HOVER OR FOCUS TO ISOLATE FLOW · CLICK TO ISOLATE THEME</span>
         </div>
         <ul
           aria-label="Trace signal stage legend"
