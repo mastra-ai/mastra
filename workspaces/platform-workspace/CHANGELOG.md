@@ -1,5 +1,30 @@
 # @mastra/platform
 
+## 1.0.0-alpha.2
+
+### Major Changes
+
+- Removed support for using `MASTRA_PLATFORM_SECRET_KEY` to authenticate workspace providers. Use the platform-injected `MASTRA_PLATFORM_ACCESS_TOKEN` or pass `accessToken` explicitly instead. ([#20695](https://github.com/mastra-ai/mastra/pull/20695))
+
+  **Before:** Set `MASTRA_PLATFORM_SECRET_KEY`.
+
+  **After:** Use the platform-injected `MASTRA_PLATFORM_ACCESS_TOKEN`. For local development, set `MASTRA_PLATFORM_ACCESS_TOKEN` to an organization API token, or pass it explicitly:
+
+  ```typescript
+  import { PlatformSandbox } from '@mastra/platform-workspace';
+
+  const sandbox = new PlatformSandbox({
+    accessToken: 'sk_your-api-token',
+    projectId: 'project_abc',
+    environmentId: 'environment_abc',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`d94b8e1`](https://github.com/mastra-ai/mastra/commit/d94b8e1cee67416d518a8c30099040061bef6a1c)]:
+  - @mastra/core@1.56.0-alpha.7
+
 ## 0.3.0-alpha.1
 
 ### Minor Changes
