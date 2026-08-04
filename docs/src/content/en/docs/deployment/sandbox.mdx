@@ -71,6 +71,22 @@ The manifest includes `expiresAt` when the sandbox provider reports an expiratio
 
 Redeploys to the same sandbox skip the dependency install when its inputs are unchanged. These inputs are `package.json`, the bundled lockfiles, and the install command.
 
+### What the URLs serve
+
+Open the Studio URL, the sandbox root, in a browser. `SandboxDeployer()` includes Studio by default, so the root serves the Studio interface. With `studio: false`, the root serves the Mastra welcome page instead.
+
+The API URL is only a prefix for the endpoints below it, such as `/api/agents`. `/api` has no handler of its own, so opening it in a browser returns a "Not Found" response even though the server is healthy.
+
+To check a deployment, call an endpoint directly:
+
+```bash
+curl -s -X POST https://4111-<sandbox-id>.e2b.app/api/agents/weatherAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Weather in London"}]}' | jq -r '.text'
+```
+
+`GET /api/agents` lists the deployed agents and works in a browser, which makes it a quick smoke test.
+
 ### Provider credentials
 
 Unlike `mastra dev`, `mastra build` doesn't load `.env` files. The deploy happens inside the build, so a sandbox provider that reads its credentials from the environment, such as E2B with `E2B_API_KEY`, sees an empty value and the deploy fails with an authentication error.
