@@ -480,6 +480,36 @@ describe('SankeySignals drill-in', () => {
     });
   });
 
+  describe('when a noise chart node is activated', () => {
+    it('opens the Noise details panel for that trace signal instead of a drill-in', async () => {
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {
+          expectExactQuery(new URL(request.url), {
+            entityType: 'agent',
+            signalName: 'behavior',
+            snapshotId: 'opaque-snapshot-cursor',
+          });
+          return HttpResponse.json(noiseResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise/examples`, () =>
+          HttpResponse.json(noiseExamplesResponse),
+        ),
+      );
+      renderSignals();
+      const noiseNode = await screen.findByLabelText(/^Noise.+2 traces \(67%\)/);
+      expect(noiseNode.getAttribute('role')).toBe('button');
+
+      fireEvent.click(noiseNode);
+
+      const dialog = await screen.findByRole('dialog', { name: 'Noise' });
+      expect(
+        await within(dialog).findByText('The agent retried a fetch without establishing a recurring behavior pattern.'),
+      ).not.toBeNull();
+      expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
+    });
+  });
+
   describe('when the snapshot changes during a drill-in', () => {
     it('keeps the durable filter and shows an empty state when the theme is absent', async () => {
       useFlowHandlers();
@@ -739,7 +769,7 @@ describe('SankeySignals drill-in', () => {
     });
   });
 
-  describe('when a non-theme node is rendered', () => {
+  describe('when an overview other node is rendered', () => {
     it('does not expose activation semantics or request paths', async () => {
       let pathsRequestCount = 0;
       useFlowHandlers(() => {
@@ -747,10 +777,8 @@ describe('SankeySignals drill-in', () => {
       });
       renderSignals();
       const otherNodes = await screen.findAllByLabelText('Other: 1 trace (33%)');
-      const noiseNode = screen.getByLabelText('Noise: 2 traces (67%)');
 
       expect(otherNodes.every(node => node.getAttribute('role') === null)).toBe(true);
-      expect(noiseNode.getAttribute('role')).toBeNull();
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
       expect(pathsRequestCount).toBe(0);
     });

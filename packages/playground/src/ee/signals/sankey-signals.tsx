@@ -37,7 +37,7 @@ import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-l
 import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
-import { buildDrilledThemeFlow, findThemeSelection } from './theme-drilldown-data';
+import { buildDrilledThemeFlow, findNoiseSelection, findThemeSelection } from './theme-drilldown-data';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { ThemeLifelines } from './theme-lifelines';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
@@ -401,16 +401,22 @@ export function SankeySignals({
       (distributionPositions.get(left.signalName) ?? stages.length) -
       (distributionPositions.get(right.signalName) ?? stages.length),
   );
-  const isNodeClickable = drillInAvailable
-    ? (selection: SankeyChartNodeSelection) =>
-        findThemeSelection(flow, selection.column.id, selection.value) !== undefined
-    : undefined;
-  const handleNodeClick = drillInAvailable
-    ? (selection: SankeyChartNodeSelection) => {
-        const nextSelection = findThemeSelection(flow, selection.column.id, selection.value);
-        if (nextSelection) setDrillIn(nextSelection);
-      }
-    : undefined;
+  // Noise nodes open the noise details panel (noise has no themeId, so it
+  // cannot drill in) and stay clickable even when drill-in is unavailable.
+  const isNodeClickable = (selection: SankeyChartNodeSelection) =>
+    findNoiseSelection(flow, selection.column.id, selection.value) !== undefined ||
+    (drillInAvailable && findThemeSelection(flow, selection.column.id, selection.value) !== undefined);
+  const handleNodeClick = (selection: SankeyChartNodeSelection) => {
+    const noiseSignal = findNoiseSelection(flow, selection.column.id, selection.value);
+    if (noiseSignal) {
+      setDetailSelection(undefined);
+      setNoiseSignalName(noiseSignal);
+      return;
+    }
+    if (!drillInAvailable) return;
+    const nextSelection = findThemeSelection(flow, selection.column.id, selection.value);
+    if (nextSelection) setDrillIn(nextSelection);
+  };
   const drillInDisabledReason = drillInAvailable
     ? undefined
     : 'Drill-in is unavailable for snapshots with more than 2,000 traces.';
