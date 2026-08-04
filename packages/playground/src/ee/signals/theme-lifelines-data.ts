@@ -6,6 +6,8 @@ export type ThemeLifelinePoint = {
   /** Share of the signal's cohort at that landmark (0..1). */
   share: number;
   traceCount: number;
+  /** The contributing theme node's id at that landmark, when it has one. */
+  themeId?: string;
 };
 
 export type ThemeLifeline = {
@@ -55,7 +57,12 @@ export function buildThemeLifelines(
         lastPoint.share += node.traceCount / stage.traceCount;
         lastPoint.traceCount += node.traceCount;
       } else {
-        row.points.push({ snapshotIndex, share: node.traceCount / stage.traceCount, traceCount: node.traceCount });
+        row.points.push({
+          snapshotIndex,
+          share: node.traceCount / stage.traceCount,
+          traceCount: node.traceCount,
+          themeId: node.themeId,
+        });
       }
       rows.set(node.label, row);
     }

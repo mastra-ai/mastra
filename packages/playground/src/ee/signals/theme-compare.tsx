@@ -8,6 +8,7 @@ import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
 import { computeThemeShareDeltas, themeShareSeries } from './theme-compare-data';
+import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
 
 const SPARKLINE_WIDTH = 100;
@@ -85,6 +86,7 @@ function SignalDeltaColumn({
   positions,
   aIndex,
   bIndex,
+  onThemeSelect,
 }: {
   signalName: TraceSignalName;
   fromFlow: ThemeFlowResponse;
@@ -93,40 +95,63 @@ function SignalDeltaColumn({
   positions: number[];
   aIndex: number;
   bIndex: number;
+  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const deltas = computeThemeShareDeltas(fromFlow, toFlow, signalName);
+  // Details open at the compared snapshot where the theme still exists.
+  const detailIndexFor = (delta: { toShare: number }) =>
+    delta.toShare > 0 ? Math.max(aIndex, bIndex) : Math.min(aIndex, bIndex);
 
   return (
     <section aria-label={`${formatSignalName(signalName)} changes`} className="min-w-0">
       <h3 className="text-neutral4 font-mono text-xs font-semibold tracking-widest uppercase">{signalName}</h3>
       <ul className="mt-2 space-y-1.5">
         {deltas.length === 0 ? <li className="text-neutral3 text-xs">No themes in either snapshot.</li> : null}
-        {deltas.map(delta => (
-          <li
-            key={delta.label}
-            className={`border-border1 rounded-lg border px-2.5 py-2 ${
-              delta.delta > 0 ? 'bg-green-500/5' : delta.delta < 0 ? 'bg-red-500/5' : 'bg-surface3'
-            }`}
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-neutral6 truncate text-xs font-medium" title={delta.label}>
-                {delta.label}
-              </span>
-              <span className="text-neutral6 shrink-0 font-mono text-xs font-semibold tabular-nums">
-                {deltaLabel(delta.delta)}
-              </span>
-            </div>
-            <p className="text-neutral3 font-mono text-[11px] tabular-nums">
-              {percent(delta.fromShare)} → {percent(delta.toShare)}
-            </p>
-            <Sparkline
-              series={themeShareSeries(flows, signalName, delta.label)}
-              positions={positions}
-              aIndex={aIndex}
-              bIndex={bIndex}
-            />
-          </li>
-        ))}
+        {deltas.map(delta => {
+          const themeId = delta.themeId;
+          const card = (
+            <>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-neutral6 truncate text-xs font-medium" title={delta.label}>
+                  {delta.label}
+                </span>
+                <span className="text-neutral6 shrink-0 font-mono text-xs font-semibold tabular-nums">
+                  {deltaLabel(delta.delta)}
+                </span>
+              </div>
+              <p className="text-neutral3 font-mono text-[11px] tabular-nums">
+                {percent(delta.fromShare)} → {percent(delta.toShare)}
+              </p>
+              <Sparkline
+                series={themeShareSeries(flows, signalName, delta.label)}
+                positions={positions}
+                aIndex={aIndex}
+                bIndex={bIndex}
+              />
+            </>
+          );
+          return (
+            <li
+              key={delta.label}
+              className={`border-border1 rounded-lg border ${
+                delta.delta > 0 ? 'bg-green-500/5' : delta.delta < 0 ? 'bg-red-500/5' : 'bg-surface3'
+              }`}
+            >
+              {themeId === undefined ? (
+                <div className="px-2.5 py-2">{card}</div>
+              ) : (
+                <button
+                  aria-label={`View theme details for ${delta.label}`}
+                  className="hover:border-border2 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.03]"
+                  onClick={() => onThemeSelect({ signalName, themeId, label: delta.label }, detailIndexFor(delta))}
+                  type="button"
+                >
+                  {card}
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -143,12 +168,14 @@ export function ThemeCompare({
   signalNames,
   snapshots,
   totalSnapshots,
+  onThemeSelect,
 }: {
   entityId: string;
   entityType: string;
   signalNames: TraceSignalName[];
   snapshots: ThemeSnapshot[];
   totalSnapshots: number;
+  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const [compareIndexes, setCompareIndexes] = useState<{ a: number; b: number }>();
   const [armedMarker, setArmedMarker] = useState<'a' | 'b'>('b');
@@ -239,6 +266,7 @@ export function ThemeCompare({
               positions={positions}
               aIndex={aIndex}
               bIndex={bIndex}
+              onThemeSelect={onThemeSelect}
             />
           ))}
         </div>

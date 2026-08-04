@@ -92,6 +92,15 @@ describe('buildThemeLifelines', () => {
       expect(legacy?.points.map(point => point.snapshotIndex)).toEqual([0, 2]);
     });
   });
+
+  describe('when the contributing theme nodes carry theme ids', () => {
+    it('keeps each presence point resolvable to its theme id', () => {
+      const rows = buildThemeLifelines([fourStageThemeFlowResponse], 'goal');
+      const resolve = rows.find(row => row.label === 'Resolve support request');
+
+      expect(resolve?.points[0]?.themeId).toBe('theme-goal-support');
+    });
+  });
 });
 
 describe('lifelineConnectors', () => {
@@ -270,6 +279,21 @@ describe('SankeySignals lifelines mode', () => {
       const flowTimeline = await screen.findByRole('region', { name: 'Snapshot timeline' });
       const selectedTick = within(flowTimeline).getByRole('button', { name: /Snapshot 1 of/ });
       expect(selectedTick.getAttribute('aria-current')).toBe('true');
+    });
+
+    it('opens the theme details panel when a lifeline point is clicked', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
+      const row = await within(goalSection).findByRole('listitem', {
+        name: 'Resolve support request: present in 5 of 5 landmarks',
+      });
+      fireEvent.click(within(row).getAllByRole('button', { name: /^Resolve support request ·/ })[0]!);
+
+      expect(await screen.findByRole('dialog', { name: 'Resolve support request' })).not.toBeNull();
     });
 
     it('draws a connecting line between adjacent landmarks within a theme row', async () => {

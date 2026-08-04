@@ -2,6 +2,8 @@ import type { ThemeFlowResponse, TraceSignalName } from './types';
 
 export type ThemeShareDelta = {
   label: string;
+  /** The theme's id on whichever compared side still has the theme. */
+  themeId?: string;
   /** Share of the signal's traces at point A (0..1). */
   fromShare: number;
   /** Share of the signal's traces at point B (0..1). */
@@ -13,11 +15,15 @@ export type ThemeShareDelta = {
 
 function stageThemeShares(flow: ThemeFlowResponse, signalName: TraceSignalName) {
   const stage = flow.stages.find(candidate => candidate.signalName === signalName);
-  const shares = new Map<string, number>();
+  const shares = new Map<string, { share: number; themeId?: string }>();
   if (!stage || stage.traceCount === 0) return shares;
   for (const node of stage.nodes) {
     if (node.kind !== 'theme') continue;
-    shares.set(node.label, (shares.get(node.label) ?? 0) + node.traceCount / stage.traceCount);
+    const entry = shares.get(node.label);
+    shares.set(node.label, {
+      share: (entry?.share ?? 0) + node.traceCount / stage.traceCount,
+      themeId: entry?.themeId ?? node.themeId,
+    });
   }
   return shares;
 }
@@ -38,10 +44,11 @@ export function computeThemeShareDeltas(
 
   return [...labels]
     .map(label => {
-      const fromShare = fromShares.get(label) ?? 0;
-      const toShare = toShares.get(label) ?? 0;
+      const fromShare = fromShares.get(label)?.share ?? 0;
+      const toShare = toShares.get(label)?.share ?? 0;
       return {
         label,
+        themeId: toShares.get(label)?.themeId ?? fromShares.get(label)?.themeId,
         fromShare,
         toShare,
         delta: toShare - fromShare,
@@ -65,6 +72,6 @@ export function themeShareSeries(
 ): Array<number | undefined> {
   return flows.map(flow => {
     if (!flow) return undefined;
-    return stageThemeShares(flow, signalName).get(label) ?? 0;
+    return stageThemeShares(flow, signalName).get(label)?.share ?? 0;
   });
 }

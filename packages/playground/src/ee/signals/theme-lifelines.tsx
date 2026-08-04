@@ -10,6 +10,7 @@ import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
+import type { ThemeSelection } from './theme-drilldown-data';
 import { buildThemeLifelines, lifelineConnectors } from './theme-lifelines-data';
 import type { ThemeLifeline } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
@@ -29,14 +30,18 @@ function pointTitle(snapshot: ThemeSnapshot | undefined, label: string, traceCou
 
 function LifelineRow({
   row,
+  signalName,
   snapshots,
   positions,
   hue,
+  onThemeSelect,
 }: {
   row: ThemeLifeline;
+  signalName: TraceSignalName;
   snapshots: ThemeSnapshot[];
   positions: number[];
   hue: number;
+  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const isPersistent = row.points.length * 2 >= snapshots.length;
   const connectors = lifelineConnectors(row.points);
@@ -75,18 +80,36 @@ function LifelineRow({
             ))}
           </svg>
         ) : null}
-        {row.points.map(point => (
-          <span
-            key={point.snapshotIndex}
-            className="absolute bottom-px w-1.5 -translate-x-1/2 rounded-xs"
-            style={{
-              left: `${positions[point.snapshotIndex]}%`,
-              height: `${barHeight(point.share)}px`,
-              backgroundColor: nodeColor(hue),
-            }}
-            title={pointTitle(snapshots[point.snapshotIndex], row.label, point.traceCount, point.share)}
-          />
-        ))}
+        {row.points.map(point => {
+          const title = pointTitle(snapshots[point.snapshotIndex], row.label, point.traceCount, point.share);
+          const style = {
+            left: `${positions[point.snapshotIndex]}%`,
+            height: `${barHeight(point.share)}px`,
+            backgroundColor: nodeColor(hue),
+          };
+          const themeId = point.themeId;
+          if (themeId === undefined) {
+            return (
+              <span
+                key={point.snapshotIndex}
+                className="absolute bottom-px w-1.5 -translate-x-1/2 rounded-xs"
+                style={style}
+                title={title}
+              />
+            );
+          }
+          return (
+            <button
+              key={point.snapshotIndex}
+              aria-label={title}
+              className="absolute bottom-px w-1.5 -translate-x-1/2 cursor-pointer rounded-xs hover:brightness-125"
+              onClick={() => onThemeSelect({ signalName, themeId, label: row.label }, point.snapshotIndex)}
+              style={style}
+              title={title}
+              type="button"
+            />
+          );
+        })}
       </div>
       <span className="text-neutral3 w-9 shrink-0 font-mono text-[11px] tabular-nums">
         {row.points.length}/{snapshots.length}
@@ -100,11 +123,13 @@ function SignalLifelines({
   flows,
   snapshots,
   positions,
+  onThemeSelect,
 }: {
   signalName: TraceSignalName;
   flows: Array<ThemeFlowResponse | undefined>;
   snapshots: ThemeSnapshot[];
   positions: number[];
+  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const rows = buildThemeLifelines(flows, signalName);
@@ -131,7 +156,15 @@ function SignalLifelines({
       ) : (
         <ul className="mt-2 space-y-0.5">
           {rows.map(row => (
-            <LifelineRow key={row.label} row={row} snapshots={snapshots} positions={positions} hue={hue} />
+            <LifelineRow
+              key={row.label}
+              row={row}
+              signalName={signalName}
+              snapshots={snapshots}
+              positions={positions}
+              hue={hue}
+              onThemeSelect={onThemeSelect}
+            />
           ))}
         </ul>
       )}
@@ -152,6 +185,7 @@ export function ThemeLifelines({
   totalSnapshots,
   selectedIndex,
   onSnapshotSelect,
+  onThemeSelect,
 }: {
   entityId: string;
   entityType: string;
@@ -160,6 +194,7 @@ export function ThemeLifelines({
   totalSnapshots: number;
   selectedIndex: number;
   onSnapshotSelect: (index: number) => void;
+  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const flowQueries = useThemeFlows(
     entityId,
@@ -203,6 +238,7 @@ export function ThemeLifelines({
           flows={flows}
           snapshots={snapshots}
           positions={positions}
+          onThemeSelect={onThemeSelect}
         />
       ))}
     </section>

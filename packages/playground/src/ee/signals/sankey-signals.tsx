@@ -239,6 +239,13 @@ export function SankeySignals({
     if (nextIsPlaying && selectedSnapshotIndex === snapshots.length - 1) selectSnapshot(0);
     setIsPlaying(nextIsPlaying);
   };
+  // Compare cards and lifeline points open details for the theme at the
+  // landmark they were clicked on, so the panel's snapshot follows the click.
+  const openThemeDetailsAt = (selection: ThemeSelection, snapshotIndex: number) => {
+    selectSnapshot(snapshotIndex);
+    setNoiseSignalName(undefined);
+    setDetailSelection(selection);
+  };
 
   // Undefined at the last landmark so playback stops instead of looping.
   const nextSnapshotOrdinal = snapshots[selectedSnapshotIndex + 1]?.ordinal;
@@ -453,6 +460,7 @@ export function SankeySignals({
           signalNames={signalNames}
           snapshots={snapshots}
           totalSnapshots={totalSnapshots}
+          onThemeSelect={openThemeDetailsAt}
         />
       ) : viewMode === 'lifelines' ? (
         <ThemeLifelines
@@ -463,6 +471,7 @@ export function SankeySignals({
           totalSnapshots={totalSnapshots}
           selectedIndex={selectedSnapshotIndex}
           onSnapshotSelect={selectSnapshot}
+          onThemeSelect={openThemeDetailsAt}
         />
       ) : (
         <>

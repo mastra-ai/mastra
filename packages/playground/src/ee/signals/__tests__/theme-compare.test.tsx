@@ -84,6 +84,13 @@ describe('computeThemeShareDeltas', () => {
       const magnitudes = deltas.map(delta => Math.abs(delta.delta));
       expect(magnitudes).toEqual([...magnitudes].sort((left, right) => right - left));
     });
+
+    it('carries the theme id from whichever side still has the theme', () => {
+      const deltas = computeThemeShareDeltas(earlierThemeFlowResponse, fourStageThemeFlowResponse, 'goal');
+
+      expect(deltas.find(delta => delta.label === 'Legacy support request')?.themeId).toBe('theme-goal-legacy');
+      expect(deltas.find(delta => delta.label === 'Resolve support request')?.themeId).toBe('theme-goal-support');
+    });
   });
 });
 
@@ -179,6 +186,19 @@ describe('SankeySignals compare mode', () => {
       expect(within(goalColumn).queryByText('NEW')).toBeNull();
       // Marker dots render as HTML overlays, not stretched svg circles.
       expect(legacyRow.querySelectorAll('circle')).toHaveLength(0);
+    });
+
+    it('opens the theme details panel when a delta card is clicked', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
+      fireEvent.click(
+        await within(goalColumn).findByRole('button', { name: 'View theme details for Legacy support request' }),
+      );
+
+      expect(await screen.findByRole('dialog', { name: 'Legacy support request' })).not.toBeNull();
     });
 
     it('moves point B by default even when the clicked tick is nearer to point A', async () => {
