@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubIntegration } from './integration.js';
 import type { GithubSignalSubscriptionRow } from './subscriptions.js';
@@ -212,6 +213,7 @@ describe('dispatchGithubWebhook', () => {
         projectRepositoryId: 'project-repository-1',
         worktreePath: '/worktrees/b',
       },
+      requestContext: expect.any(RequestContext),
     });
     expect(switchB).not.toHaveBeenCalled();
     expect(sendA).toHaveBeenCalledWith(
@@ -225,6 +227,34 @@ describe('dispatchGithubWebhook', () => {
       }),
     );
     expect(sendA.mock.calls[0]).toHaveLength(1);
+  });
+
+  it('recreates a session under its owner identity', async () => {
+    // No identity — workspace factory rejects the session, delivery dropped.
+    const send = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
+    const createSession = vi.fn(async (_input: { requestContext: RequestContext }) => ({
+      thread: { getId: () => 'thread-a', switch: vi.fn() },
+      sendNotificationSignal: send,
+    }));
+
+    const result = await dispatchGithubWebhook(
+      parsed('issue_comment', 'created', {
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+        comment: { html_url: 'https://github.com/octo/hello/pull/34#issuecomment-123' },
+        pull_request: undefined,
+      }),
+      {
+        controller: { getSessionByResource: async () => undefined, createSession } as never,
+        listSubscriptions: async () => [subscription('a', '/worktrees/a')],
+        isAuthorizedSender: async () => true,
+      },
+    );
+
+    expect(result).toEqual({ delivered: 1, failed: 0, ignored: false });
+    expect(createSession.mock.calls[0]![0].requestContext.get('user')).toEqual({
+      workosId: 'owner-1',
+      organizationId: 'org-1',
+    });
   });
 
   it('switches an exact live scoped session to its subscribed thread', async () => {

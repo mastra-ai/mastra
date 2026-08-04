@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
+import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
 import type { GithubIntegration } from './integration.js';
 import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage.js';
@@ -299,12 +300,18 @@ async function resolveSubscriptionSession(
       projectRepositoryId: subscription.data.projectRepositoryId,
       ...(scope ? { worktreePath: scope } : {}),
     };
+    // Recreating the session resolves its workspace, which authorizes the
+    // caller against the Factory session row. A webhook has no signed-in user,
+    // so it stands in as the session's owner.
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: subscription.data.ownerId, organizationId: subscription.orgId });
     session = await controller.createSession({
       id: sessionId,
       ownerId: subscription.data.ownerId,
       resourceId,
       scope,
       tags,
+      requestContext,
     });
   }
   if (session.thread.getId() !== threadId) {
