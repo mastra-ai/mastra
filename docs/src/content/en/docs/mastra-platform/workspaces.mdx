@@ -1,6 +1,6 @@
 ---
 title: "Workspaces | Mastra platform"
-description: Give each Mastra platform environment a workspace with a shared bucket for filesystem storage and on-demand sandboxes for command execution. The platform provisions the resources and injects the credentials your deploy needs.
+description: Give each Mastra platform environment a workspace with a shared bucket for filesystem storage and on-demand sandboxes for command execution. The platform provisions the resources your deploy needs.
 ---
 
 # Workspaces
@@ -12,7 +12,7 @@ Every workspace exposes two capabilities:
 - One **bucket** for filesystem storage, wrapped by [`PlatformFilesystem`](/reference/workspace/platform-filesystem). The bucket is a durable, environment-scoped store agents read from and write to across runs.
 - A pool of **on-demand sandboxes** for command execution, wrapped by [`PlatformSandbox`](/reference/workspace/platform-sandbox). Each `PlatformSandbox` instance provisions its own remote sandbox on `start()` and destroys it on `destroy()`. Agents typically spin up many sandboxes per session, use them for a task, and let them go.
 
-Workspaces are scoped to a single [environment](/docs/mastra-platform/environments), so `production` and `staging` don't share buckets or sandbox pools. The platform manages provisioning, credentials, and idle cleanup. Your deploy only constructs the providers.
+Workspaces are scoped to a single [environment](/docs/mastra-platform/environments), so `production` and `staging` don't share buckets or sandbox pools. The platform manages provisioning, authentication, and idle cleanup.
 
 ## When workspaces are provisioned
 
@@ -51,11 +51,11 @@ export const mastra = new Mastra({
 })
 ```
 
-`PlatformFilesystem` and `PlatformSandbox` read their credentials from environment variables the platform injects at deploy time, so you don't pass any options on the platform.
+`PlatformFilesystem` and `PlatformSandbox` read their configuration from environment variables, so you don't pass any options on the platform. The platform injects them at deploy time. See [Environment variables](#environment-variables).
 
 ## One bucket, many sandboxes
 
-The two providers have different lifecycles, and the difference matters when you design agents.
+`PlatformFilesystem` and `PlatformSandbox` have different lifecycles, which matters when you design agents.
 
 **`PlatformFilesystem` is a long-lived handle to the environment's bucket.** All requests, all agents, and all sandboxes in the environment read and write the same object storage. Anything an agent writes is visible on the next request unless you explicitly delete it.
 
@@ -92,13 +92,13 @@ await perProjectSandbox.start()
 
 See [`PlatformSandbox` reference](/reference/workspace/platform-sandbox) for the full lifecycle, checkpoint recovery, reattachment, and clone options.
 
-## Injected environment variables
+## Environment variables
 
-Every deploy that runs on a platform environment with a workspace receives these variables:
+Every deploy that runs on a platform environment with a workspace receives these variables automatically:
 
 | Variable | Contents |
 | - | - |
-| `MASTRA_PLATFORM_SECRET_KEY` | Secret key scoped to the deploy. Used by the workspace providers to authenticate. `MASTRA_PLATFORM_ACCESS_TOKEN` is also injected as a deprecated alias. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform-issued JSON Web Token (JWT) the workspace providers use to authenticate. The token is scoped to the deploy's organization and project. |
 | `MASTRA_PROJECT_ID` | Project the deploy belongs to. |
 | `MASTRA_ENVIRONMENT_ID` | Environment the deploy belongs to. Selects which sandbox pool the platform uses. |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket name attached to the environment. Selects which bucket `PlatformFilesystem` reads and writes. |
@@ -107,10 +107,10 @@ These names are reserved. If your project sets any of them explicitly, the platf
 
 ## Local development
 
-Reuse the same providers locally by putting the four variables in your `.env` file. Get the values from your project's Workspaces tab:
+Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` API token on your organization's settings page under **API Tokens**. Platform deploys use an injected JWT instead.
 
 ```bash title=".env"
-MASTRA_PLATFORM_SECRET_KEY=your-secret-key
+MASTRA_PLATFORM_ACCESS_TOKEN=sk_your-api-token
 MASTRA_PROJECT_ID=your-project-id
 MASTRA_ENVIRONMENT_ID=your-environment-id
 MASTRA_PLATFORM_BUCKET_NAME=your-bucket-name
