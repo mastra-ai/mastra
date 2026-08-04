@@ -17,17 +17,10 @@ See [Editor](/docs/editor/overview) for an introduction to what the editor does.
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
-import { ComposioToolProvider } from '@mastra/editor/composio'
 
 export const mastra = new Mastra({
   agents: {/* your agents */},
-  editor: new MastraEditor({
-    toolProviders: {
-      composio: new ComposioToolProvider({
-        apiKey: process.env.COMPOSIO_API_KEY!,
-      }),
-    },
-  }),
+  editor: new MastraEditor(),
 })
 ```
 
@@ -187,7 +180,7 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
             name: 'update',
             type: '(input: StorageUpdateAgentInput) => Promise<Agent>',
             description:
-              'Partially update a stored agent. Creates a new draft version with the provided snapshot fields (instructions, tools, memory, and so on) and invalidates the cache. Set memory to null to disable memory.',
+              'Partially update a stored agent. Creates a version from the provided snapshot fields, assigns it to activeVersionId, and invalidates the cache. Set memory to null to disable memory.',
           },
           {
             name: 'delete',
@@ -445,17 +438,6 @@ await editor.agent.create({
 })
 ```
 
-Update its instructions:
-
-```typescript title="src/scripts/update-agent.ts"
-await editor.agent.update({
-  id: 'support-agent',
-  instructions: "You are a friendly support agent for Acme. Respond in the user's language.",
-})
-```
-
-`editor.agent.update()` creates a version and assigns it to `activeVersionId`. This differs from the stored-agent REST `PATCH` route, which creates an inactive draft unless `autoPublish` is enabled. See [Editor versioning](/docs/editor/overview#versioning).
-
 ## Methods
 
 ### Provider access
@@ -504,10 +486,4 @@ const source = mastra.getEditor()?.getSource()
 
 Returns: `'code' | 'db' | undefined`
 
-When `source` is omitted, Editor uses the configured database storage even though `getSource()` returns `undefined`.
-
-With `source: 'code'`, active agent overrides are written as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`. The initial stored agent is published when it's created, while later server updates are written to the file when their version becomes active.
-
-Studio reads recent Git revisions of each file as read-only versions. The default scan includes up to 50 commits and skips consecutive commits with the same parsed JSON snapshot. Git manages rollback and release for code-backed overrides.
-
-See [Editor storage options](/docs/editor/overview#choose-where-changes-are-stored) for the code-source workflow.
+When `source` is omitted, Editor uses the configured database storage even though `getSource()` returns `undefined`. See [Editor storage options](/docs/editor/overview#choose-where-changes-are-stored) for the storage workflows and [code-source versioning](/reference/editor/versioning#code-source) for activation and Git history behavior.

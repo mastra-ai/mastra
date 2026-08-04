@@ -140,6 +140,4 @@ The default Mastra server prefix is `/api`. A custom server prefix changes the p
 
 ## Version resolution
 
-Prompt blocks use the same draft and publish lifecycle as agents. Runtime references resolve the active published block. Editor previews resolve the latest draft, which lets authors test a change before it affects agents that reference the block.
-
-Restoring a historical prompt version creates a new draft. It doesn't replace the active version until that draft is published. See [Editor versioning](/docs/editor/overview#versioning) for the shared lifecycle.
+Runtime references resolve the active published block. Editor previews resolve the latest draft. See [Editor versioning](/docs/editor/overview#versioning) for the shared draft, publish, and restore lifecycle.

@@ -38,27 +38,11 @@ With `source: 'code'`, active agent overrides are serialized as deterministic JS
 
 The initial agent is published to create the file. Later server updates create a draft by default and write the file when that version becomes active. Git versions are read-only in Studio. The default history scan reads up to 50 recent commits and skips consecutive commits whose parsed JSON snapshot is unchanged.
 
-Git manages release and rollback for these files. See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
+See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
 
 ## Select an agent version
 
-Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass `status` or `versionId` to apply a stored override:
-
-```typescript title="Version selection"
-const codeAgent = mastra.getAgentById('support-agent')
-
-const publishedAgent = await mastra.getAgentById('support-agent', {
-  status: 'published',
-})
-
-const draftAgent = await mastra.getAgentById('support-agent', {
-  status: 'draft',
-})
-
-const versionedAgent = await mastra.getAgentById('support-agent', {
-  versionId: 'abc-123',
-})
-```
+Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass `status` or `versionId` to apply a stored override. See [Select a version](/docs/editor/overview#select-a-version) for a TypeScript example.
 
 With the default server prefix, pass selectors as query parameters under `/api`:
 

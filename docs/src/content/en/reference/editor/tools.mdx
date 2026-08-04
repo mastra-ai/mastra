@@ -19,7 +19,7 @@ See [Editor tools](/docs/editor/overview#tools) for the Studio workflow and comm
 | Registered tools | Tools registered in the Mastra runtime tool registry |
 | MCP clients | Tools exposed by stored local or remote MCP server configurations |
 | Integration tools | Tools resolved by legacy integration-provider configuration |
-| Tool providers | Tools resolved by providers registered on `MastraEditor`, such as Composio or Arcade |
+| [Tool providers](/reference/editor/tool-provider) | Tools resolved by providers registered on `MastraEditor`, such as Composio or Arcade |
 
 Code-defined agents keep their existing tools. The [`editor` override setting](/reference/agents/agent#editor-overrides) controls whether Editor can add and remove tools or only change descriptions.
 
@@ -38,56 +38,6 @@ Editor can store conditional variants for the `tools`, `mcpClients`, `integratio
 The rule language uses the same operators and nesting behavior as [prompt block display conditions](/reference/editor/prompt-blocks#display-conditions).
 
 Conditions apply to a tool field variant or MCP client reference. Per-tool `rules` values in stored tool entries aren't evaluated by the current Editor resolver.
-
-## Integration providers
-
-Register providers in `MastraEditor.toolProviders`. See [`ToolProvider`](/reference/editor/tool-provider) for the provider interface and methods.
-
-### Composio
-
-Import `ComposioToolProvider` from `@mastra/editor/composio` and pass a Composio API key:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraEditor } from '@mastra/editor'
-import { ComposioToolProvider } from '@mastra/editor/composio'
-
-export const mastra = new Mastra({
-  agents: {/* your agents */},
-  editor: new MastraEditor({
-    toolProviders: {
-      composio: new ComposioToolProvider({
-        apiKey: process.env.COMPOSIO_API_KEY!,
-      }),
-    },
-  }),
-})
-```
-
-Composio tool slugs use uppercase names such as `GITHUB_CREATE_ISSUE`. By default, execution uses the connection associated with the agent's author. A caller-scoped configuration can instead resolve identity from request context. See [connection scope](/docs/agent-builder/integrations#connection-scope).
-
-### Arcade
-
-Import `ArcadeToolProvider` from `@mastra/editor/arcade` and pass an Arcade API key:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraEditor } from '@mastra/editor'
-import { ArcadeToolProvider } from '@mastra/editor/arcade'
-
-export const mastra = new Mastra({
-  agents: {/* your agents */},
-  editor: new MastraEditor({
-    toolProviders: {
-      arcade: new ArcadeToolProvider({
-        apiKey: process.env.ARCADE_API_KEY!,
-      }),
-    },
-  }),
-})
-```
-
-Arcade tool names use `Toolkit.ToolName` format, such as `Github.GetRepository`. The provider seeds common toolkits locally to reduce catalog requests and adds toolkits returned by Arcade. Pass `baseURL` to the provider constructor to use a custom Arcade API endpoint.
 
 ## Stored MCP clients
 
