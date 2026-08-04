@@ -31,8 +31,6 @@ Mastra provides skills and a CLI to help your coding agent write high-quality Ma
 
 AI models may not have up-to-date knowledge of Mastra's APIs. Use [Mastra skills](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance, best practices, and instructions for fetching the latest Mastra documentation.
 
-Projects generated with [create mastra](/docs) include Mastra skills that your coding agent picks up automatically.
-
 Install the skills manually with:
 
 ```bash npm2yarn
@@ -44,6 +42,12 @@ Periodically update the skills to get the latest guidance:
 ```bash npm2yarn
 npx skills update mastra
 ```
+
+:::note
+
+When you create a project with [create mastra](/docs), the command automatically installs Mastra skills so your coding agent can discover and use them.
+
+:::
 
 ### Mastra CLI
 
