@@ -32,12 +32,13 @@ export function SlackNotConfigured() {
                 Not configured
               </Txt>
             </span>
-            <Txt as="span" variant="ui-xs" className="text-icon3 max-w-80 pl-3">
-              Slack channels aren't set up for this factory.
-            </Txt>
           </span>
         }
-      />
+      >
+        <Txt as="span" variant="ui-sm" className="text-icon3 text-right">
+          Slack channels aren't set up for this factory.
+        </Txt>
+      </SettingsRow>
     </SettingsCard>
   );
 }
