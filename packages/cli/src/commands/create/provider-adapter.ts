@@ -9,74 +9,43 @@ import { resolveMastraPackageVersions } from './version-resolver';
 
 export interface ManagedProviderConfig {
   displayName: string;
-  sdkPackage: string;
-  sdkVersion?: string;
-  providerIdentifier: string;
   primaryModel?: string;
   observationalModel?: string;
   apiKeyEnv: string;
   apiKeyPrerequisite: string;
-  featureDescription: string;
-  webSearchEntry?: string;
-}
-
-interface ResolvedManagedProviderConfig extends ManagedProviderConfig {
-  sdkVersion: string;
 }
 
 export const MANAGED_PROVIDER_CONFIGS: Record<CreateLLMProvider, ManagedProviderConfig> = {
   openai: {
     displayName: 'OpenAI',
-    sdkPackage: '@ai-sdk/openai',
-    providerIdentifier: 'openai',
     apiKeyEnv: 'OPENAI_API_KEY',
     apiKeyPrerequisite: 'An OpenAI API key',
-    featureDescription: 'OpenAI web search and direct web page fetching',
   },
   anthropic: {
     displayName: 'Anthropic',
-    sdkPackage: '@ai-sdk/anthropic',
-    sdkVersion: '^3.0.96',
-    providerIdentifier: 'anthropic',
     primaryModel: 'anthropic/claude-sonnet-5',
     observationalModel: 'anthropic/claude-haiku-4-5',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
     apiKeyPrerequisite: 'An Anthropic API key',
-    featureDescription: 'Anthropic web search and direct web page fetching',
-    webSearchEntry: 'anthropic.tools.webSearch_20250305()',
   },
   google: {
     displayName: 'Google Gemini',
-    sdkPackage: '@ai-sdk/google',
-    sdkVersion: '^3.0.91',
-    providerIdentifier: 'google',
     primaryModel: 'google/gemini-3.5-flash',
     observationalModel: 'google/gemini-3.5-flash',
     apiKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY',
     apiKeyPrerequisite: 'A Google Gemini API key',
-    featureDescription: 'Google Gemini web search and direct web page fetching',
-    webSearchEntry: 'google.tools.googleSearch({})',
   },
   xai: {
     displayName: 'xAI',
-    sdkPackage: '@ai-sdk/xai',
-    sdkVersion: '^3.0.106',
-    providerIdentifier: 'xai',
     primaryModel: 'xai/grok-4.3',
     observationalModel: 'xai/grok-4.3',
     apiKeyEnv: 'XAI_API_KEY',
     apiKeyPrerequisite: 'An xAI API key',
-    featureDescription: 'xAI web search and direct web page fetching',
-    webSearchEntry: 'xai.tools.webSearch()',
   },
 };
 
-const PROVIDER_SDK_PACKAGES = Object.values(MANAGED_PROVIDER_CONFIGS).map(config => config.sdkPackage);
-const OPENAI_SDK_PACKAGE = '@ai-sdk/openai';
 const OPENAI_API_KEY = 'OPENAI_API_KEY';
-const OPENAI_IMPORT = /^import\s*\{\s*openai\s*\}\s*from\s*['"]@ai-sdk\/openai['"];?\s*$/m;
 const OPENAI_MODEL = /(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g;
-const WEB_SEARCH_PROPERTY = /^([ \t]*)web_search\s*:\s*([^\n]+?)(?:,)?\s*$/m;
 
 function findMatches(content: string, pattern: RegExp): RegExpMatchArray[] {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
@@ -130,10 +99,9 @@ function collectMastraPackages(manifestSource: string): string[] {
 
 function normalizeManagedManifest(
   content: string,
-  provider: ManagedProviderConfig,
   mastraVersions: ResolvedMastraVersions | undefined,
   fallbackTag: string,
-): { content: string; sdkVersion: string } {
+): string {
   let manifest: Record<string, unknown>;
   try {
     manifest = JSON.parse(content) as Record<string, unknown>;
@@ -146,30 +114,6 @@ function normalizeManagedManifest(
   const dependencySections = [dependencies, devDependencies].filter(
     (section): section is Record<string, unknown> => section !== undefined,
   );
-  const openAiLocations = dependencySections.filter(section => Object.hasOwn(section, OPENAI_SDK_PACKAGE));
-  if (openAiLocations.length !== 1) {
-    throw new Error(
-      `Default template compatibility error: package.json must contain ${OPENAI_SDK_PACKAGE} in exactly one dependency section.`,
-    );
-  }
-
-  const sourceSection = openAiLocations[0]!;
-  const templateOpenAiVersion = sourceSection[OPENAI_SDK_PACKAGE];
-  if (typeof templateOpenAiVersion !== 'string' || templateOpenAiVersion.trim() === '') {
-    throw new Error(
-      `Default template compatibility error: package.json must contain a nonempty ${OPENAI_SDK_PACKAGE} version.`,
-    );
-  }
-
-  for (const section of dependencySections) {
-    for (const packageName of PROVIDER_SDK_PACKAGES) delete section[packageName];
-  }
-
-  const sdkVersion = provider.sdkPackage === OPENAI_SDK_PACKAGE ? templateOpenAiVersion : provider.sdkVersion;
-  if (!sdkVersion) {
-    throw new Error(`Default template compatibility error: no SDK version is configured for ${provider.displayName}.`);
-  }
-  sourceSection[provider.sdkPackage] = sdkVersion;
 
   for (const section of dependencySections) {
     for (const packageName of Object.keys(section)) {
@@ -179,7 +123,7 @@ function normalizeManagedManifest(
     }
   }
 
-  return { content: `${JSON.stringify(manifest, null, 2)}\n`, sdkVersion };
+  return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
 function adaptAgentSource(source: string, provider: CreateLLMProvider, config: ManagedProviderConfig): string {
@@ -188,15 +132,7 @@ function adaptAgentSource(source: string, provider: CreateLLMProvider, config: M
     throw new Error(`Default template compatibility error: model configuration is missing for ${config.displayName}.`);
   }
 
-  let next = replaceSingleMatch(
-    source,
-    OPENAI_IMPORT,
-    `import { ${config.providerIdentifier} } from '${config.sdkPackage}';`,
-    'OpenAI provider import',
-    'src/mastra/agents/agent.ts',
-  );
-
-  const modelMatches = findMatches(next, OPENAI_MODEL);
+  const modelMatches = findMatches(source, OPENAI_MODEL);
   if (modelMatches.length !== 2) {
     throw new Error(
       `Default template compatibility error: expected two OpenAI model assignments in src/mastra/agents/agent.ts, found ${modelMatches.length}.`,
@@ -204,41 +140,10 @@ function adaptAgentSource(source: string, provider: CreateLLMProvider, config: M
   }
   const models = [config.primaryModel, config.observationalModel];
   let modelIndex = 0;
-  next = next.replace(OPENAI_MODEL, (_match, prefix: string, suffix: string) => {
+  return source.replace(OPENAI_MODEL, (_match, prefix: string, suffix: string) => {
     const model = models[modelIndex++]!;
     return `${prefix}${model}${suffix}`;
   });
-
-  const webSearchMatches = findMatches(next, WEB_SEARCH_PROPERTY);
-  if (webSearchMatches.length > 1) {
-    throw new Error(
-      `Default template compatibility error: expected at most one web_search property in src/mastra/agents/agent.ts, found ${webSearchMatches.length}.`,
-    );
-  }
-
-  if (webSearchMatches.length === 1) {
-    const match = webSearchMatches[0]!;
-    if (!match[2]?.includes('openai.')) {
-      throw new Error(
-        'Default template compatibility error: the existing web_search property is not owned by the OpenAI template.',
-      );
-    }
-    next = next.replace(
-      WEB_SEARCH_PROPERTY,
-      config.webSearchEntry ? `${match[1]}web_search: ${config.webSearchEntry},` : '',
-    );
-  } else if (config.webSearchEntry) {
-    next = replaceSingleMatch(
-      next,
-      /^([ \t]*)web_fetch\s*:\s*[^\n]+$/m,
-      (_line, indentation: string) =>
-        `${indentation}web_fetch: webFetchTool,\n${indentation}web_search: ${config.webSearchEntry},`,
-      'web_fetch property used to place web_search',
-      'src/mastra/agents/agent.ts',
-    );
-  }
-
-  return next;
 }
 
 function replaceEnvKey(source: string, nextKey: string): string {
@@ -271,7 +176,6 @@ function adaptReadme(
   return source
     .replace(/^# .+$/m, `# ${projectName}`)
     .replaceAll('npm run dev', `${packageManager} run dev`)
-    .replace(/^- .*OpenAI web search.*$/m, `- ${config.featureDescription}`)
     .replace(/^- .*OpenAI API key.*$/m, `- ${config.apiKeyPrerequisite}`)
     .replace(/^([ \t]*)npx create-mastra@\S+.*$/m, `$1npx create-mastra@latest <project-name> --llm ${provider}`)
     .replaceAll(OPENAI_API_KEY, config.apiKeyEnv);
@@ -287,9 +191,7 @@ function assertNoProviderResidue(
     if (otherProvider === provider) continue;
 
     const checks: Array<[string, string]> = [
-      [files.manifest, config.sdkPackage],
-      [files.agent, `${config.providerIdentifier}/`],
-      [files.agent, `${config.providerIdentifier}.tools`],
+      [files.agent, `${otherProvider}/`],
       [files.envExample, config.apiKeyEnv],
     ];
     if (files.env !== undefined) checks.push([files.env, config.apiKeyEnv]);
@@ -317,7 +219,7 @@ export async function adaptDefaultTemplate({
   provider: CreateLLMProvider;
   apiKey?: string;
   versionTag: string;
-}): Promise<ResolvedManagedProviderConfig> {
+}): Promise<ManagedProviderConfig> {
   const config = MANAGED_PROVIDER_CONFIGS[provider];
   const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
   const packageJsonPath = path.join(projectPath, 'package.json');
@@ -349,7 +251,7 @@ export async function adaptDefaultTemplate({
       `We could not resolve exact Mastra package versions for the "${versionTag}" channel, using the channel tag instead`,
     );
   }
-  const normalizedManifest = normalizeManagedManifest(packageJsonSource, config, resolvedVersions, versionTag);
+  const normalizedManifest = normalizeManagedManifest(packageJsonSource, resolvedVersions, versionTag);
   const nextEnvExample = replaceEnvKey(envExampleSource, config.apiKeyEnv);
   const nextEnv = apiKey ? setEnvValue(nextEnvExample, config.apiKeyEnv, apiKey) : undefined;
   const nextReadme =
@@ -357,14 +259,14 @@ export async function adaptDefaultTemplate({
 
   assertNoProviderResidue(provider, {
     agent: nextAgent,
-    manifest: normalizedManifest.content,
+    manifest: normalizedManifest,
     envExample: nextEnvExample,
     env: nextEnv,
   });
 
   const writes = [
     fs.writeFile(agentPath, nextAgent, 'utf8'),
-    fs.writeFile(packageJsonPath, normalizedManifest.content, 'utf8'),
+    fs.writeFile(packageJsonPath, normalizedManifest, 'utf8'),
     fs.writeFile(envExamplePath, nextEnvExample, 'utf8'),
     nextEnv === undefined ? fs.rm(envPath, { force: true }) : fs.writeFile(envPath, nextEnv, 'utf8'),
   ];
@@ -375,5 +277,5 @@ export async function adaptDefaultTemplate({
   await Promise.all(writes);
   if (nextEnv !== undefined && process.platform !== 'win32') await fs.chmod(envPath, 0o600);
 
-  return { ...config, sdkVersion: normalizedManifest.sdkVersion };
+  return config;
 }

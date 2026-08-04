@@ -181,12 +181,8 @@ beforeEach(async () => {
   const adapter = await import('./provider-adapter');
   vi.mocked(adapter.adaptDefaultTemplate).mockResolvedValue({
     displayName: 'OpenAI',
-    sdkPackage: '@ai-sdk/openai',
-    sdkVersion: 'template-version',
-    providerIdentifier: 'openai',
     apiKeyEnv: 'OPENAI_API_KEY',
     apiKeyPrerequisite: 'An OpenAI API key',
-    featureDescription: 'OpenAI web search and direct web page fetching',
   });
 });
 
@@ -855,12 +851,10 @@ describe('create materialization lifecycle', () => {
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
-      sdkPackage: '@ai-sdk/anthropic',
-      sdkVersion: 'configured-version',
-      providerIdentifier: 'anthropic',
+      primaryModel: 'anthropic/claude-sonnet-5',
+      observationalModel: 'anthropic/claude-haiku-4-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyPrerequisite: 'An Anthropic API key',
-      featureDescription: 'Anthropic web search and direct web page fetching',
     });
 
     await create({

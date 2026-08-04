@@ -53,34 +53,22 @@ beforeEach(() => {
 
 const expectedAdaptations = {
   anthropic: {
-    importLine: "import { anthropic } from '@ai-sdk/anthropic';",
     primaryModel: 'anthropic/claude-sonnet-5',
     observationalModel: 'anthropic/claude-haiku-4-5',
-    webSearch: 'web_search: anthropic.tools.webSearch_20250305(),',
-    feature: 'Anthropic web search and direct web page fetching',
   },
   google: {
-    importLine: "import { google } from '@ai-sdk/google';",
     primaryModel: 'google/gemini-3.5-flash',
     observationalModel: 'google/gemini-3.5-flash',
-    webSearch: 'web_search: google.tools.googleSearch({}),',
-    feature: 'Google Gemini web search and direct web page fetching',
   },
   xai: {
-    importLine: "import { xai } from '@ai-sdk/xai';",
     primaryModel: 'xai/grok-4.3',
     observationalModel: 'xai/grok-4.3',
-    webSearch: 'web_search: xai.tools.webSearch(),',
-    feature: 'xAI web search and direct web page fetching',
   },
 } satisfies Record<
   Exclude<CreateLLMProvider, 'openai'>,
   {
-    importLine: string;
     primaryModel: string;
     observationalModel: string;
-    webSearch?: string;
-    feature: string;
   }
 >;
 
@@ -115,27 +103,21 @@ describe('adaptDefaultTemplate', () => {
 
       if (provider === 'openai') {
         expect(agent).toBe(originalAgent);
-        expect(resolvedConfig.sdkVersion).toBe(originalManifest.dependencies['@ai-sdk/openai']);
       } else {
         const providerExpected = expectedAdaptations[provider];
-        expect(agent).toContain(providerExpected.importLine);
         expect(agent).toContain(`model: '${providerExpected.primaryModel}'`);
         expect(agent).toContain(`model: '${providerExpected.observationalModel}'`);
-        if (providerExpected.webSearch) expect(agent).toContain(providerExpected.webSearch);
-        else expect(agent).not.toContain('web_search:');
       }
+      expect(resolvedConfig).toBe(config);
       expect(agent).toContain('web_fetch: webFetchTool');
-      expect(readme).toContain(`- ${config.featureDescription}`);
+      expect(agent).toContain('web_search: webSearchTool');
+      expect(readme).toContain('- Built-in web search and direct web page fetching');
       expect(readme).toMatch(new RegExp(`^# ${provider}-project$`, 'm'));
       expect(readme).toContain('pnpm run dev');
       expect(readme).not.toMatch(/^npm run dev$/m);
 
-      expect(manifest.dependencies[config.sdkPackage]).toBe(resolvedConfig.sdkVersion);
-      for (const providerConfig of Object.values(MANAGED_PROVIDER_CONFIGS)) {
-        if (providerConfig.sdkPackage !== config.sdkPackage) {
-          expect(manifest.dependencies[providerConfig.sdkPackage]).toBeUndefined();
-          expect(manifest.devDependencies[providerConfig.sdkPackage]).toBeUndefined();
-        }
+      for (const section of [manifest.dependencies, manifest.devDependencies]) {
+        expect(Object.keys(section)).not.toContainEqual(expect.stringMatching(/^@ai-sdk\//));
       }
       for (const section of [manifest.dependencies, manifest.devDependencies]) {
         for (const [packageName, version] of Object.entries(section)) {
@@ -158,10 +140,8 @@ describe('adaptDefaultTemplate', () => {
         [CreateLLMProvider, (typeof MANAGED_PROVIDER_CONFIGS)[CreateLLMProvider]]
       >) {
         if (otherProvider === provider) continue;
-        expect(functionalFiles).not.toContain(otherConfig.sdkPackage);
-        expect(functionalFiles).not.toContain(`${otherConfig.providerIdentifier}/`);
+        expect(functionalFiles).not.toContain(`${otherProvider}/`);
         expect(functionalFiles).not.toContain(otherConfig.apiKeyEnv);
-        expect(functionalFiles).not.toContain(`${otherConfig.providerIdentifier}.tools`);
       }
       errorSpy.mockRestore();
     });
@@ -180,62 +160,50 @@ describe('adaptDefaultTemplate', () => {
     expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
   });
 
-  it('preserves template-owned OpenAI versions, models, tools, and unrelated environment variables', async () => {
+  it('preserves template-owned OpenAI models, built-in tools, and unrelated environment variables', async () => {
     const projectPath = await createFixture();
-    const manifestPath = path.join(projectPath, 'package.json');
     const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
     const envExamplePath = path.join(projectPath, '.env.example');
-    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
-    manifest.dependencies['@ai-sdk/openai'] = '^99.0.0';
-    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
     const futureModels = ['openai/future-primary', 'openai/future-observational'];
     let modelIndex = 0;
-    const updatedAgent = (await fs.readFile(agentPath, 'utf8'))
-      .replace(/(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g, (_match: string, prefix: string, suffix: string) => {
+    const updatedAgent = (await fs.readFile(agentPath, 'utf8')).replace(
+      /(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g,
+      (_match: string, prefix: string, suffix: string) => {
         return `${prefix}${futureModels[modelIndex++]!}${suffix}`;
-      })
-      .replace(/web_search\s*:\s*openai\.tools\.[^\n]+/, 'web_search: openai.tools.futureSearch(),');
+      },
+    );
     await fs.writeFile(agentPath, updatedAgent, 'utf8');
     await fs.writeFile(envExamplePath, '# Keep this comment\nOPENAI_API_KEY=\nTURSO_DATABASE_URL=\n', 'utf8');
 
-    const config = await adaptFixture({ projectPath, provider: 'openai', versionTag: 'latest' });
-    const adaptedManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    await adaptFixture({ projectPath, provider: 'openai', versionTag: 'latest' });
 
-    expect(config.sdkVersion).toBe('^99.0.0');
-    expect(adaptedManifest.dependencies['@ai-sdk/openai']).toBe('^99.0.0');
     expect(await fs.readFile(agentPath, 'utf8')).toBe(updatedAgent);
     expect(await fs.readFile(envExamplePath, 'utf8')).toBe(
       '# Keep this comment\nOPENAI_API_KEY=\nTURSO_DATABASE_URL=\n',
     );
   });
 
-  it('adapts another provider when the template updates its OpenAI SDK, models, and search tool', async () => {
+  it('adapts another provider when the template updates its OpenAI models', async () => {
     const projectPath = await createFixture();
-    const manifestPath = path.join(projectPath, 'package.json');
     const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
-    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
-    manifest.dependencies['@ai-sdk/openai'] = '^99.0.0';
-    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
     const futureModels = ['openai/future-primary', 'openai/future-observational'];
     let modelIndex = 0;
-    const updatedAgent = (await fs.readFile(agentPath, 'utf8'))
-      .replace(/(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g, (_match: string, prefix: string, suffix: string) => {
+    const updatedAgent = (await fs.readFile(agentPath, 'utf8')).replace(
+      /(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g,
+      (_match: string, prefix: string, suffix: string) => {
         return `${prefix}${futureModels[modelIndex++]!}${suffix}`;
-      })
-      .replace(/web_search\s*:\s*openai\.tools\.[^\n]+/, 'web_search: openai.tools.futureSearch(),');
+      },
+    );
     await fs.writeFile(agentPath, updatedAgent, 'utf8');
 
     await adaptFixture({ projectPath, provider: 'anthropic', versionTag: 'latest' });
 
     const adaptedAgent = await fs.readFile(agentPath, 'utf8');
-    const adaptedManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
     expect(adaptedAgent).toContain("model: 'anthropic/claude-sonnet-5'");
     expect(adaptedAgent).toContain("model: 'anthropic/claude-haiku-4-5'");
-    expect(adaptedAgent).toContain('web_search: anthropic.tools.webSearch_20250305(),');
-    expect(adaptedManifest.dependencies['@ai-sdk/anthropic']).toBe(MANAGED_PROVIDER_CONFIGS.anthropic.sdkVersion);
-    expect(adaptedManifest.dependencies['@ai-sdk/openai']).toBeUndefined();
+    expect(adaptedAgent).toContain('web_search: webSearchTool');
   });
 
   it('preserves extra environment entries when adapting to another provider', async () => {
