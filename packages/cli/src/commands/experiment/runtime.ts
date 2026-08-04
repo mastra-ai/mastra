@@ -706,9 +706,10 @@ export async function runExperimentWorker({
   let pending = Buffer.alloc(0);
   const iterator = stdin[Symbol.asyncIterator]();
   while (!terminal && !protocolFailure) {
-    const nextChunk = iterator.next();
+    let nextChunk: Promise<IteratorResult<Buffer | string>>;
     let result: { type: 'input'; input: IteratorResult<Buffer | string> } | { type: 'run-complete' };
     try {
+      nextChunk = iterator.next();
       result = runPromise
         ? await Promise.race([
             nextChunk.then(input => ({ type: 'input' as const, input })),

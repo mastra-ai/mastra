@@ -487,6 +487,46 @@ describe('runExperimentWorker', () => {
     expect(output).toContain('"status":"failed"');
   });
 
+  it('reports synchronous stdin iterator failures through protocol finalization', async () => {
+    const request = createRequest();
+    let readCount = 0;
+    const stdin = {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            readCount += 1;
+            if (readCount === 1) {
+              return Promise.resolve({ value: Buffer.from(`${JSON.stringify(request)}\n`), done: false });
+            }
+            throw new Error('synchronous stdin failure');
+          },
+        };
+      },
+      destroy: vi.fn(),
+    } as unknown as NodeJS.ReadableStream;
+    const stdout = new PassThrough();
+    let output = '';
+    stdout.setEncoding('utf8').on('data', chunk => (output += chunk));
+
+    const result = runExperimentWorker({
+      mastra: { shutdown: vi.fn().mockResolvedValue(undefined) },
+      build,
+      stdin,
+      stdout,
+      stderr: new PassThrough(),
+      runExperiment: async (_mastra, config) => {
+        if (!config.signal.aborted) {
+          await new Promise<void>(resolve => config.signal.addEventListener('abort', () => resolve(), { once: true }));
+        }
+      },
+    });
+
+    await expect(result).resolves.toBe(EXPERIMENT_WORKER_EXIT_CODES.protocol);
+    expect(output).toContain('"type":"process-failure"');
+    expect(output).toContain('stdin read failed: synchronous stdin failure');
+    expect(output).toContain('"status":"failed"');
+  });
+
   it('does not publish a successful terminal after a queued heartbeat write fails', async () => {
     vi.useFakeTimers();
     try {
