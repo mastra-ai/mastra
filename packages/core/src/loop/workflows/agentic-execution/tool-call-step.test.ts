@@ -706,6 +706,7 @@ describe('createToolCallStep delegated agent tool metadata', () => {
     logger,
     toolCallId = 'parent-tool-call-id',
     delegatedRunId = 'sub-agent-run-id',
+    toolPayloadTransform,
   }: {
     messageList: MessageList;
     requireApproval: boolean;
@@ -713,6 +714,7 @@ describe('createToolCallStep delegated agent tool metadata', () => {
     logger?: { warn: Mock; debug?: Mock };
     toolCallId?: string;
     delegatedRunId?: string;
+    toolPayloadTransform?: unknown;
   }) => {
     const tools = {
       'agent-subAgent': {
@@ -737,6 +739,7 @@ describe('createToolCallStep delegated agent tool metadata', () => {
       runId: 'parent-run-id',
       streamState,
       logger: logger as any,
+      _internal: toolPayloadTransform ? ({ toolPayloadTransform } as any) : undefined,
     });
 
     return toolCallStep.execute({
@@ -798,6 +801,60 @@ describe('createToolCallStep delegated agent tool metadata', () => {
     expect(pending.parentRunId).toBeUndefined();
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('preserves explicitly transformed null payloads in approval and suspension metadata', async () => {
+    const toolPayloadTransform = {
+      targets: ['transcript'],
+      transformToolPayload: vi.fn(() => null),
+    };
+    const approvalMessage = createAssistantMessage('assistant-approval', 'parent-tool-call-id', 'agent-subAgent', {
+      secret: 'approval-secret',
+    });
+    const approvalMessageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [approvalMessage] },
+        all: { db: () => [approvalMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const approvalExecution = startDelegatedTool({
+      messageList: approvalMessageList,
+      requireApproval: true,
+      toolPayloadTransform,
+    });
+    await settleToolSuspension();
+    expect(
+      (approvalMessage.content.metadata as Record<string, any>).pendingToolApprovals['parent-tool-call-id'].args,
+    ).toBeNull();
+
+    const suspensionMessage = createAssistantMessage('assistant-suspension', 'parent-tool-call-id', 'agent-subAgent', {
+      secret: 'suspension-secret',
+    });
+    const suspensionMessageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [suspensionMessage] },
+        all: { db: () => [suspensionMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const suspensionExecution = startDelegatedTool({
+      messageList: suspensionMessageList,
+      requireApproval: false,
+      suspendPayload: { secret: 'suspend-payload-secret' },
+      toolPayloadTransform,
+    });
+    await settleToolSuspension();
+    const suspendedEntry = (suspensionMessage.content.metadata as Record<string, any>).suspendedTools[
+      'parent-tool-call-id'
+    ];
+    expect(suspendedEntry.args).toBeNull();
+    expect(suspendedEntry.suspendPayload).toBeNull();
+
+    await expect(Promise.race([approvalExecution, Promise.resolve('completed')])).resolves.toBe('completed');
+    await expect(Promise.race([suspensionExecution, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
   it('recovers a drained response message when persisting a delegated tool suspension', async () => {

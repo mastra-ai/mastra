@@ -161,26 +161,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
-        const inputTransform = getTransformedToolPayload(
-          toolStateTransformMetadata,
-          'transcript',
-          'input-available',
-        )?.transformed;
-        const approvalTransform = getTransformedToolPayload(
-          toolStateTransformMetadata,
-          'transcript',
-          'approval',
-        )?.transformed;
-        const suspendTransform = getTransformedToolPayload(
-          toolStateTransformMetadata,
-          'transcript',
-          'suspend',
-        )?.transformed;
+        const inputTransform = getTransformedToolPayload(toolStateTransformMetadata, 'transcript', 'input-available');
+        const approvalTransform = getTransformedToolPayload(toolStateTransformMetadata, 'transcript', 'approval');
+        const suspendTransform = getTransformedToolPayload(toolStateTransformMetadata, 'transcript', 'suspend');
         const transformedArgs =
           type === 'approval'
-            ? (approvalTransform ?? inputTransform ?? args)
-            : (inputTransform ?? suspendTransform ?? args);
-        const transformedSuspendPayload = type === 'suspension' ? (suspendTransform ?? suspendPayload) : undefined;
+            ? hasTransformedToolPayload(approvalTransform)
+              ? approvalTransform.transformed
+              : hasTransformedToolPayload(inputTransform)
+                ? inputTransform.transformed
+                : args
+            : hasTransformedToolPayload(inputTransform)
+              ? inputTransform.transformed
+              : hasTransformedToolPayload(suspendTransform)
+                ? suspendTransform.transformed
+                : args;
+        const transformedSuspendPayload =
+          type === 'suspension'
+            ? hasTransformedToolPayload(suspendTransform)
+              ? suspendTransform.transformed
+              : suspendPayload
+            : undefined;
         const entry = {
           toolCallId,
           toolName,
