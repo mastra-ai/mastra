@@ -621,6 +621,46 @@ describe('checkoutSessionBranch', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('clone-failed');
   });
+
+  it('recovers by switching to the branch when checkout -b reports it already exists', async () => {
+    // Reproduces the "materialize loop" storm: `show-ref` says the branch is
+    // absent but `checkout -b` then reports it exists (e.g. the ref only lives
+    // in packed-refs, or a prior partially-completed checkout left the branch
+    // pointer behind). The old behavior threw MaterializeError on every retry,
+    // starving other sessions on the workspace. The recovery path must switch
+    // to the existing branch rather than fail hard.
+    let checkoutBAttempts = 0;
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) {
+        return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      }
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('checkout -b')) {
+        checkoutBAttempts += 1;
+        return {
+          exitCode: 128,
+          stdout: '',
+          stderr:
+            'From https://github.com/octocat/hello\n * branch                main       -> FETCH_HEAD\n' +
+            "fatal: a branch named 'factory/pr-1' already exists\n",
+        };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    // Verify the recovery actually switched to the existing branch.
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toMatch(/git -C .* checkout 'factory\/pr-1'/);
+    // And we did not force-delete or reset the branch behind the user's back.
+    expect(joined).not.toMatch(/branch -D|reset --hard|checkout -B/);
+    // Token still scrubbed back to the clean URL in the finally.
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('tok-secret');
+    expect(checkoutBAttempts).toBe(1);
+  });
 });
 
 describe('recycleClaimedWorkdir', () => {

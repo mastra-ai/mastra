@@ -412,11 +412,35 @@ export async function checkoutSessionBranch(
       // Same rule as above: uncommitted work in the tree blocks the switch
       // to the new branch. Leave the checkout on its current branch.
       if (isBlockedByLocalWork(fetch)) return;
+      // The `show-ref` probe above can miss branches that only live in
+      // `packed-refs`, or a previous partially-completed checkout can leave
+      // the branch pointer behind. In either case `checkout -b` refuses with
+      // "already exists" — but the branch *does* exist locally and is a
+      // valid target. Fall back to a plain `checkout` so materialization can
+      // proceed instead of looping forever on retry.
+      if (isBranchAlreadyExists(fetch)) {
+        const checkout = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
+        if (checkout.exitCode === 0) return;
+        if (isBlockedByLocalWork(checkout)) return;
+        throw classifyGitFailure(checkout, 'clone-failed');
+      }
       throw classifyGitFailure(fetch, 'clone-failed');
     }
   } finally {
     await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
   }
+}
+
+/**
+ * True when `git checkout -b` refused because the branch already exists.
+ * Happens when `show-ref` missed the ref (e.g. it lives only in `packed-refs`)
+ * or a prior partially-completed checkout left the branch pointer behind. The
+ * caller recovers by switching to the existing branch — hard-failing here is
+ * what produced the shipyard materialize storm.
+ */
+function isBranchAlreadyExists(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /a branch named .* already exists/i.test(output);
 }
 
 /**
