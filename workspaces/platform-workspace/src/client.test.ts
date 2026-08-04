@@ -29,15 +29,15 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('reads the access token from MASTRA_PLATFORM_SECRET_KEY', () => {
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+  it('reads the access token from MASTRA_PLATFORM_ACCESS_TOKEN', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform_access_token');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
 
-    expect(resolvePlatformOptions({}).accessToken).toBe('sk_secret');
+    expect(resolvePlatformOptions({}).accessToken).toBe('platform_access_token');
   });
 
-  it('does not use MASTRA_PLATFORM_ACCESS_TOKEN as an access token fallback', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform_observability_token');
+  it('does not use MASTRA_PLATFORM_SECRET_KEY as an access token fallback', () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
 
     expect(() => resolvePlatformOptions({})).toThrow('accessToken is required');
