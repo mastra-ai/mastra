@@ -269,6 +269,8 @@ See [`MastraEditor`](/reference/editor/mastra-editor#source) for file locations 
 
 ## Versioning
 
+Versioning depends on where Editor stores changes. Database-backed agents and prompt blocks use draft and published versions. Code-backed agent overrides use JSON files and Git history.
+
 With the database option, saving a change creates a draft version. The live agent keeps using the published version until you publish the draft.
 
 Publishing makes that version live. Restoring an older version creates another draft first, so you can test it before it replaces the current version.
