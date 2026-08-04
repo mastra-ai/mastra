@@ -616,6 +616,10 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        // A factory reads the repository it works on and its skill, never the
+        // ~/.claude instructions of whoever hosts the process. On the controller
+        // rather than per session, so webhook-recreated sessions keep it too.
+        initialState: { skipGlobalInstructions: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),

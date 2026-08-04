@@ -1,5 +1,56 @@
 # @mastra/playground-ui
 
+## 46.0.0-alpha.6
+
+### Minor Changes
+
+- Added per-project trace list columns for duration, token usage, estimated cost, and custom metadata. ([#20535](https://github.com/mastra-ai/mastra/pull/20535))
+
+- Preserved browser shortcuts by making the MainSidebar Command+B toggle opt-in. Consumers that want the previous shortcut can enable it explicitly: ([#20614](https://github.com/mastra-ai/mastra/pull/20614))
+
+  ```tsx
+  <MainSidebarProvider disableKeyboardShortcut={false}>{children}</MainSidebarProvider>
+  ```
+
+  Added selective hooks for consumers that only need sidebar state or mobile drawer state:
+
+  ```tsx
+  import { useMaybeSidebarState, useMobileDrawer } from '@mastra/playground-ui/components/MainSidebar';
+
+  const sidebar = useMaybeSidebarState();
+  const { openMobile } = useMobileDrawer();
+  ```
+
+- Added a pointer-aware ring around the chat composer. At rest it is a plain border; on hover or focus a soft arc lights the edge under the cursor, and while the agent is running the arc rotates on its own so the composer itself shows the run instead of a separate "working…" label. ([#20630](https://github.com/mastra-ai/mastra/pull/20630))
+
+  ```tsx
+  import { ComposerBox, ComposerRing } from '@mastra/playground-ui/components/Composer';
+
+  <ComposerRing busy={isRunning}>
+    <ComposerBox>{/* input and actions */}</ComposerBox>
+  </ComposerRing>;
+  ```
+
+  Wrap `ComposerBox` with it and pass `busy` — the ring becomes the composer's edge, so the box no longer needs a border of its own.
+
+### Patch Changes
+
+- Fixed three problems with the conversation rail in chat threads. ([#20615](https://github.com/mastra-ai/mastra/pull/20615))
+
+  **The rail now marks the turn you are reading after older history loads.** Scrolling up to load earlier messages used to leave the oldest message highlighted as the current turn, so the marker jumped to the top of the thread instead of following the transcript.
+
+  **Scrolling stays responsive in long threads.** The rail re-derived the order of every message on each scroll event. It now does that only when messages are added or removed.
+
+  **The rail can be used in a browser-only app.** Importing it no longer drags the whole `@mastra/react` entry point into the bundle.
+
+- Fixed the last column header in Sankey charts (for example SENTIMENT on the Trace Intelligence page) rendering right up against the chart's edge. It now keeps the same spacing as the first column's header. ([#20589](https://github.com/mastra-ai/mastra/pull/20589))
+
+- Updated dependencies [[`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866), [`19ccefa`](https://github.com/mastra-ai/mastra/commit/19ccefa628dc971b4bfa2058a324a6ac9b846358), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866)]:
+  - @mastra/core@1.56.0-alpha.6
+  - @mastra/client-js@1.37.0-alpha.6
+  - @mastra/memory@1.25.0-alpha.2
+  - @mastra/react@1.4.0-alpha.6
+
 ## 46.0.0-alpha.5
 
 ### Patch Changes

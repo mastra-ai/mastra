@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.22.0-alpha.6
+
+### Patch Changes
+
+- Add `--no-install` flag to create command. It allows you to skip dependency installation. ([#20619](https://github.com/mastra-ai/mastra/pull/20619))
+
 ## 1.22.0-alpha.5
 
 ## 1.22.0-alpha.4
