@@ -787,12 +787,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/evals/datasets/overview",
+      "destination": "/docs/datasets/overview",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/evals/datasets/running-experiments",
+      "destination": "/docs/datasets/running-experiments",
       "permanent": true
     },
     {
@@ -1662,12 +1662,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview/llms.txt",
-      "destination": "/docs/evals/datasets/overview/llms.txt",
+      "destination": "/docs/datasets/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments/llms.txt",
-      "destination": "/docs/evals/datasets/running-experiments/llms.txt",
+      "destination": "/docs/datasets/running-experiments/llms.txt",
       "permanent": true
     },
     {

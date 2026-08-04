@@ -772,12 +772,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/evals/datasets/overview",
+      "destination": "/docs/datasets/overview",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/evals/datasets/running-experiments",
+      "destination": "/docs/datasets/running-experiments",
       "permanent": true
     },
     {
