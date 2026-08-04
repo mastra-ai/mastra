@@ -165,7 +165,7 @@ describe('SankeySignals compare mode', () => {
       expect(within(comparison).queryByText(/traces/)).toBeNull();
     });
 
-    it('shows a gone theme with its share movement', async () => {
+    it('shows a gone theme with its share movement and no status badge', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
@@ -174,9 +174,46 @@ describe('SankeySignals compare mode', () => {
       const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
       const legacyRow = within(goalColumn).getByTitle('Legacy support request').closest('li');
       if (!legacyRow) throw new Error('Legacy support request row was not rendered');
-      expect(within(legacyRow).getByText('GONE')).not.toBeNull();
       expect(within(legacyRow).getByText('-8pp')).not.toBeNull();
       expect(within(legacyRow).getByText('8% → 0%')).not.toBeNull();
+      expect(within(legacyRow).queryByText('GONE')).toBeNull();
+      expect(within(goalColumn).queryByText('NEW')).toBeNull();
+      // Marker dots render as HTML overlays, not stretched svg circles.
+      expect(legacyRow.querySelectorAll('circle')).toHaveLength(0);
+    });
+
+    it('moves point B by default even when the clicked tick is nearer to point A', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+
+      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
+      const firstTick = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ })[0]!;
+      fireEvent.click(firstTick);
+
+      expect(
+        await within(comparison).findByText('Pick two different landmarks on the timeline to compare them.'),
+      ).not.toBeNull();
+    });
+
+    it('moves point A after the user arms it', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+
+      const pointA = within(comparison).getByRole('button', { name: /Point A/ });
+      fireEvent.click(pointA);
+      expect(pointA.getAttribute('aria-pressed')).toBe('true');
+
+      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
+      const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
+      fireEvent.click(ticks[ticks.length - 1]!);
+
+      expect(
+        await within(comparison).findByText('Pick two different landmarks on the timeline to compare them.'),
+      ).not.toBeNull();
     });
 
     it('returns to the flow chart when the user switches back', async () => {
