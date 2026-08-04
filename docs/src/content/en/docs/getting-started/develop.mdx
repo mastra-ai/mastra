@@ -93,17 +93,17 @@ File-based agents are in beta and may change before they're stable.
 
 :::
 
-With file-based agents, Mastra automatically [discovers](/reference/file-based-agents/config#discovery-lifecycle) agents and related primitives from supported files under `src/mastra/`. You organize those files by convention instead of importing and registering each primitive on your [`Mastra`](/reference/core/mastra-class) instance.
-
-The file system becomes a direct representation of your project structure, so you and your coding agent can understand how the project fits together without tracing how everything is wired together in code.
-
-You can use file-based agents throughout your project or adopt them incrementally alongside primitives defined in code. Not every Mastra feature or use case is supported yet.
-
 :::tip[📹 Watch]
 
 [How to create your first file-based agent](https://www.youtube.com/watch?v=5Kfn-oYkJNg\&t=18s)
 
 :::
+
+With file-based agents, Mastra automatically [discovers](/reference/file-based-agents/config#discovery-lifecycle) agents and related primitives from supported files under `src/mastra/`. You organize those files by convention instead of importing and registering each primitive on your [`Mastra`](/reference/core/mastra-class) instance.
+
+The file system becomes a direct representation of your project structure, so you and your coding agent can understand how the project fits together without tracing how everything is wired together in code.
+
+You can use file-based agents throughout your project or adopt them incrementally alongside primitives defined in code. Not every Mastra feature or use case is supported yet.
 
 ### Create your first agent
 
@@ -134,7 +134,7 @@ Run `npx mastra dev`, open Studio, and select `writing-assistant` to test it.
 
 ### How discovery works
 
-Mastra uses paths to discover and name file-based capabilities. An agent directory supplies the default agent `id` and `name`. Inside the agent, `tools/search_docs.ts` registers the tool as `search_docs`, while `skills/style-guide.md` registers the skill as `style-guide`.
+Mastra uses paths to discover and name file-based capabilities. An agent directory supplies the default agent `id` and `name`. For example, `tools/search_docs.ts` registers a tool as `search_docs`, while `skills/style-guide.md` registers a skill as `style-guide`. See the extension paths below.
 
 ### Extend your agent
 
