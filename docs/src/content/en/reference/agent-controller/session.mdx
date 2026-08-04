@@ -1,11 +1,11 @@
 ---
-title: "Reference: Session class | AgentController"
+title: "Reference: Session | AgentController"
 description: "API reference for the AgentController Session, which owns the per-conversation state for a single conversation: identity, threads, mode, model, run state, grants, and the display snapshot."
 packages:
   - "@mastra/core"
 ---
 
-# Session class
+# Session
 
 :::experimental
 
@@ -600,6 +600,7 @@ Resolve the role's model ID to a model instance via the configured model gateway
 
 ```typescript
 const observerModel = session.om.observer.resolvedModel()
+const reflectorModel = session.om.reflector.resolvedModel()
 ```
 
 ## Permissions
