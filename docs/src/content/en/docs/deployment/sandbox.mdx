@@ -90,8 +90,6 @@ curl -s -X POST https://4111-<sandbox-id>.e2b.app/api/agents/weatherAgent/genera
   -d '{"messages":[{"role":"user","content":"Weather in London"}]}' | jq -r '.text'
 ```
 
-`GET /api/agents` lists the deployed agents and works in a browser, which makes it a quick smoke test.
-
 ### Provider credentials
 
 Unlike `mastra dev`, `mastra build` doesn't load `.env` files. The deploy happens inside the build, so a sandbox provider that reads its credentials from the environment, such as E2B with `E2B_API_KEY`, sees an empty value and the deploy fails with an authentication error.
