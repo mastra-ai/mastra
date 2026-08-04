@@ -107,7 +107,7 @@ VERCEL_TEAM_ID=
 VERCEL_PROJECT_ID=
 ```
 
-Every provider also accepts these as constructor options. On Vercel, a `VERCEL_OIDC_TOKEN` replaces all three variables. Self-hosted E2B and Daytona installations take `E2B_DOMAIN` or `DAYTONA_API_URL`.
+Every provider also accepts these as constructor options. Self-hosted E2B and Daytona installations take `E2B_DOMAIN` or `DAYTONA_API_URL`.
 
 Unlike `mastra dev`, `mastra build` doesn't load `.env` files. The deploy happens inside the build, so a sandbox provider that reads its credentials from the environment, such as E2B with `E2B_API_KEY`, sees an empty value and the deploy fails with an authentication error.
 
