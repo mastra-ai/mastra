@@ -19,25 +19,25 @@ npx mastra dev
 
 Open Studio at [`http://localhost:4111`](http://localhost:4111) to test your agent and inspect its runs.
 
-The development server also exposes endpoints for your agents, tools, and workflows. Open [`http://localhost:4111/api`](http://localhost:4111/api) to browse the available endpoints. You can connect your frontend to these endpoints with the [Mastra Client](/docs/server/mastra-client).
+The development server also exposes APIs for your agents, tools, and workflows. Open [`http://localhost:4111/api`](http://localhost:4111/api) to browse what's available, then connect your frontend using the [Mastra Client](/docs/server/mastra-client).
 
 Changes in your `src/mastra/` directory automatically restart the development server, so you don't need to restart it manually as you build.
 
 ## Build with AI
 
-Mastra provides skills and a CLI to help your coding agent write high-quality Mastra code.
+Mastra provides a skill and a CLI to help your coding agent write high-quality Mastra code.
 
-### Mastra skills
+### Mastra skill
 
-AI models may not have up-to-date knowledge of Mastra's APIs. Use [Mastra skills](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance, best practices, and instructions for fetching the latest Mastra documentation.
+AI models may not have up-to-date knowledge of Mastra's APIs. Use the [Mastra skill](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance, best practices, and instructions for fetching the latest Mastra documentation.
 
-Install the skills manually with:
+Install the skill manually with:
 
 ```bash npm2yarn
 npx skills add mastra-ai/skills
 ```
 
-Periodically update the skills to get the latest guidance:
+Periodically update the skill to get the latest guidance:
 
 ```bash npm2yarn
 npx skills update mastra
@@ -45,7 +45,7 @@ npx skills update mastra
 
 :::note
 
-When you create a project with [create mastra](/docs), the command automatically installs Mastra skills so your coding agent can discover and use them.
+When you create a project with [create mastra](/docs), the command automatically installs the Mastra skill so your coding agent can discover and use it.
 
 :::
 
