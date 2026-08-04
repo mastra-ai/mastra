@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # PlatformSandbox
 
-Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes; use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
+Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes. Use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
 
 Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
 
@@ -117,7 +117,7 @@ When `sandboxId` is set, `environmentId` isn't required because the sandbox alre
 The constructor `id` (explicit or auto-generated) is sent to the platform on `POST /sandbox` as an advisory recovery key:
 
 - If the platform recognises the `id` from a previous session, the new sandbox boots from the most recent checkpoint of that earlier sandbox's filesystem instead of the base recipe.
-- If the `id` isn't recognised, the platform falls through to a fresh sandbox from the base recipe. Auto-generated ids never match, so omitting `id` disables checkpoint recovery.
+- If the `id` isn't recognised, the platform starts a fresh sandbox from the base recipe. Auto-generated ids never match, so omitting `id` disables checkpoint recovery.
 
 Pass a stable `id` to preserve a sandbox's filesystem across sessions or across a `destroy()`/`start()` cycle:
 

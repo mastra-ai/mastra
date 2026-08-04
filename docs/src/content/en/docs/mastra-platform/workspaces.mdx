@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 
 ## One bucket, many sandboxes
 
-The two providers have different lifecycles, and the difference matters when you design agents.
+`PlatformFilesystem` and `PlatformSandbox` have different lifecycles, which matters when you design agents.
 
 **`PlatformFilesystem` is a long-lived handle to the environment's bucket.** All requests, all agents, and all sandboxes in the environment read and write the same object storage. Anything an agent writes is visible on the next request unless you explicitly delete it.
 
@@ -104,7 +104,7 @@ Every deploy that runs on a platform environment with a workspace receives these
 
 These names are reserved. If your project sets any of them explicitly, the platform-managed values take precedence.
 
-One variable is **not** injected and must be set on your project yourself:
+`MASTRA_PLATFORM_SECRET_KEY` isn't injected. Set it on your project:
 
 | Variable | Contents |
 | - | - |
