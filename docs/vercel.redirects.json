@@ -12,7 +12,7 @@
     },
     {
       "source": "/docs/voice/livekit",
-      "destination": "/docs/voice/realtime-voice",
+      "destination": "/guides/voice/realtime-voice",
       "permanent": true
     },
     {
@@ -102,7 +102,7 @@
     },
     {
       "source": "/docs/agents/adding-voice",
-      "destination": "/docs/voice/overview",
+      "destination": "/guides/voice/overview",
       "permanent": true
     },
     {
@@ -257,82 +257,82 @@
     },
     {
       "source": "/examples/rag/chunking/chunk-text",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-html",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-json",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-markdown",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-size",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-delimiters",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-chunk",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-chunk-array",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-with-cohere",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/upsert/upsert-embeddings",
-      "destination": "/docs/rag/vector-databases",
+      "destination": "/guides/rag/vector-databases",
       "permanent": true
     },
     {
       "source": "/examples/rag/query/retrieve-results",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-cohere",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-zeroentropy",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/basic-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
@@ -472,12 +472,12 @@
     },
     {
       "source": "/examples/rag/query/hybrid-vector-search",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/graph-rag",
-      "destination": "/docs/rag/graph-rag",
+      "destination": "/guides/rag/graph-rag",
       "permanent": true
     },
     {
@@ -1108,6 +1108,16 @@
     {
       "source": "/reference/client-js/agent-builder",
       "destination": "https://agent-builder.mastra.ai/reference/client",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*",
+      "destination": "/guides/rag/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*",
+      "destination": "/guides/voice/:path*",
       "permanent": true
     }
   ]
