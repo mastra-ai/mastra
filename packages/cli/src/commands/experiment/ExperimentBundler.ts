@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { lstat, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
@@ -50,6 +51,19 @@ export class ExperimentBundler extends Bundler {
     } catch {
       return Promise.resolve([]);
     }
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    if (!Array.isArray(bundlerOptions.externals)) return bundlerOptions;
+
+    return {
+      ...bundlerOptions,
+      dynamicPackages: [...new Set([...(bundlerOptions.dynamicPackages ?? []), ...bundlerOptions.externals])],
+    };
   }
 
   async bundle(

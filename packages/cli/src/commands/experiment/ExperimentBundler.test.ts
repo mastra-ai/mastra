@@ -52,6 +52,35 @@ describe('ExperimentBundler', () => {
     expect(entry).toContain('process.exit(exitCode)');
   });
 
+  it('installs explicitly configured externals that static analysis cannot observe', async () => {
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+      externals: ['execa', 'existing-package'],
+      dynamicPackages: ['existing-package', 'dynamic-package'],
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    const options = await (new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', '/output');
+
+    expect(options).toEqual({
+      externals: ['execa', 'existing-package'],
+      dynamicPackages: ['existing-package', 'dynamic-package', 'execa'],
+    });
+  });
+
+  it('does not treat externals true as an explicit runtime dependency list', async () => {
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+      externals: true,
+      dynamicPackages: ['dynamic-package'],
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    const options = await (new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', '/output');
+
+    expect(options).toEqual({ externals: true, dynamicPackages: ['dynamic-package'] });
+  });
+
   it('removes pnpm install metadata that embeds build-machine paths', async () => {
     const { removePnpmInstallMetadata } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');
