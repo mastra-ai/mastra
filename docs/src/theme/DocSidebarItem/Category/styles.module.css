@@ -2,6 +2,14 @@
   overflow: hidden;
 }
 
+.categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist)) {
+  overflow: visible;
+}
+
+.categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist)) .categoryLinkLabel {
+  color: inherit;
+}
+
 /*
 TODO merge this logic back in Infima?
  */
