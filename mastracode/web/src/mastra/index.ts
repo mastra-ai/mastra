@@ -31,6 +31,7 @@ import { MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { SlackIntegration, createGithubSourceControl } from '../web/channels/slack/integration.js';
@@ -119,6 +120,22 @@ const linear =
     ? new LinearIntegration({
         clientId: linearClientId,
         clientSecret: linearClientSecret,
+      })
+    : undefined;
+
+// Jira Cloud intake. Deployment-global credentials (Basic auth with an API
+// token) — no OAuth flow. Only a complete credential group enables the
+// integration; with a partial group no `/web/jira/*` routes mount and the SPA
+// treats the missing status route as "disabled".
+const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraEmail = process.env.JIRA_EMAIL?.trim();
+const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
+const jira =
+  jiraBaseUrl && jiraEmail && jiraApiToken
+    ? new JiraIntegration({
+        baseUrl: jiraBaseUrl,
+        email: jiraEmail,
+        apiToken: jiraApiToken,
       })
     : undefined;
 
@@ -225,7 +242,12 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+const integrations = [
+  ...(github ? [github] : []),
+  ...(linear ? [linear] : []),
+  ...(jira ? [jira] : []),
+  ...(slack ? [slack] : []),
+];
 
 export const factoryRules = defaultFactoryRules({
   version: 'mastracode-web-v1',
