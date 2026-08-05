@@ -1201,6 +1201,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mcp/mcp-apps",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2043,6 +2048,11 @@
     {
       "source": "/docs/agents/supervisor-agents/llms.txt",
       "destination": "/docs/capabilities/subagents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
       "permanent": true
     }
   ]
