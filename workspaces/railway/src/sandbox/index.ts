@@ -143,10 +143,10 @@ export class RailwaySandbox extends MastraSandbox {
   private _createdAt: Date | null = null;
   private _checkpointRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private _checkpointRefreshInFlight: Promise<void> | null = null;
+  private _sandboxId?: string;
 
   private readonly _token?: string;
   private readonly _environmentId?: string;
-  private readonly _sandboxId?: string;
   private readonly _checkpointName?: string;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: SandboxNetworkIsolation;
@@ -356,7 +356,7 @@ export class RailwaySandbox extends MastraSandbox {
    * running or destroyed — so stopping destroys the sandbox but we keep a checkpoint of the filesystem.
    */
   async stop(): Promise<void> {
-    if (this._checkpointName) {
+    if (this._checkpointName && this._sandbox) {
       await this._checkpointSandbox(this._sandbox!).catch(error => {
         this.logger.warn(`${LOG_PREFIX} Failed to checkpoint Railway sandbox ${this._sandbox?.id}:`, error);
       });
@@ -370,7 +370,10 @@ export class RailwaySandbox extends MastraSandbox {
    */
   async destroy(): Promise<void> {
     if (this._checkpointName) {
-      await Sandbox.deleteCheckpoint(this._checkpointName, this._clientConfig());
+      await this._checkpointRefreshInFlight;
+      await Sandbox.deleteCheckpoint(this._checkpointName, this._clientConfig()).catch(error => {
+        this.logger.warn(`${LOG_PREFIX} Failed to delete Railway checkpoint ${this._checkpointName}:`, error);
+      });
     }
 
     await this._teardown();
