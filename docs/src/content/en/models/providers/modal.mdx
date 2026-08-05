@@ -16,22 +16,22 @@ MODAL_PROXY_TOKEN=your-api-token
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from '@mastra/core/agent'
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'modal/moonshotai/Kimi-K3',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "modal/moonshotai/Kimi-K3"
+});
 
 // Generate a response
-const response = await agent.generate('Hello!')
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story')
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
-  console.log(chunk)
+  console.log(chunk);
 }
 ```
 
@@ -46,29 +46,29 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    model: 'modal/moonshotai/Kimi-K3',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 131072,
-    inputCost: 3,
-    outputCost: 15,
+    "model": "modal/moonshotai/Kimi-K3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
-    model: 'modal/thinkingmachines/Inkling-NVFP4',
-    imageInput: true,
-    audioInput: true,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 262144,
-    inputCost: 1.2,
-    outputCost: 5,
-  },
+    "model": "modal/thinkingmachines/Inkling-NVFP4",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 1.2,
+    "outputCost": 5
+  }
 ]}
 />
 
@@ -78,28 +78,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'custom-agent',
-  name: 'custom-agent',
+  id: "custom-agent",
+  name: "custom-agent",
   model: {
-    url: 'https://inference.us-west.modal.direct/v1',
-    id: 'modal/moonshotai/Kimi-K3',
+    url: "https://inference.us-west.modal.direct/v1",
+    id: "modal/moonshotai/Kimi-K3",
     apiKey: process.env.MODAL_PROXY_TOKEN,
     headers: {
-      'X-Custom-Header': 'value',
-    },
-  },
-})
+      "X-Custom-Header": "value"
+    }
+  }
+});
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'dynamic-agent',
-  name: 'Dynamic Agent',
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'modal/thinkingmachines/Inkling-NVFP4' : 'modal/moonshotai/Kimi-K3'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "modal/thinkingmachines/Inkling-NVFP4"
+      : "modal/moonshotai/Kimi-K3";
+  }
+});
 ```
+
+
