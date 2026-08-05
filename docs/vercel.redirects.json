@@ -1136,6 +1136,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
       "source": "/docs/agent-controller/session",
       "destination": "/docs/harness/agent-controller",
       "permanent": true

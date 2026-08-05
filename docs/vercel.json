@@ -1151,6 +1151,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
       "source": "/docs/agent-controller/session",
       "destination": "/docs/harness/agent-controller",
       "permanent": true
@@ -1973,6 +1978,11 @@
     {
       "source": "/docs/evals/datasets/:path*/llms.txt",
       "destination": "/docs/datasets/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/overview/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
