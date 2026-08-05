@@ -271,7 +271,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
 
             <div className="space-y-2">
               <Label htmlFor="item-timeout">Item timeout (ms, optional)</Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Overrides the experiment-level item timeout. Enter a positive integer from 1 to 1,800,000 milliseconds
                 (30 minutes).
               </p>

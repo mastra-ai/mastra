@@ -355,7 +355,7 @@ export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEd
     >
       <div className="space-y-2">
         <Label htmlFor="edit-item-timeout">Item timeout (ms, optional)</Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Overrides the experiment-level item timeout. Enter a positive integer from 1 to 1,800,000 milliseconds (30
           minutes).
         </p>
