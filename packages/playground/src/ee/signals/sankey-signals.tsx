@@ -111,7 +111,14 @@ function DrillFilterBanner({
   onRemove: (signalName: TraceSignalName) => void;
   onClearAll: () => void;
 }) {
-  const bannerColor = nodeColor(getSignalHue(selections[0]?.signalName ?? 'goal'));
+  const bannerColors = selections.map(selection => nodeColor(getSignalHue(selection.signalName)));
+  const bannerColor = bannerColors[0] ?? nodeColor(getSignalHue('goal'));
+  const backgroundImage =
+    bannerColors.length > 1
+      ? `linear-gradient(90deg, ${bannerColors
+          .map(color => `color-mix(in srgb, ${color} 18%, transparent)`)
+          .join(', ')})`
+      : undefined;
 
   return (
     <section
@@ -119,12 +126,14 @@ function DrillFilterBanner({
       className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2"
       style={{
         borderColor: `color-mix(in srgb, ${bannerColor} 35%, transparent)`,
-        backgroundColor: `color-mix(in srgb, ${bannerColor} 8%, transparent)`,
+        backgroundColor: backgroundImage ? undefined : `color-mix(in srgb, ${bannerColor} 8%, transparent)`,
+        backgroundImage,
       }}
     >
-      {selections.map(selection => {
+      {selections.map((selection, index) => {
         const label = selectionLabel(selection);
-        const color = nodeColor(getSignalHue(selection.signalName));
+        const color = bannerColors[index];
+        const isLatestSelection = index === selections.length - 1;
         return (
           <div className="flex items-center gap-1" key={selection.signalName}>
             <button
@@ -137,15 +146,17 @@ function DrillFilterBanner({
               {label}
               <X aria-hidden="true" className="size-3.5" />
             </button>
-            <Button
-              aria-label={`View details for ${label}`}
-              onClick={() => onViewDetails(selection)}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              Details →
-            </Button>
+            {isLatestSelection ? (
+              <Button
+                aria-label={`View details for ${label}`}
+                onClick={() => onViewDetails(selection)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Details →
+              </Button>
+            ) : null}
           </div>
         );
       })}

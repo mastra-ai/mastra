@@ -588,7 +588,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(noiseNodes[0]!);
 
       const banner = await screen.findByLabelText('Active drill-down filters');
-      expect(within(banner).getByRole('button', { name: 'View details for Goal · Add transcript' })).not.toBeNull();
+      expect(within(banner).queryByRole('button', { name: 'View details for Goal · Add transcript' })).toBeNull();
       expect(within(banner).getByRole('button', { name: 'View details for Behavior · Noise' })).not.toBeNull();
       expect(await within(banner).findByText('Showing 1 of 3 traces that match all filters')).not.toBeNull();
       expect(within(screen.getByLabelText('Trace signal stage legend')).queryByText('Goal')).toBeNull();
@@ -597,7 +597,20 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(within(banner).getByRole('button', { name: 'Remove Behavior · Noise filter' }));
 
       expect(await within(banner).findByText('Showing 2 of 3 traces that match all filters')).not.toBeNull();
+      expect(within(banner).getByRole('button', { name: 'View details for Goal · Add transcript' })).not.toBeNull();
       expect(within(screen.getByLabelText('Trace signal stage legend')).getByText('Behavior')).not.toBeNull();
+    });
+
+    it('blends the selected signal colors across the filter banner', async () => {
+      useFourSignalFlowHandlers();
+      renderSignals(['goal', 'outcome', 'behavior', 'sentiment']);
+
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      const noiseNodes = await screen.findAllByRole('button', { name: /^Noise.+1 trace \(50%\)/ });
+      fireEvent.click(noiseNodes[0]!);
+
+      const banner = await screen.findByLabelText('Active drill-down filters');
+      expect(banner.style.backgroundImage).toContain('linear-gradient');
     });
 
     it('opens details instead of adding a filter that would leave one column', async () => {
@@ -645,9 +658,8 @@ describe('SankeySignals drill-in', () => {
         ),
       );
       renderSignals(['goal', 'outcome', 'behavior', 'sentiment']);
-      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      const noiseNodes = await screen.findAllByRole('button', { name: /^Noise.+1 trace \(50%\)/ });
-      fireEvent.click(noiseNodes[0]!);
+      fireEvent.click(await screen.findByRole('button', { name: /^Noise.+2 traces \(67%\)/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+1 trace \(50%\)/ }));
 
       const banner = await screen.findByLabelText('Active drill-down filters');
       fireEvent.click(within(banner).getByRole('button', { name: 'View details for Goal · Add transcript' }));
