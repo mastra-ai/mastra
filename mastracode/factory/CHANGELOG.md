@@ -1,5 +1,31 @@
 # @mastra/factory
 
+## 0.5.0-alpha.1
+
+### Minor Changes
+
+- Added a built-in Slack integration, so every factory and create-factory deployment can offer Slack channels without vendoring the integration itself. Register it alongside the built-in GitHub and Linear integrations: ([#20507](https://github.com/mastra-ai/mastra/pull/20507))
+
+  ```ts
+  import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
+
+  new MastraFactory({
+    integrations: [new SlackIntegration({ signingSecret, botToken, clientId, clientSecret })],
+  });
+  ```
+
+  Slack-started sessions are repo-backed automatically: the factory exposes its source-control owner on `IntegrationContext` (`ctx.storage.sourceControlOwner`) and the integration wires itself up from there.
+
+  Two related changes come with it. `FactoryIntegration.channels()` now returns a config object (`FactoryChannelsConfig`) instead of a built `AgentControllerChannels` instance, and the factory constructs the instance at the attach site. And when no Slack integration is registered, the factory answers `GET /web/channel-accounts` with `{ accounts: [], canConnect: false, reason: 'not_registered' }`, so the Connections UI can say Slack is not set up instead of telling you to set environment variables that would not enable it.
+
+### Patch Changes
+
+- Fixed Factory sessions that stopped responding after a server restart. GitHub webhook deliveries now restore the saved session owner when they rebuild a session, so the delivery goes through and the session picks up where it left off. ([#20698](https://github.com/mastra-ai/mastra/pull/20698))
+
+- Updated dependencies [[`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c)]:
+  - @mastra/core@1.57.0-alpha.1
+  - @mastra/code-sdk@1.1.3-alpha.1
+
 ## 0.4.1-alpha.0
 
 ### Patch Changes

@@ -589,7 +589,10 @@ export class MessageList {
               part.toolInvocation?.state === 'result' &&
               part.providerMetadata?.mastra &&
               typeof part.providerMetadata.mastra === 'object' &&
-              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+              // Key off the value, not its presence: a nullish `modelOutput` means the tool's
+              // toModelOutput opted out of mapping, so the raw result must be kept. Keying off
+              // presence would blank out `output` on the tool message sent to the provider.
+              (part.providerMetadata.mastra as Record<string, unknown>).modelOutput != null
             ) {
               storedModelOutputs.set(
                 part.toolInvocation.toolCallId,

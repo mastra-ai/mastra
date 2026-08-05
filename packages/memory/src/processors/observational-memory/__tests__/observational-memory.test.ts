@@ -1,5 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
@@ -13035,6 +13036,32 @@ describe('threadId validation in thread scope', () => {
     });
 
     await expect(om.getOrCreateRecord('', 'resource-1')).rejects.toThrow(/requires a threadId/);
+  });
+
+  it('should classify missing thread context as a bad request', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 500, model: 'test-model' },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+    });
+
+    let error: unknown;
+    try {
+      om.getThreadContext(undefined, new MessageList());
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error).toMatchObject({
+      id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+    });
+    expect((error as Error).message).toMatch(/requires a threadId/);
   });
 
   it('should NOT throw when getOrCreateRecord is called without threadId in resource scope', async () => {

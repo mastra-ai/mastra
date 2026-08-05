@@ -1,6 +1,9 @@
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
-import type { ChannelIdentityStorage, FactoryProjectsStorage, RouteAuth, StateSigner } from '@mastra/factory';
+import type { RouteAuth } from '../../routes/route.js';
+import type { StateSigner } from '../../state-signing.js';
+import type { ChannelIdentityStorage } from '../../storage/domains/channel-identity/base.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 
 /**
  * Payload shape for the Connections list: the platform sender key +

@@ -33,16 +33,11 @@ const sidebars = {
           id: 'getting-started/develop',
           label: 'Develop',
         },
-        {
-          type: 'doc',
-          id: 'storage/overview',
-          label: 'Storage',
-        },
       ],
     },
     {
       type: 'category',
-      label: 'Core',
+      label: 'Build',
       collapsed: false,
       collapsible: false,
       customProps: {
@@ -65,23 +60,13 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/skills',
-              label: 'Skills',
-            },
-            {
-              type: 'doc',
               id: 'agents/structured-output',
               label: 'Structured Output',
             },
             {
               type: 'doc',
               id: 'agents/agent-approval',
-              label: 'Agent Approval',
-            },
-            {
-              type: 'doc',
-              id: 'agents/supervisor-agents',
-              label: 'Supervisor Agents',
+              label: 'Human-in-the-Loop',
             },
             {
               type: 'doc',
@@ -100,44 +85,6 @@ const sidebars = {
               customProps: {
                 tags: ['beta'],
               },
-            },
-            {
-              type: 'category',
-              label: 'Connections',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'agents/a2a',
-                  label: 'A2A',
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/acp',
-                  label: 'ACP',
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/sdk-agents',
-                  label: 'SDK Agents',
-                },
-                {
-                  type: 'category',
-                  label: 'MCP',
-                  collapsed: true,
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'mcp/overview',
-                      label: 'Overview',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'mcp/mcp-apps',
-                      label: 'MCP Apps',
-                    },
-                  ],
-                },
-              ],
             },
           ],
         },
@@ -178,7 +125,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workflows/human-in-the-loop',
-              label: 'Human-in-the-loop',
+              label: 'Human-in-the-Loop',
             },
             {
               type: 'doc',
@@ -199,8 +146,66 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Harness',
+          items: [
+            {
+              type: 'doc',
+              id: 'long-running-agents/durable-agents',
+              label: 'Durable Agents',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/background-tasks',
+              label: 'Background Tasks',
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/goals',
+              label: 'Goals',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/schedules',
+              label: 'Schedules',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/signals',
+              label: 'Signals',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/signal-providers',
+              label: 'Signal Providers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'harness/agent-controller',
+              label: 'Agent Controller',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+          ],
+        },
+        {
+          type: 'category',
           label: 'Memory',
-          collapsed: true,
           items: [
             {
               type: 'doc',
@@ -235,38 +240,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'memory/multi-user-threads',
-              label: 'Multi-user Threads',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Studio',
-          items: [
-            {
-              type: 'doc',
-              id: 'studio/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'studio/deployment',
-              label: 'Deployment',
-            },
-            {
-              type: 'doc',
-              id: 'studio/auth',
-              label: 'Auth',
-            },
-            {
-              type: 'doc',
-              id: 'studio/observability',
-              label: 'Observability',
-            },
-            {
-              type: 'doc',
-              id: 'editor/overview',
-              label: 'Editor',
+              label: 'Multi-User Threads',
             },
           ],
         },
@@ -274,7 +248,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Capabilities',
+      label: 'Extend',
       collapsible: false,
       collapsed: false,
       customProps: {
@@ -282,8 +256,18 @@ const sidebars = {
       },
       items: [
         {
+          type: 'doc',
+          id: 'capabilities/subagents',
+          label: 'Subagents',
+        },
+        {
+          type: 'doc',
+          id: 'agents/skills',
+          label: 'Skills',
+        },
+        {
           type: 'category',
-          label: 'Workspaces',
+          label: 'Sandbox',
           items: [
             {
               type: 'doc',
@@ -314,45 +298,6 @@ const sidebars = {
               type: 'doc',
               id: 'workspace/search',
               label: 'Search and Indexing',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Browser',
-          items: [
-            {
-              type: 'doc',
-              id: 'browser/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'browser/agent-browser',
-              label: 'AgentBrowser',
-            },
-            {
-              type: 'doc',
-              id: 'browser/stagehand',
-              label: 'Stagehand',
-            },
-            {
-              type: 'doc',
-              id: 'browser/firecrawl',
-              label: 'Firecrawl',
-            },
-            {
-              type: 'doc',
-              id: 'browser/recording',
-              label: 'Recording',
-              customProps: {
-                tags: ['beta'],
-              },
-            },
-            {
-              type: 'doc',
-              id: 'browser/browser-viewer',
-              label: 'BrowserViewer',
             },
           ],
         },
@@ -398,7 +343,72 @@ const sidebars = {
             {
               type: 'doc',
               id: 'capabilities/channels/other-adapters',
-              label: 'More',
+              label: 'Other Adapters',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Browser',
+          items: [
+            {
+              type: 'doc',
+              id: 'browser/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'browser/agent-browser',
+              label: 'AgentBrowser',
+            },
+            {
+              type: 'doc',
+              id: 'browser/stagehand',
+              label: 'Stagehand',
+            },
+            {
+              type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
+              id: 'browser/recording',
+              label: 'Recording',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'browser/browser-viewer',
+              label: 'BrowserViewer',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Connections',
+          items: [
+            {
+              type: 'doc',
+              id: 'agents/a2a',
+              label: 'A2A',
+            },
+            {
+              type: 'doc',
+              id: 'agents/acp',
+              label: 'ACP',
+            },
+            {
+              type: 'doc',
+              id: 'agents/sdk-agents',
+              label: 'SDK Agents',
+            },
+            {
+              type: 'doc',
+              id: 'mcp/overview',
+              label: 'MCP',
             },
           ],
         },
@@ -406,7 +416,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Long-running Agents',
+      label: 'Develop / Deploy',
       collapsible: false,
       collapsed: false,
       customProps: {
@@ -415,68 +425,40 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'long-running-agents/durable-agents',
-          label: 'Durable Agents',
-          customProps: {
-            tags: ['beta'],
-          },
+          id: 'storage/overview',
+          label: 'Storage',
         },
         {
-          type: 'doc',
-          id: 'long-running-agents/background-tasks',
-          label: 'Background Tasks',
+          type: 'category',
+          label: 'Studio',
+          items: [
+            {
+              type: 'doc',
+              id: 'studio/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'studio/deployment',
+              label: 'Deployment',
+            },
+            {
+              type: 'doc',
+              id: 'studio/auth',
+              label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/observability',
+              label: 'Observability',
+            },
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Editor',
+            },
+          ],
         },
-        {
-          type: 'doc',
-          id: 'long-running-agents/goals',
-          label: 'Goals',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'long-running-agents/schedules',
-          label: 'Schedules',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'long-running-agents/signals',
-          label: 'Signals',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'long-running-agents/signal-providers',
-          label: 'Signal Providers',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'harness/agent-controller',
-          label: 'Agent Controller',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Production',
-      collapsible: false,
-      collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
-      items: [
         {
           type: 'category',
           label: 'Server',
@@ -521,89 +503,89 @@ const sidebars = {
               id: 'server/mastra-client',
               label: 'Mastra Client',
             },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Auth',
+          items: [
             {
-              type: 'category',
-              label: 'Auth',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'server/auth/index',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/auth0',
-                  label: 'Auth0',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/better-auth',
-                  label: 'Better Auth',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/clerk',
-                  label: 'Clerk',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/composite-auth',
-                  label: 'Composite Auth',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/custom-auth-provider',
-                  label: 'Custom Auth Provider',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/firebase',
-                  label: 'Firebase',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/fga',
-                  label: 'Fine-Grained Authorization',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/google',
-                  label: 'Google',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/jwt',
-                  label: 'JSON Web Token',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/okta',
-                  label: 'Okta',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/simple-auth',
-                  label: 'Simple Auth',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/supabase',
-                  label: 'Supabase',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/workos',
-                  label: 'WorkOS',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/workers',
-                  label: 'Workers',
-                  customProps: {
-                    tags: ['beta'],
-                  },
-                },
-              ],
+              type: 'doc',
+              id: 'server/auth/index',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/auth0',
+              label: 'Auth0',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/clerk',
+              label: 'Clerk',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/composite-auth',
+              label: 'Composite Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/custom-auth-provider',
+              label: 'Custom Auth Provider',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/firebase',
+              label: 'Firebase',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/google',
+              label: 'Google',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/jwt',
+              label: 'JSON Web Token',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/okta',
+              label: 'Okta',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/simple-auth',
+              label: 'Simple Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/supabase',
+              label: 'Supabase',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/workos',
+              label: 'WorkOS',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
             },
           ],
         },
@@ -669,7 +651,7 @@ const sidebars = {
       items: [
         {
           type: 'category',
-          label: 'Tracing',
+          label: 'Traces',
           items: [
             {
               type: 'doc',
@@ -679,7 +661,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              label: 'Tracing',
+              label: 'Traces',
             },
             {
               type: 'doc',
@@ -728,7 +710,7 @@ const sidebars = {
                     {
                       type: 'doc',
                       id: 'observability/integrations/exporters/mastra-platform',
-                      label: 'Mastra platform',
+                      label: 'Mastra Platform',
                     },
                     {
                       type: 'doc',
@@ -814,7 +796,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/metrics/querying',
-              label: 'Querying metrics',
+              label: 'Querying Metrics',
             },
           ],
         },
@@ -886,7 +868,7 @@ const sidebars = {
   platformSidebar: [
     {
       type: 'category',
-      label: 'Mastra platform',
+      label: 'Mastra Platform',
       items: [
         {
           type: 'doc',

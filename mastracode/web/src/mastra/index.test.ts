@@ -218,16 +218,20 @@ describe('platform entry (src/mastra/index.ts)', () => {
     });
 
     it(
-      'fails the boot when Slack is configured without a replica-stable state secret',
+      'boots a Slack-only deployment by signing state with the Slack signing secret',
       { timeout: 60_000 },
       async () => {
         vi.resetModules();
         vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
-        // A per-process random signer means a link signed on one replica cannot be
-        // verified on another — silently broken linking. Fail loud instead.
+        // Slack signs OAuth state, so the factory rejects a per-process random
+        // signer: a link signed on one replica could not be verified on another.
+        // A deployment that configures Slack and nothing else has neither of the
+        // other two secrets, so the signing secret is the stable signer and boot
+        // must survive on it alone.
         vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', '');
         vi.stubEnv('WORKOS_COOKIE_PASSWORD', '');
-        await expect(import('./index.js')).rejects.toThrow(/'slack' signs OAuth state/);
+        const mod = await import('./index.js');
+        expect(mod.mastra.getAgentController('code')?.getChannels()).toBeDefined();
       },
     );
   });

@@ -1,5 +1,30 @@
 # @mastra/server
 
+## 1.57.0-alpha.1
+
+### Patch Changes
+
+- Fixed invalid workflow input responses to return HTTP 400 instead of HTTP 500 while preserving schema validation details. ([#20722](https://github.com/mastra-ai/mastra/pull/20722))
+
+- Fixed `POST /workflows/:workflowId/stream` restarting a workflow run that had already finished, which could overwrite its stored result. Streaming a finished run now returns `409` instead. Read a finished run's result through `POST /workflows/:workflowId/observe`. ([#20184](https://github.com/mastra-ai/mastra/pull/20184))
+
+- Fixed thread-scoped Observational Memory requests without a thread ID to return a clear bad request error instead of an internal server error. ([#20721](https://github.com/mastra-ai/mastra/pull/20721))
+
+- Added a clear server warning when a webhook is sent to an agent without a matching channel adapter. No adapter setup is needed for the warning: ([#20489](https://github.com/mastra-ai/mastra/pull/20489))
+
+  ```sh
+  curl -X POST http://localhost:4111/api/agents/support/channels/slack/webhook
+  ```
+
+  The server keeps the 404 response and logs:
+
+  ```text
+  Received a Slack webhook, but this agent doesn't have a Slack adapter. Add one to the agent's channels.adapters configuration and restart the server.
+  ```
+
+- Updated dependencies [[`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c)]:
+  - @mastra/core@1.57.0-alpha.1
+
 ## 1.56.1-alpha.0
 
 ### Patch Changes

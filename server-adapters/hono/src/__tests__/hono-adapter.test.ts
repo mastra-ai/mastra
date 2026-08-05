@@ -868,6 +868,27 @@ describe('Hono Server Adapter', () => {
     });
   });
 
+  describe('Channel webhook diagnostics', () => {
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      const response = await app.request('/api/agents/support/channels/slack/webhook', {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
+    });
+  });
+
   describe('Custom API Routes (registerApiRoute)', () => {
     let server: Server | null = null;
 

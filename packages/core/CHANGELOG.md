@@ -1,5 +1,84 @@
 # @mastra/core
 
+## 1.57.0-alpha.1
+
+### Minor Changes
+
+- Added tool definitions to MODEL_GENERATION span attributes. The tools made available to the model (name, description, and JSON-schema parameters) are now captured once per generation as the `tools` attribute, so observability exporters can surface which tool schemas the model ran with. Per-step tool names (after `activeTools` filtering) remain on MODEL_INFERENCE spans as `availableTools`. Related: #20242 ([#20243](https://github.com/mastra-ai/mastra/pull/20243))
+
+  ```typescript
+  // Any exporter reading MODEL_GENERATION spans now receives:
+  span.attributes.tools;
+  // [
+  //   {
+  //     type: 'function',
+  //     name: 'get_weather',
+  //     description: 'Get the weather for a city',
+  //     parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+  //   },
+  // ]
+  ```
+
+### Patch Changes
+
+- Fixed a memory leak where suspended agent runs were never released from memory. Every suspend kept its full in-memory transcript retained for the life of the process, so long-running servers with many suspend/resume cycles grew unbounded and could eventually exhaust the heap. ([#20273](https://github.com/mastra-ai/mastra/pull/20273))
+
+  Suspended runs are now kept warm only for a bounded window (30 minutes by default) and then evicted. A same-instance resume within that window still reattaches to the warm state exactly as before; a resume after the TTL expires falls back to the durable snapshot. Set `MASTRA_SUSPENDED_RUN_TTL_MS` (in milliseconds) to tune the window — lower it on multi-instance deployments where a resume rarely lands on the origin instance:
+
+  ```sh
+  # keep suspended runs warm for 10 minutes instead of the default 30
+  MASTRA_SUSPENDED_RUN_TTL_MS=600000
+  ```
+
+- Fixed sessions opening a new empty thread on every start instead of resuming their conversation. This affected setups that give each session its own working directory: the conversation stayed in storage but the session never reopened it, leaving an unused thread behind each time. ([#20743](https://github.com/mastra-ai/mastra/pull/20743))
+
+- Fixed invalid workflow input responses to return HTTP 400 instead of HTTP 500 while preserving schema validation details. ([#20722](https://github.com/mastra-ai/mastra/pull/20722))
+
+- Fixed agent controller approvals losing the current caller identity while processing subscribed thread streams. ([#20741](https://github.com/mastra-ai/mastra/pull/20741))
+
+- Fixed `filterIncompleteToolCalls: false` producing prompts that providers reject with a 400. ([#20636](https://github.com/mastra-ai/mastra/pull/20636))
+
+  A tool call that suspends for approval is stored without a result. With filtering disabled that call was sent to the provider unpaired, and since every provider requires a tool call to have a matching tool result, the request failed — and kept failing on every later turn, leaving the thread unusable.
+
+  Suspended tool calls are now paired with a placeholder result instead of being sent alone, so the agent can see its pending calls and the prompt stays valid:
+
+  ```typescript
+  const agent = new Agent({
+    name: 'approvals',
+    model: 'openai/gpt-5-mini',
+    memory,
+  });
+
+  // Before: this turn failed with 'No tool output found for function call ...'
+  // After: the agent answers and can see the pending approval
+  await agent.stream('Do I have anything waiting on my approval?', {
+    memory: {
+      thread: 'thread-1',
+      resource: 'user-1',
+      options: { filterIncompleteToolCalls: false },
+    },
+  });
+  ```
+
+  The default (`true`) is unchanged — suspended calls are still dropped from the prompt.
+
+- Fixed SignalProvider webhook documentation to explain how applications should expose verified HTTP endpoints. ([#20749](https://github.com/mastra-ai/mastra/pull/20749))
+
+- Fixed the in-memory storage fallback warning when file-based storage is registered during startup. ([#20696](https://github.com/mastra-ai/mastra/pull/20696))
+
+- Prevented tool results and durable request-context snapshots from hanging the event loop when they contain deeply shared object graphs. Serialization now uses a bounded check, so an acyclic value with layered shared references (which `JSON.stringify` would expand exponentially) is handled in milliseconds instead of blocking for minutes. Over-budget tool results are still returned — repeated references are collapsed to `[Circular]` — rather than dropped. ([#20727](https://github.com/mastra-ai/mastra/pull/20727))
+
+- Fixed how tool errors are stored in message history. When a tool throws (or a background task fails), the tool call is now recorded with an error state and its message in an `errorText` field, instead of being stored as a successful result. This keeps failed tool calls distinguishable from real results when messages are recalled or replayed to the model. ([#20705](https://github.com/mastra-ai/mastra/pull/20705))
+
+- Improved observability traces: RequestContext objects and arrays now preserve their nested structure instead of appearing as `[object]`. ([#20520](https://github.com/mastra-ai/mastra/pull/20520))
+
+- Fixed durable agents dropping tool results when a tool's `toModelOutput` returns `undefined`. ([#20404](https://github.com/mastra-ai/mastra/pull/20404))
+
+  Tools that only map some of their results — including the built-in workspace `read_file` tool and the sandbox tools — return `undefined` from `toModelOutput` to mean "send the raw result as-is". Durable runs stored that `undefined` as the tool's model output, so the next request to the provider carried a tool message with no `output` field and the run failed with `Cannot read properties of undefined (reading 'type')`. Any multi-step durable task that read a file hit this. Regular agents were never affected.
+
+- Updated dependencies [[`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4)]:
+  - @mastra/schema-compat@1.3.5-alpha.0
+
 ## 1.56.1-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,28 @@
 # @internal/playground
 
+## 1.23.0-alpha.1
+
+### Minor Changes
+
+- Reworked the Studio Trace Intelligence page around landmark snapshots — a bounded, time-balanced selection of snapshots instead of every snapshot in range. ([#20710](https://github.com/mastra-ai/mastra/pull/20710))
+
+  **Timeline** — snapshots appear as ticks on a time axis positioned by when they became current, with day labels, snap-to-tick scrubbing, and playback that stops at the end. Only the selected snapshot's flow is fetched, so the page loads without waiting on dozens of requests.
+
+  **Three views** — a pill-tab switcher offers Flow (the Sankey diagram, now showing the set of traces classified by every signal so all columns add up), Compare (pick two points in time and see which themes grew, shrank, appeared, or disappeared per signal, with sparklines), and Lifelines (every theme as a row showing its presence across all snapshots, collapsible per signal).
+
+  **Drill-down** — clicking a theme in the Flow view shows an explicit filter banner with a dismissible chip and a trace subset summary; noise buckets, compare cards, and lifeline points all open the theme details drawer. Trace observations in the details drawer now render severity and kind as tinted cards and badges instead of raw prefix text.
+
+  The agent selector moved into the breadcrumb (deep-linkable via `?agent=`), and the date filter sits inline with the view tabs.
+
+### Patch Changes
+
+- Updated dependencies [[`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`4a1637c`](https://github.com/mastra-ai/mastra/commit/4a1637c474617b2267f0fbe13ad29ac3e7985a46), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`4a1637c`](https://github.com/mastra-ai/mastra/commit/4a1637c474617b2267f0fbe13ad29ac3e7985a46), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c)]:
+  - @mastra/core@1.57.0-alpha.1
+  - @mastra/schema-compat@1.3.5-alpha.0
+  - @mastra/playground-ui@46.0.1-alpha.1
+  - @mastra/client-js@1.37.1-alpha.1
+  - @mastra/react@1.4.1-alpha.1
+
 ## 1.22.1-alpha.0
 
 ### Patch Changes
