@@ -206,7 +206,6 @@ const contextualTopLevelItems = [
   'Tools',
   'Structured Output',
   'Human-in-the-Loop',
-  'Supervisor Agents',
   'Guardrails',
   'Processors',
   'Code Mode',
