@@ -65,6 +65,7 @@ function renderSignalsPageWithShell() {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('Trace Intelligence page', () => {
@@ -351,7 +352,11 @@ describe('Trace Intelligence page', () => {
 
   describe('when a custom snapshot date range is applied', () => {
     it('requests snapshots with inclusive start and end timestamps', async () => {
-      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
+      // Freeze the clock so the calendar (which reads `new Date()`, not `Date.now()`)
+      // always opens on the same month; fake only `Date` so timers used by
+      // waitFor/React Query keep running.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
       const snapshotRequests: URL[] = [];
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
