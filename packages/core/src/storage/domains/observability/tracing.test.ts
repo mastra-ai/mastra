@@ -289,35 +289,41 @@ describe('buildInputPreview', () => {
     expect(buildInputPreview(input)).toBe('part one');
   });
 
-  it('recovers user text when the store sliced the JSON mid-document', () => {
-    const full = JSON.stringify({
+  it('previews malformed JSON as empty, never leaking message text', () => {
+    // Writers keep stored JSON valid (truncation replaces values inside the structure,
+    // never slices the document), so an unparseable document previews as empty —
+    // matching how `parseJson` treats an unparseable column. Property order is
+    // caller-controlled, so a best-effort scan of broken JSON could surface assistant
+    // text; empty is the safe answer.
+    const roleFirst = JSON.stringify({
       messages: [
-        { role: 'user', content: 'survives truncation' },
+        { role: 'user', content: 'question' },
         { role: 'assistant', content: 'x'.repeat(500) },
       ],
     });
+    const contentFirst = JSON.stringify({
+      messages: [
+        { content: 'summarize my medical report', role: 'user' },
+        { content: 'assistant text that must not leak', role: 'assistant' },
+        { content: 'z'.repeat(500), role: 'user' },
+      ],
+    });
 
-    expect(buildInputPreview(full.slice(0, 80))).toBe('survives truncation');
+    expect(buildInputPreview(roleFirst.slice(0, 80))).toBeUndefined();
+    expect(buildInputPreview(contentFirst.slice(0, 250))).toBeUndefined();
+    expect(buildInputPreview('{"messages": [{"role"')).toBeUndefined();
+    expect(buildInputPreview(`[${'{"role":"user"},'.repeat(10_000)}`)).toBeUndefined();
   });
 
-  it('does not surface assistant text when truncated JSON has no user text', () => {
-    const truncated =
-      '[{"role":"user","content":[{"type":"image"}]},{"role":"assistant","content":"assistant reply text';
+  it('previews content-before-role messages like any other when the JSON is intact', () => {
+    const input = {
+      messages: [
+        { content: 'content-first question', role: 'user' },
+        { content: 'skipped answer', role: 'assistant' },
+      ],
+    };
 
-    expect(buildInputPreview(truncated)).toBeUndefined();
-  });
-
-  it('recovers every user message from truncated JSON', () => {
-    const truncated =
-      '{"messages":[{"role":"user","content":"first question"},{"role":"assistant","content":"an answer"},{"role":"user","content":"second question"},{"role":"assistant","content":"cut off mid-doc';
-
-    expect(buildInputPreview(truncated)).toBe('first question | second question');
-  });
-
-  it('handles truncated JSON with many role markers and no recoverable text', () => {
-    const truncated = `[${'{"role":"user"},'.repeat(10_000)}`;
-
-    expect(buildInputPreview(truncated)).toBeUndefined();
+    expect(buildInputPreview(JSON.stringify(input))).toBe('content-first question');
   });
 
   it('truncates past the max length with an ellipsis', () => {

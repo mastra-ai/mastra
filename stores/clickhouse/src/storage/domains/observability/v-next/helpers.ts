@@ -222,7 +222,7 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     status: computeTraceStatus({ error, endedAt }),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     // Derived at read time from the raw `input` column; buildInputPreview parses
-    // internally and can recover a preview from truncated JSON.
+    // internally and previews an unparseable document as empty.
     inputPreview: buildInputPreview(row.input ?? null) ?? null,
     createdAt: startedAt,
     updatedAt: null,

@@ -434,18 +434,6 @@ const inputPreviewField = z.string().describe('Short text preview of the span in
 
 type PreviewMessage = { role?: string; content?: unknown };
 
-/**
- * Maximum number of characters scanned when recovering user text from truncated
- * JSON. Bounds the work done on degenerate or adversarial inputs.
- */
-const PARTIAL_JSON_SCAN_LIMIT = 65_536;
-
-/** Matches a `"role": "<value>"` marker so scanning can respect message boundaries. */
-const ROLE_MARKER_PATTERN = /"role"\s*:\s*"([^"\\]*)"/g;
-
-/** Matches a `content`/`text` JSON string value within a single message segment. */
-const CONTENT_VALUE_PATTERN = /"(?:content|text)"\s*:\s*"((?:[^"\\]|\\.)*)"/;
-
 function truncatePreview(text: string, maxLength: number): string | undefined {
   if (!text) return undefined;
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
@@ -467,39 +455,14 @@ function previewTextFromContent(content: unknown): string {
     .join(' ');
 }
 
-// Known bound: if a following message serializes `content` before `role`, its text can
-// fall inside the previous user segment — acceptable for this truncated-JSON recovery path.
-function recoverUserTextFromPartialJson(raw: string): string {
-  const scanned = raw.length > PARTIAL_JSON_SCAN_LIMIT ? raw.slice(0, PARTIAL_JSON_SCAN_LIMIT) : raw;
-  const markers: { role: string; start: number; end: number }[] = [];
-  for (const match of scanned.matchAll(ROLE_MARKER_PATTERN)) {
-    const start = match.index ?? 0;
-    markers.push({ role: match[1] ?? '', start, end: start + match[0].length });
-  }
-  const parts: string[] = [];
-  for (let i = 0; i < markers.length; i++) {
-    const marker = markers[i]!;
-    if (marker.role !== 'user') continue;
-    const segmentEnd = i + 1 < markers.length ? markers[i + 1]!.start : scanned.length;
-    const captured = CONTENT_VALUE_PATTERN.exec(scanned.slice(marker.end, segmentEnd))?.[1];
-    if (!captured) continue;
-    try {
-      parts.push(JSON.parse(`"${captured}"`) as string);
-    } catch {
-      parts.push(captured);
-    }
-  }
-  return parts.join(' | ');
-}
-
 /**
  * Builds the short text shown in a trace list's input column, mirroring what the
  * full-payload list previously derived client-side. Stores call this at read time,
  * from their lightweight list row mappers, so the raw `input` blob never reaches
  * the caller.
  *
- * Accepts a parsed `input` value or its JSON string, and tolerates a string that was
- * cut off mid-document (ingesters cap oversized fields).
+ * Accepts a parsed `input` value or its JSON string. An unparseable JSON document
+ * previews as empty, mirroring how store read paths treat an unparseable column.
  */
 export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_LENGTH): string | undefined {
   if (input == null) return undefined;
@@ -512,8 +475,11 @@ export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_
       try {
         value = JSON.parse(trimmed);
       } catch {
-        // The store sliced `input` mid-JSON — recover whatever user text is intact.
-        return truncatePreview(recoverUserTextFromPartialJson(trimmed), maxLength);
+        // Malformed JSON previews as empty. Writers keep stored JSON valid (truncation
+        // replaces values inside the structure, never slices the document), and message
+        // property order is caller-controlled — a best-effort scan of broken JSON can
+        // surface assistant text, so empty is the safe answer, matching `parseJson`.
+        return undefined;
       }
     } else if (trimmed.startsWith('"')) {
       // A JSON-encoded scalar string ('"hello"') — unwrap it so the preview drops the
