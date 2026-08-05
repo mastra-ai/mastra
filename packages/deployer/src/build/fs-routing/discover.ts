@@ -518,7 +518,11 @@ async function discoverSchedules(schedulesDir: string, prefix = ''): Promise<Dis
     }
   }
 
-  return schedules;
+  // Sort by key, not by traversal order. Sorting basenames only orders each
+  // directory: given `a.ts` alongside a directory `a/`, `a` sorts before
+  // `a.ts`, so recursion emits `a/job` before `a`. Codegen order follows this
+  // list, so a global sort is what actually makes it path-sorted and stable.
+  return schedules.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
 }
 
 /**

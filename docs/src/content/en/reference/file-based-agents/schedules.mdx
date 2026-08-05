@@ -11,7 +11,7 @@ A file-based agent discovers **schedules** from its `schedules/` directory. Each
 
 Use this page for the file-based convention. To create schedules at runtime instead, see [Schedules](/reference/schedules/overview).
 
-`defineSchedule` is re-exported from `@mastra/core/agent` so file-based agents need one import path; `@mastra/core/schedules` exports it too.
+`defineSchedule` is re-exported from `@mastra/core/agent` so file-based agents need one import path. `@mastra/core/schedules` exports it too.
 
 ## Quickstart
 
@@ -46,7 +46,7 @@ src/mastra/agents/
 
 That id is stable across builds, which is what lets Mastra tell an edited schedule from a new one. Renaming or moving a file is treated as deleting one schedule and creating another.
 
-Two files that resolve to the same id, such as `heartbeat.ts` and `heartbeat.md`, are a build error.
+`heartbeat.ts` and `heartbeat.md` resolve to the same id, so declaring both is a build error.
 
 ## Execution modes
 
@@ -91,11 +91,11 @@ export default defineSchedule({
 })
 ```
 
-The handler's return value is merged over the schedule's stored fields. Returning `undefined` applies no overrides, so the fire falls back to those stored fields — and because a handler-mode schedule cannot declare a `prompt`, that fire fails for a missing prompt. Return a `prompt` to run, or `null` to skip.
+The handler's return value is merged over the schedule's stored fields. Returning `undefined` applies no overrides, so the fire falls back to those stored fields. Since a handler-mode schedule can't declare a `prompt`, that fire then fails for a missing prompt. Return a `prompt` to run, or `null` to skip.
 
 Handlers are functions, so they can't be persisted on the stored schedule row. Mastra resolves them in-process when the schedule fires. A handler-mode schedule that supplies no prompt (and declares none) fails that fire with a reason rather than sending the agent an empty message.
 
-That in-process lookup means the process running the scheduler must have the owning agent registered. A normal deployment boots one entry, so this is automatic. If you run the scheduler as a standalone worker, ensure it boots the same entry as your server. A worker built from a trimmed entry has no handler to call, and those fires will fail rather than run.
+That in-process lookup means the process running the scheduler must have the owning agent registered. A normal deployment boots a single entry and gets that for free. Standalone workers need the same entry as your server. Boot one from a trimmed entry and it has no handler to call, so its fires fail rather than run.
 
 ### Markdown schedules
 
@@ -234,7 +234,7 @@ curl http://localhost:4111/api/schedules
 curl -X POST http://localhost:4111/api/schedules/<scheduleId>/run
 ```
 
-This records a trigger with `triggerKind: "manual"` and does not advance `nextFireAt`, so the regular cadence is unaffected. Studio lists the same schedules and their trigger history.
+This records a trigger with `triggerKind: "manual"` and doesn't advance `nextFireAt`, so the regular cadence is unaffected. Studio lists the same schedules and their trigger history.
 
 Stored ids are namespaced and URL-encoded. `billing/sweep` on the `support` agent becomes `fsa_support__billing%2Fsweep`, so copy the id from the list response rather than assembling it by hand.
 
@@ -242,7 +242,7 @@ Stored ids are namespaced and URL-encoded. `billing/sweep` on the `support` agen
 
 Mastra syncs declared schedules into schedule storage when it starts, and again whenever an agent is registered afterward. Declaring a schedule is enough to start the scheduler, with no `scheduler: { enabled: true }` needed.
 
-The sync is a diff, not a rewrite:
+The sync compares each declared schedule against its stored row and writes only what changed:
 
 - A new schedule file creates a row.
 - Editing `cron` or `timezone` patches the row and recomputes the next fire time, so an edited schedule never fires on its old cadence.

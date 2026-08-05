@@ -1675,6 +1675,23 @@ describe('schedules discovery', () => {
     expect((await discoverFsAgents(dir))[0]!.schedules).toEqual([]);
   });
 
+  it('sorts by key when a file and a directory share a name prefix', async () => {
+    // Sorting basenames only orders each directory. The directory `billing`
+    // sorts before the file `billing.ts`, so traversal alone would emit
+    // `billing/sweep` before `billing`. The list has to be sorted by key.
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'billing.ts': `export default { cron: '0 1 * * *', prompt: 'roll up' };`,
+        'billing/sweep.ts': `export default { cron: '0 2 * * *', prompt: 'sweep' };`,
+        'audit.ts': `export default { cron: '0 3 * * *', prompt: 'audit' };`,
+      },
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.schedules.map(s => s.key)).toEqual(['audit', 'billing', 'billing/sweep']);
+  });
+
   it('discovers schedules declared on a subagent so assembly can reject them', async () => {
     await writeAgent('parent', {
       instructions: 'hi',
