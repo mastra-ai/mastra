@@ -8,6 +8,7 @@ import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import {
+  boundedStringify,
   deepEqual,
   deepMerge,
   ensureSerializable,
@@ -875,6 +876,57 @@ describe('isBoundedSerializable', () => {
 
     expect(result).toBe(false);
     expect(elapsed).toBeLessThan(2000);
+  });
+
+  it('returns false for values that produce no JSON output', () => {
+    // JSON.stringify returns undefined (without throwing) for these — a bare
+    // "did it throw?" probe would wrongly call them serializable.
+    expect(isBoundedSerializable(undefined)).toBe(false);
+    expect(isBoundedSerializable(() => {})).toBe(false);
+    expect(isBoundedSerializable(Symbol('x'))).toBe(false);
+    expect(isBoundedSerializable({ toJSON: () => undefined })).toBe(false);
+  });
+});
+
+describe('boundedStringify', () => {
+  it('returns the JSON string for serializable values', () => {
+    expect(boundedStringify({ a: 1 })).toBe('{"a":1}');
+    expect(boundedStringify('hi')).toBe('"hi"');
+    expect(boundedStringify(null)).toBe('null');
+  });
+
+  it('returns undefined for values that produce no JSON', () => {
+    expect(boundedStringify(undefined)).toBeUndefined();
+    expect(boundedStringify(() => {})).toBeUndefined();
+    expect(boundedStringify(Symbol('x'))).toBeUndefined();
+    expect(boundedStringify({ toJSON: () => undefined })).toBeUndefined();
+  });
+
+  it('returns undefined for cycles and over-budget graphs in bounded time', () => {
+    const cyclic: any = {};
+    cyclic.self = cyclic;
+    expect(boundedStringify(cyclic)).toBeUndefined();
+
+    let node: any = { leaf: true };
+    for (let i = 0; i < 30; i++) node = { a: node, b: node };
+    const start = Date.now();
+    expect(boundedStringify(node)).toBeUndefined();
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+
+  it('reads the value exactly once (no probe/clone TOCTOU)', () => {
+    let reads = 0;
+    const value = {
+      get payload() {
+        reads++;
+        return { n: reads };
+      },
+    };
+
+    const json = boundedStringify(value);
+
+    expect(reads).toBe(1);
+    expect(JSON.parse(json!)).toEqual({ payload: { n: 1 } });
   });
 });
 

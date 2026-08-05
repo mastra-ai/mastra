@@ -36,27 +36,40 @@ export function safeStringify(value: unknown, space?: string | number): string {
 const SERIALIZATION_NODE_BUDGET = 1_000_000;
 
 /**
- * Whether `JSON.stringify(value)` would succeed while visiting no more than
- * `SERIALIZATION_NODE_BUDGET` nodes.
+ * Serialize a value to JSON while visiting no more than
+ * `SERIALIZATION_NODE_BUDGET` nodes. Returns the JSON string, or `undefined`
+ * when the value cannot be represented as JSON: it threw (a cycle or BigInt),
+ * exhausted the budget (a shared-reference graph `JSON.stringify` would expand
+ * exponentially), or produced no output (top-level `undefined`, a function, a
+ * symbol, or an object whose `toJSON()` returns `undefined`).
  *
- * Mirrors a bare `JSON.stringify` probe — returns `false` for cycles, BigInt,
- * and other non-serializable values — but can never hang on a shared-reference
- * graph: it stops and returns `false` once the budget is exhausted instead of
- * expanding the graph exponentially.
+ * The value is read exactly once, so a caller that needs both a serializability
+ * check and the serialized result can use this rather than probing and then
+ * re-serializing — closing a TOCTOU gap where a stateful getter/`toJSON()`
+ * returns a different (e.g. much larger) value the second time.
  */
-export function isBoundedSerializable(value: unknown): boolean {
+export function boundedStringify(value: unknown): string | undefined {
+  let budget = SERIALIZATION_NODE_BUDGET;
   try {
-    let budget = SERIALIZATION_NODE_BUDGET;
-    JSON.stringify(value, (_key, val) => {
+    return JSON.stringify(value, (_key, val) => {
       if (--budget < 0) {
-        throw new RangeError('isBoundedSerializable: value exceeds the serialization node budget');
+        throw new RangeError('boundedStringify: value exceeds the serialization node budget');
       }
       return val;
     });
-    return true;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+/**
+ * Whether `value` can be serialized to JSON within `SERIALIZATION_NODE_BUDGET`
+ * nodes. `false` for cycles, BigInt, over-budget shared-reference graphs, and
+ * values that produce no JSON output (top-level undefined/function/symbol, or an
+ * object whose `toJSON()` returns undefined).
+ */
+export function isBoundedSerializable(value: unknown): boolean {
+  return boundedStringify(value) !== undefined;
 }
 
 /**
