@@ -10,7 +10,7 @@ import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
-import type { ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme } from './theme-drilldown-data';
 import { buildThemeLifelines, lifelineConnectors } from './theme-lifelines-data';
 import type { ThemeLifeline } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
@@ -41,7 +41,7 @@ function LifelineRow({
   snapshots: ThemeSnapshot[];
   positions: number[];
   hue: number;
-  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
+  onThemeSelect: (selection: SelectedTheme, snapshotIndex: number) => void;
 }) {
   const isPersistent = row.points.length * 2 >= snapshots.length;
   const connectors = lifelineConnectors(row.points);
@@ -103,7 +103,9 @@ function LifelineRow({
               key={point.snapshotIndex}
               aria-label={title}
               className="absolute bottom-px w-1.5 -translate-x-1/2 cursor-pointer rounded-xs hover:brightness-125"
-              onClick={() => onThemeSelect({ signalName, themeId, label: row.label }, point.snapshotIndex)}
+              onClick={() =>
+                onThemeSelect({ kind: 'theme', signalName, themeId, label: row.label }, point.snapshotIndex)
+              }
               style={style}
               title={title}
               type="button"
@@ -129,7 +131,7 @@ function SignalLifelines({
   flows: Array<ThemeFlowResponse | undefined>;
   snapshots: ThemeSnapshot[];
   positions: number[];
-  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
+  onThemeSelect: (selection: SelectedTheme, snapshotIndex: number) => void;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const rows = buildThemeLifelines(flows, signalName);
@@ -194,7 +196,7 @@ export function ThemeLifelines({
   totalSnapshots: number;
   selectedIndex: number;
   onSnapshotSelect: (index: number) => void;
-  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
+  onThemeSelect: (selection: SelectedTheme, snapshotIndex: number) => void;
 }) {
   const flowQueries = useThemeFlows(
     entityId,

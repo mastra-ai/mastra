@@ -10,7 +10,7 @@ import {
 import { useState } from 'react';
 
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
-import type { ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme } from './theme-drilldown-data';
 import { TraceInsightView } from './trace-insight-view';
 
 interface ThemeDetailPanelProps {
@@ -18,7 +18,7 @@ interface ThemeDetailPanelProps {
   entityType: string;
   snapshotId: string;
   snapshotTotal: number;
-  selection: ThemeSelection | undefined;
+  selection: SelectedTheme | undefined;
   onClose: () => void;
 }
 

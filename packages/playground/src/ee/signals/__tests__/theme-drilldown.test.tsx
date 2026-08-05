@@ -14,6 +14,8 @@ import {
   drilldownThemeSnapshotsResponse,
   firstThemeExamplesResponse,
   firstThemePathsResponse,
+  fourSignalThemeFlowResponse,
+  fourSignalThemePathsResponse,
   largeThemeFlowResponse,
   missingSelectedThemePathsResponse,
   missingThemeDetailResponse,
@@ -321,16 +323,15 @@ describe('Agent Learning theme drilldown hooks', () => {
 });
 
 describe('buildDrilledThemeFlow', () => {
-  describe('when paths contain the selected theme', () => {
-    it('recomputes counts and keeps noise assignments in the drilled flow', () => {
-      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, {
-        signalName: 'goal',
-        themeId: '101',
-        label: 'Add transcript',
-      });
+  describe('when paths contain one selected theme', () => {
+    it('removes the drilled column and links the newly adjacent stages', () => {
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'theme', signalName: 'goal', themeId: '101', label: 'Add transcript' },
+      ]);
 
       expect(result.snapshot.traceCount).toBe(2);
-      expect(result.stages[2]?.nodes).toEqual(
+      expect(result.stages.map(stage => stage.signalName)).toEqual(['outcome', 'behavior']);
+      expect(result.stages[1]?.nodes).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ label: 'Opened workspace', traceCount: 1, stageShare: 0.5 }),
           expect.objectContaining({ kind: 'noise', traceCount: 1, stageShare: 0.5 }),
@@ -338,26 +339,76 @@ describe('buildDrilledThemeFlow', () => {
       );
       expect(result.links).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ traceCount: 2 }),
-          expect.objectContaining({ traceCount: 1 }),
+          expect.objectContaining({
+            sourceNodeId: 'flow-outcome-201',
+            targetNodeId: 'flow-behavior-301',
+            traceCount: 1,
+          }),
+          expect.objectContaining({
+            sourceNodeId: 'flow-outcome-201',
+            targetNodeId: 'flow-behavior-noise',
+            traceCount: 1,
+          }),
         ]),
       );
     });
   });
 
+  describe('when two selections match the same path', () => {
+    it('AND-filters the paths and leaves the two undrilled stages linked', () => {
+      const result = buildDrilledThemeFlow(fourSignalThemeFlowResponse, fourSignalThemePathsResponse, [
+        { kind: 'theme', signalName: 'goal', themeId: '101', label: 'Add transcript' },
+        { kind: 'noise', signalName: 'behavior' },
+      ]);
+
+      expect(result.snapshot.traceCount).toBe(1);
+      expect(result.stages.map(stage => stage.signalName)).toEqual(['outcome', 'sentiment']);
+      expect(result.links).toEqual([
+        expect.objectContaining({
+          sourceNodeId: 'flow-outcome-201',
+          targetNodeId: 'flow-sentiment-noise',
+          traceCount: 1,
+        }),
+      ]);
+    });
+  });
+
+  describe('when a noise bucket is selected', () => {
+    it('keeps only noise-assigned paths and removes the noise signal column', () => {
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'noise', signalName: 'behavior' },
+      ]);
+
+      expect(result.snapshot.traceCount).toBe(2);
+      expect(result.stages.map(stage => stage.signalName)).toEqual(['goal', 'outcome']);
+      expect(result.links).toHaveLength(2);
+    });
+  });
+
   describe('when the selected theme was collapsed into other in the overview', () => {
-    it('renders the concrete path theme as its own node', () => {
-      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, {
-        signalName: 'goal',
-        themeId: '102',
-        label: 'Search transcripts',
-      });
+    it('preserves the concrete path theme identity in a remaining column', () => {
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'theme', signalName: 'outcome', themeId: '202', label: 'Transcript located' },
+      ]);
 
       expect(result.snapshot.traceCount).toBe(1);
       expect(result.stages[0]?.nodes).toEqual([
         expect.objectContaining({ kind: 'theme', themeId: '102', label: 'Search transcripts', traceCount: 1 }),
       ]);
       expect(result.stages[0]?.nodes[0]?.nodeId).not.toBe('flow-goal-other');
+    });
+  });
+
+  describe('when stacked selections have no path in common', () => {
+    it('returns a zero-trace flow over only the undrilled stages', () => {
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'theme', signalName: 'goal', themeId: '102', label: 'Search transcripts' },
+        { kind: 'theme', signalName: 'behavior', themeId: '301', label: 'Opened workspace' },
+      ]);
+
+      expect(result.snapshot.traceCount).toBe(0);
+      expect(result.stages).toEqual([{ signalName: 'outcome', traceCount: 0, nodes: [] }]);
+      expect(result.links).toEqual([]);
     });
   });
 });

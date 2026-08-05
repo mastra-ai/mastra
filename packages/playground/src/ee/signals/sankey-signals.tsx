@@ -38,7 +38,7 @@ import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findNoiseSelection, findThemeSelection } from './theme-drilldown-data';
-import type { ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme } from './theme-drilldown-data';
 import { ThemeLifelines } from './theme-lifelines';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
@@ -82,7 +82,7 @@ function ThemeFilterBanner({
   onViewDetails,
   onClear,
 }: {
-  selection: ThemeSelection;
+  selection: SelectedTheme;
   filteredTraceCount?: number;
   totalTraceCount: number;
   onViewDetails: () => void;
@@ -222,8 +222,8 @@ export function SankeySignals({
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
-  const [drillIn, setDrillIn] = useState<ThemeSelection>();
-  const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
+  const [drillIn, setDrillIn] = useState<SelectedTheme>();
+  const [detailSelection, setDetailSelection] = useState<SelectedTheme>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
@@ -241,7 +241,7 @@ export function SankeySignals({
   };
   // Compare cards and lifeline points open details for the theme at the
   // landmark they were clicked on, so the panel's snapshot follows the click.
-  const openThemeDetailsAt = (selection: ThemeSelection, snapshotIndex: number) => {
+  const openThemeDetailsAt = (selection: SelectedTheme, snapshotIndex: number) => {
     selectSnapshot(snapshotIndex);
     setNoiseSignalName(undefined);
     setDetailSelection(selection);
@@ -276,7 +276,7 @@ export function SankeySignals({
   const flow = useMemo(() => {
     if (!stableUnfilteredFlow || !drillIn || !pathsQuery.data) return stableUnfilteredFlow;
 
-    const drilledFlow = buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, drillIn);
+    const drilledFlow = buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, [drillIn]);
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
   }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
@@ -419,10 +419,10 @@ export function SankeySignals({
     findNoiseSelection(flow, selection.column.id, selection.value) !== undefined ||
     (drillInAvailable && findThemeSelection(flow, selection.column.id, selection.value) !== undefined);
   const handleNodeClick = (selection: SankeyChartNodeSelection) => {
-    const noiseSignal = findNoiseSelection(flow, selection.column.id, selection.value);
-    if (noiseSignal) {
+    const noiseSelection = findNoiseSelection(flow, selection.column.id, selection.value);
+    if (noiseSelection) {
       setDetailSelection(undefined);
-      setNoiseSignalName(noiseSignal);
+      setNoiseSignalName(noiseSelection.signalName);
       return;
     }
     if (!drillInAvailable) return;
