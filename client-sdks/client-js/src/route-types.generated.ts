@@ -2854,6 +2854,7 @@ type Shared_Type_123 = {
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   scorerIds?: string[] | undefined;
+  timeout?: number | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -17473,6 +17474,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** IDs of scorers selected for this item */
   scorerIds?: string[] | undefined;
+  /** Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes) */
+  timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17527,6 +17530,8 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     scorerIds?: string[] | undefined;
+    /** Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes) */
+    timeout?: number | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17650,6 +17655,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** IDs of scorers selected for this item */
   scorerIds?: (string[] | undefined) | null;
+  /** Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes) */
+  timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17772,6 +17779,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     scorerIds?: string[] | undefined;
+    timeout?: number | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -17942,6 +17950,8 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   agentVersion?: string | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
+  /** Fallback execution timeout per item in milliseconds, from 1 to 1,800,000 (30 minutes) */
+  itemTimeout?: number | undefined;
   /** Global request context passed to the target */
   requestContext?:
     | {
