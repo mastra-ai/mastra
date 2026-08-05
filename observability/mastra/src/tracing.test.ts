@@ -2134,6 +2134,36 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('should serialize requestContext once using its span serialization contract', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      const serializeSpy = vi
+        .spyOn(requestContext, 'serializeForSpan')
+        .mockReturnValue({ userId: 'user-123', privateConfig: '[object]' });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        requestContext,
+      });
+
+      expect(serializeSpy).toHaveBeenCalledOnce();
+      expect(span.requestContext).toEqual({
+        userId: 'user-123',
+        privateConfig: '[object]',
+      });
+      expect(span.attributes).toEqual({ agentId: 'agent-1' });
+
+      span.end();
+    });
+
     it('should include requestContext in exported span', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
@@ -2251,7 +2281,7 @@ describe('Tracing', () => {
       span.end();
     });
 
-    it('should filter non-serializable values from requestContext', () => {
+    it('should preserve nested requestContext values by walking them through deepClean', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
@@ -2270,10 +2300,12 @@ describe('Tracing', () => {
         requestContext,
       });
 
-      // Functions should be replaced with '[Function]' by deepClean
+      // Plain objects are handed to deepClean and walked (nested data stays
+      // visible in the trace); functions and other non-plain types are
+      // collapsed by serializeForSpan rather than walked.
       expect(span.requestContext).toEqual({
         userId: 'user-123',
-        callback: '[Function]',
+        callback: '[function]',
         nested: { data: 'value' },
       });
 
@@ -2655,6 +2687,39 @@ describe('Tracing', () => {
       expect(userMetric?.metric.correlationContext?.environment).toBe('production');
 
       span.end();
+    });
+
+    it('attaches environment and serviceName to log events emitted without a span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      observability.getLoggerContext().info('span-less log');
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      expect(testExporter.logEvents[0]!.log.correlationContext?.environment).toBe('production');
+      expect(testExporter.logEvents[0]!.log.correlationContext?.serviceName).toBe('test-service');
+    });
+
+    it('attaches environment and serviceName to metric events emitted without a span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      observability.getMetricsContext().emit('user_metric', 1, { status: 'ok' });
+
+      const userMetric = testExporter.metricEvents.find(e => e.metric.name === 'user_metric');
+      expect(userMetric?.metric.correlationContext?.environment).toBe('production');
+      expect(userMetric?.metric.correlationContext?.serviceName).toBe('test-service');
     });
 
     it('attaches environment to score events when correlationContext comes from a live span', async () => {

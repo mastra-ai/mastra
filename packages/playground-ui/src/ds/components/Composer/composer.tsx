@@ -2,11 +2,18 @@ import type { ComponentPropsWithoutRef } from 'react';
 import { forwardRef } from 'react';
 
 import { ScrollArea } from '../ScrollArea';
+import { useComposerPointerAngle } from './use-composer-pointer-angle';
 import { cn } from '@/lib/utils';
 
+import './composer-ring.css';
 import './composer-sending.css';
 
 export type ComposerProps = ComponentPropsWithoutRef<'form'>;
+
+export interface ComposerInputProps extends ComponentPropsWithoutRef<'textarea'> {
+  /** Maximum height of the scrolling input viewport. */
+  maxHeight?: string;
+}
 
 export const Composer = forwardRef<HTMLFormElement, ComposerProps>(({ children, ...props }, ref) => (
   <form ref={ref} data-slot="composer" {...props}>
@@ -37,6 +44,30 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
 );
 ComposerBox.displayName = 'ComposerBox';
 
+export interface ComposerRingProps extends ComponentPropsWithoutRef<'div'> {
+  busy?: boolean;
+}
+
+/**
+ * Edge for the composer box it wraps: a conic arc lit under the cursor on hover,
+ * spinning on its own while the agent runs, never both at once. Wraps rather
+ * than decorates because the box clips its overflow and would cut the arc off.
+ */
+export const ComposerRing = ({ busy = false, className, ...props }: ComposerRingProps) => {
+  const ringRef = useComposerPointerAngle(!busy);
+
+  return (
+    <div
+      ref={ringRef}
+      data-slot="composer-ring"
+      data-busy={busy ? 'true' : 'false'}
+      className={cn('composer-ring mx-auto w-full max-w-3xl', className)}
+      {...props}
+    />
+  );
+};
+ComposerRing.displayName = 'ComposerRing';
+
 export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
   ({ className, ...props }, ref) => (
     <div
@@ -50,14 +81,14 @@ export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWith
 );
 ComposerAttachments.displayName = 'ComposerAttachments';
 
-export const ComposerInput = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<'textarea'>>(
-  ({ className, ...props }, ref) => (
-    <ScrollArea maxHeight="212px">
+export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
+  ({ className, maxHeight = '212px', ...props }, ref) => (
+    <ScrollArea maxHeight={maxHeight}>
       <textarea
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'min-h-17 field-sizing-content w-full resize-none bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}
@@ -82,10 +113,10 @@ ComposerActions.displayName = 'ComposerActions';
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
   <div className={cn('flex size-full flex-col -space-y-3', className)}>
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Dark blur-xl" />
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Darker blur-xl" />
+    <div className="bg-accent1 w-full flex-1 blur-xl" />
+    <div className="bg-accent1Dark w-full flex-1 blur-xl" />
+    <div className="bg-accent1 w-full flex-1 blur-xl" />
+    <div className="bg-accent1Darker w-full flex-1 blur-xl" />
   </div>
 );
 

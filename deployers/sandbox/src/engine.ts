@@ -204,7 +204,7 @@ export function buildLaunchScript(opts: { remoteDir: string; port: number; env: 
 }
 
 /** Create a gzipped tarball of the directory contents (excluding node_modules). */
-async function createTarball(dir: string): Promise<Buffer> {
+export async function createTarball(dir: string): Promise<Buffer> {
   const tmp = await mkdtemp(join(tmpdir(), 'mastra-sandbox-'));
   const tarPath = join(tmp, 'deploy.tgz');
   try {
@@ -220,7 +220,7 @@ async function createTarball(dir: string): Promise<Buffer> {
  * path when available, otherwise falls back to base64 chunks over
  * `executeCommand` — so `executeCommand` + `networking` is the minimum contract.
  */
-async function uploadFile(sandbox: WorkspaceSandbox, remotePath: string, content: Buffer): Promise<void> {
+export async function uploadFile(sandbox: WorkspaceSandbox, remotePath: string, content: Buffer): Promise<void> {
   if (sandbox.writeFiles) {
     await sandbox.writeFiles([{ path: remotePath, content }]);
     return;
@@ -250,7 +250,7 @@ const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml',
  * package.json, any bundled lockfile, and the install command itself. A
  * matching hash means the previous `node_modules` can be reused.
  */
-async function hashInstallInputs(dir: string, installCommand: string): Promise<string | null> {
+export async function hashInstallInputs(dir: string, installCommand: string): Promise<string | null> {
   const hash = createHash('sha256');
   try {
     hash.update(await readFile(join(dir, 'package.json')));

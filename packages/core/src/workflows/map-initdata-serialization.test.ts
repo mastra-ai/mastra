@@ -57,11 +57,20 @@ describe('map(): initData mapping does not serialize the live workflow (#19018)'
   };
 
   const mapStepConfig = (workflow: any): string => {
-    const mapEntry = workflow.serializedStepFlow.find(
-      (e: any) => typeof e?.step?.mapConfig === 'string' && e.step.mapConfig.includes('initData'),
-    );
+    // Accept either serialization shape produced by the mapping reducer:
+    //   • { type: 'step',    step: { id, mapConfig } }   (createStep-wrapped)
+    //   • { type: 'mapping', id, mapConfig }             (typed mapping entry)
+    const readMapConfig = (e: any): string | undefined => {
+      if (typeof e?.step?.mapConfig === 'string') return e.step.mapConfig as string;
+      if (e?.type === 'mapping' && typeof e?.mapConfig === 'string') return e.mapConfig as string;
+      return undefined;
+    };
+    const mapEntry = workflow.serializedStepFlow.find((e: any) => {
+      const mc = readMapConfig(e);
+      return typeof mc === 'string' && mc.includes('initData');
+    });
     expect(mapEntry, 'expected a serialized map step with an initData mapConfig').toBeDefined();
-    return mapEntry.step.mapConfig as string;
+    return readMapConfig(mapEntry) as string;
   };
 
   it('serializes an id reference, not the live Workflow instance', () => {

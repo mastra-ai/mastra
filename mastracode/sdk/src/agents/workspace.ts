@@ -181,12 +181,12 @@ function detectPackageRunner(projectPath: string): string | undefined {
 }
 
 /**
- * Build (or reuse) a sandbox-backed Workspace for a GitHub project. The sandbox
+ * Build (or reuse) a sandbox-backed Workspace for a linked project repository. The sandbox
  * is reattached by its persisted provider id and a `SandboxFilesystem` is layered
  * over the in-sandbox checkout so file tools and command tools share one VM.
  */
 async function getSandboxWorkspace({
-  githubProjectId,
+  projectRepositoryId,
   sandboxId,
   workdir,
   worktreePath,
@@ -194,7 +194,7 @@ async function getSandboxWorkspace({
   mastra,
   skillExtension,
 }: {
-  githubProjectId: string;
+  projectRepositoryId: string;
   sandboxId: string;
   workdir: string;
   worktreePath?: string;
@@ -212,7 +212,7 @@ async function getSandboxWorkspace({
   // fresh Workspace/ProcessManager instead of reusing one bound to a stale
   // sandbox or the wrong working tree.
   const extensionId = skillExtension ? `-${skillExtension.id}` : '';
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}${extensionId}`;
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-repository-${projectRepositoryId}-${sandboxId}-${boundWorkdir}${extensionId}`;
 
   // Reuse the existing remote workspace if already registered (preserves the
   // reattached sandbox + ProcessManager state across re-opens).
@@ -254,14 +254,13 @@ export async function getDynamicWorkspace({
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
 
-  // GitHub/cloud-sandbox-backed project: the repo lives inside a remote sandbox,
-  // not on the server host. Reattach to the already-provisioned + materialized
-  // sandbox (the SPA called `.../ensure` first, persisting sandboxId/workdir on
-  // controller state) and build a sandbox-backed Workspace. Optional embedders
-  // may add read-only skill roots while project skills remain sandbox-backed.
-  if (state?.githubProjectId && state.sandboxId && state.sandboxWorkdir) {
+  // Repository-backed project: the repo lives inside a remote sandbox, not on
+  // the server host. Reattach to the already-provisioned + materialized sandbox
+  // and build a sandbox-backed Workspace. Optional embedders may add read-only
+  // skill roots while project skills remain sandbox-backed.
+  if (state?.projectRepositoryId && state.sandboxId && state.sandboxWorkdir) {
     return getSandboxWorkspace({
-      githubProjectId: state.githubProjectId,
+      projectRepositoryId: state.projectRepositoryId,
       sandboxId: state.sandboxId,
       workdir: state.sandboxWorkdir,
       worktreePath: state.worktreePath,

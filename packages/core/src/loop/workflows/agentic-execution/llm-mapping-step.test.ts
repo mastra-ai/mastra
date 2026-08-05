@@ -245,6 +245,19 @@ describe('createLLMMappingStep HITL behavior', () => {
     // Should NOT bail — the agentic loop should continue so the model can see the error and retry
     expect(bail).not.toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(true);
+    // Should record the failure as `output-error` with the message in `errorText`,
+    // not as a successful `result`, so it stays distinguishable on recall/replay.
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'output-error',
+          toolCallId: 'call-1',
+          toolName: 'brokenTool',
+          errorText: 'Tool execution failed',
+        }),
+      }),
+    );
   });
 
   it('should NOT record a result and should bail when a tool was aborted (no fabricated success)', async () => {

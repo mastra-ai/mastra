@@ -19,7 +19,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { buildProgramModule, buildRunner, FRAME_PREFIX } from '@mastra/core/tools';
+import { buildProgramModule, buildRunner, FRAME_PREFIX, sanitizeToolId } from '@mastra/core/tools';
 import type { CodeModeRunnerFrame, CodeModeToolResult, CodeModeTransport } from '@mastra/core/tools';
 import type { ProcessHandle } from '@mastra/core/workspace';
 import { transformSync } from 'esbuild';
@@ -27,12 +27,6 @@ import { E2BSandbox } from '../sandbox';
 
 /** Base directory inside the E2B sandbox where Code Mode programs are written. */
 const SANDBOX_TMP = '/home/user/mastra-code-mode';
-
-/** Mirrors the external-name sanitizer used by the core Code Mode runner. */
-function sanitize(id: string): string {
-  const cleaned = id.replace(/[^A-Za-z0-9_$]/g, '_');
-  return /^[A-Za-z_$]/.test(cleaned) ? cleaned : `_${cleaned}`;
-}
 
 /**
  * Code Mode transport for {@link E2BSandbox}.
@@ -70,7 +64,7 @@ export class E2BCodeModeTransport implements CodeModeTransport {
     }
 
     const e2b = sandbox.e2b;
-    const externals = toolIds.map(toolId => ({ toolId, externalName: sanitize(toolId) }));
+    const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
 
     const suffix = randomBytes(4).toString('hex');

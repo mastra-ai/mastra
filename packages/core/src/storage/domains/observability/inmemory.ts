@@ -618,22 +618,24 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     return {
       traceId,
-      spans: spans.map((span): LightSpanRecord => ({
-        traceId: span.traceId,
-        spanId: span.spanId,
-        parentSpanId: span.parentSpanId,
-        name: span.name,
-        spanType: span.spanType,
-        isEvent: span.isEvent,
-        startedAt: span.startedAt,
-        endedAt: span.endedAt,
-        error: span.error,
-        entityType: span.entityType,
-        entityId: span.entityId,
-        entityName: span.entityName,
-        createdAt: span.createdAt,
-        updatedAt: span.updatedAt,
-      })),
+      spans: spans.map(
+        (span): LightSpanRecord => ({
+          traceId: span.traceId,
+          spanId: span.spanId,
+          parentSpanId: span.parentSpanId,
+          name: span.name,
+          spanType: span.spanType,
+          isEvent: span.isEvent,
+          startedAt: span.startedAt,
+          endedAt: span.endedAt,
+          error: span.error,
+          entityType: span.entityType,
+          entityId: span.entityId,
+          entityName: span.entityName,
+          createdAt: span.createdAt,
+          updatedAt: span.updatedAt,
+        }),
+      ),
     };
   }
 
@@ -1222,6 +1224,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (!(filters.name as string[]).includes(m.name)) return false;
     }
     if (filters.traceId !== undefined && m.traceId !== filters.traceId) return false;
+    if (Array.isArray(filters.traceIds) && !filters.traceIds.includes(m.traceId)) return false;
     if (filters.spanId !== undefined && m.spanId !== filters.spanId) return false;
     if (filters.provider !== undefined && m.provider !== filters.provider) return false;
     if (filters.model !== undefined && m.model !== filters.model) return false;
