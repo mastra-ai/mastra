@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.23.0
+
+### Patch Changes
+
+- Fixed prerelease project creation to keep using the running create-mastra release channel when npm dist-tags have not finished updating. ([#20723](https://github.com/mastra-ai/mastra/pull/20723))
+
 ## 1.23.0-alpha.2
 
 ## 1.23.0-alpha.1
