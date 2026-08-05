@@ -93,7 +93,7 @@ export class StoreMemoryLance extends MemoryStorage {
             createdAt: new Date(thread.createdAt).getTime(),
             updatedAt: now,
           };
-          await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+          await threadsTable.mergeInsert('id').whenMatchedUpdateAll().execute([record]);
         }
       }
     } catch (error) {
@@ -200,7 +200,7 @@ export class StoreMemoryLance extends MemoryStorage {
         };
 
         const table = await this.client.openTable(TABLE_THREADS);
-        await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+        await table.mergeInsert('id').whenMatchedUpdateAll().execute([record]);
 
         const updatedThread = await this.getThreadById({ threadId: id });
         if (!updatedThread) {
@@ -514,13 +514,8 @@ export class StoreMemoryLance extends MemoryStorage {
         return { messages: [] };
       }
 
-      const threadId = messages[0]?.threadId;
-
-      if (!threadId) {
-        throw new Error('Thread ID is required');
-      }
-
       // Validate all messages before saving
+      const threadIds = new Set<string>();
       for (const message of messages) {
         if (!message.id) {
           throw new Error('Message ID is required');
@@ -534,6 +529,7 @@ export class StoreMemoryLance extends MemoryStorage {
         if (!message.content) {
           throw new Error('Message content is required');
         }
+        threadIds.add(message.threadId);
       }
 
       const transformedMessages = messages.map((message: MastraDBMessage | MastraMessageV1) => {
@@ -546,14 +542,21 @@ export class StoreMemoryLance extends MemoryStorage {
         };
       });
 
-      const table = await this.client.openTable(TABLE_MESSAGES);
-      await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
-
-      // Update the thread's updatedAt timestamp
+      // Confirm every parent thread exists before writing any messages.
       const threadsTable = await this.client.openTable(TABLE_THREADS);
       const currentTime = new Date().getTime();
-      const updateRecord = { id: threadId, updatedAt: currentTime };
-      await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
+      for (const id of threadIds) {
+        const result = await threadsTable
+          .mergeInsert('id')
+          .whenMatchedUpdateAll()
+          .execute([{ id, updatedAt: currentTime }]);
+        if (result.numUpdatedRows === 0) {
+          throw new Error(`Cannot save messages because parent thread ${id} does not exist`);
+        }
+      }
+
+      const table = await this.client.openTable(TABLE_MESSAGES);
+      await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
@@ -948,8 +951,7 @@ export class StoreMemoryLance extends MemoryStorage {
           updatePayload.content = JSON.stringify(newContent);
         }
 
-        // Update the message using merge insert
-        await this.#db.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
+        await this.#db.update({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
 
         // Get the updated message
         const updatedMessage = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id } });
@@ -960,7 +962,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Update timestamps for all affected threads
       for (const threadId of affectedThreadIds) {
-        await this.#db.insert({
+        await this.#db.update({
           tableName: TABLE_THREADS,
           record: { id: threadId, updatedAt: Date.now() },
         });
@@ -1147,7 +1149,13 @@ export class StoreMemoryLance extends MemoryStorage {
         };
 
         const table = await this.client.openTable(TABLE_RESOURCES);
-        await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+        const result = await table.mergeInsert('id').whenMatchedUpdateAll().execute([record]);
+        if (result.numUpdatedRows === 0) {
+          if (attempt < maxRetries - 1) {
+            continue;
+          }
+          throw new Error(`Resource ${resourceId} disappeared while it was being updated`);
+        }
 
         return updatedResource;
       } catch (error: any) {

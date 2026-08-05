@@ -64,6 +64,14 @@ const visibilityMatches = (left: MessageScrollerVisibility, right: MessageScroll
   left.visibleMessageIds.length === right.visibleMessageIds.length &&
   left.visibleMessageIds.every((messageId, index) => messageId === right.visibleMessageIds[index]);
 
+const orderItemsByDocumentPosition = (items: Array<readonly [string, MessageScrollerItemRecord]>) =>
+  items.sort(([, left], [, right]) => {
+    const position = left.element.compareDocumentPosition(right.element);
+    if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+    if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+    return 0;
+  });
+
 const getContentPadding = (contentElement: HTMLElement | null) => {
   if (!contentElement) return { start: 0, end: 0 };
   const styles = window.getComputedStyle(contentElement);
@@ -187,6 +195,8 @@ export function MessageScrollerProvider({
   const itemsRef = React.useRef<Map<string, MessageScrollerItemRecord> | null>(null);
   itemsRef.current ??= new Map<string, MessageScrollerItemRecord>();
   const itemsRegistry = itemsRef.current;
+  // Rebuilt on register/unregister only — scroll runs this too often to sort per event.
+  const orderedItemsRef = React.useRef<Array<readonly [string, MessageScrollerItemRecord]> | null>(null);
   const visibleMessageIdsRef = React.useRef<Set<string> | null>(null);
   visibleMessageIdsRef.current ??= new Set<string>();
   const intersectingMessageIds = visibleMessageIdsRef.current;
@@ -249,7 +259,9 @@ export function MessageScrollerProvider({
   }, [publishScrollable, scrollEdgeThreshold, viewportElement]);
 
   const updateVisibility = React.useCallback(() => {
-    const items = Array.from(itemsRegistry.entries());
+    // Registration is mount order, not document order, once history is prepended.
+    orderedItemsRef.current ??= orderItemsByDocumentPosition(Array.from(itemsRegistry.entries()));
+    const items = orderedItemsRef.current;
     const fallbackAnchorId = items.filter(([, item]) => item.scrollAnchor).at(-1)?.[0] ?? items.at(-1)?.[0];
 
     if (items.length === 0) {
@@ -405,6 +417,7 @@ export function MessageScrollerProvider({
   const registerItem = React.useCallback(
     (messageId: string, element: HTMLElement, scrollAnchor: boolean) => {
       itemsRegistry.set(messageId, { element, scrollAnchor });
+      orderedItemsRef.current = null;
       setItemsVersion(version => version + 1);
 
       return () => {
@@ -412,6 +425,7 @@ export function MessageScrollerProvider({
         if (current?.element !== element) return;
         itemsRegistry.delete(messageId);
         intersectingMessageIds.delete(messageId);
+        orderedItemsRef.current = null;
         setItemsVersion(version => version + 1);
       };
     },
