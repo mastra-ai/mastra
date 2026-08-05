@@ -16,22 +16,22 @@ BASETEN_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from '@mastra/core/agent'
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'baseten/MiniMaxAI/MiniMax-M2.5',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "baseten/MiniMaxAI/MiniMax-M2.5"
+});
 
 // Generate a response
-const response = await agent.generate('Hello!')
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story')
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
-  console.log(chunk)
+  console.log(chunk);
 }
 ```
 
@@ -46,197 +46,197 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    model: 'baseten/deepseek-ai/DeepSeek-V4-Flash-0731',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 1048576,
-    inputCost: 0.13,
-    outputCost: 0.26,
+    "model": "baseten/deepseek-ai/DeepSeek-V4-Flash-0731",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.13,
+    "outputCost": 0.26
   },
   {
-    model: 'baseten/deepseek-ai/DeepSeek-V4-Pro',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262144,
-    maxOutput: 262144,
-    inputCost: 1.74,
-    outputCost: 3.48,
+    "model": "baseten/deepseek-ai/DeepSeek-V4-Pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 1.74,
+    "outputCost": 3.48
   },
   {
-    model: 'baseten/moonshotai/Kimi-K2.5',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262000,
-    maxOutput: 262000,
-    inputCost: 0.6,
-    outputCost: 3,
+    "model": "baseten/moonshotai/Kimi-K2.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.6,
+    "outputCost": 3
   },
   {
-    model: 'baseten/moonshotai/Kimi-K2.6',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262000,
-    maxOutput: 262000,
-    inputCost: 0.95,
-    outputCost: 4,
+    "model": "baseten/moonshotai/Kimi-K2.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.95,
+    "outputCost": 4
   },
   {
-    model: 'baseten/moonshotai/Kimi-K2.7-Code',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262000,
-    maxOutput: 262000,
-    inputCost: 0.95,
-    outputCost: 4,
+    "model": "baseten/moonshotai/Kimi-K2.7-Code",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.95,
+    "outputCost": 4
   },
   {
-    model: 'baseten/moonshotai/Kimi-K3',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 262144,
-    inputCost: 3,
-    outputCost: 15,
+    "model": "baseten/moonshotai/Kimi-K3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
-    model: 'baseten/nvidia/Nemotron-120B-A12B',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 202800,
-    maxOutput: 202800,
-    inputCost: 0.3,
-    outputCost: 0.75,
+    "model": "baseten/nvidia/Nemotron-120B-A12B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
+    "inputCost": 0.3,
+    "outputCost": 0.75
   },
   {
-    model: 'baseten/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 202800,
-    maxOutput: 202800,
-    inputCost: 0.6,
-    outputCost: 2.4,
+    "model": "baseten/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
+    "inputCost": 0.6,
+    "outputCost": 2.4
   },
   {
-    model: 'baseten/openai/gpt-oss-120b',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 128072,
-    maxOutput: 128072,
-    inputCost: 0.1,
-    outputCost: 0.5,
+    "model": "baseten/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128072,
+    "maxOutput": 128072,
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
-    model: 'baseten/thinkingmachines/inkling',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 32768,
-    inputCost: 1,
-    outputCost: 4.05,
+    "model": "baseten/thinkingmachines/inkling",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": 1,
+    "outputCost": 4.05
   },
   {
-    model: 'baseten/thinkingmachines/inkling-small',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 32768,
-    inputCost: 0.5,
-    outputCost: 1.2,
+    "model": "baseten/thinkingmachines/inkling-small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": 0.5,
+    "outputCost": 1.2
   },
   {
-    model: 'baseten/zai-org/GLM-4.7',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 200000,
-    maxOutput: 200000,
-    inputCost: 0.6,
-    outputCost: 2.2,
+    "model": "baseten/zai-org/GLM-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 200000,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   },
   {
-    model: 'baseten/zai-org/GLM-5',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 202800,
-    maxOutput: 202800,
-    inputCost: 0.95,
-    outputCost: 3.15,
+    "model": "baseten/zai-org/GLM-5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
+    "inputCost": 0.95,
+    "outputCost": 3.15
   },
   {
-    model: 'baseten/zai-org/GLM-5.1',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 202800,
-    maxOutput: 202800,
-    inputCost: 1.3,
-    outputCost: 4.3,
+    "model": "baseten/zai-org/GLM-5.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
+    "inputCost": 1.3,
+    "outputCost": 4.3
   },
   {
-    model: 'baseten/zai-org/GLM-5.2',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 262144,
-    inputCost: 1.4,
-    outputCost: 4.4,
+    "model": "baseten/zai-org/GLM-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 1.4,
+    "outputCost": 4.4
   },
   {
-    model: 'baseten/zai-org/GLM-5.2-Fast',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 524288,
-    maxOutput: 262144,
-    inputCost: 2.1,
-    outputCost: 6.6,
-  },
+    "model": "baseten/zai-org/GLM-5.2-Fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 524288,
+    "maxOutput": 262144,
+    "inputCost": 2.1,
+    "outputCost": 6.6
+  }
 ]}
 />
 
@@ -246,28 +246,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'custom-agent',
-  name: 'custom-agent',
+  id: "custom-agent",
+  name: "custom-agent",
   model: {
-    url: 'https://inference.baseten.co/v1',
-    id: 'baseten/MiniMaxAI/MiniMax-M2.5',
+    url: "https://inference.baseten.co/v1",
+    id: "baseten/MiniMaxAI/MiniMax-M2.5",
     apiKey: process.env.BASETEN_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
-    },
-  },
-})
+      "X-Custom-Header": "value"
+    }
+  }
+});
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'dynamic-agent',
-  name: 'Dynamic Agent',
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'baseten/zai-org/GLM-5.2-Fast' : 'baseten/MiniMaxAI/MiniMax-M2.5'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "baseten/zai-org/GLM-5.2-Fast"
+      : "baseten/MiniMaxAI/MiniMax-M2.5";
+  }
+});
 ```
+
+
