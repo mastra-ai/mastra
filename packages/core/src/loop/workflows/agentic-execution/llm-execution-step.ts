@@ -15,7 +15,7 @@ import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
-import type { AnySpan, ModelInferenceContext, TracingContext } from '../../../observability';
+import type { AnySpan, IModelSpanTracker, ModelInferenceContext, TracingContext } from '../../../observability';
 import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
 import type { CachedLLMStepResponse, InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
@@ -73,6 +73,8 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import type { PendingProviderToolCall } from './provider-tool-spans';
+import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -150,8 +152,10 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   mastra?: Mastra;
   /** Active tracing context. Parent of any CLIENT_TOOL_CALL spans we create. */
   tracingContext?: TracingContext;
-  /** Closure-scoped map for PROVIDER_TOOL_CALL spans that may persist across iterations. */
-  providerToolSpansByToolCallId?: Map<string, { span: AnySpan; ended: boolean }>;
+  /** Closure-scoped map for provider tool calls awaiting a result, which may arrive in a later iteration. */
+  pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
+  /** Live step tracker, consulted at tool-result time to parent PROVIDER_TOOL_CALL spans. */
+  modelSpanTracker?: IModelSpanTracker;
 };
 
 type ToolResolvers = {
@@ -438,7 +442,8 @@ async function processOutputStream<OUTPUT = undefined>({
   toolPayloadTransform,
   mastra,
   tracingContext,
-  providerToolSpansByToolCallId,
+  pendingProviderToolCallsByToolCallId,
+  modelSpanTracker,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -519,6 +524,9 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     try {
+      // Unlike PROVIDER_TOOL_CALL, this span must exist at call time so proxy.inject
+      // can place its trace carrier into the outgoing tool-call payload, and the tool
+      // runs outside the step lifecycle — so it anchors to AGENT_RUN, not the step.
       const parentSpan =
         tracingContext.currentSpan.type === SpanType.AGENT_RUN
           ? tracingContext.currentSpan
@@ -554,7 +562,7 @@ async function processOutputStream<OUTPUT = undefined>({
     return { toolDef, inferredProviderExecuted };
   };
 
-  const injectProviderToolObservability = ({
+  const recordProviderToolCall = ({
     toolCallId,
     toolName,
     args,
@@ -565,7 +573,7 @@ async function processOutputStream<OUTPUT = undefined>({
     args?: unknown;
     providerExecuted?: boolean;
   }) => {
-    if (!providerToolSpansByToolCallId || !tracingContext?.currentSpan) {
+    if (!pendingProviderToolCallsByToolCallId || !tracingContext?.currentSpan) {
       return;
     }
 
@@ -576,46 +584,28 @@ async function processOutputStream<OUTPUT = undefined>({
       return;
     }
 
-    const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+    const existingEntry = pendingProviderToolCallsByToolCallId.get(toolCallId);
     if (existingEntry) {
-      // If args are now available and the span was created without them (e.g. from
-      // tool-call-input-streaming-start), update the span input.
-      if (args !== undefined && existingEntry.span.input === undefined) {
-        existingEntry.span.update({ input: args });
+      // If args arrive after the call was first recorded (e.g. from
+      // tool-call-input-streaming-start), fill them in.
+      if (args !== undefined && existingEntry.args === undefined) {
+        existingEntry.args = args;
       }
       return;
     }
 
-    try {
-      const parentSpan =
-        tracingContext.currentSpan.type === SpanType.AGENT_RUN
-          ? tracingContext.currentSpan
-          : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+    const fallbackParentSpan =
+      tracingContext.currentSpan.type === SpanType.AGENT_RUN
+        ? tracingContext.currentSpan
+        : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
 
-      const span = parentSpan.createChildSpan({
-        type: SpanType.PROVIDER_TOOL_CALL,
-        name: `provider_tool: '${toolName}'`,
-        entityType: EntityType.TOOL,
-        entityId: toolName,
-        entityName: toolName,
-        attributes: {
-          toolType: 'provider-tool',
-          toolDescription: (toolDef as { description?: string } | undefined)?.description,
-          toolCallId,
-        },
-        metadata: { toolCallId },
-        ...(args !== undefined ? { input: args } : {}),
-      });
-
-      if (span) {
-        providerToolSpansByToolCallId.set(toolCallId, { span, ended: false });
-      }
-    } catch (err) {
-      logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
-        error: err instanceof Error ? err.message : String(err),
-        toolName,
-      });
-    }
+    pendingProviderToolCallsByToolCallId.set(toolCallId, {
+      toolName,
+      args,
+      startTime: new Date(),
+      toolDescription: (toolDef as { description?: string } | undefined)?.description,
+      fallbackParentSpan,
+    });
   };
 
   for await (let chunk of outputStream._getBaseStream()) {
@@ -658,7 +648,7 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       }));
-      injectProviderToolObservability({
+      recordProviderToolCall({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         providerExecuted: chunk.payload.providerExecuted,
@@ -683,7 +673,7 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       });
-      injectProviderToolObservability({
+      recordProviderToolCall({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
@@ -813,15 +803,22 @@ async function processOutputStream<OUTPUT = undefined>({
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
-        // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
-        if (providerToolSpansByToolCallId) {
-          const providerEntry = providerToolSpansByToolCallId.get(chunk.payload.toolCallId);
-          if (providerEntry && !providerEntry.ended) {
-            providerEntry.span.end({
-              output: chunk.payload.result,
-              attributes: { success: !chunk.payload.isError },
+        // The result determines which MODEL_STEP owns the provider tool call, so the
+        // PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
+        if (pendingProviderToolCallsByToolCallId) {
+          const pending = pendingProviderToolCallsByToolCallId.get(chunk.payload.toolCallId);
+          if (pending) {
+            // Re-fetch the live step context so the span parents under whichever
+            // MODEL_STEP is open right now (mirrors the durable path); a live
+            // lookup never returns a closed step.
+            endPendingProviderToolSpan({
+              toolCallId: chunk.payload.toolCallId,
+              pending,
+              parentSpan: modelSpanTracker?.getTracingContext()?.currentSpan ?? pending.fallbackParentSpan,
+              result: { output: chunk.payload.result, isError: chunk.payload.isError },
+              logger,
             });
-            providerEntry.ended = true;
+            pendingProviderToolCallsByToolCallId.delete(chunk.payload.toolCallId);
           }
         }
         safeEnqueue(controller, chunk);
@@ -959,18 +956,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
-  const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
+  const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
-    for (const [toolCallId, entry] of providerToolSpansByToolCallId.entries()) {
-      if (entry.ended) {
-        providerToolSpansByToolCallId.delete(toolCallId);
-      } else if (terminal) {
-        entry.span.end();
-        entry.ended = true;
-        providerToolSpansByToolCallId.delete(toolCallId);
-      }
+    if (!terminal) {
+      return;
     }
+    for (const [toolCallId, pending] of pendingProviderToolCallsByToolCallId.entries()) {
+      endPendingProviderToolSpan({ toolCallId, pending, parentSpan: pending.fallbackParentSpan, logger });
+    }
+    pendingProviderToolCallsByToolCallId.clear();
   };
 
   return createStep({
@@ -1535,7 +1530,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
               mastra,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-              providerToolSpansByToolCallId,
+              pendingProviderToolCallsByToolCallId,
+              modelSpanTracker,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
@@ -2145,8 +2141,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const shouldContinue =
         shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
 
-      // Clean up server tool spans: remove ended entries, force-close unclosed on terminal exit.
-      // On retry (shouldRetry), unclosed spans from the rejected attempt must also be closed —
+      // On terminal exit, materialize spans for provider tool calls whose result never arrived.
+      // On retry (shouldRetry), pending calls from the rejected attempt must also be flushed —
       // the LLM will produce a fresh response with new tool calls.
       cleanupProviderToolSpans(!shouldContinue || shouldRetry);
 

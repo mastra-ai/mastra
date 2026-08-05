@@ -635,10 +635,14 @@ describe('standalone auto-construction (no index.ts)', () => {
     const out = join(dir, '.mastra');
 
     const result = await prepareFsAgentsEntry(dir, undefined, out);
+    const moduleSource = result.moduleSource!;
     expect(result.standalone).toBe(true);
     expect(result.hasStorage).toBe(true);
-    expect(result.moduleSource).toContain('__registerFsStorage');
-    expect(result.moduleSource).toContain(`new Mastra({})`);
+    expect(moduleSource).toContain('__registerFsStorage');
+    expect(moduleSource).toContain(`new Mastra({})`);
+    expect(moduleSource.indexOf('__registerFsStorage')).toBeLessThan(
+      moduleSource.indexOf('assembleAgentFromFsEntry(__entry'),
+    );
   });
 
   it('standalone module includes workflow registration', async () => {

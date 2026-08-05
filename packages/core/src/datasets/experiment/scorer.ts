@@ -1,3 +1,4 @@
+import { ScorerRunError } from '../../evals/base';
 import type { MastraScorer } from '../../evals/base';
 import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '../../evals/types';
@@ -144,6 +145,11 @@ export interface WorkflowScorerData {
  * Errors are isolated per scorer - one failing scorer doesn't affect others.
  * Trajectory scorers (scorer.type === 'trajectory') receive a pre-extracted
  * Trajectory as their output, mirroring the dispatch runEvals performs.
+ *
+ * `persistScores: false` suppresses score writes while leaving `storage` usable
+ * for reads. The two are deliberately separate parameters: `storage` is also the
+ * source for trajectory extraction, so nulling it to stop writes would silently
+ * downgrade trajectory scorers to the raw-message fallback.
  */
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
@@ -158,6 +164,7 @@ export async function runScorersForItem(
   scorerOutput?: ScorerRunOutputForAgent,
   traceId?: string,
   workflowData?: WorkflowScorerData,
+  persistScores: boolean = true,
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
 
@@ -193,10 +200,11 @@ export async function runScorersForItem(
         targetCorrelationContext,
         scorer.type === 'trajectory' ? trajectoryOutput : undefined,
         workflowData,
+        persistScores,
       );
 
-      // Persist score if storage available and score was computed
-      if (storage && result.score !== null) {
+      // Persist only scores from successful scorer runs.
+      if (persistScores && storage && result.error === null && result.score !== null) {
         try {
           // Legacy score-store emission. This path is being deprecated.
           await validateAndSaveScore(storage, {
@@ -258,6 +266,37 @@ interface ScorerPromptMetadata {
   analyzePrompt?: string;
 }
 
+function extractScorerRunFields(scoreResult: unknown): {
+  score: number | null;
+  reason: string | null;
+  promptMetadata: ScorerPromptMetadata;
+} {
+  if (typeof scoreResult !== 'object' || scoreResult === null) {
+    return { score: null, reason: null, promptMetadata: {} };
+  }
+
+  const fields = scoreResult as Record<string, unknown>;
+  const str = (key: string): string | undefined =>
+    typeof fields[key] === 'string' ? (fields[key] as string) : undefined;
+  const obj = (key: string): Record<string, unknown> | undefined => {
+    const value = fields[key];
+    return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+  };
+
+  return {
+    score: typeof fields.score === 'number' ? fields.score : null,
+    reason: typeof fields.reason === 'string' ? fields.reason : null,
+    promptMetadata: {
+      generateScorePrompt: str('generateScorePrompt'),
+      generateReasonPrompt: str('generateReasonPrompt'),
+      preprocessStepResult: obj('preprocessStepResult'),
+      preprocessPrompt: str('preprocessPrompt'),
+      analyzeStepResult: obj('analyzeStepResult'),
+      analyzePrompt: str('analyzePrompt'),
+    },
+  };
+}
+
 /**
  * Run a single scorer safely, catching any errors.
  * Returns both the ScorerResult and prompt metadata for DB persistence.
@@ -275,6 +314,7 @@ async function runScorerSafe(
   targetCorrelationContext?: CorrelationContext,
   trajectoryOutput?: Trajectory,
   workflowData?: WorkflowScorerData,
+  persistScores: boolean = true,
 ): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
     const effectiveOutput = trajectoryOutput ?? scorerOutput ?? output;
@@ -303,6 +343,7 @@ async function runScorerSafe(
       ...(workflowData?.spanId ? { targetSpanId: workflowData.spanId } : {}),
       ...(targetCorrelationContext ? { targetCorrelationContext } : {}),
       ...(targetMetadata ? { targetMetadata } : {}),
+      _internal: { emitObservabilityScore: persistScores },
     });
 
     // Extract fields with typeof guards — scorer run result types use complex
@@ -320,16 +361,7 @@ async function runScorerSafe(
       };
     }
 
-    const fields = scoreResult as Record<string, unknown>;
-    const score = typeof fields.score === 'number' ? fields.score : null;
-    const reason = typeof fields.reason === 'string' ? fields.reason : null;
-
-    const str = (key: string): string | undefined =>
-      typeof fields[key] === 'string' ? (fields[key] as string) : undefined;
-    const obj = (key: string): Record<string, unknown> | undefined => {
-      const val = fields[key];
-      return typeof val === 'object' && val !== null ? (val as Record<string, unknown>) : undefined;
-    };
+    const { score, reason, promptMetadata } = extractScorerRunFields(scoreResult);
 
     return {
       result: {
@@ -340,16 +372,26 @@ async function runScorerSafe(
         error: null,
         targetScope: effectiveScope,
       },
-      promptMetadata: {
-        generateScorePrompt: str('generateScorePrompt'),
-        generateReasonPrompt: str('generateReasonPrompt'),
-        preprocessStepResult: obj('preprocessStepResult'),
-        preprocessPrompt: str('preprocessPrompt'),
-        analyzeStepResult: obj('analyzeStepResult'),
-        analyzePrompt: str('analyzePrompt'),
-      },
+      promptMetadata,
     };
   } catch (error) {
+    if (error instanceof ScorerRunError) {
+      const { score, reason, promptMetadata } = extractScorerRunFields(error.result);
+      return {
+        result: {
+          scorerId: scorer.id,
+          scorerName: scorer.name,
+          score,
+          reason,
+          error: error.message,
+          failedStep: error.failedStep,
+          completedSteps: error.completedSteps,
+          targetScope: trajectoryOutput ? 'trajectory' : 'span',
+        },
+        promptMetadata,
+      };
+    }
+
     return {
       result: {
         scorerId: scorer.id,
@@ -404,6 +446,7 @@ export async function runStepScorersForItem(
   targetId: string,
   itemId: string,
   traceId?: string,
+  persistScores: boolean = true,
 ): Promise<ScorerResult[]> {
   const stepIds = Object.keys(stepScorers);
   if (stepIds.length === 0) return [];
@@ -456,6 +499,7 @@ export async function runStepScorersForItem(
             targetEntityType: EntityType.WORKFLOW_STEP,
             targetTraceId: traceId,
             ...(targetCorrelationContext ? { targetCorrelationContext } : {}),
+            _internal: { emitObservabilityScore: persistScores },
           });
 
           if (typeof scoreResult !== 'object' || scoreResult === null) {
@@ -474,7 +518,7 @@ export async function runStepScorersForItem(
           const reason = typeof fields.reason === 'string' ? fields.reason : null;
 
           // Persist score (best-effort, mirrors runScorersForItem)
-          if (storage && score !== null) {
+          if (persistScores && storage && score !== null) {
             try {
               await validateAndSaveScore(storage, {
                 scorerId: scorer.id,
@@ -514,6 +558,21 @@ export async function runStepScorersForItem(
             stepId,
           };
         } catch (error) {
+          if (error instanceof ScorerRunError) {
+            const { score, reason } = extractScorerRunFields(error.result);
+            return {
+              scorerId: scorer.id,
+              scorerName: scorer.name,
+              score,
+              reason,
+              error: error.message,
+              failedStep: error.failedStep,
+              completedSteps: error.completedSteps,
+              targetScope: 'span' as const,
+              stepId,
+            };
+          }
+
           return {
             scorerId: scorer.id,
             scorerName: scorer.name,

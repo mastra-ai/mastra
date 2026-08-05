@@ -196,6 +196,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
         options.name,
         {
           kind: getSpanKind(options.type),
+          ...(options.startTime ? { startTime: options.startTime } : {}),
         },
         parentOtelContext,
       );

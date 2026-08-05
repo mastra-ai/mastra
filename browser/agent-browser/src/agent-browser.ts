@@ -183,7 +183,7 @@ export class AgentBrowser extends MastraBrowser {
     this.sharedManager = new BrowserManager();
 
     const localConfig = this.config as BrowserConfig;
-    const launchOptions: BrowserLaunchOptions = {
+    const launchOptions: BrowserLaunchOptions & { cdpHeaders?: Record<string, string> } = {
       headless: this.headless,
       viewport: localConfig.viewport,
       profile: localConfig.profile,
@@ -194,6 +194,9 @@ export class AgentBrowser extends MastraBrowser {
     // Resolve CDP URL if provided (can be string or function)
     if (localConfig.cdpUrl) {
       launchOptions.cdpUrl = await this.resolveCdpUrl(localConfig.cdpUrl);
+    }
+    if (localConfig.cdpHeaders) {
+      launchOptions.cdpHeaders = localConfig.cdpHeaders;
     }
 
     await this.sharedManager.launch(launchOptions);

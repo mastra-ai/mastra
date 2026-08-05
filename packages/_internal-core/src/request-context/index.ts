@@ -157,6 +157,26 @@ const SERIALIZATION_PROBE_BUDGET = 1_000_000;
  */
 const _typedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Int8Array.prototype), 'length')!.get!;
 
+/**
+ * Whether a value is a plain object (prototype `Object.prototype` or `null`)
+ * or an array — i.e. structural data safe to hand to the span serializer to
+ * walk. Class instances, functions, `Map`/`Set`, `Date`, etc. are excluded so
+ * their internals aren't walked into traces.
+ */
+function isPlainObjectOrArray(value: unknown): boolean {
+  try {
+    if (Array.isArray(value)) return true;
+    if (value === null || typeof value !== 'object') return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+  } catch {
+    // Some exotic values throw on classification — e.g. a revoked Proxy makes
+    // Array.isArray/getPrototypeOf throw TypeError. Treat them as non-plain so
+    // serializeForSpan collapses them to a type marker instead of throwing.
+    return false;
+  }
+}
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
@@ -389,13 +409,23 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
-   * Custom span serialization to prevent leaking internal state (like auth
-   * tokens stored in the private `registry` Map) into observability spans.
+   * Custom span serialization. Exposes the registry *entries* (never the
+   * instance's own private fields) so `deepClean` in `@mastra/observability`
+   * doesn't walk the runtime-enumerable `registry` Map — which would
+   * serialize its raw entries (including bearer tokens) into exported spans.
    *
-   * `deepClean` in `@mastra/observability` calls this method before falling
-   * back to `Object.keys()` — which would walk the runtime-enumerable
-   * `registry` field and serialize its raw Map entries (including any
-   * bearer tokens) into exported spans.
+   * Per stored value:
+   * - The framework-managed auth token is redacted by key.
+   * - Primitives are returned as-is.
+   * - Plain objects and arrays are returned by reference so the downstream
+   *   `deepClean` walks and bounds them — this keeps nested request-context
+   *   data visible in traces instead of collapsing it to `[object]`.
+   * - Every other type (class instances, functions, Map/Set, Date, etc.) is
+   *   collapsed to `[${typeof value}]` rather than walked, so a class's
+   *   internals never reach the trace serializer.
+   *
+   * The plain objects/arrays passed through here MUST still be bounded by a
+   * downstream `deepClean` before export.
    */
   serializeForSpan(): Record<string, unknown> {
     const safe: Record<string, unknown> = {};
@@ -409,6 +439,8 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
         typeof value === 'number' ||
         typeof value === 'boolean'
       ) {
+        safe[key] = value;
+      } else if (isPlainObjectOrArray(value)) {
         safe[key] = value;
       } else {
         safe[key] = `[${typeof value}]`;

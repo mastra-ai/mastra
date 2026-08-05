@@ -60,6 +60,13 @@ beforeAll(() => {
     registryVersions[name] = { latest: baseVersion, alpha: `${baseVersion}-alpha.0` };
   }
 
+  const memoryVersion = JSON.parse(
+    fs.readFileSync(path.resolve(pkgRoot, '../..', 'packages/memory/package.json'), 'utf8'),
+  ).version as string;
+  linkedLocalVersions['@mastra/memory'] = memoryVersion;
+  const memoryBaseVersion = memoryVersion.split('-')[0]!;
+  registryVersions['@mastra/memory'] = { latest: memoryBaseVersion, alpha: `${memoryBaseVersion}-alpha.0` };
+
   fakeBinDir = path.join(workDir, 'bin');
   fs.mkdirSync(fakeBinDir);
   const registryVersionsPath = path.join(workDir, 'registry-versions.json');
@@ -122,6 +129,9 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
       'src/ui',
       'src/vite.config.ts',
       'src/mastra/public',
+      // Slack ships inside @mastra/factory; the scaffold imports it rather
+      // than carrying a vendored copy it would have to maintain.
+      'src/web',
     ]) {
       expect(fs.existsSync(path.join(outDir, absentPath)), `${absentPath} must not ship`).toBe(false);
     }
@@ -149,13 +159,13 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
       '@mastra/core',
       '@mastra/factory',
       '@mastra/libsql',
+      '@mastra/memory',
       '@mastra/pg',
       '@mastra/platform-workspace',
       '@mastra/redis-streams',
       'zod',
     ]);
     expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
-    expect(pkg.dependencies['@mastra/memory']).toBeUndefined();
     expect(pkg.dependencies['react-is']).toBeUndefined();
     for (const browserDependency of ['react', 'react-dom', '@tanstack/react-query', 'vite', 'tailwindcss']) {
       expect(allDeps[browserDependency]).toBeUndefined();
