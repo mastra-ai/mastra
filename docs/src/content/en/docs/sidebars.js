@@ -68,11 +68,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/supervisor-agents',
-              label: 'Supervisor Agents',
-            },
-            {
-              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -268,6 +263,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'capabilities/subagents',
+          label: 'Subagents',
+        },
+        {
+          type: 'doc',
           id: 'agents/skills',
           label: 'Skills',
         },
@@ -418,20 +418,9 @@ const sidebars = {
               label: 'SDK Agents',
             },
             {
-              type: 'category',
+              type: 'doc',
+              id: 'mcp/overview',
               label: 'MCP',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'mcp/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'mcp/mcp-apps',
-                  label: 'MCP Apps',
-                },
-              ],
             },
           ],
         },

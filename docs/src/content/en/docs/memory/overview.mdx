@@ -184,7 +184,7 @@ Conversation messages are ordered by timestamp and deduplicated by message ID, s
 
 ## Memory in multi-agent systems
 
-When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
+When a [supervisor agent](/docs/capabilities/subagents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
 
 ### How delegation scopes memory
 
@@ -200,7 +200,7 @@ Title generation (`generateTitle`) is a top-level thread concern and **isn't** a
 
 :::
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved, the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved, the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/capabilities/subagents#message-filtering) callback.
 
 :::note
 
