@@ -294,13 +294,13 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   }
 
   // Phase B — Resolve task function
-  let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
+  let execFn: (item: ExperimentItem, signal?: AbortSignal, hardAbortSignal?: AbortSignal) => Promise<ExecutionResult>;
 
   try {
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
-      execFn = async (item, itemSignal) => {
+      execFn = async (item, itemSignal, hardAbortSignal) => {
         try {
           const taskPromise = Promise.resolve(
             taskFn({
@@ -311,7 +311,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               signal: itemSignal,
             }),
           );
-          const result = itemSignal ? await raceWithSignal(taskPromise, itemSignal) : await taskPromise;
+          const result = hardAbortSignal ? await raceWithSignal(taskPromise, hardAbortSignal) : await taskPromise;
           return { output: result, error: null, traceId: null };
         } catch (err: unknown) {
           return executionFailure(err);
@@ -498,9 +498,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           // Compose one per-item signal before the first attempt so timeout is a whole-item budget.
           const effectiveTimeout = item.timeout ?? itemTimeout;
           let itemSignal: AbortSignal | undefined = executionSignal;
+          let hardAbortSignal: AbortSignal | undefined = signal;
           if (effectiveTimeout !== undefined) {
             const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
             itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
+            hardAbortSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
           }
 
           // Resolve item scorer configuration before executing the target. Invalid item
@@ -508,15 +510,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           let retryCount = 0;
           let execResult: ExecutionResult = scorerConfigError
             ? { output: null, error: scorerConfigError, traceId: null }
-            : await execFn(item, itemSignal);
-          if (executionSignal?.aborted) {
-            throw executionSignal.reason ?? new DOMException('Aborted', 'AbortError');
+            : await execFn(item, itemSignal, hardAbortSignal);
+          if (signal?.aborted) {
+            throw signal.reason ?? new DOMException('Aborted', 'AbortError');
           }
 
           while (execResult.error && !scorerConfigError && retryCount < maxRetries) {
-            if (executionSignal?.aborted) {
-              throw executionSignal.reason ?? new DOMException('Aborted', 'AbortError');
+            if (signal?.aborted) {
+              throw signal.reason ?? new DOMException('Aborted', 'AbortError');
             }
+            if (eventDispatcher?.failure) return;
 
             // The item deadline and explicit abort errors are non-retryable.
             if (itemSignal?.aborted || execResult.aborted) break;
@@ -534,24 +537,25 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
             const jitter = delay * 0.2 * Math.random();
             try {
-              await waitForRetry(delay + jitter, itemSignal);
+              await waitForRetry(delay + jitter, hardAbortSignal);
             } catch (error) {
-              if (executionSignal?.aborted) {
-                throw executionSignal.reason ?? error;
+              if (signal?.aborted) {
+                throw signal.reason ?? error;
               }
               execResult = executionFailure(error);
               break;
             }
 
+            if (eventDispatcher?.failure) return;
             if (itemSignal?.aborted) {
               execResult = executionFailure(itemSignal.reason);
               break;
             }
 
             retryCount++;
-            execResult = await execFn(item, itemSignal);
-            if (executionSignal?.aborted) {
-              throw executionSignal.reason ?? new DOMException('Aborted', 'AbortError');
+            execResult = await execFn(item, itemSignal, hardAbortSignal);
+            if (signal?.aborted) {
+              throw signal.reason ?? new DOMException('Aborted', 'AbortError');
             }
           }
 
