@@ -13,6 +13,8 @@ import {
   ensureDate,
   filterByDateRange,
   jsonValueEquals,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -609,6 +611,7 @@ export class StoreMemoryRedis extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       if (page < 0) {
@@ -710,6 +713,10 @@ export class StoreMemoryRedis extends MemoryStorage {
         filter?.dateRange,
       );
 
+      messagesData = messagesData.filter(message =>
+        storageMessageMatchesMetadataFilter(message.content, metadataFilter),
+      );
+
       messagesData.sort((a, b) => {
         const aValue = getFieldValue(a);
         const bValue = getFieldValue(b);
@@ -751,13 +758,13 @@ export class StoreMemoryRedis extends MemoryStorage {
 
       const returnedThreadMessageIds = new Set(
         finalMessages
-          .filter(m => {
-            return m.threadId && threadIdsSet.has(m.threadId);
-          })
-          .map(m => m.id),
+          .filter(message => message.threadId && threadIdsSet.has(message.threadId))
+          .map(message => message.id),
       );
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && end < total;
+      const hasMore =
+        perPageInput !== false &&
+        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        offset + paginatedMessages.length < total;
 
       return {
         messages: finalMessages,

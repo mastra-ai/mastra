@@ -1,5 +1,6 @@
 import { McpSelectorComponent } from '../components/mcp-selector.js';
 import { showInfo } from '../display.js';
+import { openUrlInBrowser } from '../open-url.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -48,8 +49,8 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
         `      }\n` +
         `    }\n` +
         `  }\n\n` +
-        `Note: For dynamic auth (token refresh), use a stdio wrapper.\n` +
-        `"headers" only supports static values.`,
+        `Servers that require OAuth can be added with just a "url" —\n` +
+        `authenticate them from the /mcp selector.`,
     );
     return;
   }
@@ -76,6 +77,21 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
     },
     onReconnectServer: async (name: string) => {
       return mm.reconnectServer(name);
+    },
+    onAuthenticateServer: async (name: string) => {
+      return mm.authenticateServer(name, {
+        onAuthorizationUrl: (url: string) => {
+          // Always print the URL so headless (or failed-open) environments can
+          // complete the flow manually; opening the browser is best-effort.
+          showInfo(ctx.state, `MCP: To authenticate "${name}", open:\n  ${url}`);
+          if (process.env.MASTRA_MCP_OAUTH_NO_BROWSER !== '1') {
+            openUrlInBrowser(url);
+          }
+        },
+      });
+    },
+    onCancelAuthenticateServer: async (name: string) => {
+      return mm.cancelServerAuthentication(name);
     },
     getServerLogs: (name: string) => {
       return mm.getServerLogs(name);
@@ -104,7 +120,11 @@ async function reloadServers(ctx: SlashCommandContext): Promise<void> {
     const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
     ctx.showInfo(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
     for (const s of statuses.filter(s => !s.connected)) {
-      ctx.showInfo(`MCP: Failed to connect to "${s.name}": ${s.error}`);
+      if (s.needsAuth) {
+        ctx.showInfo(`MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+      } else {
+        ctx.showInfo(`MCP: Failed to connect to "${s.name}": ${s.error}`);
+      }
     }
   } catch (error) {
     ctx.showError(`MCP reload failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -125,8 +145,24 @@ function showTextStatus(ctx: SlashCommandContext): void {
   lines.push('');
 
   for (const status of statuses) {
-    const icon = status.connecting ? '⟳' : status.connected ? '\u2713' : '\u2717';
-    const state = status.connecting ? 'connecting...' : status.connected ? 'connected' : `error: ${status.error}`;
+    const icon = status.authenticating
+      ? '\u26a0'
+      : status.connecting
+        ? '⟳'
+        : status.connected
+          ? '\u2713'
+          : status.needsAuth
+            ? '\u26a0'
+            : '\u2717';
+    const state = status.authenticating
+      ? 'authenticating — cancel via /mcp'
+      : status.connecting
+        ? 'connecting...'
+        : status.connected
+          ? 'connected'
+          : status.needsAuth
+            ? 'needs auth — authenticate via /mcp'
+            : `error: ${status.error}`;
     lines.push(`  ${icon} ${status.name} [${status.transport}] (${state})`);
     if (status.toolNames.length > 0) {
       for (const toolName of status.toolNames) {

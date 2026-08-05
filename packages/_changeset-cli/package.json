@@ -1,6 +1,6 @@
 {
   "name": "@internal/changeset-cli",
-  "version": "0.0.68",
+  "version": "0.0.75",
   "description": "Custom changeset CLI for Mastra monorepo versioning",
   "type": "module",
   "main": "dist/src/index.js",
@@ -9,7 +9,8 @@
   "scripts": {
     "start": "tsx --env-file=./.env.dev src/index.ts",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

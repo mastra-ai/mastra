@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Prompt alignment scorer
 
-The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates how well agent responses align with user prompts across multiple dimensions: intent understanding, requirement fulfillment, response completeness, and format appropriateness.
+The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates how well agent responses align with user prompts across intent understanding and requirement fulfillment, plus response completeness, and format appropriateness.
 
 ## Parameters
 
@@ -126,7 +126,7 @@ Evaluates alignment with user prompts only:
 
 1. **Intent Alignment** (40% weight): Whether the response addresses the user's core request
 1. **Requirements Fulfillment** (30% weight): If all user requirements are met
-1. **Completeness** (20% weight): Whether the response is comprehensive for user needs
+1. **Completeness** (20% weight): Whether the response is detailed for user needs
 1. **Response Appropriateness** (10% weight): If format and tone match user expectations
 
 #### System Mode ('system')
@@ -185,7 +185,7 @@ Final Score = Weighted Score × scale
 - **0.8-0.9** = Very good alignment with minor gaps
 - **0.7-0.8** = Good alignment but missing some requirements or completeness
 - **0.6-0.7** = Moderate alignment with noticeable gaps
-- **0.4-0.6** = Poor alignment with significant issues
+- **0.4-0.6** = Poor alignment with substantial issues
 - **0.0-0.4** = Very poor alignment, response doesn't address the prompt effectively
 
 ### When to Use Each Mode
@@ -206,7 +206,7 @@ Final Score = Weighted Score × scale
 
 **Both Mode (`'both'`)** - Use when (default, recommended):
 
-- Comprehensive evaluation of overall AI agent performance
+- Comprehensive evaluation of AI agent performance
 - Balancing user satisfaction with system compliance
 - Production monitoring where both user and system requirements matter
 - Holistic assessment of prompt-response alignment
@@ -449,7 +449,7 @@ console.log(result)
 
 ### Excellent alignment output
 
-The output receives a high score because it perfectly addresses the intent, fulfills all requirements, and uses appropriate format.
+The output receives a high score because it perfectly addresses the intent and fulfills all requirements. It also uses the appropriate format.
 
 ```typescript prettier:false
 {

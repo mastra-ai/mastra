@@ -9,7 +9,7 @@ How to write idiomatic Tailwind v4 and spot v3-era syntax that still compiles bu
 
 ## Version and sources
 
-Check the pinned version before using recent utilities: the playground packages pin `tailwindcss` in their `package.json` (4.2.2 at the time of writing — v4.2 features like logical properties and `font-features-*` are available; v4.3 additions like `scrollbar-*`, `zoom-*`, `tab-*` are not). When unsure whether a utility, variant, or directive exists in the pinned version, verify against the docs instead of guessing:
+Check the pinned version before using recent utilities: the playground packages pin `tailwindcss` in their `package.json` (4.3.3 at the time of writing, including v4.3 utilities like `scrollbar-*`, `zoom-*`, and `tab-*`). When unsure whether a utility, variant, or directive exists in the pinned version, verify against the docs instead of guessing:
 
 - Utility/variant reference: https://tailwindcss.com/docs
 - v3 → v4 migration: https://tailwindcss.com/docs/upgrade-guide

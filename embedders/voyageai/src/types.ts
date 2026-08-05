@@ -69,6 +69,8 @@ export interface VoyageTextEmbeddingConfig {
   model: VoyageTextModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Input type for retrieval optimization */
   inputType?: VoyageInputType;
   /** Output embedding dimension (model-dependent, default 1024) */
@@ -119,7 +121,10 @@ export interface VoyageVideoUrlContent {
  * All multimodal content types
  */
 export type VoyageMultimodalContent =
-  VoyageTextContent | VoyageImageUrlContent | VoyageImageBase64Content | VoyageVideoUrlContent;
+  | VoyageTextContent
+  | VoyageImageUrlContent
+  | VoyageImageBase64Content
+  | VoyageVideoUrlContent;
 
 /**
  * Single multimodal input - an array of interleaved content
@@ -136,6 +141,8 @@ export interface VoyageMultimodalEmbeddingConfig {
   model: VoyageMultimodalModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Input type for retrieval optimization */
   inputType?: VoyageInputType;
   /** Whether to truncate inputs that exceed context length (default true) */
@@ -154,6 +161,8 @@ export interface VoyageContextualizedEmbeddingConfig {
   model: VoyageContextModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Input type for retrieval optimization */
   inputType?: VoyageInputType;
   /** Output embedding dimension (default 1024) */
@@ -370,7 +379,12 @@ export interface VoyageContextualizedEmbeddingResponse {
  * VoyageAI reranking models
  */
 export type VoyageRerankerModel =
-  'rerank-2.5' | 'rerank-2.5-lite' | 'rerank-2' | 'rerank-2-lite' | 'rerank-1' | 'rerank-lite-1';
+  | 'rerank-2.5'
+  | 'rerank-2.5-lite'
+  | 'rerank-2'
+  | 'rerank-2-lite'
+  | 'rerank-1'
+  | 'rerank-lite-1';
 
 /**
  * Configuration for VoyageAI reranker
@@ -380,6 +394,8 @@ export interface VoyageRerankerConfig {
   model: VoyageRerankerModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Whether to truncate inputs that exceed context length (default true) */
   truncation?: boolean;
 }

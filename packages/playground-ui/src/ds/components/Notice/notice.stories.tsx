@@ -16,7 +16,7 @@ const meta: Meta<typeof Notice> = {
   },
   decorators: [
     Story => (
-      <div className="max-w-200 mx-auto w-full rounded-lg bg-surface2 p-6">
+      <div className="bg-surface2 mx-auto w-full max-w-200 rounded-lg p-6">
         <Story />
       </div>
     ),
@@ -133,6 +133,32 @@ export const MessageOnlyWithActionLong: Story = {
     >
       Failed to load scorers from the remote registry. The request timed out after 30 seconds. Check your network
       connection and confirm the registry endpoint is reachable, then retry to continue.
+    </Notice>
+  ),
+};
+
+const gitRemoteFailure =
+  "Failed to prepare the workspace: Failed to set git remote: error: could not lock config file .git/config: File exists fatal: could not set 'remote.origin.url' to 'https://x-access-token:ghs_EXAMPLEtokenaGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9eyJhdWQiOiJhdXRobiIsImRpZ2VzdCI6IlF2QzJWbmNsIjNkbFZtbFBNUXJleDhxdnl2d1RMZ0Z2N2FQbXVlTnJ1TGVn@github.com/mastra-ai/mastra.git'";
+
+export const MessageWithUnbreakableToken: Story = {
+  render: () => (
+    <Notice
+      variant="destructive"
+      action={
+        <Notice.Button>
+          Retry <RefreshCwIcon />
+        </Notice.Button>
+      }
+    >
+      {gitRemoteFailure}
+    </Notice>
+  ),
+};
+
+export const TitledWithUnbreakableToken: Story = {
+  render: () => (
+    <Notice variant="destructive" title="Workspace unavailable">
+      <Notice.Message>{gitRemoteFailure}</Notice.Message>
     </Notice>
   ),
 };
