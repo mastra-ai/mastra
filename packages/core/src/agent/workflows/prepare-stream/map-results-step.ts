@@ -242,6 +242,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
       includeRawChunks: options.includeRawChunks,
+      experimentalTransform: options.experimentalTransform,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {

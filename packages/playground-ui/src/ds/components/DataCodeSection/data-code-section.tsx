@@ -280,9 +280,9 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 text-ui-sm break-all text-neutral4 dark:border-white/10 dark:bg-black/20">
+      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
-          <div className="font-mono break-all text-neutral4">
+          <div className="text-neutral4 font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -299,7 +299,7 @@ export function DataCodeSection({
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
         <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate text-ui-sm [&>svg]:size-3.5">
+            <DialogTitle className="text-ui-sm flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -343,8 +343,8 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="overflow-hidden overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 text-ui-sm break-all text-neutral4 dark:border-white/10 dark:bg-black/20">
-                <div className="font-mono break-all text-neutral4">
+              <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+                <div className="text-neutral4 font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>

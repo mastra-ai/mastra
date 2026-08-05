@@ -1,6 +1,6 @@
 ---
 title: "Evals with memory | Evals"
-description: "Run scorers against memory-enabled agents — including observational memory in thread scope — using runEvals and dataset experiments."
+description: "Run scorers against memory-enabled agents, including observational memory in thread scope, using runEvals and dataset experiments."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -8,7 +8,7 @@ packages:
 
 # Evals with memory
 
-Agents that use memory in `thread` scope — including observational memory — require a thread ID at run time. When an eval invokes the agent without one, you'll see:
+Agents that use memory in `thread` scope, including observational memory, require a thread ID at run time. When an eval invokes the agent without one, you'll see:
 
 ```
 ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList.
@@ -24,11 +24,11 @@ This page covers the three working patterns for running Mastra evals against mem
 | One independent thread per item, focused CI loop | [`runEvals` per item](#per-item-threads-with-runevals) |
 | Per-item threads driven by a stored `Dataset` | [`dataset.startExperiment` with an inline task](#dataset-experiments-with-an-inline-task) |
 
-Pre-seeding `RequestContext` with `MastraMemory` **isn't** a supported way to drive memory into an agent. Thread resolution reads `args.memory.thread` — `RequestContext.MastraMemory` is populated by `prepare-memory-step` after the agent has already resolved its thread.
+Pre-seeding `RequestContext` with `MastraMemory` **isn't** a supported way to drive memory into an agent. Thread resolution reads `args.memory.thread`, `RequestContext.MastraMemory` is populated by `prepare-memory-step` after the agent has already resolved its thread.
 
 ## Shared thread with `runEvals`
 
-`runEvals` accepts `targetOptions`, which is forwarded to `agent.generate()`. Passing `memory: { thread, resource }` runs every data item against the same thread — useful for testing recall across a multi-turn conversation.
+`runEvals` accepts `targetOptions`, which is forwarded to `agent.generate()`. Passing `memory: { thread, resource }` runs every data item against the same thread, useful for testing recall across a multi-turn conversation.
 
 ```typescript title="src/mastra/agents/support-agent.test.ts"
 import { runEvals } from '@mastra/core/evals'
@@ -96,7 +96,7 @@ Create the thread before running the eval. Observational memory in `thread` scop
 
 ## Dataset experiments with an inline task
 
-`dataset.startExperiment({ target: agent })` **doesn't** forward a `memory` option to the agent — only `requestContext`. To run a stored dataset against a memory-enabled agent, use an inline `task` function and stash `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
+`dataset.startExperiment({ target: agent })` **doesn't** forward a `memory` option to the agent, only `requestContext`. To run a stored dataset against a memory-enabled agent, use an inline `task` function and stash `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
 
 ```typescript title="src/mastra/evals/dataset-experiment.ts"
 import { randomUUID } from 'node:crypto'
@@ -149,6 +149,6 @@ The inline `task` receives the item's `metadata`, so each row can drive its own 
 ## Related
 
 - [Running scorers in CI](/docs/evals/running-in-ci)
-- [Running experiments](/docs/evals/datasets/running-experiments)
+- [Running experiments](/docs/datasets/running-experiments)
 - [Observational memory](/docs/memory/observational-memory)
 - [runEvals API reference](/reference/evals/run-evals)

@@ -16,6 +16,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   idGenerator,
   messageList,
   includeRawChunks,
+  experimentalTransform,
   modelSettings,
   tools,
   _internal,
@@ -156,7 +157,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     messageList,
     messageId: currentResponseMessageId!,
     options: {
-      runId: runIdToUse!,
+      runId: runIdToUse,
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
@@ -168,6 +169,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       requestContext: rest.requestContext,
       processorStates,
       transportRef: internalToUse.transportRef,
+      experimentalTransform,
     },
     initialState: initialStreamState,
   });

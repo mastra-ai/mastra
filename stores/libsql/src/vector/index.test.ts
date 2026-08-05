@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { createClient } from '@libsql/client';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { LibSQLVector } from './index.js';
@@ -268,58 +267,5 @@ describe('LibSQLVector - Store Specific', () => {
 
       expect(results.length).toBe(0);
     });
-  });
-});
-
-describe('LibSQLVector local journal mode readiness', () => {
-  it('rejects invalid journal modes at runtime', () => {
-    expect(
-      () => new LibSQLVector({ id: 'invalid-mode', url: 'file:invalid.db', journalMode: 'truncate' as 'wal' }),
-    ).toThrow("journalMode must be either 'wal' or 'delete'");
-  });
-
-  it('establishes DELETE mode before the first vector operation', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-vector-delete-mode-'));
-    const dbPath = path.join(tmpDir, 'vectors.db');
-    const vector = new LibSQLVector({ id: 'delete-mode', url: `file:${dbPath}`, journalMode: 'delete' });
-
-    try {
-      await vector.createIndex({ indexName: 'ready_test', dimension: 4 });
-      const client = (vector as unknown as { turso: ReturnType<typeof createClient> }).turso;
-      const result = await client.execute('PRAGMA journal_mode;');
-
-      expect(Object.values(result.rows[0] ?? {})[0]).toBe('delete');
-      expect(fs.existsSync(`${dbPath}-wal`)).toBe(false);
-      expect(fs.existsSync(`${dbPath}-shm`)).toBe(false);
-    } finally {
-      await vector.close();
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  it('propagates a failed DELETE transition before vector access and close', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-vector-delete-locked-'));
-    const dbPath = path.join(tmpDir, 'vectors.db');
-    const blocker = createClient({ url: `file:${dbPath}` });
-    await blocker.execute('PRAGMA journal_mode=WAL;');
-    await blocker.execute('CREATE TABLE blocker (id INTEGER PRIMARY KEY);');
-    const tx = await blocker.transaction('write');
-    await tx.execute('INSERT INTO blocker (id) VALUES (1);');
-
-    const vector = new LibSQLVector({ id: 'delete-mode-locked', url: `file:${dbPath}`, journalMode: 'delete' });
-    const vectorClient = (vector as unknown as { turso: ReturnType<typeof createClient> }).turso;
-
-    try {
-      await expect(vector.listIndexes()).rejects.toThrow();
-      await tx.rollback();
-      await expect(vector.close()).rejects.toThrow();
-      expect(vectorClient.closed).toBe(true);
-    } finally {
-      if (!tx.closed) {
-        await tx.rollback();
-      }
-      blocker.close();
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
   });
 });

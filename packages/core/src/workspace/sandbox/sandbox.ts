@@ -97,8 +97,15 @@ export interface SandboxCloneOptions {
   sandboxId?: string;
   /** Environment variables baked into the sandbox clone. */
   env?: Record<string, string>;
+  /** Provider working directory for the sandbox clone. */
+  workingDirectory?: string;
   /** Idle teardown window (minutes) for the sandbox clone. */
   idleTimeoutMinutes?: number;
+  /**
+   * Provider checkpoint used to seed and preserve the sandbox clone.
+   * Providers without checkpoint support may ignore this option.
+   */
+  checkpointName?: string;
 }
 
 // =============================================================================

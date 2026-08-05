@@ -49,7 +49,7 @@ const ToolExecutorContent = ({
   return (
     <MainContentContent>
       <div className="flex w-full flex-col items-center p-5 lg:flex-row lg:items-start lg:justify-center">
-        <div className="grid w-full min-w-0 max-w-3xl content-start gap-5">
+        <div className="grid w-full max-w-3xl min-w-0 content-start gap-5">
           <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
           {hasConfiguration && (
             <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>

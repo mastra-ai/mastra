@@ -62,6 +62,9 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         backgroundTaskEnabled,
         inputProcessors: options.inputProcessors,
         hooks: options.hooks,
+        // Use the resolved execution model so provider-native placeholders
+        // respect per-call and Studio model overrides.
+        model: capabilities.llm.getModel(),
       });
 
       // Update the agent span with available tool names for observability

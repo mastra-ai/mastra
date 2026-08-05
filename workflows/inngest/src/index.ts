@@ -15,10 +15,12 @@ import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, createTool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
 import type { Step, AgentStepOptions, StepParams, ToolStep, StepMetadata } from '@mastra/core/workflows';
-import { Workflow } from '@mastra/core/workflows';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
+import {
+  Workflow,
+  createStepFromAgent as coreCreateStepFromAgent,
+  createStepFromTool as coreCreateStepFromTool,
+} from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
-import { z } from 'zod';
 import type { InngestEngineType, InngestWorkflowConfig } from './types';
 import { InngestWorkflow } from './workflow';
 
@@ -316,212 +318,37 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   params: InngestSubAgent<TStepId> | Agent<TStepId, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<TStepId, any, any, TStepOutput, unknown, unknown, InngestEngineType> {
-  const options = (agentOrToolOptions ?? {}) as
-    | (AgentStepOptions<TStepOutput> & {
-        retries?: number;
-        scorers?: DynamicArgument<MastraScorers>;
-        metadata?: StepMetadata;
-      })
-    | undefined;
-  // Determine output schema based on structuredOutput option
-  const outputSchema = (options?.structuredOutput?.schema ??
-    z.object({ text: z.string() })) as unknown as PublicSchema<TStepOutput>;
-  const { retries, scorers, metadata, ...agentOptions } =
-    options ??
-    ({} as AgentStepOptions<TStepOutput> & {
-      retries?: number;
-      scorers?: DynamicArgument<MastraScorers>;
-      metadata?: StepMetadata;
-    });
-
-  return {
-    id: params.id,
-    description: params.getDescription(),
-    inputSchema: toStandardSchema(
-      z.object({
-        prompt: z.string(),
-      }),
-    ),
-    outputSchema: toStandardSchema(outputSchema),
-    retries,
-    scorers,
-    metadata,
-    execute: async ({
-      inputData,
-      runId,
-      [PUBSUB_SYMBOL]: pubsub,
-      [STREAM_FORMAT_SYMBOL]: streamFormat,
-      requestContext,
-      tracingContext,
-      abortSignal,
-      abort,
-      writer,
-    }) => {
-      let streamPromise = {} as {
-        promise: Promise<string>;
-        resolve: (value: string) => void;
-        reject: (reason?: any) => void;
-      };
-
-      streamPromise.promise = new Promise((resolve, reject) => {
-        streamPromise.resolve = resolve;
-        streamPromise.reject = reject;
-      });
-
-      // Track structured output result
-      let structuredResult: any = null;
-
-      const toolData = {
-        name: params.name ?? params.id,
-        args: inputData,
-      };
-
-      let stream: ReadableStream<any>;
-
-      if ((await params.getModel()).specificationVersion === 'v1') {
-        if (typeof params.streamLegacy !== 'function') {
-          throw new Error(`Agent step ${params.id} returned a v1 model but does not implement streamLegacy`);
-        }
-        const modelOutput = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
-          requestContext,
-          tracingContext,
-          onFinish: (result: any) => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
-          abortSignal,
-        });
-        if ('text' in modelOutput) {
-          void (modelOutput as { text: Promise<string> }).text.then(streamPromise.resolve, streamPromise.reject);
-        }
-        stream = modelOutput.fullStream as any;
-      } else {
-        const { structuredOutput, ...restAgentOptions } = agentOptions ?? {};
-        const baseOptions = {
-          ...restAgentOptions,
-          requestContext,
-          tracingContext,
-          onFinish: (result: any) => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if (structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void agentOptions?.onFinish?.(result);
-          },
-          abortSignal,
-        };
-
-        const modelOutput = structuredOutput
-          ? await params.stream((inputData as { prompt: string }).prompt, {
-              ...baseOptions,
-              structuredOutput,
-            } as any)
-          : await params.stream((inputData as { prompt: string }).prompt, baseOptions as any);
-
-        stream = modelOutput.fullStream as ReadableStream<any>;
-        void (modelOutput as { text: Promise<string> }).text.then(streamPromise.resolve, streamPromise.reject);
-      }
-
-      if (streamFormat === 'legacy') {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-        });
-        for await (const chunk of stream) {
-          if (chunk.type === 'text-delta') {
-            await pubsub.publish(`workflow.events.v2.${runId}`, {
-              type: 'watch',
-              runId,
-              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-            });
-          }
-        }
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-        });
-      } else {
-        for await (const chunk of stream) {
-          await writer.write(chunk as any);
-        }
-      }
-
-      if (abortSignal.aborted) {
-        return abort() as TStepOutput;
-      }
-
-      // Return structured output if available, otherwise default text
-      if (structuredResult !== null) {
-        return structuredResult;
-      }
-      return {
-        text: await streamPromise.promise,
-      } as TStepOutput;
-    },
-    component: 'AGENT',
-  };
+  // Delegates to core's factory: the run logic lives in the shared entry
+  // executors (`runAgentEntry`), which is also what the inherited
+  // `DefaultExecutionEngine.executeAgent` runs for declarative graph entries.
+  // The engine generic is phantom (executors never read `ctx.engine`), so the
+  // cast only re-brands the step for Inngest consumers.
+  return coreCreateStepFromAgent(params as any, agentOrToolOptions as any) as unknown as Step<
+    TStepId,
+    any,
+    any,
+    TStepOutput,
+    unknown,
+    unknown,
+    InngestEngineType
+  >;
 }
 
 function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType> {
-  const toolOpts = agentOrToolOptions as
-    { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata } | undefined;
-  if (!params.inputSchema || !params.outputSchema) {
-    throw new Error('Tool must have input and output schemas defined');
-  }
-
-  return {
-    id: params.id,
-    description: params.description,
-    inputSchema: params.inputSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
-    retries: toolOpts?.retries,
-    scorers: toolOpts?.scorers,
-    metadata: toolOpts?.metadata,
-    execute: async ({
-      inputData,
-      mastra,
-      requestContext,
-      tracingContext,
-      suspend,
-      resumeData,
-      runId,
-      workflowId,
-      state,
-      setState,
-    }) => {
-      // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
-      const toolContext = {
-        mastra,
-        requestContext,
-        tracingContext,
-        workflow: {
-          runId,
-          resumeData,
-          suspend,
-          workflowId,
-          state,
-          setState,
-        },
-      };
-      return params.execute(inputData, toolContext) as TStepOutput;
-    },
-    component: 'TOOL',
-  };
+  // Delegates to core's factory (shared `runToolEntry` executor); see
+  // `createStepFromAgent` above for why the engine re-brand cast is safe.
+  return coreCreateStepFromTool(params as any, agentOrToolOptions as any) as unknown as Step<
+    string,
+    any,
+    TStepInput,
+    TStepOutput,
+    TResume,
+    TSuspend,
+    InngestEngineType
+  >;
 }
 
 function createStepFromProcessor<TProcessorId extends string>(
@@ -866,7 +693,8 @@ function createStepFromProcessor<TProcessorId extends string>(
               const spanKey = `__outputStreamSpan_${processor.id}`;
               const mutableState = (state ?? {}) as Record<string, unknown>;
               let processorSpan = mutableState[spanKey] as
-                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
+                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
+                | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor

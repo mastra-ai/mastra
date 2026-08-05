@@ -55,7 +55,7 @@ Service account auth is the recommended option for backend agents. No user conse
 
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and select or create a project.
 1. Go to **APIs & Services > Library**, search for **Google Drive API**, and select **Enable**.
-1. Go to **APIs & Services > Credentials**, select **Create credentials > Service account**, and complete the form. The role can be left blank — Drive permissions are granted by sharing folders, not by IAM roles.
+1. Go to **APIs & Services > Credentials**, select **Create credentials > Service account**, and complete the form. The role can be left blank: Drive permissions are granted by sharing folders, not by IAM roles.
 1. Open the new service account, go to the **Keys** tab, and select **Add key > Create new key > JSON**. The browser downloads a JSON key file.
 1. Copy the `client_email` value from the JSON file. This is the address you share Drive folders with.
 
@@ -104,7 +104,7 @@ const filesystem = new GoogleDriveFilesystem({
 
 You **don't** need to copy the entire JSON file or pass other fields like `project_id`, `client_id`, `private_key_id`, or `token_uri`. They're not used. Only `clientEmail` and `privateKey` are required. `privateKeyId`, `scopes`, and `subject` are optional. `scopes` defaults to `['https://www.googleapis.com/auth/drive']`, which is the scope required for the service account to see folders shared with it. The narrower `drive.file` scope only grants access to files the application created itself, so a folder shared with the service account would return `404 Not Found`.
 
-`GoogleDriveFilesystem` automatically normalizes the `privateKey` string before signing. It strips surrounding quotes (including escaped quotes from JSON-wrapped values), converts literal `\n` sequences to real newlines, normalizes `\r\n` line endings, and removes a trailing comma. The key works regardless of how your `.env` loader handles the value.
+`GoogleDriveFilesystem` automatically normalizes the `privateKey` string before signing. It strips surrounding quotes, including escaped quotes from JSON-wrapped values, and converts literal `\n` sequences to real newlines. It also normalizes `\r\n` line endings, and removes a trailing comma. The key works regardless of how your `.env` loader handles the value.
 
 ##### Troubleshoot
 
@@ -222,5 +222,5 @@ GoogleDriveFilesystem implements the [WorkspaceFilesystem interface](/reference/
 
 - Google Drive allows multiple files with the same name in a folder. `GoogleDriveFilesystem` resolves paths by picking the first match, so keep names unique within each folder when you rely on path-based lookup.
 - `writeFile` creates parent folders automatically when `recursive` is unset (the default) or `true`. Set `recursive: false` to require the parent folder to already exist.
-- `expectedMtime` on `WriteOptions` is honored — when the stored `modifiedTime` differs, the write is rejected with `StaleFileError` to support optimistic concurrency.
-- The provider only exercises Drive REST endpoints (`https://www.googleapis.com/drive/v3` and `https://www.googleapis.com/upload/drive/v3`) through the built-in `fetch`; no additional dependencies are required.
+- `expectedMtime` on `WriteOptions` is honored. When the stored `modifiedTime` differs, the write is rejected with `StaleFileError` to support optimistic concurrency.
+- The provider only exercises Drive REST endpoints (`https://www.googleapis.com/drive/v3` and `https://www.googleapis.com/upload/drive/v3`) through the built-in `fetch`. No additional dependencies are required.
