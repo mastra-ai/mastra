@@ -113,12 +113,15 @@ function DrillFilterBanner({
 }) {
   const bannerColors = selections.map(selection => nodeColor(getSignalHue(selection.signalName)));
   const bannerColor = bannerColors[0] ?? nodeColor(getSignalHue('goal'));
-  const stackedGradientStops = bannerColors
-    .map(color => `color-mix(in srgb, ${color} 32%, var(--color-surface1))`)
+  const stackedBackgroundStops = bannerColors
+    .map(color => `color-mix(in srgb, ${color} 8%, var(--color-surface1))`)
+    .join(', ');
+  const stackedBorderStops = bannerColors
+    .map(color => `color-mix(in srgb, ${color} 35%, var(--color-surface1))`)
     .join(', ');
   const backgroundImage =
     bannerColors.length > 1
-      ? `linear-gradient(90deg, ${stackedGradientStops}), linear-gradient(90deg, ${stackedGradientStops})`
+      ? `linear-gradient(90deg, ${stackedBackgroundStops}), linear-gradient(90deg, ${stackedBorderStops})`
       : undefined;
 
   return (

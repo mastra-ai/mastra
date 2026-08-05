@@ -611,6 +611,8 @@ describe('SankeySignals drill-in', () => {
 
       const banner = await screen.findByLabelText('Active drill-down filters');
       expect(banner.style.backgroundImage.match(/linear-gradient/g)).toHaveLength(2);
+      expect(banner.style.backgroundImage).toContain('8%');
+      expect(banner.style.backgroundImage).toContain('35%');
       expect(banner.style.backgroundClip).toBe('padding-box, border-box');
     });
 
