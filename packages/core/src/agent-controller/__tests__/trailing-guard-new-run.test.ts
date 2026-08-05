@@ -121,4 +121,70 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
       organizationId: 'org-1',
     });
   });
+
+  // Resuming is a caller-authenticated entry point that starts the subscription
+  // itself, so an approval arriving after it must not fall back to whatever
+  // identity a previous send happened to leave behind — or to none at all.
+  it('uses the resuming caller context for an approval that follows a resume', async () => {
+    const controller = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.suspensions.register({ toolCallId: 'suspended-1', runId: 'run-a', toolName: 'ask_user' });
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'resuming-user', organizationId: 'org-1' });
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    const approveToolCall = vi.spyOn(session, 'approveToolCall').mockResolvedValue();
+
+    await session
+      .resumeToolCall({ resumeData: 'answer', toolCallId: 'suspended-1', requestContext })
+      .catch(() => undefined);
+
+    await processSubscribedChunks(session, [
+      { type: 'start', runId: 'run-b' },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-b',
+        payload: { toolCallId: 'tool-call-1', toolName: 'factory_transition_work_item', args: {} },
+      },
+      { type: 'finish', runId: 'run-b', payload: { stepResult: { reason: 'stop' } } },
+    ]);
+
+    expect(approveToolCall).toHaveBeenCalledOnce();
+    expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({
+      id: 'resuming-user',
+      organizationId: 'org-1',
+    });
+  });
+
+  it('uses the notifying caller context for an approval that follows a notification signal', async () => {
+    const controller = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'notifying-user', organizationId: 'org-1' });
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    const approveToolCall = vi.spyOn(session, 'approveToolCall').mockResolvedValue();
+
+    await session
+      .sendNotificationSignal({ tagName: 'system', contents: 'ping' } as any, { requestContext })
+      .catch(() => undefined);
+
+    await processSubscribedChunks(session, [
+      { type: 'start', runId: 'run-b' },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-b',
+        payload: { toolCallId: 'tool-call-1', toolName: 'factory_transition_work_item', args: {} },
+      },
+      { type: 'finish', runId: 'run-b', payload: { stepResult: { reason: 'stop' } } },
+    ]);
+
+    expect(approveToolCall).toHaveBeenCalledOnce();
+    expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({
+      id: 'notifying-user',
+      organizationId: 'org-1',
+    });
+  });
 });
