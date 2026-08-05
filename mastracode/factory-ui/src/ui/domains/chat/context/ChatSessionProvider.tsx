@@ -138,7 +138,11 @@ export function ChatSessionBoundary({
 
   return (
     <ChatTranscriptProvider
-      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
+      // Identity is the session address alone. The transcript used to remount on
+      // the pending -> ready flip to re-seed its reducer from the first result;
+      // results now merge in, so remounting would only drop the live SSE
+      // listener and any streamed content that arrived before the fetch landed.
+      key={`${resourceId}:${threadId ?? 'draft'}`}
       threadId={threadId}
       initialMessages={messagesQuery.data}
       hasMoreHistory={messagesQuery.hasMore}
