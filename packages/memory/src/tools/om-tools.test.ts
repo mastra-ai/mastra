@@ -2426,7 +2426,71 @@ describe('om-tools', () => {
 
       await expect(
         tool.execute?.({ mode: 'messages' }, { memory: {}, agent: { resourceId: 'res-a' } } as any),
-      ).rejects.toThrow('Either cursor or threadId is required for mode="messages"');
+      ).rejects.toThrow('Pass a threadId (use mode="threads" to discover thread IDs) or a message ID as cursor');
+    });
+
+    it('should default to the current thread in thread scope when mode="messages" omits cursor', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'thread' });
+      const recallMock = vi.fn().mockResolvedValue({
+        messages: [
+          {
+            id: 'msg-1',
+            threadId: 'thread-a',
+            resourceId: 'res-a',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Message 1' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+
+      const result = await tool.execute?.({ mode: 'messages' }, {
+        memory: { recall: recallMock },
+        agent: { threadId: 'thread-a', resourceId: 'res-a' },
+      } as any);
+
+      expect(recallMock).toHaveBeenCalledWith(expect.objectContaining({ threadId: 'thread-a' }));
+      expect((result as any)?.messages).not.toMatch(/threadId wasn't passed/);
+      expect((result as any)?.messages).toContain('Message 1');
+    });
+
+    // Regression: with retrieval `{ vector: true, scope: 'thread' }` the tool schema omits
+    // `threadId`, so a fresh `mode="messages"` call has neither cursor nor threadId. This used
+    // to throw `Either cursor or threadId is required for mode="messages"` even with an active
+    // thread, leaving the agent no way to proceed. It must now browse the current thread.
+    it('should not throw the legacy cursor/threadId error in thread scope when a thread is active', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'thread' });
+      const recallMock = vi.fn().mockResolvedValue({
+        messages: [
+          {
+            id: 'msg-1',
+            threadId: 'thread-a',
+            resourceId: 'res-a',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Message 1' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+
+      const execute = () =>
+        tool.execute?.({ mode: 'messages' }, {
+          memory: { recall: recallMock },
+          agent: { threadId: 'thread-a', resourceId: 'res-a' },
+        } as any);
+
+      await expect(execute()).resolves.toBeDefined();
+      const result = await execute();
+      expect((result as any)?.messages).not.toContain('Either cursor or threadId is required');
+      expect(recallMock).toHaveBeenCalledWith(expect.objectContaining({ threadId: 'thread-a' }));
+    });
+
+    it('should explain missing thread context in thread scope for mode="messages"', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'thread' });
+
+      await expect(
+        tool.execute?.({ mode: 'messages' }, { memory: {}, agent: { resourceId: 'res-a' } } as any),
+      ).rejects.toThrow('no current thread could be resolved');
     });
 
     it('should allow cursor-only browsing in resource scope by resolving the cursor thread', async () => {

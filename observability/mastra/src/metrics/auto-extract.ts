@@ -10,6 +10,7 @@ import type {
   ModelGenerationAttributes,
   UsageStats,
 } from '@mastra/core/observability';
+import { resolveModelId } from '../model-id';
 import { estimateCosts } from './estimator';
 import { TokenMetrics } from './types';
 import { getTokenMetricSamples } from './usage-metrics';
@@ -78,7 +79,7 @@ function emitUsageMetrics(
   } else {
     try {
       const provider = attrs.provider;
-      const model = attrs.responseModel ?? attrs.model;
+      const model = resolveModelId(attrs.responseModel, attrs.model);
 
       if (provider && model) {
         metricCosts = estimateCosts({
@@ -137,7 +138,7 @@ function getProvidedCostContext(
 
   const carrierMetric = usage.inputTokens !== undefined ? TokenMetrics.TOTAL_INPUT : TokenMetrics.TOTAL_OUTPUT;
   const provider = costContext.provider ?? attrs.provider;
-  const model = costContext.model ?? attrs.responseModel ?? attrs.model;
+  const model = resolveModelId(costContext.model, attrs.responseModel, attrs.model);
   const contexts = new Map<TokenMetrics, CostContext>();
 
   for (const sample of getTokenMetricSamples(usage)) {
@@ -166,6 +167,7 @@ function getDurationMetricName(span: AnySpan): string | null {
       return 'mastra_agent_duration_ms';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.PROVIDER_TOOL_CALL:
       return 'mastra_tool_duration_ms';
     case SpanType.CLIENT_TOOL_CALL:
       // The CLIENT_TOOL_CALL server span measures only carrier emission

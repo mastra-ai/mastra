@@ -3,7 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Mastra } from '../mastra';
 import type { GetMetricBreakdownResponse, ObservabilityStorage } from '../storage/domains';
-import { captureTelemetryEvent, hashTelemetryValue, isEETelemetryEnabled } from './posthog';
+import { getServerTelemetryContext } from './context';
+import { captureTelemetryEvent, isTelemetryEnabled } from './posthog';
 
 const INPUT_TOKENS_METRIC = 'mastra_model_total_input_tokens';
 const OUTPUT_TOKENS_METRIC = 'mastra_model_total_output_tokens';
@@ -92,7 +93,7 @@ function applyBreakdown(
  */
 export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelemetryOptions = {}): Promise<void> {
   try {
-    if (!isEETelemetryEnabled()) {
+    if (!isTelemetryEnabled()) {
       return;
     }
 
@@ -101,8 +102,7 @@ export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelem
       return;
     }
 
-    const projectRoot = process.env.MASTRA_PROJECT_ROOT || process.cwd();
-    const projectId = hashTelemetryValue(projectRoot).slice(0, 16);
+    const { projectId, distinctId, command, nodeEnv } = getServerTelemetryContext();
     const cursorPath = options.cursorPath ?? getDefaultCursorPath();
     const lastSyncedAt = readCursor(cursorPath, projectId);
     const now = options.now ?? new Date();
@@ -133,9 +133,6 @@ export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelem
     applyBreakdown(rows, inputTotal, 'totalInputTokens');
     applyBreakdown(rows, outputTotal, 'totalOutputTokens');
 
-    const distinctId = process.env.MASTRA_CLI_DISTINCT_ID || undefined;
-    const command = process.env.MASTRA_TELEMETRY_COMMAND || 'server';
-    const nodeEnv = process.env.NODE_ENV || 'development';
     const isFirstSync = !lastSyncedAt;
 
     for (const row of rows.values()) {

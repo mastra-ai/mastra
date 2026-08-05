@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -8,11 +7,14 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
   createStorageErrorId,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 
 /**
@@ -54,18 +56,14 @@ export const OM_MIGRATION_COLUMNS: string[] = [
 ];
 
 /**
- * Try to import the OM schema statically. On older @mastra/core versions that
- * don't export OBSERVATIONAL_MEMORY_TABLE_SCHEMA this will be undefined,
- * and getExportDDL / init() will simply skip the OM table.
+ * The OM schema is imported statically above: the peer dependency range
+ * (`@mastra/core >= 1.49.0`) guarantees the export exists. This used to be a
+ * dynamic `require` guarded by `typeof require === 'function'` for older core
+ * versions, but esbuild rewrites the bare `require` identifier in the ESM
+ * bundle to a shim that always throws, and the silent catch meant the
+ * published ESM build skipped creating the OM table entirely (#18954).
  */
-let _omTableSchema: Record<string, Record<string, any>> | undefined;
-try {
-  const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
-  const storage = __require('@mastra/core/storage');
-  _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
-} catch {
-  // OM not available in this version of core
-}
+const _omTableSchema: Record<string, Record<string, any>> = OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -196,11 +194,11 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Reuse the module-level `_omTableSchema` set via the top-of-file
-    // `createRequire` shim. `await import('@mastra/core/storage')` here used
-    // to deadlock `mastra build` output: bundlers rewrite the dynamic import
-    // to point at the entry chunk that statically depends on this file, so
-    // the cycle never resolves when storage initializes during module
+    // Reuse the module-level `_omTableSchema` (static import). Don't switch
+    // this to `await import('@mastra/core/storage')`: that used to deadlock
+    // `mastra build` output, because bundlers rewrite the dynamic import to
+    // point at the entry chunk that statically depends on this file, so the
+    // cycle never resolves when storage initializes during module
     // evaluation (#18298).
     const omSchema = _omTableSchema?.[OM_TABLE];
 
@@ -227,7 +225,10 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      await this.#db.client.none(`CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`);
+      await this.#db.createIndexFromStatement(
+        'idx_om_lookup_key',
+        `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`,
+      );
     }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -1021,6 +1022,7 @@ export class MemoryPG extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
@@ -1075,14 +1077,27 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
-      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-      const messages: MessageRowFromDB[] = [...(rows || [])];
+      let total: number;
+      let messages: MessageRowFromDB[];
+      if (metadataFilter) {
+        const rows = await this.#db.client.manyOrNone(
+          `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
+          queryParams,
+        );
+        const filteredRows = (rows || []).filter(row =>
+          storageMessageMatchesMetadataFilter(row.content, metadataFilter),
+        );
+        total = filteredRows.length;
+        messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+      } else {
+        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+        total = parseInt(countResult.count, 10);
+        const limitValue = perPageInput === false ? total : perPage;
+        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+        messages = [...(rows || [])];
+      }
+      const primaryPageCount = messages.length;
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
@@ -1117,7 +1132,9 @@ export class MemoryPG extends MemoryStorage {
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -1188,6 +1205,7 @@ export class MemoryPG extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
@@ -1252,14 +1270,26 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
-      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-      const messages: MessageRowFromDB[] = [...(rows || [])];
+      let total: number;
+      let messages: MessageRowFromDB[];
+      if (metadataFilter) {
+        const rows = await this.#db.client.manyOrNone(
+          `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
+          queryParams,
+        );
+        const filteredRows = (rows || []).filter(row =>
+          storageMessageMatchesMetadataFilter(row.content, metadataFilter),
+        );
+        total = filteredRows.length;
+        messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+      } else {
+        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+        total = parseInt(countResult.count, 10);
+        const limitValue = perPageInput === false ? total : perPage;
+        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+        messages = [...(rows || [])];
+      }
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {

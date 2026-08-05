@@ -1,6 +1,6 @@
 services:
   db:
-    image: mysql:8.4
+    image: mysql:9.7
     container_name: 'mysql-test-db'
     ports:
       - '3306:3306'

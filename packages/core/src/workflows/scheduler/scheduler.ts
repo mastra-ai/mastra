@@ -6,7 +6,7 @@ import { computeNextFireAt } from './cron';
 import type { SchedulerConfig } from './types';
 
 const TOPIC_WORKFLOWS = 'workflows';
-export const TOPIC_HEARTBEATS = 'heartbeats';
+export const TOPIC_AGENT_SCHEDULES = 'agent-schedules';
 const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MISSES_BEFORE_DELETE = 3;
@@ -96,7 +96,9 @@ export class Scheduler extends MastraBase {
       // scripts that create a Mastra instance (which auto-creates the
       // notification dispatch workflow with a cron schedule) and exit
       // after a single agent.generate() call.
-      this.#intervalHandle.unref();
+      // Optional call: on runtimes where setInterval returns a number
+      // (e.g. Cloudflare Workers) there is no unref and nothing to release.
+      this.#intervalHandle.unref?.();
     } catch (err) {
       // Reset state so a future start() can retry. Without this, a failed
       // warm-up tick would leave #started=true with no interval armed and
@@ -303,7 +305,7 @@ export class Scheduler extends MastraBase {
 
     // For workflow targets we record the trigger now with the claim id —
     // the workflow event processor will reuse the same runId. For
-    // heartbeat targets the HeartbeatWorker records the trigger itself
+    // agent targets the AgentScheduleWorker records the trigger itself
     // after the agent run starts, so it can write the real agent runId.
     if (schedule.target.type === 'workflow' || triggerStatus === 'failed') {
       try {
@@ -360,9 +362,9 @@ export class Scheduler extends MastraBase {
         });
         return;
       }
-      case 'heartbeat': {
-        await this.#pubsub.publish(TOPIC_HEARTBEATS, {
-          type: 'heartbeat.fire',
+      case 'agent': {
+        await this.#pubsub.publish(TOPIC_AGENT_SCHEDULES, {
+          type: 'agent-schedule.fire',
           runId: claimId,
           data: {
             scheduleId: schedule.id,
@@ -382,7 +384,7 @@ export class Scheduler extends MastraBase {
 
 /**
  * @deprecated Renamed to {@link Scheduler}. The scheduler now drives both
- * workflow and heartbeat schedules, so the `Workflow`-prefixed name is no longer
+ * workflow and agent schedules, so the `Workflow`-prefixed name is no longer
  * accurate. This alias will be removed in a future major release.
  */
 export const WorkflowScheduler = Scheduler;

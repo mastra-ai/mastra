@@ -3,5 +3,5 @@
   "compilerOptions": {
     "exactOptionalPropertyTypes": true
   },
-  "include": ["./core/auth.test-d.ts"]
+  "include": ["./core/auth.test-d.ts", "./core/agent-message-input.test-d.ts"]
 }

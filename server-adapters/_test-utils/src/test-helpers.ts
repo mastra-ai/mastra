@@ -1,8 +1,7 @@
 import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { expect, Mock, vi } from 'vitest';
-import { Workflow } from '@mastra/core/workflows';
-import { normalizeRoutePath } from './route-test-utils';
+import { Workflow, createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { CompositeVoice } from '@mastra/core/voice';
@@ -11,18 +10,17 @@ import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { UnknownToolProviderError } from '@mastra/core/tool-provider';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
 import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
-import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-test-utils';
+import { generateValidDataFromSchema, getDefaultValidPathParams, normalizeRoutePath } from './route-test-utils';
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 import { getZodDef, getZodTypeName } from '@mastra/core/utils';
 vi.mock('@mastra/core/vector');
@@ -763,6 +761,25 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    // Add test stored workflow definition so GET /stored/workflows/:storedWorkflowId
+    // finds a row matching getDefaultValidPathParams' 'test-stored-workflow'
+    const workflowDefinitions = await storage.getStore('workflowDefinitions');
+    if (workflowDefinitions) {
+      await workflowDefinitions.upsert({
+        id: 'test-stored-workflow',
+        description: 'Test stored workflow',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+        graph: [
+          {
+            type: 'mapping',
+            id: 'greet',
+            mapConfig: JSON.stringify({ message: { template: 'Hello, ${initData.name}!' } }),
+          },
+        ],
+      });
+    }
+
     const backgroundTasks = await storage.getStore('backgroundTasks');
     if (backgroundTasks) {
       await backgroundTasks.createTask({
@@ -798,8 +815,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         updatedAt: now,
       });
       await schedules.createSchedule({
-        id: 'hb_test-heartbeat',
-        target: { type: 'heartbeat', agentId: 'test-agent', prompt: 'ping' },
+        id: 'agent_test-agent-schedule',
+        target: { type: 'agent', agentId: 'test-agent', prompt: 'ping' },
         cron: '* * * * *',
         status: 'active',
         nextFireAt: now + 60_000,

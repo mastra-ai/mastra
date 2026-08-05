@@ -86,7 +86,7 @@ describe('Mastra — workflow scheduler integration', () => {
     await flushAsyncInit();
 
     // The schedules store may be touched on boot to check for existing
-    // heartbeat rows (cold-boot rehydration via #detectExistingHeartbeats).
+    // agent-schedule rows (cold-boot rehydration via #detectExistingAgentSchedules).
     // What matters is that the scheduler itself never spins up.
     expect(mastra.scheduler).toBeUndefined();
 

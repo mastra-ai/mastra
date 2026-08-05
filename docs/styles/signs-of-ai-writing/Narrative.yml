@@ -1,0 +1,11 @@
+extends: existence
+message: "Prescriptive narrative language detected: '%s'"
+level: suggestion
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+tokens:
+  - 'one must consider'
+  - 'we must acknowledge'
+  - 'it is vital to remember'
+  - 'it is necessary to examine'
+  - 'one should note'
+  - 'we should recognize'

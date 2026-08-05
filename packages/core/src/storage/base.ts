@@ -23,6 +23,7 @@ import type {
   ToolProviderConnectionsStorage,
   NotificationsStorage,
   ThreadStateStorage,
+  WorkflowDefinitionsStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
@@ -30,6 +31,7 @@ import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy }
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
   workflows?: WorkflowsStorage;
+  workflowDefinitions?: WorkflowDefinitionsStorage;
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
@@ -115,8 +117,14 @@ export function calculatePagination(
 /**
  * Configuration for individual domain overrides.
  * Each domain can be sourced from a different storage adapter.
+ *
+ * Set a domain to `false` to disable it entirely: the domain resolves to
+ * `undefined` instead of falling back to the `editor`/`default` stores, so
+ * nothing can read from or write to it through this composite.
  */
-export type MastraStorageDomains = Partial<StorageDomains>;
+export type MastraStorageDomains = {
+  [K in keyof StorageDomains]?: StorageDomains[K] | false;
+};
 
 /**
  * Configuration options for MastraCompositeStore.
@@ -334,10 +342,11 @@ export class MastraCompositeStore extends MastraBase {
       this.parentDefault = config.default;
       this.parentEditor = config.editor;
 
-      // Validate that at least one storage source is provided
+      // Validate that at least one storage source is provided (a `false`
+      // override disables a domain, so it doesn't count as a source)
       const hasDefaultDomains = defaultStores && Object.values(defaultStores).some(v => v !== undefined);
       const hasEditorDomains = editorStores && Object.values(editorStores).some(v => v !== undefined);
-      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined);
+      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined && v !== false);
 
       if (!hasDefaultDomains && !hasEditorDomains && !hasOverrideDomains) {
         throw new Error(
@@ -347,9 +356,13 @@ export class MastraCompositeStore extends MastraBase {
 
       const editorDomainSet = new Set<string>(EDITOR_DOMAINS);
 
-      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default
+      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default.
+      // A `false` override disables the domain — it resolves to undefined
+      // instead of falling through to the editor/default stores.
       const resolve = <K extends keyof StorageDomains>(key: K): StorageDomains[K] | undefined => {
-        if (domainOverrides[key] !== undefined) return domainOverrides[key];
+        const override: StorageDomains[K] | false | undefined = domainOverrides[key];
+        if (override === false) return undefined;
+        if (override !== undefined) return override;
         if (editorDomainSet.has(key) && editorStores?.[key] !== undefined) return editorStores[key];
         return defaultStores?.[key];
       };
@@ -358,6 +371,7 @@ export class MastraCompositeStore extends MastraBase {
       this.stores = {
         memory: resolve('memory'),
         workflows: resolve('workflows'),
+        workflowDefinitions: resolve('workflowDefinitions'),
         scores: resolve('scores'),
         observability: resolve('observability'),
         agents: resolve('agents'),
@@ -380,8 +394,13 @@ export class MastraCompositeStore extends MastraBase {
         // The thread-state domain always has an in-memory store wired by default
         // so the built-in task tools work out of the box without a configured
         // backend. Configure a durable backend for state that must survive a
-        // process restart.
-        threadState: resolve('threadState') ?? new InMemoryThreadStateStorage(),
+        // process restart. An explicit `false` override still disables the
+        // domain entirely — the in-memory fallback only applies when the
+        // domain is left unset.
+        threadState:
+          domainOverrides.threadState === false
+            ? undefined
+            : (resolve('threadState') ?? new InMemoryThreadStateStorage()),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -452,9 +471,13 @@ export class MastraCompositeStore extends MastraBase {
    * failed domain is retried naturally on the next tick.
    *
    * With no `retention` configured this is a no-op returning `[]`.
+   *
+   * Pass `options.retention` to replace the configured retention policies for
+   * this call only — e.g. to skip a domain (keep chat history) or prune more
+   * aggressively than the standing config without reconstructing the store.
    */
   async prune(options?: PruneOptions): Promise<PruneResult[]> {
-    const retention = this.retention;
+    const retention = options?.retention ?? this.retention;
     if (!retention) return [];
 
     const results: PruneResult[] = [];
@@ -495,13 +518,24 @@ export class MastraCompositeStore extends MastraBase {
    * cover, so we never double-init the same domain instance.
    */
   async init(): Promise<void> {
-    // to prevent race conditions, await any current init
-    if (this.shouldCacheInit && (await this.hasInitialized)) {
+    if (!this.shouldCacheInit) {
+      await this.#runInit();
       return;
     }
 
-    this.hasInitialized = this.#runInit();
-    await this.hasInitialized;
+    if (this.hasInitialized) {
+      await this.hasInitialized;
+      return;
+    }
+
+    const initPromise = this.#runInit().catch(error => {
+      if (this.hasInitialized === initPromise) {
+        this.hasInitialized = null;
+      }
+      throw error;
+    });
+    this.hasInitialized = initPromise;
+    await initPromise;
   }
 
   async #runInit(): Promise<boolean> {
@@ -538,6 +572,7 @@ export class MastraCompositeStore extends MastraBase {
     if (this.stores) {
       maybeInit(this.stores.memory);
       maybeInit(this.stores.workflows);
+      maybeInit(this.stores.workflowDefinitions);
       maybeInit(this.stores.scores);
       maybeInit(this.stores.observability);
       maybeInit(this.stores.agents);

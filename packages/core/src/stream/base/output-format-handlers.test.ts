@@ -1,8 +1,8 @@
-import { convertArrayToReadableStream, convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { asSchema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { convertArrayToReadableStream, convertAsyncIterableToArray } from '../../loop/test-utils/stream-helpers';
 import type { PublicSchema } from '../../schema';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
@@ -208,6 +208,51 @@ describe('output-format-handlers', () => {
       const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ name: 'John', age: 30 });
+    });
+
+    it('should extract final JSON object from mixed prompt-injection text', async () => {
+      const schema = z.object({
+        decision: z.enum(['done', 'continue', 'waiting']),
+        reason: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema, jsonPromptInjection: true },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: 'I will inspect the files first.\n' },
+        },
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: '{"decision":"done","reason":"verified with tools"}' },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ decision: 'done', reason: 'verified with tools' });
     });
 
     it('should validate on text-end chunk', async () => {

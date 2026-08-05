@@ -52,7 +52,7 @@ export class SchedulerWorker extends MastraWorker {
               mastra.getWorkflowById(target.workflowId);
               return true;
             }
-            if (target.type === 'heartbeat') {
+            if (target.type === 'agent') {
               mastra.getAgentById(target.agentId);
               return true;
             }

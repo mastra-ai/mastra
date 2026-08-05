@@ -56,8 +56,8 @@ export function comboboxTriggerClass({
 
 export const comboboxItemClass = cva(
   cn(
-    'relative flex cursor-pointer select-none items-center rounded-md',
-    'py-1.5 min-h-8',
+    'relative flex cursor-pointer items-center rounded-md select-none',
+    'min-h-8 py-1.5',
     'text-ui-smd leading-ui-sm text-neutral4',
     'outline-none focus:outline-none focus-visible:outline-none',
     transitions.colors,
@@ -67,8 +67,8 @@ export const comboboxItemClass = cva(
   {
     variants: {
       multiple: {
-        false: 'gap-2 pl-2.5 pr-2',
-        true: 'gap-2 pl-2.5 pr-2',
+        false: 'gap-2 pr-2 pl-2.5',
+        true: 'gap-2 pr-2 pl-2.5',
       },
     },
     defaultVariants: {
@@ -89,7 +89,7 @@ export const comboboxStyles = {
 
   /** Popup container — concentric with rounded-xl + p-1 (8px items inside 12px container). */
   popup: cn(
-    'min-w-(--anchor-width) w-max max-w-(--available-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
+    'w-max max-w-(--available-width) min-w-(--anchor-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
     'shadow-dialog',
     'origin-(--transform-origin)',
     'transition-[transform,scale,opacity] duration-150 ease-out',
@@ -104,7 +104,7 @@ export const comboboxStyles = {
   searchContainer: cn('flex items-center border-b border-border1 px-2.5 py-1.5', transitions.colors),
 
   /** Search icon */
-  searchIcon: cn('mr-2 h-3.5 w-3.5 shrink-0 text-neutral3', transitions.colors),
+  searchIcon: cn('mr-2 size-3.5 shrink-0 text-neutral3', transitions.colors),
 
   /** Search input */
   searchInput: cn(

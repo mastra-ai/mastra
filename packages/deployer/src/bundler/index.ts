@@ -15,10 +15,14 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { isBareModuleSpecifier, slash } from '../build/utils';
+import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { getWorkspaceInformation } from './workspaceDependencies';
+import {
+  collectTransitiveWorkspaceDependencies,
+  getWorkspaceInformation,
+  packWorkspaceDependencies,
+} from './workspaceDependencies';
 
 export type { BundlerOptions } from '../build/types';
 export type { BundlerPlatform } from '../build/utils';
@@ -126,11 +130,15 @@ export abstract class Bundler extends MastraBundler {
     );
   }
 
-  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+  protected async installDependencies(
+    outputDirectory: string,
+    rootDir = process.cwd(),
+    pnpmOverrides?: Record<string, string>,
+  ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    await deps.install({ dir: join(outputDirectory, this.outputDir) });
+    await deps.install({ dir: join(outputDirectory, this.outputDir), pnpmOverrides });
   }
 
   /**
@@ -196,6 +204,29 @@ export abstract class Bundler extends MastraBundler {
     } catch {
       return;
     }
+  }
+
+  /**
+   * Writes the `mastra-project.json` deployment marker for Software Factory
+   * projects after public assets have been copied. Verifies that the Factory
+   * SPA (`factory/index.html`) exists in the output before emitting the marker.
+   */
+  protected async writeFactoryMarker(outputDirectory: string): Promise<void> {
+    const outputDir = join(outputDirectory, this.outputDir);
+    const factoryIndex = join(outputDir, 'factory', 'index.html');
+    if (!existsSync(factoryIndex)) {
+      throw new MastraError({
+        id: 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING',
+        text: 'Software Factory project detected but factory/index.html was not found after copying the prebuilt Factory UI.',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
+      });
+    }
+    await writeFile(
+      join(outputDir, 'mastra-project.json'),
+      JSON.stringify({ schemaVersion: 1, projectType: 'factory', assets: { ui: 'factory' } }, null, 2),
+    );
+    this.logger.info('Wrote mastra-project.json for Software Factory project');
   }
 
   protected async getBundlerOptions(
@@ -362,8 +393,41 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set(dep, depInfo);
     }
 
+    const initialWorkspaceDependencies = new Set<string>();
+    for (const dep of analyzedBundleInfo.dependencies.keys()) {
+      const pkgName = getPackageName(dep);
+      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
+        initialWorkspaceDependencies.add(pkgName);
+      }
+    }
+
+    const transitiveWorkspaceDependencies = collectTransitiveWorkspaceDependencies({
+      workspaceMap: analyzedBundleInfo.workspaceMap,
+      initialDependencies: initialWorkspaceDependencies,
+      logger: this.logger,
+    });
+
+    for (const [dep, packageSpec] of Object.entries(transitiveWorkspaceDependencies.resolutions)) {
+      dependenciesToInstall.set(dep, {
+        version: analyzedBundleInfo.workspaceMap.get(dep)?.version,
+        packageSpec,
+      });
+    }
+
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+      await this.writePackageJson(
+        join(outputDirectory, this.outputDir),
+        dependenciesToInstall,
+        transitiveWorkspaceDependencies.resolutions,
+      );
+      if (transitiveWorkspaceDependencies.usedWorkspacePackages.size > 0) {
+        await packWorkspaceDependencies({
+          workspaceMap: analyzedBundleInfo.workspaceMap,
+          usedWorkspacePackages: transitiveWorkspaceDependencies.usedWorkspacePackages,
+          bundleOutputDir: join(outputDirectory, this.outputDir),
+          logger: this.logger,
+        });
+      }
 
       this.logger.info('Bundling Mastra application');
 
@@ -423,19 +487,35 @@ export const tools = [${toolsExports.join(', ')}]`,
       await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
       this.logger.info('Done copying public files');
 
+      // For Software Factory projects, write a deterministic deployment marker
+      // after public assets (including the SPA) have been copied.
+      if (analyzedBundleInfo.projectType === 'factory') {
+        await this.writeFactoryMarker(outputDirectory);
+      }
+
       this.logger.info('Copying .npmrc file');
       await this.copyDOTNPMRC({ outputDirectory, rootDir: projectRoot });
 
       this.logger.info('Done copying .npmrc file');
 
       this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory, projectRoot);
+      await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
       this.logger.info('Done installing dependencies');
 
-      this.logger.info('Generating package-lock.json for deploy');
-      await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
-      this.logger.info('Done generating package-lock.json');
+      if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
+        this.logger.info('Generating package-lock.json for deploy');
+        await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+        this.logger.info('Done generating package-lock.json');
+      } else {
+        this.logger.warn(
+          'Skipping package-lock.json generation because the output contains packed workspace dependencies',
+        );
+      }
     } catch (error) {
+      if (error instanceof MastraError && error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING') {
+        throw error;
+      }
+
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
         {

@@ -596,7 +596,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: {},
+        requestContext: workflowInput.requestContextEntries ?? {},
         tracingOptions,
       },
     });
@@ -901,7 +901,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         existingEntry = {
           // Minimal placeholder fields. The durable LLM step recreates tools
           // and model from the workflow input; this slot exists primarily to
-          // carry the abort controller across the resumed segment.
+          // carry the abort controller across the resumed segment. The
+          // explicit flag tells resolveRuntimeDependencies to rebuild runtime
+          // state from the Mastra instance instead of trusting this entry.
+          isPlaceholder: true,
           tools: {},
           model: undefined as any,
         };
@@ -986,7 +989,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: {},
+              requestContext: snapshot?.requestContext ?? {},
               stepResults: snapshot?.context,
               resume: {
                 steps,

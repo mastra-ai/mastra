@@ -8,7 +8,7 @@ packages:
 
 # LangSmith exporter
 
-[LangSmith](https://smith.langchain.com/) is LangChain's platform for monitoring and evaluating LLM applications. The LangSmith exporter sends your traces to LangSmith, providing insights into model performance, debugging capabilities, and evaluation workflows.
+[LangSmith](https://smith.langchain.com/) is LangChain's platform for monitoring and evaluating LLM applications. The LangSmith exporter sends your traces to LangSmith, providing insights into model performance and debugging capabilities, plus evaluation workflows.
 
 ## Installation
 
@@ -116,7 +116,7 @@ The `projectName` config option takes precedence over the `LANGCHAIN_PROJECT` en
 
 ## Dynamic configuration
 
-You can dynamically override LangSmith settings per-span using `withLangsmithMetadata`. This is useful for routing traces to different projects based on runtime conditions (e.g., customer, environment, or feature).
+You can override at runtime LangSmith settings per-span using `withLangsmithMetadata`. This is useful for routing traces to different projects based on runtime conditions (e.g., customer, environment, or feature).
 
 ### Using the Helper
 

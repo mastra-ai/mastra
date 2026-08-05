@@ -146,6 +146,37 @@ describe('checkMastraPeerDeps', () => {
     const mismatches = await checkMastraPeerDeps(packages);
     expect(mismatches).toHaveLength(0);
   });
+
+  it('should ignore workspace: protocol peer dep ranges from linked packages', async () => {
+    const packages: MastraPackageInfo[] = [
+      { name: '@mastra/core', version: '1.0.0' },
+      { name: '@mastra/playground-ui', version: '1.0.0' },
+    ];
+
+    mockGetPackageInfo.mockImplementation(async (name: string) => {
+      if (name === '@mastra/playground-ui') {
+        return {
+          name: '@mastra/playground-ui',
+          version: '1.0.0',
+          rootPath: '/node_modules/@mastra/playground-ui',
+          packageJson: {
+            peerDependencies: {
+              '@mastra/core': 'workspace:^',
+            },
+          },
+        } as ReturnType<typeof getPackageInfo>;
+      }
+      return {
+        name,
+        version: packages.find(p => p.name === name)?.version ?? '0.0.0',
+        rootPath: `/node_modules/${name}`,
+        packageJson: {},
+      } as ReturnType<typeof getPackageInfo>;
+    });
+
+    const mismatches = await checkMastraPeerDeps(packages);
+    expect(mismatches).toHaveLength(0);
+  });
 });
 
 describe('logPeerDepWarnings', () => {

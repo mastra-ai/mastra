@@ -6,20 +6,30 @@ export * from './signals';
 export * from '../signals/signal-provider';
 export * from '../signals/webhook-signal-provider';
 export {
-  HEARTBEAT_SCHEDULE_PREFIX,
-  HeartbeatInputSchema,
-  HeartbeatOutputSchema,
-  Heartbeats,
-  toHeartbeat,
-  type HeartbeatInput,
-  type HeartbeatOutput,
-  type HeartbeatRunStatus,
-  type Heartbeat,
-  type CreateHeartbeatInput,
-  type UpdateHeartbeatInput,
-  type ListHeartbeatsFilter,
-} from './heartbeat';
+  AGENT_SCHEDULE_PREFIX,
+  WORKFLOW_SCHEDULE_PREFIX,
+  ScheduleInputSchema,
+  ScheduleOutputSchema,
+  Schedules,
+  toAgentSchedule,
+  toWorkflowSchedule,
+  toScheduleView,
+  type ScheduleInput,
+  type ScheduleOutput,
+  type ScheduleRunStatus,
+  type AgentSchedule,
+  type WorkflowSchedule,
+  type AnySchedule,
+  type CreateScheduleInput,
+  type CreateAgentScheduleInput,
+  type CreateWorkflowScheduleInput,
+  type UpdateScheduleInput,
+  type UpdateAgentScheduleInput,
+  type UpdateWorkflowScheduleInput,
+  type ListSchedulesFilter,
+} from '../schedules';
 export * from './agent';
+export { getGoalActivityDurationMs } from './goal';
 export * from './utils';
 export * from './fs-routing';
 

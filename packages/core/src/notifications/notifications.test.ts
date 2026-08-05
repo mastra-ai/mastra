@@ -2,12 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
-import { createNotificationDispatchWorkflow, parseNotificationDispatchNow } from './workflow';
+import {
+  buildNotificationDispatchSchedule,
+  createNotificationDispatchWorkflow,
+  NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+  parseNotificationDispatchNow,
+} from './workflow';
 import {
   createNotificationInboxTool,
   createNotificationSignal,
   createNotificationSummarySignal,
   dispatchDueNotifications,
+  MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
   resolveNotificationDeliveryDecision,
   summarizeNotifications,
 } from '.';
@@ -458,6 +464,86 @@ describe('notification inbox', () => {
     expect(stored?.deliveredSignalId).toBeUndefined();
   });
 
+  it('marks a notification failed once delivery attempts are exhausted', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('No model selected. Use /models to select a model first.')),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    for (let attempt = 1; attempt < MAX_NOTIFICATION_DELIVERY_ATTEMPTS; attempt++) {
+      await dispatchDueNotifications({ mastra, storage, now });
+      await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+        status: 'pending',
+        deliveryAttempts: attempt,
+      });
+    }
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'failed',
+      deliveryAttempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+      lastDeliveryError: 'No model selected. Use /models to select a model first.',
+    });
+    await expect(storage.listDueNotifications({ now })).resolves.toEqual([]);
+
+    await dispatchDueNotifications({ mastra, storage, now });
+    expect(sendSignal).toHaveBeenCalledTimes(MAX_NOTIFICATION_DELIVERY_ATTEMPTS);
+  });
+
+  it.each([
+    { label: 'at the cap', attempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS },
+    { label: 'far past the cap', attempts: 288 },
+  ])('terminalizes a record $label without inflating its attempt count', async ({ attempts }) => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('No model selected. Use /models to select a model first.')),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+    await storage.updateNotification({ id: 'n1', threadId: 'thread-1', deliveryAttempts: attempts });
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'failed',
+      deliveryAttempts: attempts,
+    });
+    await expect(storage.listDueNotifications({ now })).resolves.toEqual([]);
+    // A record carried over from before the cap existed gets one final
+    // attempt, in case the failure it accumulated has since been resolved.
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await dispatchDueNotifications({ mastra, storage, now });
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+  });
+
   it('groups due summary notifications by agent, resource, and thread', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
@@ -700,14 +786,10 @@ describe('notification inbox', () => {
       const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
       expect(workflow.id).toBe('__mastra_notification_dispatcher');
       expect(mastra.listWorkflows()).not.toHaveProperty('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/1 * * * *',
-          inputData: { limit: 100 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
+      // The dispatcher must not declare a schedule — its schedule row is
+      // created lazily on the first deferred notification so idle apps never
+      // start the scheduler (see #18864).
+      expect(workflow.getScheduleConfigs()).toEqual([]);
     } finally {
       await mastra.stopWorkers();
     }
@@ -734,47 +816,33 @@ describe('notification inbox', () => {
     }
   });
 
-  it('uses notification dispatch workflow config when provided', async () => {
-    const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({
-      id: 'notification-workflow-config-storage',
-      domains: { notifications },
-    });
-    const mastra = new Mastra({
-      storage,
-      logger: false,
-      notifications: { dispatch: { cron: '*/5 * * * *', batchSize: 25 } },
-    });
+  it('builds the dispatcher schedule row from the dispatch config', () => {
+    const schedule = buildNotificationDispatchSchedule({ cron: '*/5 * * * *', batchSize: 25 });
 
-    try {
-      const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/5 * * * *',
-          inputData: { limit: 25 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
-    } finally {
-      await mastra.stopWorkers();
-    }
+    expect(schedule).toMatchObject({
+      id: NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+      cron: '*/5 * * * *',
+      status: 'active',
+      target: {
+        type: 'workflow',
+        workflowId: '__mastra_notification_dispatcher',
+        inputData: { limit: 25 },
+      },
+      metadata: { internal: true, feature: 'notifications' },
+    });
+    expect(schedule.nextFireAt).toBeGreaterThan(Date.now());
+    // Not `wf_`-prefixed: declarative orphan-cleanup must leave it alone.
+    expect(schedule.id.startsWith('wf_')).toBe(false);
   });
 
   it('rejects invalid notification dispatch workflow times', () => {
     expect(() => parseNotificationDispatchNow('not-a-date')).toThrow('Invalid notification dispatch time: not-a-date');
   });
 
-  it('creates a scheduled notification dispatch workflow', () => {
-    const workflow = createNotificationDispatchWorkflow({ cron: '*/5 * * * *', batchSize: 25 });
+  it('creates an unscheduled notification dispatch workflow', () => {
+    const workflow = createNotificationDispatchWorkflow({ batchSize: 25 });
 
     expect(workflow.id).toBe('__mastra_notification_dispatcher');
-    expect((workflow as any).getScheduleConfigs()).toMatchObject([
-      {
-        id: 'dispatch',
-        cron: '*/5 * * * *',
-        inputData: { limit: 25 },
-      },
-    ]);
+    expect((workflow as any).getScheduleConfigs()).toEqual([]);
   });
 });

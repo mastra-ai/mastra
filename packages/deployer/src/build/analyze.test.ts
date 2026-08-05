@@ -177,6 +177,96 @@ describe('external dependency versions', () => {
       process.chdir(originalCwd);
     }
   }, 15000);
+
+  it('does not externalize transitive workspace dependencies in production builds', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-transitive-workspace-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const pkgADir = join(tempDir, 'packages', 'a');
+    const pkgBDir = join(tempDir, 'packages', 'b');
+    const pkgCDir = join(tempDir, 'packages', 'c');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(join(pkgADir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(join(pkgBDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(join(appDir, 'src'), { recursive: true });
+    await mkdir(join(pkgADir, 'src'), { recursive: true });
+    await mkdir(join(pkgBDir, 'src'), { recursive: true });
+    await mkdir(join(pkgCDir, 'src'), { recursive: true });
+
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(pkgADir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/a',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: { '@internal/b': 'workspace:*' },
+      }),
+    );
+    await writeFile(
+      join(pkgBDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/b',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: { '@internal/c': 'workspace:*' },
+      }),
+    );
+    await writeFile(
+      join(pkgCDir, 'package.json'),
+      JSON.stringify({ name: '@internal/c', version: '1.0.0', type: 'module', main: './src/index.js' }),
+    );
+
+    await writeFile(
+      join(pkgADir, 'src', 'index.js'),
+      `import { valueB } from '@internal/b';\nexport const valueA = valueB;`,
+    );
+    await writeFile(
+      join(pkgBDir, 'src', 'index.js'),
+      `import { valueC } from '@internal/c';\nexport const valueB = valueC;`,
+    );
+    await writeFile(join(pkgCDir, 'src', 'index.js'), `export const valueC = 'c';`);
+    await writeFile(entryFile, `import { valueA } from '@internal/a';\nexport const value = valueA;`);
+
+    await symlink(pkgADir, join(appDir, 'node_modules', '@internal', 'a'));
+    await symlink(pkgBDir, join(pkgADir, 'node_modules', '@internal', 'b'));
+    await symlink(pkgCDir, join(pkgBDir, 'node_modules', '@internal', 'c'));
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: appDir,
+          platform: 'node',
+          bundlerOptions: {
+            externals: [],
+            enableSourcemap: false,
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result.externalDependencies.has('@internal/a')).toBe(false);
+      expect(result.externalDependencies.has('@internal/b')).toBe(false);
+      expect(result.externalDependencies.has('@internal/c')).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15000);
 });
 
 describe('protocol imports', () => {
@@ -188,6 +278,7 @@ describe('protocol imports', () => {
     const entryFile = join(tempDir, 'index.ts');
     const outputDir = join(tempDir, '.mastra', '.build');
     await mkdir(outputDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'protocol-import-test', type: 'module' }));
     await writeFile(
       entryFile,
       `
@@ -324,4 +415,68 @@ describe('npm alias dependencies', () => {
       packageSpec: 'npm:@ai-sdk/provider-utils@3.0.25',
     });
   }, 15000);
+});
+
+describe('Software Factory project type detection', () => {
+  it('classifies a MastraFactory entry as factory', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'factory-analyze-'));
+    tempDirs.push(tempDir);
+
+    const mastraDir = join(tempDir, 'src', 'mastra');
+    const entryFile = join(mastraDir, 'index.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(mastraDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test', version: '1.0.0', type: 'module' }));
+    await writeFile(join(mastraDir, 'factory.ts'), `export class MastraFactory { prepare() { return {}; } }\n`);
+    await writeFile(
+      entryFile,
+      `import { MastraFactory } from './factory';\n` +
+        `const factory = new MastraFactory();\n` +
+        `export const mastra = factory.prepare();\n`,
+    );
+
+    const result = await analyzeBundle(
+      [entryFile],
+      entryFile,
+      {
+        outputDir,
+        projectRoot: tempDir,
+        platform: 'node',
+        bundlerOptions: { externals: [], enableSourcemap: false },
+      },
+      noopLogger,
+    );
+
+    expect(result.projectType).toBe('factory');
+  });
+
+  it('classifies an ordinary Mastra entry as undefined projectType', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'factory-analyze-'));
+    tempDirs.push(tempDir);
+
+    const mastraDir = join(tempDir, 'src', 'mastra');
+    const entryFile = join(mastraDir, 'index.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(mastraDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test', version: '1.0.0', type: 'module' }));
+    await writeFile(entryFile, `export const mastra = new Mastra({});\n`);
+
+    const result = await analyzeBundle(
+      [entryFile],
+      entryFile,
+      {
+        outputDir,
+        projectRoot: tempDir,
+        platform: 'node',
+        bundlerOptions: { externals: [], enableSourcemap: false },
+      },
+      noopLogger,
+    );
+
+    expect(result.projectType).toBeUndefined();
+  });
 });

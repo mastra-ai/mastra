@@ -218,3 +218,48 @@ describe('client observability carrier propagation', () => {
     });
   });
 });
+
+describe('durable step-start with missing payload', () => {
+  it('does not throw when a step-start chunk has no payload (@mastra/core >= 1.49)', () => {
+    // @mastra/core >= 1.49 emits a durable `step-start` chunk with no `payload`.
+    // The converter must not throw when destructuring it (regression: only the
+    // `start` frame reached the client and the stream tore down).
+    const chunk = { type: 'step-start', runId: 'run-1', from: ChunkFrom.AGENT } as any;
+    expect(() => convertMastraChunkToAISDKv6({ chunk })).not.toThrow();
+    expect((convertMastraChunkToAISDKv6({ chunk }) as any).type).toBe('start-step');
+  });
+});
+
+describe('finish usage conversion', () => {
+  const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
+
+  it('converts canonical output usage', () => {
+    const chunk = {
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: { stepResult: { reason: 'stop' }, output: { usage } },
+    } as any;
+
+    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+      type: 'finish',
+      finishReason: 'stop',
+      totalUsage: usage,
+    });
+  });
+
+  it('converts legacy top-level usage retained by durable transports', () => {
+    const chunk = {
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: { stepResult: { reason: 'stop' }, usage },
+    } as any;
+
+    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+      type: 'finish',
+      finishReason: 'stop',
+      totalUsage: usage,
+    });
+  });
+});

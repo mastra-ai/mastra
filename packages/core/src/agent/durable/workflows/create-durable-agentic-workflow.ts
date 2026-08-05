@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
 import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
+import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
@@ -26,6 +27,7 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -34,6 +36,7 @@ import {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableSignalDrainStep,
 } from './steps';
 
 /**
@@ -111,6 +114,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // Create the background task check step
   const backgroundTaskCheckStep = createDurableBackgroundTaskCheckStep();
 
+  // Create the signal drain step — mirrors the non-durable `signalDrainStep`
+  // which drains signals queued during tool execution.
+  const signalDrainStep = createDurableSignalDrainStep();
+
   // Create the isTaskComplete evaluation step (mirrors the non-durable
   // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
   // so it shows up in workflow traces and produces a proper state transition.
@@ -122,8 +129,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   const goalStep = createDurableGoalStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
-  // Note: foreach runs with concurrency: 1 (sequential) because tool approval
-  // and suspension require sequential execution to properly handle suspend/resume.
+  // Note: tool-call foreach concurrency is resolved per run at execution time
+  // (see resolveDurableToolCallConcurrency) — approval/suspend flows force
+  // sequential execution; otherwise the run's `toolCallConcurrency` applies.
   // The workflow is created once at startup and reused for all runs.
   const singleIterationWorkflow = createWorkflow({
     id: DurableStepIds.AGENTIC_EXECUTION,
@@ -131,16 +139,28 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     outputSchema: iterationStateSchema,
     options: {
       shouldPersistSnapshot: params => {
-        // We need a persisted snapshot record to support `resumeStream()`.
-        // - Create the initial record early ("pending")
-        // - Update it when execution is suspended ("paused"/"suspended")
-        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        // We need a persisted snapshot record to support both:
+        //  - `resumeStream()` after a suspend (records with status
+        //    `pending` / `paused` / `suspended`)
+        //  - boot-time recovery of orphaned RUNNING runs after a process
+        //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
+        //    the row to actually be stamped `running` while the loop is
+        //    in-flight (issue #19056).
+        //
+        // The engine's persist path guards against overwriting a `suspended`
+        // / `paused` snapshot with a later `running` update from the same
+        // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
+        // it is safe to return true for `running` here.
         return (
           params.workflowStatus === 'pending' ||
           params.workflowStatus === 'paused' ||
-          params.workflowStatus === 'suspended'
+          params.workflowStatus === 'suspended' ||
+          params.workflowStatus === 'running'
         );
       },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
@@ -185,8 +205,22 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       },
       { id: 'extract-tool-calls' },
     )
-    // Step 3: Execute each tool call individually (with suspend support)
-    .foreach(toolCallStep)
+    // Step 3: Execute each tool call individually (with suspend support).
+    // Concurrency is resolved per run from the serialized iteration state:
+    // approval/suspend-capable tool sets run sequentially, everything else
+    // honors the run's `toolCallConcurrency` (default 10). The workflow graph
+    // is shared across runs, so this must be a resolver — never a mutated
+    // shared options object.
+    .foreach(toolCallStep, {
+      concurrency: ({ inputData, getInitData }) => {
+        const state = getInitData() as IterationState | undefined;
+        return resolveDurableToolCallConcurrency({
+          options: state?.options,
+          toolsMetadata: state?.toolsMetadata,
+          toolCalls: inputData as DurableToolCallInput[],
+        });
+      },
+    })
     // Step 4: Collect tool results and bundle with LLM output for mapping step
     .map(
       async ({ inputData, getStepResult, getInitData }) => {
@@ -212,55 +246,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     // Step 6.5: Drain signals that were queued while tool execution was running
     // within this iteration. Mirrors the non-durable `signalDrainStep` which
     // sits between backgroundTaskCheckStep and isTaskCompleteStep.
-    .map(
-      async params => {
-        const execOutput = params.inputData as DurableAgenticExecutionOutput;
-        const initData = params.getInitData() as IterationState;
-        const runId = initData.runId;
-        const registryEntry = globalRunRegistry.get(runId);
-        const drainFn = registryEntry?.drainPendingSignals;
-
-        if (!drainFn) return execOutput;
-
-        try {
-          const pendingSignals = drainFn('pending');
-          if (pendingSignals.length === 0) return execOutput;
-
-          const drainList = new MessageList();
-          drainList.deserialize(execOutput.messageListState);
-          drainList.markResponseMessageBoundary(execOutput.messageId);
-
-          const nextMessageId =
-            (params.mastra as Mastra | undefined)?.generateId?.() ??
-            globalThis.crypto?.randomUUID?.() ??
-            `msg_${Date.now()}`;
-
-          const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-          for (const pendingSignal of pendingSignals) {
-            const signalForTranscript = drainList.addSignal(pendingSignal);
-            if (pubsub) {
-              await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
-            }
-          }
-
-          return {
-            ...execOutput,
-            messageListState: drainList.serialize(),
-            messageId: nextMessageId,
-            stepResult: {
-              ...execOutput.stepResult,
-              messageId: nextMessageId,
-              isContinued: true,
-            },
-          };
-        } catch {
-          // Signal drain is best-effort; drainPendingSignals() is inside
-          // the try so signals remain queued if it throws.
-          return execOutput;
-        }
-      },
-      { id: 'signal-drain' },
-    )
+    .then(signalDrainStep)
     // Step 7: Map back to iteration state format using shared function
     .map(
       async ({ inputData, getInitData }) => {
@@ -302,16 +288,19 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       outputSchema: durableAgenticOutputSchema,
       options: {
         shouldPersistSnapshot: params => {
-          // We need a persisted snapshot record to support `resumeStream()`.
-          // - Create the initial record early ("pending")
-          // - Update it when execution is suspended ("paused"/"suspended")
-          // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+          // See the singleIterationWorkflow comment above — same policy for
+          // the outer loop. The persist path guards against overwriting a
+          // suspended snapshot with running.
           return (
             params.workflowStatus === 'pending' ||
             params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended'
+            params.workflowStatus === 'suspended' ||
+            params.workflowStatus === 'running'
           );
         },
+        // Agent-loop snapshots are pure resume artifacts — strip everything a
+        // resume never reads before persisting.
+        pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
@@ -345,6 +334,21 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         const initData = params.getInitData() as DurableAgenticWorkflowInput;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const registryEntry = globalRunRegistry.get(state.runId);
+
+        // ── Abort check ────────────────────────────────────────────────
+        // If the abort signal has fired, stop the loop immediately.
+        // The llm-execution step may have already emitted the ABORT event
+        // and returned a clean output, but the signal may also have fired
+        // between steps (e.g. inside a tool). Override the stepResult
+        // reason so the FINISH event carries 'abort' and the client sees
+        // the correct finishReason.
+        if (registryEntry?.abortSignal?.aborted) {
+          if (state.lastStepResult) {
+            state.lastStepResult.reason = 'abort';
+            state.lastStepResult.isContinued = false;
+          }
+          return false;
+        }
 
         // Two-phase stop: if onIterationComplete returned { continue: false, feedback }
         // on the previous iteration, we allowed one more LLM turn with that feedback.
@@ -656,7 +660,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             registryEntry.memory &&
             durableState?.threadId &&
             durableState?.resourceId &&
-            !durableState.observationalMemory
+            !durableState.observationalMemory &&
+            // Respect readOnly memory config ("read memory but don't save new
+            // messages"). Mirrors the non-durable executeOnFinish `!readOnlyMemory`
+            // guard and the MessageHistory output processor's readOnly check.
+            !durableState.memoryConfig?.readOnly
           ) {
             try {
               const memoryMessageList = new MessageList();
@@ -677,6 +685,37 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               );
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error persisting messages: ${error}`);
+            }
+          }
+
+          // Thread title generation (executeOnFinish equivalent).
+          // The non-durable `#executeOnFinish` generates a thread title from the first user
+          // message when `memory.options.generateTitle` is set. That branch was never ported
+          // to the durable path, so `generateTitle` silently never fired for durable/evented
+          // agents (and Inngest). The `generateThreadTitle` closure — parked on the registry
+          // entry during preparation, where the agent instance is in scope — runs it here.
+          //
+          // Kept OUTSIDE the `!observationalMemory` guard above: OM handles its own message
+          // persistence, but title generation is orthogonal and should still run when OM is on.
+          // Non-serializable (a closure), so like the other registry closures it only fires for
+          // in-process durable runs; cross-process engines (Inngest after a restart) skip it.
+          if (
+            registryEntry?.generateThreadTitle &&
+            durableState?.threadId &&
+            durableState?.resourceId &&
+            !durableState.memoryConfig?.readOnly
+          ) {
+            try {
+              await registryEntry.generateThreadTitle({
+                threadId: durableState.threadId,
+                resourceId: durableState.resourceId,
+                memoryConfig: durableState.memoryConfig,
+                messageListState: state.messageListState,
+                requestContext,
+                tracingContext,
+              });
+            } catch (error) {
+              logger?.warn?.(`[DurableAgent] Error generating thread title: ${error}`);
             }
           }
 

@@ -176,5 +176,5 @@ describeForAllEngines(
       expect(requests.length).toBeLessThanOrEqual(2);
     });
   },
-  { skip: ['durable'] },
+  {},
 );

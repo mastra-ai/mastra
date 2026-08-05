@@ -40,11 +40,17 @@ export type {
 } from './extractor';
 export { WorkingMemoryExtractor } from './working-memory-extractor';
 
+// Standalone conversation summarization (reuses the Observer + extractor plumbing)
+export { summarizeConversation } from './summarize';
+export type { SummarizeConversationOptions, SummarizeConversationResult, SummarizeModel } from './summarize';
+
 export type {
   ObservationalMemoryConfig,
   ObservationDebugEvent,
   ObserveHooks,
+  ObserveHookContext,
   ObserveHookUsage,
+  ObserveTrigger,
   ObservationConfig,
   ReflectionConfig,
   ObserverResult,

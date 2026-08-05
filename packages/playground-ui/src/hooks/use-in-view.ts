@@ -11,6 +11,7 @@ export const useInView = () => {
   const setRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
       const observer = new IntersectionObserver(([entry]) => {
+        if (!entry) return;
         setInView(entry.isIntersecting);
       });
       observer.observe(node);

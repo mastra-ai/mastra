@@ -15,7 +15,7 @@ jobs:
     runs-on: starsling-ubuntu-24.04
     steps:
       - name: Initial checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -33,7 +33,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           # Fetch entire git history so Changesets can generate changelogs

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative } from 'node:path';
-import * as babel from '@babel/core';
+import { transformAsync, transformSync } from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { OutputAsset, OutputChunk } from 'rollup';
@@ -391,14 +391,12 @@ export async function analyzeBundle(
   logger: IMastraLogger,
 ) {
   const mastraConfig = await readFile(mastraEntry, 'utf-8');
-  const mastraConfigResult = {
-    hasValidConfig: false,
-  } as const;
+  const mastraConfigResult: { hasValidConfig: boolean; projectType?: string } = { hasValidConfig: false };
 
-  await babel.transformAsync(mastraConfig, {
+  await transformAsync(mastraConfig, {
     filename: mastraEntry,
     presets: [import.meta.resolve('@babel/preset-typescript')],
-    plugins: [checkConfigExport(mastraConfigResult)],
+    plugins: [() => checkConfigExport(mastraConfigResult)],
   });
 
   if (!mastraConfigResult.hasValidConfig) {
@@ -438,14 +436,14 @@ export async function analyzeBundle(
       sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
       workspaceMap,
       projectRoot,
-      shouldCheckTransitiveDependencies: isDev || externalsPreset,
+      shouldCheckTransitiveDependencies: true,
       analyzeCache,
     });
 
     // Detect pino transports in the bundled output
-    babel.transformSync(analyzeResult.output.code, {
+    transformSync(analyzeResult.output.code, {
       filename: 'pino-detection.js',
-      plugins: [detectPinoTransports(detectedPinoTransports)],
+      plugins: [() => detectPinoTransports(detectedPinoTransports)],
       configFile: false,
       babelrc: false,
       code: false,
@@ -558,6 +556,10 @@ export async function analyzeBundle(
 
       const pkgName = getPackageName(i);
 
+      if (pkgName && workspaceMap.has(pkgName)) {
+        continue;
+      }
+
       if (pkgName) {
         // Try to get version info from our tracked dependencies, then resolve from the chunk's source module.
         const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName);
@@ -637,5 +639,13 @@ export async function analyzeBundle(
   return {
     ...result,
     externalDependencies: mergedExternalDeps,
+    /**
+     * Workspace deps that were optimized (after isDev/externalsPreset pruning).
+     * Used by the watcher to re-run optimization when workspace sources change.
+     */
+    depsToOptimize,
+    workspaceRoot,
+    outputDir,
+    ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),
   };
 }

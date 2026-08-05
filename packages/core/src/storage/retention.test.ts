@@ -79,6 +79,33 @@ describe('MastraCompositeStore.prune()', () => {
     expect(observability.calls[0]!.policies).toEqual({ spans: { maxAge: '7d' } });
   });
 
+  it('replaces the configured retention with the per-call `options.retention`', async () => {
+    const memoryResult: PruneResult = { domain: 'memory', table: 'mastra_messages', deleted: 5, done: true };
+    const obsResult: PruneResult = { domain: 'observability', table: 'mastra_ai_spans', deleted: 2, done: true };
+    const memory = makePruneDomain([memoryResult]);
+    const observability = makePruneDomain([obsResult]);
+
+    const composite = new TestComposite(
+      'c-override',
+      { memory: memory as any, observability: observability as any },
+      {
+        memory: { messages: { maxAge: '30d' } },
+        observability: { spans: { maxAge: '7d' } },
+      },
+    );
+
+    // Override drops the memory domain: only observability is pruned.
+    const overridden = await composite.prune({ retention: { observability: { spans: { maxAge: '7d' } } } });
+    expect(overridden).toEqual([obsResult]);
+    expect(memory.prune).not.toHaveBeenCalled();
+    expect(observability.prune).toHaveBeenCalledTimes(1);
+
+    // The standing config is untouched: the next plain call prunes both.
+    const standing = await composite.prune();
+    expect(standing).toEqual([memoryResult, obsResult]);
+    expect(memory.prune).toHaveBeenCalledTimes(1);
+  });
+
   it('skips domains that are configured in retention but absent from stores', async () => {
     const observability = makePruneDomain([]);
     const composite = new TestComposite(

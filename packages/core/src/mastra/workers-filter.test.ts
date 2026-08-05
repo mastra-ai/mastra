@@ -30,7 +30,7 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
 
     // Mock start()/init() on construction-time workers so we can record which
     // were started without running real worker side effects. The scheduler +
-    // heartbeat workers are injected lazily inside startWorkers() — they
+    // agent-schedule workers are injected lazily inside startWorkers() — they
     // aren't visible here, so their real start() runs and isRunning reflects
     // whether they passed the MASTRA_WORKERS filter.
     const knownStarted: string[] = [];

@@ -16,7 +16,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType, TracingOptions } from '../../observability';
+import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
@@ -137,7 +137,7 @@ export interface SerializableStructuredOutput {
   /** JSON Schema representation of the output schema */
   schema?: JSONSchema7;
   /** Whether to use JSON prompt injection instead of native response format */
-  jsonPromptInjection?: boolean | 'system' | 'inline';
+  jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   /** Whether to use the parent agent's model for structuring */
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
@@ -321,6 +321,10 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
+  /** Deferred step-finish chunk for intermediate steps.
+   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
+   *  chunks, matching the regular agent's chunk ordering. */
+  deferredStepFinishChunk?: unknown;
 }
 
 /**
@@ -539,6 +543,14 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /**
+   * Marks a minimal cross-process placeholder entry (e.g. seeded by
+   * @mastra/inngest resume() to carry an abort controller). Placeholder
+   * entries hold no usable tools/model/processors, so
+   * `resolveRuntimeDependencies` must rebuild runtime state from the agent
+   * registered on the Mastra instance instead of trusting the entry.
+   */
+  isPlaceholder?: boolean;
   /** Resolved tools with execute functions */
   tools: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
@@ -662,6 +674,24 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /**
+   * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
+   * title-generation branch, which was never ported to the durable finish step
+   * (so `memory.options.generateTitle` never fired for durable/evented agents).
+   * Parked here during preparation, where the agent instance is in scope; the
+   * durable finish step invokes it after the run completes. When the merged
+   * memory config has no `generateTitle`, or the thread already has a title, it
+   * is a no-op. Non-serializable (a closure) — cross-process engines lose it and
+   * skip title generation, matching the other registry closures.
+   */
+  generateThreadTitle?: (args: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfig;
+    messageListState: SerializedMessageListState;
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+  }) => Promise<void>;
   /**
    * Signal messages already present in the `messageList` at run start (from
    * persisted history). These are echoed as `data-signal` stream data parts
