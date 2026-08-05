@@ -37,6 +37,7 @@ export async function createFactoryTransitionTools(options: {
       description:
         'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: transitionInputSchema,
+      requireApproval: true,
       execute: async ({ stage, expectedRevision, rationale }, execution) => {
         const currentAddress = getFactorySessionAddress(execution.requestContext);
         const toolCallId = execution.agent?.toolCallId;

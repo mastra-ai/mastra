@@ -285,6 +285,64 @@ describe('DurableAgent background tasks via stream()', () => {
     cleanup();
   });
 
+  it('does not flush the bg task result to memory when the run is readOnly', async () => {
+    const memory = new MockMemory();
+    const researchTool = createTool({
+      id: 'research',
+      description: 'Research a topic',
+      inputSchema: z.object({ topic: z.string() }),
+      execute: async ({ topic }) => {
+        await new Promise(r => setTimeout(r, 100));
+        return { summary: `Research on ${topic}` };
+      },
+      background: { enabled: true },
+    });
+
+    const mockModel = createToolCallThenTextModel('research', { topic: 'AI' }, 'Summary provided');
+
+    const baseAgent = new Agent({
+      id: 'bg-readonly-agent',
+      name: 'BG ReadOnly Agent',
+      instructions: 'Research when asked',
+      model: mockModel as LanguageModelV2,
+      tools: { research: researchTool },
+      backgroundTasks: { tools: { research: true } },
+      memory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const localMastra = new Mastra({
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+      agents: { 'bg-readonly-agent': durableAgent as any },
+    });
+    await localMastra.startWorkers();
+
+    const chunks: any[] = [];
+    const { cleanup } = await durableAgent.stream('Research AI', {
+      onChunk: chunk => chunks.push(chunk),
+      memory: {
+        thread: 'thread-bg-readonly',
+        resource: 'resource-bg-readonly',
+        options: { readOnly: true },
+      },
+    });
+
+    await new Promise(r => setTimeout(r, 1500));
+
+    const bgStarted = chunks.find(c => c.type === 'background-task-started');
+    expect(bgStarted).toBeDefined();
+
+    const recalled = await memory.recall({
+      threadId: 'thread-bg-readonly',
+      resourceId: 'resource-bg-readonly',
+    });
+    expect(recalled.messages).toEqual([]);
+
+    cleanup();
+  });
+
   it('bg task completes and result is queryable via the task manager', async () => {
     const researchTool = createTool({
       id: 'research',

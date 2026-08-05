@@ -194,6 +194,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
       outputSchema: undefined,
       stateSchema: undefined,
       requestContextSchema: undefined,
+      origin: workflow.origin,
     } as WorkflowInfo;
   }
 
@@ -201,6 +202,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
     name: workflow.name,
     description: workflow.description,
     metadata: workflow.metadata,
+    origin: workflow.origin,
     steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
       acc[key] = {
         id: step.id,

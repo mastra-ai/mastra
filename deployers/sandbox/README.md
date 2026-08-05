@@ -15,7 +15,7 @@ import { VercelSandbox } from '@mastra/vercel';
 const deployer = new SandboxDeployer({
   sandbox: new VercelSandbox({
     sandboxName: 'my-preview', // identity: redeploys resume this sandbox
-    timeout: 3_600_000,
+    timeout: 2_400_000, // must stay under the plan's max sandbox lifetime (45 min on Pro)
     ports: [4111],
   }),
 });

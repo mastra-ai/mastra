@@ -12,6 +12,7 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -1033,5 +1034,64 @@ describe('Fastify Server Adapter', () => {
       expect(cancel).not.toHaveBeenCalled();
       expect(signalAbort).not.toHaveBeenCalled();
     });
+  });
+
+  describe('Channel webhook diagnostics', () => {
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra: new Mastra({}) });
+
+      try {
+        await adapter.init();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/agents/support/channels/slack/webhook',
+        });
+
+        expect(response.statusCode).toBe(404);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('channels.adapters configuration'),
+          expect.objectContaining({ agentId: 'support', platform: 'slack' }),
+        );
+      } finally {
+        warnSpy.mockRestore();
+        await app.close();
+      }
+    });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => Fastify({ logger: false }),
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      adapter.registerContextMiddleware();
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const parsedUrl = new URL(url);
+      const injectOptions: any = {
+        method,
+        url: parsedUrl.pathname + parsedUrl.search,
+        headers: options.headers || {},
+      };
+
+      if (options.body) {
+        injectOptions.payload = options.body;
+        injectOptions.headers['content-type'] = 'application/json';
+      }
+
+      const response = await app.inject(injectOptions);
+      return { status: response.statusCode };
+    },
+
+    cleanupApp: app => app.close(),
   });
 });
