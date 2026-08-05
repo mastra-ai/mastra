@@ -66,6 +66,23 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * If specified, uses efficient indexed replay (subscribeFromOffset).
    */
   offset?: number;
+  /**
+   * If set, terminate the stream when no pubsub event arrives for this many ms
+   * AND the run is not alive (see `isAlive`). A durable run whose driving process
+   * crashed stops emitting but never publishes a terminal event, so `observe()`
+   * would otherwise hang forever on a producerless topic. Absent ⇒ no idle bound
+   * (current behavior).
+   */
+  idleTimeoutMs?: number;
+  /**
+   * Optional liveness probe consulted when the idle timeout fires. Returns true
+   * while some process is still driving the run (e.g. a fresh run-liveness
+   * heartbeat), in which case the stream keeps waiting; false ⇒ terminate. When
+   * omitted, a bare `idleTimeoutMs` terminates on pure silence. A transient throw
+   * is treated as alive (keep waiting), so a momentary dependency blip never ends
+   * a live stream.
+   */
+  isAlive?: () => boolean | Promise<boolean>;
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
@@ -139,6 +156,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     threadId,
     resourceId,
     offset,
+    idleTimeoutMs,
+    isAlive,
     onChunk,
     onStepFinish,
     onFinish,
@@ -178,6 +197,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Track subscription state
   let isSubscribed = false;
   let cancelled = false;
+  // Set once the stream reaches ANY terminal state (FINISH/ERROR/ABORT, a
+  // closeOnSuspend suspend, idle termination, or cleanup). `cancelled` alone is
+  // insufficient: `safeClose()` leaves `controller` set and only `cleanup()`
+  // flips `cancelled`, so without this flag the watchdog would re-arm on an
+  // already-closed stream — observing a finished run (replayed FINISH) or a
+  // late/stale event would start a self-renewing timer. Checked by armIdleTimer.
+  let terminated = false;
   let controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> | null = null;
 
   // Promise that resolves when subscription is established
@@ -202,8 +228,97 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // surface it in onError when the FINISH event arrives with reason 'error'.
   let lastErrorMessage: string | undefined;
 
+  // Idle/liveness watchdog. A durable run whose driving process crashed stops
+  // emitting chunks but never publishes a terminal FINISH/ERROR/ABORT event, so
+  // a producerless topic would otherwise leave the stream open forever. When
+  // `idleTimeoutMs` is set we arm a timer that terminates the stream after that
+  // much silence — unless `isAlive` confirms a producer is still driving the run
+  // (e.g. a long tool call or a suspended HITL gate), in which case we re-arm and
+  // keep waiting.
+  //
+  // Declared BEFORE `handleEvent` (which re-arms on every event) so a synchronous
+  // replay delivered during `pubsub.subscribe*` in the ReadableStream `start()`
+  // can't reference these consts in their temporal dead zone. `onIdleTimeout`
+  // references `cleanup` (defined later) but only ever runs from a timer, long
+  // after `cleanup` is initialized.
+  //
+  // `idleGeneration` guards an async `isAlive()` race: a probe that resolves
+  // after a fresh event re-armed the timer (or after a terminal event) would
+  // otherwise close an active/finished stream. Every clear/re-arm bumps the
+  // generation; the probe captures it and bails if it no longer matches.
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let idleGeneration = 0;
+  const clearIdleTimer = () => {
+    idleGeneration += 1;
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = undefined;
+    }
+  };
+  // Mark the stream terminal and stop the watchdog. Call at every terminal close
+  // so armIdleTimer() can never re-arm afterwards.
+  const markTerminated = () => {
+    terminated = true;
+    clearIdleTimer();
+  };
+  const onIdleTimeout = async (generation: number) => {
+    idleTimer = undefined;
+    if (cancelled || !controller || generation !== idleGeneration) return;
+    if (isAlive) {
+      let alive = true;
+      try {
+        alive = await isAlive();
+      } catch {
+        alive = true; // transient blip ⇒ assume alive
+      }
+      // A chunk (re-arm) or terminal event during the await bumps the generation —
+      // abandon this stale probe so it can't close a now-active or finished stream.
+      if (cancelled || !controller || generation !== idleGeneration) return;
+      if (alive) {
+        armIdleTimer(); // still driving ⇒ keep waiting
+        return;
+      }
+    }
+    // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
+    // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
+    // controller.error which MastraModelOutput swallows). Fire onError — for
+    // observe() that schedules registry + pubsub-topic cleanup, so an
+    // idle-terminated run doesn't retain state — then unsubscribe in finally.
+    const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
+    safeEnqueue(controller, {
+      type: 'error',
+      payload: { error },
+    } as ChunkType<OUTPUT>);
+    safeClose(controller);
+    markTerminated(); // block any re-arm while we await onError below
+    try {
+      await onError?.({ error });
+    } catch (callbackError) {
+      logError(`[DurableAgentStream] onError callback error:`, callbackError);
+    } finally {
+      cleanup();
+    }
+  };
+  const armIdleTimer = () => {
+    // `!isSubscribed`: a synchronously-delivering PubSub can invoke handleEvent
+    // (which re-arms) DURING replay, before the subscribe promise resolves and
+    // sets isSubscribed — arming (and possibly expiring) the timer before the
+    // subscription exists. The post-subscribe `.then()` arms it once ready.
+    if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || terminated || !isSubscribed || !controller) {
+      return;
+    }
+    clearIdleTimer();
+    const generation = idleGeneration;
+    idleTimer = setTimeout(() => {
+      void onIdleTimeout(generation);
+    }, idleTimeoutMs);
+  };
+
   const handleEvent = async (event: Event) => {
     if (!controller) return;
+
+    // Any event proves the producer is alive — restart the idle countdown.
+    armIdleTimer();
 
     // Parse the event data as AgentStreamEvent
     const streamEvent = event as unknown as AgentStreamEvent;
@@ -249,6 +364,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           } as ChunkType<OUTPUT>;
           safeEnqueue(controller, finishChunk);
           safeClose(controller);
+          markTerminated();
 
           // Build rich onFinish payload from finish event data.
           // The pubsub FINISH event carries output.text, output.steps, and
@@ -335,6 +451,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             payload: { error },
           } as ChunkType<OUTPUT>);
           safeClose(controller);
+          markTerminated();
           try {
             await onError?.({ error });
           } catch (callbackError) {
@@ -345,18 +462,34 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
-          await onSuspended?.(data);
-          // By default we leave the stream open on suspend so a later resume
-          // can keep streaming chunks. `generate()`/`resumeGenerate()` opt
-          // into closing here so `getFullOutput()` can resolve.
+          // By default we leave the stream open on suspend so a later resume can
+          // keep streaming chunks (the watchdog stays armed; a suspended-but-live
+          // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
+          // opt into closing so `getFullOutput()` can resolve.
           if (closeOnSuspend) {
-            safeClose(controller);
+            // Mark terminal BEFORE awaiting onSuspended: handleEvent re-armed the
+            // watchdog at the top, and a slow callback (> idleTimeoutMs) would
+            // otherwise let it fire and emit a spurious idle error on an
+            // already-closing run. safeClose in `finally` so a throwing callback
+            // can't skip closure.
+            markTerminated();
+            try {
+              await onSuspended?.(data);
+            } finally {
+              safeClose(controller);
+            }
+          } else {
+            await onSuspended?.(data);
           }
           break;
         }
 
         case AgentStreamEventTypes.ABORT: {
           const data = streamEvent.data as AgentAbortEventData;
+          // Mark terminal BEFORE awaiting onAbort, for the same reason as the
+          // closeOnSuspend path above — a slow callback must not let the re-armed
+          // watchdog fire against an already-aborted run.
+          markTerminated();
           try {
             await onAbort?.(data);
           } catch (callbackError) {
@@ -415,6 +548,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             return;
           }
           isSubscribed = true;
+          // Start the idle countdown only once subscribed.
+          armIdleTimer();
           resolveReady();
         })
         .catch(error => {
@@ -432,6 +567,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Sets cancelled=true so the subscribe .then() handler will unsubscribe
   // if cleanup runs before the subscription promise resolves.
   const cleanup = () => {
+    markTerminated();
     cancelled = true;
     if (isSubscribed) {
       isSubscribed = false;

@@ -23,11 +23,13 @@ import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { PlatformSandbox } from '@mastra/platform-workspace';
+import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
+import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
+import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -44,6 +46,16 @@ function positiveInt(raw: string | undefined): number | undefined {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
   return parsed;
+}
+
+function investigateIntakeIssue(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+  } as const;
 }
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
@@ -142,10 +154,20 @@ function localSandboxEnv(): Record<string, string> {
 const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
 const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 
+// Private-network exec: the workspace-proxy discovers each sandbox's private
+// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
+// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
+// in-process registry; `PlatformSandbox.executeCommand()` reads it on every
+// exec to dial the sidecar's `POST /exec` directly over Railway's private
+// network, falling back to the lease path when no address is registered or
+// a dial fails. Only constructed when `PlatformSandbox` is in play; a
+// `LocalSandbox` dev run has no sidecar and no need for the registry.
+const sandboxAddressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
+
 // Use PlatformSandbox only when its complete identity is configured. Otherwise
 // fall back to LocalSandbox for single-user development.
 const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox()
+  ? new PlatformSandbox({ addressRegistry: sandboxAddressRegistry })
   : new LocalSandbox({
       workingDirectory:
         process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
@@ -215,9 +237,21 @@ const slack = slackSigningSecret
 
 const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
 
+export const factoryRules = defaultFactoryRules({
+  version: 'mastracode-web-v1',
+  overrides: {
+    work: {
+      intake: {
+        issue: { onEnter: investigateIntakeIssue },
+      },
+    },
+  },
+});
+
 export const factory = new MastraFactory({
   auth,
   integrations,
+  rules: factoryRules,
   sandbox: {
     machine: sandbox,
     // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
@@ -233,6 +267,11 @@ export const factory = new MastraFactory({
   storage,
   vector,
   pubsub,
+  platform: {
+    // Platform's GitHub App identity is not included in the Platform credentials.
+    // Reuse the deployment's configured App slug to ignore Factory's own handoff writes.
+    githubAppSlug,
+  },
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.
   publicUrl: process.env.MASTRACODE_PUBLIC_URL,

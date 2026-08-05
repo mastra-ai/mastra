@@ -50,7 +50,7 @@ A supervisor pattern keeps one lead agent in control for the full task. The supe
 Use this pattern when the task is open-ended and the full sequence isn't known in advance. For example, a research task may require different lines of inquiry based on what earlier steps uncover. A supervisor can adapt as the task unfolds.
 The tradeoff is that the supervisor becomes the main coordination point. That makes the pattern flexible, but it also means the result depends heavily on good delegation behavior and clear subagent boundaries.
 
-In Mastra, this pattern maps directly to [supervisor agents](/docs/agents/supervisor-agents). A supervisor agent defines subagents on the `agents` property and uses `stream()` or `generate()` to coordinate them. Mastra also provides delegation hooks, message filtering, and memory isolation to help control this pattern.
+In Mastra, this pattern maps directly to [supervisor agents](/docs/capabilities/subagents). A supervisor agent defines subagents on the `agents` property and uses `stream()` or `generate()` to coordinate them. Mastra also provides delegation hooks, message filtering, and memory isolation to help control this pattern.
 
 :::tip
 
@@ -74,7 +74,7 @@ These patterns differ mainly in how they distribute control:
 | - | - | - | - | - |
 | Handoffs | Current specialist | Ownership should move between specialists | Context transfer becomes more important | Agents with workflows and memory |
 | Workflows | Execution graph | The path is known in advance | Less adaptive when the task changes | [Workflows](/docs/workflows/overview) |
-| Supervisor agents | One lead agent | Delegation must adapt during execution | Results depend on good coordination and clear boundaries | [Supervisor agents](/docs/agents/supervisor-agents) |
+| Supervisor agents | One lead agent | Delegation must adapt during execution | Results depend on good coordination and clear boundaries | [Supervisor agents](/docs/capabilities/subagents) |
 | Council | Final synthesis step | The task needs multiple independent perspectives | Higher cost and latency | Agents with workflow parallelism |
 
 In practice, these patterns are often combined:

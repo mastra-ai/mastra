@@ -215,6 +215,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             entityId: tr.toolName,
             entityName: tr.toolName,
             input: tr.args,
+            attributes: {
+              toolCallId: tr.toolCallId,
+            },
           });
 
           if (tr.error) {

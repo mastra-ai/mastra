@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -235,6 +236,42 @@ describe('vNext Workflow Handlers', () => {
       expect(workflow.stepCount).toBeUndefined();
     });
 
+    it("should stamp origin: 'code' for statically declared workflows", async () => {
+      const result = await LIST_WORKFLOWS_ROUTE.handler({ ...createTestServerContext({ mastra: mockMastra }) });
+      expect(result['test-workflow']?.origin).toBe('code');
+      expect(result['reusable-workflow']?.origin).toBe('code');
+    });
+
+    it("should stamp origin: 'stored' for workflows registered via addStoredWorkflow", async () => {
+      const echoTool = createTool({
+        id: 'echo',
+        description: 'echoes input',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const mastraForStored = new Mastra({
+        logger: false,
+        workflows: { 'test-workflow': mockWorkflow },
+        tools: { echo: echoTool } as any,
+        storage: new MockStore(),
+      });
+
+      await mastraForStored.addStoredWorkflow({
+        id: 'stored-only',
+        inputSchema: { type: 'object', properties: {}, required: [] },
+        outputSchema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'] },
+        graph: [{ type: 'step', step: { id: 'echo' } }] as any,
+      });
+
+      const result = await LIST_WORKFLOWS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraForStored }),
+      });
+      expect(result['stored-only']?.origin).toBe('stored');
+      // Code-defined workflows keep their 'code' origin in the same response.
+      expect(result['test-workflow']?.origin).toBe('code');
+    });
+
     it('should return no workflows when FGA is configured and no user is present', async () => {
       const filterAccessible = vi.fn();
       vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
@@ -339,6 +376,38 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       expect(result.steps['test-step'].status).toEqual('success');
+    });
+
+    it('should return a client error when workflow input is invalid', async () => {
+      const step = createStep({
+        id: 'number-step',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async ({ inputData }) => inputData,
+      });
+      const workflow = createWorkflow({
+        id: 'number-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(step)
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        workflows: { 'number-workflow': workflow },
+        storage: new MockStore(),
+      });
+
+      await expect(
+        START_ASYNC_WORKFLOW_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workflowId: 'number-workflow',
+          inputData: { value: 'not-a-number' },
+        } as any),
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining('expected number'),
+      });
     });
   });
 

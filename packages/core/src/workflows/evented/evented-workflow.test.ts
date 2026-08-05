@@ -77,13 +77,19 @@ createWorkflowTestSuite({
   registerWorkflows: async registry => {
     registeredRegistry = registry;
     const workflows: Record<string, any> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
     registeredMastra = new Mastra({
       logger: false,
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
       pubsub: new EventEmitterPubSub(),
     });
     await registeredMastra.startWorkers();
@@ -123,9 +129,15 @@ createWorkflowTestSuite({
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
     // Create a fresh Mastra instance for each test execution
-    // This ensures proper isolation between tests
+    // This ensures proper isolation between tests.
+    // Carry through any mastraAgents/mastraTools declared for this workflow in the
+    // shared harness registry so declarative `.agent('id')` / `.tool('id')` builder
+    // calls can resolve their string references at execution time.
+    const registryEntry = registeredRegistry?.[workflow.id];
     const mastra = new Mastra({
       workflows: { [workflow.id]: workflow },
+      agents: registryEntry?.mastraAgents,
+      tools: registryEntry?.mastraTools,
       storage: sharedStorage,
       pubsub: new EventEmitterPubSub(),
     });
@@ -569,6 +581,10 @@ describe('Workflow (Evented Engine Specific)', () => {
       ]);
       // Result verification covered by shared suite
       expect(executionResult.status).toBe('success');
+      expect(watchData.at(-1)?.payload).toMatchObject({
+        workflowStatus: 'success',
+        finalWorkflowResult: executionResult.result,
+      });
 
       await mastra.stopWorkers();
     });

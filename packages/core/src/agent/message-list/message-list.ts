@@ -25,6 +25,7 @@ import {
   systemMessageToAIV4Core,
   StepContentExtractor,
 } from './conversion';
+import type { ToolCallConversionMode } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
@@ -372,6 +373,15 @@ export class MessageList {
     return this;
   }
 
+  /**
+   * Suspended tool calls are dropped from the prompt by default. When the caller opts out
+   * they stay visible, but they are still paired with a pending result — providers reject a
+   * tool call that has no result regardless of what the caller prefers.
+   */
+  private get promptConversionMode(): ToolCallConversionMode {
+    return this.filterIncompleteToolCalls ? 'prompt' : 'prompt-with-suspended';
+  }
+
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
       if ((message.role as string) !== 'signal') {
@@ -543,7 +553,7 @@ export class MessageList {
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
-          this.filterIncompleteToolCalls,
+          this.promptConversionMode,
         );
 
         const messages = [...systemMessages, ...modelMessages];
@@ -566,7 +576,7 @@ export class MessageList {
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
-          this.filterIncompleteToolCalls,
+          this.promptConversionMode,
         );
 
         const storedModelOutputs = new Map<string, unknown>();

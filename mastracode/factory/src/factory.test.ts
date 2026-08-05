@@ -298,6 +298,14 @@ describe('MastraFactory.prepare', () => {
     expect(config.storageBackend).toBe('pg');
   });
 
+  it('keeps the host machine out of every session it mounts', async () => {
+    // On the controller, not per session — `createSession` clones
+    // `initialState` on every path, webhook recreation included.
+    const config = await prepareFactory({ storage: fakeStorage() });
+    expect(config.initialState).toMatchObject({ skipGlobalInstructions: true });
+    expect(config.disableSettingsOmSeed).toBe(true);
+  });
+
   it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -117,6 +117,29 @@ describe('Trace signals trace insight', () => {
       expect(screen.getByText('The upload tool succeeded on the first attempt.')).not.toBeNull();
       expect(screen.getByText('Add a transcript to the workspace.')).not.toBeNull();
       expect(screen.getByText('Transcript added to the workspace.')).not.toBeNull();
+    });
+
+    it('renders observation severity and kind as visual cues instead of raw prefixes', async () => {
+      registerThemeDrilldownHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
+      );
+      renderSignals();
+
+      await openThemeExampleInsight();
+
+      const observations = await screen.findByRole('list', { name: 'Observations' });
+      expect(screen.queryByText(/severity=/)).toBeNull();
+      expect(screen.queryByText(/kind=/)).toBeNull();
+      expect(within(observations).getByText('Task: add a transcript to the workspace.')).not.toBeNull();
+      expect(
+        within(observations).getByText('The run never verified the transcript was linked to the project.'),
+      ).not.toBeNull();
+      expect(within(observations).getByText('task')).not.toBeNull();
+      expect(within(observations).getByText('completion')).not.toBeNull();
+      expect(within(observations).getByText('unresolved')).not.toBeNull();
+      // Problem severity stays announced for assistive tech, not just as a tint.
+      expect(within(observations).getByText('problem')).not.toBeNull();
     });
 
     it('links to the full trace page', async () => {
