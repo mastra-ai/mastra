@@ -385,7 +385,7 @@ Returns: `Promise<AgentControllerThread>`
 
 ### `session.thread.switch({ threadId, emitEvent? })`
 
-Switch to an owned stored thread and hydrate its mode, model, observational memory, and permission settings.
+Switch to an owned stored thread and hydrate its mode, model, and observational memory settings.
 
 ```typescript
 await session.thread.switch({ threadId: 'thread-8' })
@@ -822,7 +822,7 @@ const added = await session.state.update(current => ({
 
 ## Persistence boundaries
 
-A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation.
+A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission rules, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation. The host must restore any of this state when recreating a session.
 
 With configured storage, threads, messages, and token usage persist. Thread settings restore mode and model choices. They can also restore observational memory settings and subagent model selections, including per-agent-type overrides. A chat channel can map back to stored threads, but channel-to-session and auto-approval state held by `AgentControllerChannels` remains in memory.
 

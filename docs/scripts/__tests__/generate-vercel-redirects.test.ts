@@ -12,6 +12,10 @@ describe('toLlmsTxtPath', () => {
     )
   })
 
+  test('preserves additional fragment delimiters', () => {
+    expect(toLlmsTxtPath('/docs/page#one#two')).toBe('/docs/page/llms.txt#one#two')
+  })
+
   test('removes a trailing slash before adding the suffix', () => {
     expect(toLlmsTxtPath('/docs/agents/overview/')).toBe('/docs/agents/overview/llms.txt')
   })
