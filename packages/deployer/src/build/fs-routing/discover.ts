@@ -112,7 +112,7 @@ export type DiscoveredFsSchedule =
 
 /**
  * A markdown schedule is always prompt mode — the document body is the prompt
- * and handler mode needs a function, so it needs a `.ts` file. Reuses core's
+ * and handler mode needs a function, so it needs a `.ts`/`.js` module. Reuses core's
  * definition type so the two can't drift; core validates the parsed result
  * during agent assembly.
  */
@@ -426,7 +426,7 @@ async function parseMarkdownSchedule(path: string, key: string): Promise<Markdow
   if (unknown.length > 0) {
     const hint = unknown.includes('prompt')
       ? ` The document body is used as the prompt, so "prompt" cannot be set in frontmatter.`
-      : ` Supported fields: ${MARKDOWN_SCHEDULE_KEYS.join(', ')}. Handler mode requires a .ts schedule.`;
+      : ` Supported fields: ${MARKDOWN_SCHEDULE_KEYS.join(', ')}. Handler mode requires a .ts or .js schedule.`;
     throw new Error(`Schedule "${key}" in ${path} has unknown frontmatter field(s): ${unknown.join(', ')}.${hint}`);
   }
 

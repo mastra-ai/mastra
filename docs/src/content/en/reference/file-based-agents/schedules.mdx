@@ -91,7 +91,7 @@ export default defineSchedule({
 })
 ```
 
-The handler's return value is merged over the schedule's stored fields. Returning `undefined` fires with the declared defaults.
+The handler's return value is merged over the schedule's stored fields. Returning `undefined` applies no overrides, so the fire falls back to those stored fields — and because a handler-mode schedule cannot declare a `prompt`, that fire fails for a missing prompt. Return a `prompt` to run, or `null` to skip.
 
 Handlers are functions, so they can't be persisted on the stored schedule row. Mastra resolves them in-process when the schedule fires. A handler-mode schedule that supplies no prompt (and declares none) fails that fire with a reason rather than sending the agent an empty message.
 
@@ -115,7 +115,7 @@ Close the ones that are clearly resolved and summarize the rest.
 
 Always quote the cron. A leading `*` is a YAML alias, so `cron: */5 * * * *` is a parse error while `cron: "*/5 * * * *"` is fine.
 
-Frontmatter accepts every option below except `handler`, which needs a function and so needs a `.ts` file. `prompt` isn't settable either, because the body is the prompt. Unknown frontmatter fields fail the build rather than being silently ignored, so a typo like `ifIdel` is caught at build time.
+Frontmatter accepts every option below except `handler`, which needs a function and so needs a `.ts` or `.js` schedule module. `prompt` isn't settable either, because the body is the prompt. Unknown frontmatter fields fail the build rather than being silently ignored, so a typo like `ifIdel` is caught at build time.
 
 ## Options
 
@@ -240,7 +240,7 @@ Stored ids are namespaced and URL-encoded. `billing/sweep` on the `support` agen
 
 ## Registration and lifecycle
 
-Mastra syncs declared schedules into schedule storage when it starts, and again whenever an agent is registered afterwards. Declaring a schedule is enough to start the scheduler, with no `scheduler: { enabled: true }` needed.
+Mastra syncs declared schedules into schedule storage when it starts, and again whenever an agent is registered afterward. Declaring a schedule is enough to start the scheduler, with no `scheduler: { enabled: true }` needed.
 
 The sync is a diff, not a rewrite:
 

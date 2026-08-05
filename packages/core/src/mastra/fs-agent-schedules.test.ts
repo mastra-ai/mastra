@@ -201,6 +201,57 @@ describe('Mastra — file-based agent schedules', () => {
     await mastra.shutdown();
   });
 
+  it('registers an agent that lands while a sweep is already in flight', async () => {
+    // The sweep coalesces a synchronous batch into one pass. But an agent that
+    // arrives *after* the running sweep has read the agent map must not be
+    // dropped — it would have no rows until the next boot.
+    //
+    // Gate `listSchedules` so the window is deterministic rather than relying
+    // on timer ordering: the first sweep parks inside the store, the late agent
+    // registers while it is parked, then the sweep is released.
+    const mastra = makeMastra({
+      support: makeFsAgent('support', [{ key: 'heartbeat', schedule: { cron: '0 3 * * *', prompt: 'hi' } }]),
+    });
+    await mastra.startWorkers();
+    await waitUntil(() => mastra.scheduler?.isRunning === true);
+
+    // Gate `createSchedule`, not `listSchedules`: the sweep reads the agent map
+    // *after* listing rows, so parking on the list would still include a late
+    // agent. Parking on the first write puts the registration strictly after
+    // the map was read, which is the window that actually drops it.
+    const store = (await mastra.getStorage()!.getStore('schedules'))! as any;
+    const realCreate = store.createSchedule.bind(store);
+    let release!: () => void;
+    const parked = new Promise<void>(resolve => (release = resolve));
+    let entered = false;
+    store.createSchedule = async (...args: unknown[]) => {
+      if (!entered) {
+        entered = true;
+        await parked;
+      }
+      return realCreate(...args);
+    };
+
+    // Starts the sweep; it parks inside the gated listSchedules.
+    mastra.addAgent(makeFsAgent('billing', [{ key: 'sweep', schedule: { cron: '0 4 * * *', prompt: 'sweep' } }]));
+    await waitUntil(() => entered, 5000);
+
+    // Lands strictly after the sweep began: only the queued re-run saves it.
+    mastra.addAgent(makeFsAgent('late', [{ key: 'catchup', schedule: { cron: '0 6 * * *', prompt: 'late' } }]));
+    release();
+
+    await waitUntil(async () => {
+      const ids = (await listSchedules(mastra)).map(r => r.id);
+      return ids.includes(fsAgentScheduleRowId('late', 'catchup'));
+    }, 5000);
+
+    const ids = (await listSchedules(mastra)).map(r => r.id);
+    expect(ids).toContain(fsAgentScheduleRowId('billing', 'sweep'));
+    expect(ids).toContain(fsAgentScheduleRowId('late', 'catchup'));
+
+    await mastra.shutdown();
+  }, 20000);
+
   it('stores an empty prompt for handler-mode schedules and resolves the handler by row id', async () => {
     const handler = async () => ({ prompt: 'computed at fire time' });
     const mastra = makeMastra({

@@ -717,6 +717,12 @@ export class Mastra<
    * batch of agents after startup triggers one sweep rather than one per agent.
    */
   #fsScheduleSyncPending = false;
+  /**
+   * Set when an agent registers while a sweep is already in flight. That sweep
+   * may have read the agent map before the agent landed, so it runs one more
+   * pass instead of dropping the registration.
+   */
+  #fsScheduleSyncRerun = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
   #schedules?: Schedules;
@@ -2641,28 +2647,35 @@ export class Mastra<
     // Workers not started yet — SchedulerWorker.init() will sync these.
     if (!worker?.scheduler) return;
 
-    if (this.#fsScheduleSyncPending) return;
+    // A sweep is already in flight. It may already have read the agent map, so
+    // ask it to run once more rather than dropping this registration — but do
+    // not start a second sweep, which would race the first on `createSchedule`
+    // for the same row.
+    if (this.#fsScheduleSyncPending) {
+      this.#fsScheduleSyncRerun = true;
+      return;
+    }
     this.#fsScheduleSyncPending = true;
 
     void (async () => {
-      // Yield first so agents registered in the same synchronous batch are all
-      // present before the sweep computes what is declared.
-      await Promise.resolve();
       try {
-        const schedulesStore = await this.#storage?.getStore('schedules');
-        if (!schedulesStore) return;
-        await this.registerDeclarativeSchedules(schedulesStore);
+        do {
+          this.#fsScheduleSyncRerun = false;
+          // Yield first so agents registered in the same synchronous batch are
+          // all present before the sweep computes what is declared.
+          await Promise.resolve();
+          const schedulesStore = await this.#storage?.getStore('schedules');
+          if (!schedulesStore) return;
+          await this.registerDeclarativeSchedules(schedulesStore);
+        } while (this.#fsScheduleSyncRerun);
       } catch (error) {
         this.#logger?.error('Failed to register schedules for late-registered agent', {
           agentId: agent.id,
           error,
         });
       } finally {
-        // Cleared only once the sweep has finished. Clearing it before the
-        // await would let an agent registered mid-sync start a second
-        // concurrent sync, which races the first on `createSchedule` for the
-        // same row.
         this.#fsScheduleSyncPending = false;
+        this.#fsScheduleSyncRerun = false;
       }
     })();
   }
