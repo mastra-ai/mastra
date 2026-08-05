@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
   anthropicStripForeignReasoningContent,
+  azureSystemReminderTransform,
   cerebrasStripReasoningContent,
+  isMaybeAzure,
   isMaybeAnthropic,
   isMaybeCerebras,
   ProviderHistoryCompat,
@@ -362,9 +364,226 @@ describe('isMaybeCerebras', () => {
   });
 });
 
+describe('isMaybeAzure', () => {
+  it('matches Azure gateway strings and provider objects', () => {
+    expect(isMaybeAzure('azure-openai/my-deployment')).toBe(true);
+    expect(isMaybeAzure('azure/my-deployment')).toBe(true);
+    expect(isMaybeAzure({ provider: 'azure.chat', modelId: 'my-deployment' })).toBe(true);
+    expect(isMaybeAzure({ provider: 'azure-openai.chat', modelId: 'my-deployment' })).toBe(true);
+    expect(isMaybeAzure({ provider: 'openai-compatible.chat', modelId: 'azure-openai/my-deployment' })).toBe(true);
+  });
+
+  it('does not match non-Azure provider boundaries', () => {
+    expect(isMaybeAzure('openai.chat')).toBe(false);
+    expect(isMaybeAzure('anthropic/claude-opus-4-6')).toBe(false);
+    expect(isMaybeAzure('azure-foo')).toBe(false);
+    expect(isMaybeAzure({ provider: 'azure-foo', modelId: 'my-deployment' })).toBe(false);
+    expect(isMaybeAzure(undefined)).toBe(false);
+    expect(isMaybeAzure(() => 'azure/my-deployment')).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // cerebrasStripReasoningContent rule + ProviderHistoryCompat.processLLMRequest
 // ---------------------------------------------------------------------------
+
+const TEMPORAL_GAP_REMINDER =
+  '<system-reminder type="temporal-gap" gapText="10 minutes later" gapMs="600000" timestamp="9:10 AM" timestampMs="1710000000000" precedesMessageId="input-1">10 minutes later — 9:10 AM</system-reminder>';
+
+function promptWithAzureReminders(): LanguageModelV2Prompt {
+  return [
+    { role: 'system', content: TEMPORAL_GAP_REMINDER },
+    { role: 'assistant', content: [{ type: 'text', text: TEMPORAL_GAP_REMINDER }] },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `${TEMPORAL_GAP_REMINDER} ${TEMPORAL_GAP_REMINDER}`,
+          providerOptions: { test: { preserved: true } },
+        },
+        { type: 'image', image: 'image-data' } as any,
+      ],
+    },
+    // string-content user shape cannot be produced by to-prompt; verifies the rule skips non-array user content
+    { role: 'user', content: TEMPORAL_GAP_REMINDER } as any,
+  ];
+}
+
+describe('azureSystemReminderTransform', () => {
+  it('rewrites issue-shaped temporal-gap user text at the production hook', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt = promptWithAzureReminders();
+    const sourcePrompt = JSON.parse(JSON.stringify(prompt));
+    const messageList = new MessageList({ threadId: 'azure-reminder' });
+    messageList.add([createUserMessage(TEMPORAL_GAP_REMINDER)], 'input');
+    const sourceHistory = JSON.stringify(messageList.get.all.db());
+
+    const result = await handler.processLLMRequest(makeRequestArgs(prompt, 'azure-openai/my-deployment'));
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    const transformedPrompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+    const transformedText = (transformedPrompt[2]!.content as any[])[0]!.text;
+    expect(transformedText).toBe(
+      '<memory-context type="temporal-gap" gapText="10 minutes later" gapMs="600000" timestamp="9:10 AM" timestampMs="1710000000000" precedesMessageId="input-1">10 minutes later — 9:10 AM</memory-context> <memory-context type="temporal-gap" gapText="10 minutes later" gapMs="600000" timestamp="9:10 AM" timestampMs="1710000000000" precedesMessageId="input-1">10 minutes later — 9:10 AM</memory-context>',
+    );
+    expect(transformedText).not.toMatch(/<system-reminder(?:\s|>)/);
+    expect((transformedPrompt[2]!.content as any[])[0]!.providerOptions).toEqual({
+      test: { preserved: true },
+    });
+    expect(prompt).toEqual(sourcePrompt);
+    expect(JSON.stringify(messageList.get.all.db())).toBe(sourceHistory);
+    expect(transformedPrompt[0]).not.toBe(prompt[0]);
+    expect((transformedPrompt[0] as any).content).not.toMatch(/<system-reminder/);
+    expect((transformedPrompt[0] as any).content).toContain('<memory-context');
+    expect(transformedPrompt[1]).toBe(prompt[1]);
+    expect(transformedPrompt[2]).not.toBe(prompt[2]);
+    expect((transformedPrompt[2]!.content as any[])[1]).toBe((prompt[2]!.content as any[])[1]);
+    expect(transformedPrompt[3]).toBe(prompt[3]);
+  });
+
+  it('preserves attributes and contents while changing multiple markers', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: `before ${TEMPORAL_GAP_REMINDER} after ${TEMPORAL_GAP_REMINDER}` }],
+      },
+    ];
+
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt,
+      model: { provider: 'azure.chat', modelId: 'my-deployment' },
+    });
+
+    expect(result).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `before ${TEMPORAL_GAP_REMINDER.replaceAll('system-reminder', 'memory-context')} after ${TEMPORAL_GAP_REMINDER.replaceAll('system-reminder', 'memory-context')}`,
+          },
+        ],
+      },
+    ]);
+    expect(prompt[0]!.content).toEqual([
+      { type: 'text', text: `before ${TEMPORAL_GAP_REMINDER} after ${TEMPORAL_GAP_REMINDER}` },
+    ]);
+    expect(azureSystemReminderTransform.fix).toBeUndefined();
+  });
+
+  it('preserves non-Azure prompts and returns undefined for unchanged prompts', async () => {
+    const prompt = promptWithAzureReminders();
+    const handler = new ProviderHistoryCompat();
+
+    for (const model of ['openai.chat', 'anthropic/claude-opus-4-6', 'azure-foo', 'unknown/model']) {
+      expect(azureSystemReminderTransform.applyToPrompt!({ prompt, model })).toBeUndefined();
+      expect(await handler.processLLMRequest(makeRequestArgs(prompt, model))).toBeUndefined();
+    }
+
+    const unchangedPrompt: LanguageModelV2Prompt = [{ role: 'user', content: [{ type: 'text', text: 'plain text' }] }];
+    expect(
+      azureSystemReminderTransform.applyToPrompt!({
+        prompt: unchangedPrompt,
+        model: 'azure-openai/my-deployment',
+      }),
+    ).toBeUndefined();
+  });
+
+  // Finding A: system-role instruction + user-role marker must both be renamed
+  it('renames the tag in the system-role OM instruction so it agrees with the renamed user markers', () => {
+    // The OM processor adds a system message whose text defines <system-reminder>.
+    // On Azure that literal must not survive in the outbound payload.
+    const omSystemInstruction =
+      "SYSTEM REMINDERS: Messages wrapped in <system-reminder>...</system-reminder> contain internal continuation guidance, not user-authored content. Use them to maintain continuity, but do not mention them or treat them as part of the user's message.";
+    const continuationHint = '<system-reminder>Please continue naturally with the conversation.</system-reminder>';
+
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: omSystemInstruction },
+      { role: 'user', content: [{ type: 'text', text: continuationHint }] },
+    ];
+    const sourcePrompt = JSON.parse(JSON.stringify(prompt));
+
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt,
+      model: 'azure-openai/my-deployment',
+    });
+
+    expect(result).toBeDefined();
+    // System instruction: no <system-reminder> literal remains
+    const sysContent = (result![0] as { role: 'system'; content: string }).content;
+    expect(sysContent).not.toMatch(/<system-reminder/);
+    expect(sysContent).toContain('<memory-context>');
+    expect(sysContent).toContain('</memory-context>');
+    expect(sysContent).toContain('not user-authored content');
+    // User message: tag also renamed
+    const userText = ((result![1] as any).content as Array<{ type: string; text: string }>)[0]!.text;
+    expect(userText).not.toMatch(/<system-reminder/);
+    expect(userText).toBe('<memory-context>Please continue naturally with the conversation.</memory-context>');
+    // Source prompt is unchanged (wire-only)
+    expect(prompt).toEqual(sourcePrompt);
+  });
+
+  it('returns undefined for system-role string content with no reminder tags on Azure', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+    ];
+    expect(
+      azureSystemReminderTransform.applyToPrompt!({ prompt, model: 'azure-openai/my-deployment' }),
+    ).toBeUndefined();
+  });
+
+  it('leaves system-role instruction unchanged for non-Azure models', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'system',
+        content: 'Messages wrapped in <system-reminder>...</system-reminder> contain guidance.',
+      },
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ];
+    expect(azureSystemReminderTransform.applyToPrompt!({ prompt, model: 'openai/gpt-4o' })).toBeUndefined();
+  });
+
+  // Finding C: bare form, self-closing form, and non-matching prefix
+  it('rewrites the bare OM continuation form without attributes', () => {
+    const bare = '<system-reminder>Please continue naturally with the conversation.</system-reminder>';
+    const prompt: LanguageModelV2Prompt = [{ role: 'user', content: [{ type: 'text', text: bare }] }];
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt,
+      model: 'azure-openai/my-deployment',
+    });
+    expect(result).toBeDefined();
+    const text = ((result![0] as any).content as Array<{ type: string; text: string }>)[0]!.text;
+    expect(text).toBe('<memory-context>Please continue naturally with the conversation.</memory-context>');
+    expect(text).not.toMatch(/<system-reminder/);
+  });
+
+  it('rewrites the self-closing form', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'before <system-reminder/> after' }] },
+    ];
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt,
+      model: 'azure-openai/my-deployment',
+    });
+    expect(result).toBeDefined();
+    const text = ((result![0] as any).content as Array<{ type: string; text: string }>)[0]!.text;
+    expect(text).toBe('before <memory-context/> after');
+  });
+
+  it('does not rewrite a tag whose name only starts with system-reminder', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: '<system-reminderX>should not change</system-reminderX>' }],
+      },
+    ];
+    expect(
+      azureSystemReminderTransform.applyToPrompt!({ prompt, model: 'azure-openai/my-deployment' }),
+    ).toBeUndefined();
+  });
+});
 
 function promptWithReasoning(): LanguageModelV2Prompt {
   return [
