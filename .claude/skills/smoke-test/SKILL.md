@@ -88,7 +88,7 @@ pnpm create mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 1
 bunx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 ```
 
-The removed `-c` and `-e` flags must not be used. Use the managed template by default, `--empty` for a deliberately empty project, or `--template <template>` for a specific template. If a flag is rejected, inspect `create-mastra@<tag> --help` rather than retrying a legacy command.
+The removed `-c` and `-e` flags must not be used. Use the managed template by default, `--empty` for a deliberately empty project, or `--template <template>` for a specific template. If a flag is rejected, inspect `<pm> create mastra@<tag> --help` rather than retrying a legacy command.
 
 Wait for the installation to complete. This may take 1-2 minutes depending on network speed.
 
@@ -296,13 +296,13 @@ After completing all tests, provide a summary:
 
 ## Quick Reference
 
-| Step           | Action                                                                                        |
-| -------------- | --------------------------------------------------------------------------------------------- |
-| Create Project | `cd <directory> && npx create-mastra@<tag> <name> --no-git --llm <provider> --timeout 120000` |
-| Install Deps   | Automatic during creation                                                                     |
-| Set Env Vars   | Check global env first, then `.env`, ask user only if needed                                  |
-| Start Server   | `cd <directory>/<name> && npm run dev`                                                        |
-| Studio URL     | `http://localhost:4111`                                                                       |
+| Step           | Action                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| Create Project | `cd <directory> && <pm> create mastra@<tag> <name> --no-git --llm <provider> --timeout 120000` |
+| Install Deps   | Automatic during creation                                                                      |
+| Set Env Vars   | Check global env first, then `.env`, ask user only if needed                                   |
+| Start Server   | `cd <directory>/<name> && <pm> run dev`                                                        |
+| Studio URL     | `http://localhost:4111`                                                                        |
 
 ## Troubleshooting
 

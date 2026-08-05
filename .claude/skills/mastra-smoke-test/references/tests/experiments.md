@@ -22,11 +22,78 @@ If the main project includes native stores such as DuckDB, also build a minimal 
 
 ### 2. Inspect protocol identity
 
-Read the generated manifest and worker bundle metadata. Use protocol version `1`, the embedded build ID, and the dataset SHA-256 attestation expected by the worker. A deliberately incorrect build ID should fail with protocol exit code `70` before loading the experiment.
+Read the launch command, protocol version, and build ID from the generated manifest:
+
+```bash
+MANIFEST=.mastra/experiment-worker/experiment-worker-manifest.json
+jq '{launch, protocol, buildId: .build.buildId}' "$MANIFEST"
+```
+
+The default launch command is `cd .mastra/experiment-worker && node index.mjs`. Use the protocol version from `.protocol.versions` and copy `.build.buildId` to `packet.artifacts.buildId`. A deliberately incorrect build ID should fail with protocol exit code `70` before loading the experiment.
 
 ### 3. Run one correctly attested request
 
-Send one NDJSON request targeting a registered agent or workflow with a dataset item containing a string `id` and `input`. Capture stdout, stderr, and the process exit code.
+From the project root, replace `YOUR_WORKFLOW_REGISTRY_KEY` below with a registered workflow key. This script creates one dataset item, canonicalizes it by recursively sorting object keys while preserving array order, computes the SHA-256 attestation, and writes a complete protocol-v1 NDJSON request:
+
+```bash
+node --input-type=module > .mastra/experiment-request.ndjson <<'EOF'
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+
+const canonicalize = value =>
+  value === null || typeof value !== 'object'
+    ? JSON.stringify(value)
+    : Array.isArray(value)
+      ? `[${value.map(canonicalize).join(',')}]`
+      : `{${Object.keys(value)
+          .sort()
+          .map(key => `${JSON.stringify(key)}:${canonicalize(value[key])}`)
+          .join(',')}}`;
+
+const items = [{ id: 'item-1', input: { value: 21 }, toolMocks: [] }];
+const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
+const manifest = JSON.parse(
+  readFileSync('.mastra/experiment-worker/experiment-worker-manifest.json', 'utf8'),
+);
+const experimentId = 'smoke-experiment-1';
+
+console.log(JSON.stringify({
+  type: 'run',
+  protocolVersion: '1',
+  supportedProtocolVersions: ['1'],
+  experimentId,
+  jobId: 'smoke-job-1',
+  attempt: 1,
+  idempotencyKey: 'smoke-attempt-1',
+  deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+  datasetAttestation: { itemCount: items.length, digest, canonicalizationVersion: '1' },
+  packet: {
+    protocolVersion: '1',
+    experimentId,
+    tenant: {},
+    environment: {},
+    artifacts: { buildId: manifest.build.buildId },
+    target: { type: 'workflow', id: 'YOUR_WORKFLOW_REGISTRY_KEY' },
+    dataset: { itemCount: items.length, digest, canonicalizationVersion: '1', items },
+    scorers: [],
+    limits: { concurrency: 1, timeoutMs: 5000 },
+    policies: { allowedToolIds: [], allowedNetworkHosts: [] },
+    secretReferences: [],
+  },
+}));
+EOF
+
+(cd .mastra/experiment-worker && node index.mjs) \
+  < .mastra/experiment-request.ndjson \
+  > .mastra/experiment-stdout.ndjson \
+  2> .mastra/experiment-stderr.log
+status=$?
+printf 'worker exit code: %s\n' "$status"
+cat .mastra/experiment-stdout.ndjson
+cat .mastra/experiment-stderr.log >&2
+```
+
+The item count, digest, and canonicalization version must match in `datasetAttestation` and `packet.dataset`. Capture stdout, stderr, and the process exit code.
 
 Expected successful lifecycle:
 

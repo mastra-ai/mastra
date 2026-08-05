@@ -68,14 +68,17 @@ cd <project-name>
 
 ### 4. Verify Generated Versions and Structure
 
-For tagged smoke tests, compare the generated dependency versions with the published tag. A prerelease creator that writes stable Mastra dependencies is a release-channel regression; upgrade the generated project to the requested tag before continuing, but preserve the original `package.json` as evidence.
+For tagged smoke tests, compare the generated dependency versions with the published tag. A prerelease creator that writes stable Mastra dependencies is a release-channel regression and a failed setup result. Record the failure before changing anything, and preserve the generated project and original `package.json` as baseline evidence.
 
 ```bash
 npm view create-mastra@<tag> version
 npm view mastra@<tag> version
 npm view @mastra/core@<tag> version
 <pm> list --depth 0
+cp package.json package.generated.json
 ```
+
+Do not repair the baseline project in place. If later checks require the requested dependency channel, copy it to a clearly named sibling such as `<project-name>-repaired`, perform upgrades there, and report repaired-project results separately from the failed generated baseline.
 
 - [ ] Note if `package.json` exists
 - [ ] Confirm every generated `@mastra/*` and `mastra` dependency matches the requested release channel
