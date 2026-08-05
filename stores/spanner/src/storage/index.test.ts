@@ -737,7 +737,7 @@ if (ENABLE_TESTS) {
       );
     });
 
-    it('updateExperimentResult sets review status/tags and is a no-op without changes', async () => {
+    it('updateExperimentResult sets review status/tags/comment and is a no-op without changes', async () => {
       const exp = await experiments.createExperiment(baseExp());
       const r = await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i1' }));
       const updated = await experiments.updateExperimentResult({
@@ -745,12 +745,15 @@ if (ENABLE_TESTS) {
         experimentId: exp.id,
         status: 'reviewed',
         tags: ['a', 'b'],
+        comment: 'note',
       });
       expect(updated.status).toBe('reviewed');
       expect(updated.tags).toEqual(['a', 'b']);
-      // No-op (no status/tags) returns the existing row.
+      expect(updated.comment).toBe('note');
+      // No-op (no status/tags/comment) returns the existing row.
       const same = await experiments.updateExperimentResult({ id: r.id });
       expect(same.status).toBe('reviewed');
+      expect(same.comment).toBe('note');
       await expect(experiments.updateExperimentResult({ id: 'missing', status: 'complete' })).rejects.toThrow();
     });
 
@@ -5932,6 +5935,32 @@ if (ENABLE_TESTS) {
           );
           expect(byProvider.get('openai')).toBe(300);
           expect(byProvider.get('anthropic')).toBe(50);
+        });
+
+        it('getMetricBreakdown: filters a batch of trace IDs', async () => {
+          await observability.batchCreateMetrics({
+            metrics: [
+              makeMetric({ traceId: 'trace-a', value: 10 }),
+              makeMetric({ traceId: 'trace-b', value: 20 }),
+              makeMetric({ traceId: 'trace-c', value: 30 }),
+            ],
+          });
+
+          const result = await observability.getMetricBreakdown({
+            name: ['agent.duration_ms'],
+            aggregation: 'sum',
+            groupBy: ['traceId'],
+            filters: { traceIds: ['trace-a', 'trace-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.traceId, group.value])
+              .sort(([left], [right]) => String(left).localeCompare(String(right))),
+          ).toEqual([
+            ['trace-a', 10],
+            ['trace-c', 30],
+          ]);
         });
 
         it('getMetricBreakdown: groups by a label key', async () => {

@@ -56,7 +56,8 @@ export const setupCompletionPersistenceScenario = {
 
     await runtime.waitForScreenText(/Observational Memory/i, terminal);
     await runtime.waitForScreenText(/OpenAI Mini/i, terminal);
-    terminal.write('\x1b[B');
+    // No arrow key: the OM step pre-selects the pack matching the mode pack chosen above,
+    // so the OpenAI assertion below only passes if that pre-selection landed.
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Tool Approval/i, terminal);

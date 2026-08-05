@@ -1,31 +1,25 @@
-# create-factory
+# `create-factory`
 
-Scaffolding CLI for the **Mastra Factory** — an open-source, agent-powered software delivery environment built on [Mastra](https://mastra.ai).
+`create-factory` scaffolds a Mastra Factory project.
 
-```bash
+```shell
 npm create factory
 ```
 
-The CLI is intentionally minimal: it asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes git. That's it — run `npm run dev` and finish setup (model providers, integrations, database) from the web UI on first load.
+It clones the public [`softwarefactory-template`](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes Git. Run `npm create factory -- --help` for options.
 
-## Flags
+## Development
 
-```text
-Usage: create-factory [options] [project-name]
+This package owns prompts, template cloning, package-manager detection, optional Mastra platform setup, dependency installation, and Git initialization.
 
-Create a new Mastra Factory project
-
-Arguments:
-  project-name                Directory name of the project
-
-Options:
-  --template <template-name>  Create a project from a template (public GitHub URL) (default: "https://github.com/mastra-ai/softwarefactory-template")
-  --no-platform               Skip Mastra platform sign-in, project, and Neon provisioning
-  --org <org>                 Mastra organization id or name — skips the interactive org picker
-  --region <region>           Platform project region (eu or us); prompts when omitted
-  -v, --version               output the version number
-  -h, --help                  display help for command
+```shell
+pnpm --filter create-factory test
+pnpm --filter create-factory check
+pnpm --filter create-factory lint
+pnpm --filter create-factory build
 ```
+
+Generated project behavior belongs to the separate template repository.
 
 ## License
 

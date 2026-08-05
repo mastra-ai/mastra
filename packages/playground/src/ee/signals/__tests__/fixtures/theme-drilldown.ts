@@ -7,6 +7,7 @@ import type {
   ThemeHistoryResponse,
   ThemePathsResponse,
   ThemeSnapshotsResponse,
+  TraceInsightResponse,
 } from '@mastra/client-js';
 
 const snapshot = {
@@ -215,6 +216,32 @@ export const secondThemeExamplesResponse = {
     },
   ],
 } satisfies ThemeExamplesResponse;
+
+export const traceInsightResponse = {
+  traceId: 'trace-1',
+  summary: {
+    version: 'trace_summary/om_observer_slim/v0',
+    summary:
+      'The user asked the agent to add a meeting transcript to their workspace. The agent located the workspace, uploaded the transcript, and confirmed the addition.',
+    observations: [
+      'severity=info | kind=task | Task: add a transcript to the workspace.',
+      'severity=success | kind=completion | The upload tool succeeded on the first attempt.',
+      'severity=problem | kind=unresolved | The run never verified the transcript was linked to the project.',
+    ],
+    currentTask: 'Add a transcript to the workspace.',
+    degenerate: false,
+    createdAt: '2026-07-21T09:00:00.000Z',
+  },
+  signals: [
+    { signalName: 'goal', signalText: 'Add this transcript to my workspace.' },
+    { signalName: 'outcome', signalText: 'Transcript added to the workspace.' },
+  ],
+} satisfies TraceInsightResponse;
+
+export const noSummaryTraceInsightResponse = {
+  traceId: 'trace-2',
+  signals: [],
+} satisfies TraceInsightResponse;
 
 export const noiseResponse = {
   snapshot,

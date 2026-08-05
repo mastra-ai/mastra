@@ -7,6 +7,7 @@
  *
  * Source files:
  *   - src/mastra/index.ts
+ *   - src/web/channels/slack/{integration,connect-route,slack}.ts
  *   - .env.schema
  *   - docker-compose.yml
  *
@@ -63,6 +64,8 @@ const RUNTIME_DEPENDENCIES = [
   '@mastra/pg',
   '@mastra/platform-workspace',
   '@mastra/redis-streams',
+  '@mastra/slack',
+  'chat',
   // @mastra/factory's runtime schema surface is externalized by the CLI build.
   'zod',
 ];
@@ -175,6 +178,15 @@ function writePackageJson() {
     devDependencies,
     engines: webManifest.engines,
   };
+
+  // Transitive runtime peer that must be declared as a direct dep so npm
+  // resolves it without needing pnpm's auto-install-peers behavior.
+  const { version: memoryVersion, tag: memoryTag } = resolveLinkedVersion(
+    '@mastra/memory',
+    linkedPackageVersion('@mastra/memory', 'packages/memory'),
+  );
+  manifest.dependencies['@mastra/memory'] = memoryVersion;
+  console.log(`  ✓ @mastra/memory@${memoryVersion} (${memoryTag})`);
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
@@ -308,6 +320,9 @@ if (fs.existsSync(outDir)) {
 }
 fs.mkdirSync(outDir, { recursive: true });
 copySourceFile('src/mastra/index.ts');
+copySourceFile('src/web/channels/slack/integration.ts');
+copySourceFile('src/web/channels/slack/connect-route.ts');
+copySourceFile('src/web/channels/slack/slack.ts');
 copySourceFile('.env.schema');
 copySourceFile('docker-compose.yml');
 writePackageJson();

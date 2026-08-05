@@ -123,7 +123,7 @@ describe('Board card click starts the default run', () => {
 
     // The click target announces the default run, not a blank thread.
     const cardButton = await screen.findByRole('button', { name: 'Investigate Fix login bug' });
-    expect(screen.queryByRole('button', { name: 'Create thread for Fix login bug' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start session for Fix login bug' })).not.toBeInTheDocument();
     await user.click(cardButton);
 
     await waitFor(() => expect(startRequests).toHaveLength(1));

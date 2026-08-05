@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "1.2.0-alpha.0",
+  "version": "1.2.2",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -23,9 +23,9 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
-    "dev": "tsup --watch && tsc -p tsconfig.build.json",
+    "dev": "tsdown --watch && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
@@ -40,10 +40,10 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1058.0",
     "@aws-sdk/lib-dynamodb": "^3.1058.0",
-    "electrodb": "^3.7.2"
+    "electrodb": "^3.9.1"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -54,7 +54,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

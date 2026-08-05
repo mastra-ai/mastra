@@ -8,6 +8,7 @@ import {
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
+  ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import {
   MessageScroller,
@@ -197,7 +198,9 @@ export const Thread = ({
                 </div>
               )}
             </MessageScrollerViewport>
-            <MessageScrollerButton className="z-30" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
+              <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
+            </div>
           </MessageScroller>
 
           {showThumbnailInChat && agentId && threadId && (
@@ -292,47 +295,49 @@ const AgentComposer = ({
         <ComposerAttachments>
           <ChatComposerAttachments />
         </ComposerAttachments>
-        <ComposerBox sendingPulseKey={sendPulseKey}>
-          <ComposerInput
-            ref={textareaRef}
-            value={text}
-            autoFocus={false}
-            placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-            onChange={event => {
-              setThreadInput(event.target.value);
-            }}
-            onKeyDown={event => {
-              // Ignore Enter while an IME composition is active (e.g. committing a
-              // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-              // `keyCode === 229` fallback covers browsers that fire keydown without it.
-              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-              if (event.key === 'Enter' && !event.shiftKey) {
-                if (sendBlocked) return;
-                event.preventDefault();
-                event.stopPropagation();
-                void submit();
-              }
-            }}
-            disabled={!canExecuteAgent}
-          />
-          {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
-          <ComposerActions>
-            <ComposerActionRow
-              canExecute={canExecuteAgent}
-              agentId={agentId}
-              runOptionsSlot={runOptionsSlot}
-              showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
-              isEmpty={isEmpty}
-              isRunning={isRunning}
-              canSendWhileStreaming={canSendWhileStreaming}
-              onCancel={() => void cancelRun()}
-              onSetText={value => {
-                setThreadInput(value);
+        <ComposerRing busy={isRunning}>
+          <ComposerBox sendingPulseKey={sendPulseKey}>
+            <ComposerInput
+              ref={textareaRef}
+              value={text}
+              autoFocus={false}
+              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+              onChange={event => {
+                setThreadInput(event.target.value);
               }}
-              voiceCall={voiceCall}
+              onKeyDown={event => {
+                // Ignore Enter while an IME composition is active (e.g. committing a
+                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  if (sendBlocked) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void submit();
+                }
+              }}
+              disabled={!canExecuteAgent}
             />
-          </ComposerActions>
-        </ComposerBox>
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+            <ComposerActions>
+              <ComposerActionRow
+                canExecute={canExecuteAgent}
+                agentId={agentId}
+                runOptionsSlot={runOptionsSlot}
+                showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                isEmpty={isEmpty}
+                isRunning={isRunning}
+                canSendWhileStreaming={canSendWhileStreaming}
+                onCancel={() => void cancelRun()}
+                onSetText={value => {
+                  setThreadInput(value);
+                }}
+                voiceCall={voiceCall}
+              />
+            </ComposerActions>
+          </ComposerBox>
+        </ComposerRing>
       </Composer>
     </div>
   );
