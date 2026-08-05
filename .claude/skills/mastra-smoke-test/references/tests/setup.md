@@ -58,7 +58,7 @@ Use the current managed-template flow. Do not pass the removed `-c` or `-e` flag
 <pm> create mastra@<tag> <project-name> --no-git --llm <llm> --timeout 120000
 ```
 
-Use `--empty` only when the smoke scope explicitly requires an empty project, or `--template <template>` when testing a specific template. Run `<pm> create mastra@<tag> --help` first if the command rejects a documented flag.
+Use `--empty` only when the smoke scope explicitly requires an empty project, or `--template <template>` when testing a specific template. If the command rejects a documented flag, inspect the initializer's help with the syntax for the selected package manager: `npm create mastra@<tag> -- --help`, `npx create-mastra@<tag> --help`, `pnpm create mastra@<tag> --help`, `yarn dlx create-mastra@<tag> --help`, or `bunx create-mastra@<tag> --help`.
 
 ### 3. Enter Project
 

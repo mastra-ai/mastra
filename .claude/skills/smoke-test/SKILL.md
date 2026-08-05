@@ -79,7 +79,7 @@ Run the create-mastra command with explicit parameters to avoid interactive prom
 npx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 
 # For yarn
-yarn create mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
+yarn dlx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 
 # For pnpm
 pnpm create mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
@@ -88,7 +88,7 @@ pnpm create mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 1
 bunx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 ```
 
-`-c/--components` and `-e/--example` were removed and must not be used. `-l/--llm` is still supported and is the flag used above. Use the managed template by default, `--empty` for a deliberately empty project, or `--template <template>` for a specific template. If a flag is rejected, inspect `<pm> create mastra@<tag> --help` rather than retrying a legacy command.
+`-c/--components` and `-e/--example` were removed and must not be used. `-l/--llm` is still supported and is the flag used above. Use the managed template by default, `--empty` for a deliberately empty project, or `--template <template>` for a specific template. If a flag is rejected, inspect the initializer's help rather than retrying a legacy command: `npm create mastra@<tag> -- --help`, `npx create-mastra@<tag> --help`, `pnpm create mastra@<tag> --help`, `yarn dlx create-mastra@<tag> --help`, or `bunx create-mastra@<tag> --help`.
 
 Wait for the installation to complete. This may take 1-2 minutes depending on network speed.
 
@@ -352,6 +352,6 @@ After completing all tests, provide a summary:
 - If the user doesn't specify an LLM provider, default to OpenAI as it's most common
 - Take screenshots at each major step for documentation/debugging
 - Keep the dev server running in the background during testing
-- Pass explicit flags (`--llm`, `--no-git`, `--timeout`) so creation stays non-interactive; confirm the supported set with `<pm> create mastra@<tag> --help` instead of assuming legacy flags
+- Pass explicit flags (`--llm`, `--no-git`, `--timeout`) so creation stays non-interactive; use the package-manager-specific initializer help command documented in Step 1 instead of assuming legacy flags
 - Browser agent testing validates the new browser automation features
 - Observability traces appear automatically after running agents or workflows
