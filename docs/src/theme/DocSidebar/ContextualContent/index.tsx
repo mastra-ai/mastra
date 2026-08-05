@@ -18,7 +18,7 @@ export default function ContextualContent({ activePath, items, label, onBack, on
   return (
     <>
       <div className={styles.header}>
-        <button className={styles.backButton} type="button" aria-label={`Back to ${label}`} onClick={onBack}>
+        <button className={styles.backButton} type="button" aria-label={`Back to global sidebar`} onClick={onBack}>
           <span className={styles.backArrow} aria-hidden="true">
             ←
           </span>
