@@ -557,18 +557,15 @@ export class AgentController<TState = {}> {
         await session.thread.create({ id: overrides.threadId });
       }
     } else {
-      // Same scope `thread.create()` stamps. An inferred scope is a guess, so a
-      // thread carrying no value for the key is claimed by nobody and stays
-      // resumable; caller tags are a claim, so they filter strictly.
-      const { tags: scopeTags, explicit } = session.getThreadScope();
-      const scopeEntries = Object.entries(scopeTags);
+      // Same scope `thread.create()` stamps, matched strictly: a thread outside
+      // this session's scope — including one carrying no scope at all — belongs
+      // to nobody here and must not be auto-resumed.
+      const scopeEntries = Object.entries(session.getThreadScope());
 
       const threads = await session.thread.list();
       const candidates = threads.filter(t => {
         const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-        return scopeEntries.every(
-          ([key, value]) => metadata[key] === value || (!explicit && metadata[key] === undefined),
-        );
+        return scopeEntries.every(([key, value]) => metadata[key] === value);
       });
 
       if (candidates.length === 0) {

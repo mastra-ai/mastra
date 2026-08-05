@@ -543,7 +543,7 @@ export class SessionThread {
 
     // Stamp the session's scope so thread selection can filter listings back to
     // it (e.g. a `projectPath` per git worktree).
-    Object.assign(metadata, session.getThreadScope().tags);
+    Object.assign(metadata, session.getThreadScope());
 
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
@@ -2686,14 +2686,13 @@ export class Session<TState = unknown> {
    * The scope this session's threads carry: what `thread.create()` stamps and
    * what thread selection filters on. Both must read it here — computing it on
    * each side is what let selection drift off the controller-global state while
-   * creation stamped the session's own. `explicit` distinguishes caller-provided
-   * tags, which filter strictly, from a scope inferred from state, which does not.
+   * creation stamped the session's own.
    */
-  getThreadScope(): { tags: Record<string, string>; explicit: boolean } {
+  getThreadScope(): Record<string, string> {
     const tags = Object.fromEntries(Object.entries(this.#tags).filter(([key]) => !isReservedThreadMetadataKey(key)));
-    if (Object.keys(tags).length > 0) return { tags, explicit: true };
+    if (Object.keys(tags).length > 0) return tags;
     const { projectPath } = this.state.get() as { projectPath?: string };
-    return { tags: projectPath ? { projectPath } : {}, explicit: false };
+    return projectPath ? { projectPath } : {};
   }
 
   /**

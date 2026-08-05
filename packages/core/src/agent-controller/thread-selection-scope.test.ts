@@ -53,27 +53,20 @@ describe('AgentController thread selection — session scope', () => {
     expect(await resumed.thread.list()).toHaveLength(1);
   });
 
-  it('resumes a tagged thread from a caller that passes no tags', async () => {
+  // Worktrees of one repo share a resourceId, so a thread carrying no scope is
+  // exactly the one a worktree session must leave alone.
+  it('does not resume an unscoped thread from a scoped session', async () => {
     const storage = new InMemoryStore();
-    const workspace = createSessionScopedWorkspaceFactory(SESSION_WORKDIR);
 
-    const first = createController(storage, { workspace });
-    await first.init();
-    const created = await first.createSession({
-      id: 'session-1',
-      ownerId: 'owner',
-      resourceId: 'session-1',
-      threadId: 'session-1',
-      tags: { factoryProjectId: 'project-1', projectRepositoryId: 'repo-1' },
-    });
-    expect(created.thread.requireId()).toBe('session-1');
+    const unscoped = createController(storage, { initialState: {} });
+    await unscoped.init();
+    const untagged = await unscoped.createSession({ id: 'a', ownerId: 'owner', resourceId: 'shared' });
 
-    const restarted = createController(storage, { workspace });
-    await restarted.init();
-    const resumed = await restarted.createSession({ id: 'session-1', ownerId: 'owner', resourceId: 'session-1' });
+    const worktree = createController(storage, { initialState: { projectPath: '/wt/current' } });
+    await worktree.init();
+    const scoped = await worktree.createSession({ id: 'b', ownerId: 'owner', resourceId: 'shared' });
 
-    expect(resumed.thread.requireId()).toBe('session-1');
-    expect(await resumed.thread.list()).toHaveLength(1);
+    expect(scoped.thread.requireId()).not.toBe(untagged.thread.requireId());
   });
 
   it('keeps worktrees on their own thread when the caller tags the scope', async () => {
