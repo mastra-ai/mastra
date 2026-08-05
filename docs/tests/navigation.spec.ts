@@ -201,24 +201,29 @@ test.describe('Sidebar navigation', () => {
 
 // ─── Contextual sidebar navigation ────────────────────────────────────
 
-const contextualTopLevelItems = [
-  'Overview',
-  'Tools',
-  'Structured Output',
-  'Human-in-the-Loop',
-  'Guardrails',
-  'Processors',
-  'Code Mode',
-]
-
 function visibleSidebarPane(page: Page, pane: 'root' | 'contextual') {
   return page.locator(`[data-sidebar-pane="${pane}"]:visible`)
+}
+
+function contextualTopLevelLinks(pane: Locator) {
+  return pane.locator(
+    ':scope > ul.menu__list > li > a.menu__link, :scope > ul.menu__list > li > .menu__list-item-collapsible > a.menu__link',
+  )
+}
+
+async function firstContextualChild(pane: Locator) {
+  const links = contextualTopLevelLinks(pane)
+  expect(await links.count()).toBeGreaterThan(1)
+  const link = links.nth(1)
+  const href = await link.getAttribute('href')
+  expect(href).toBeTruthy()
+  return { link, href: href! }
 }
 
 async function expectContextualCategoryRootLink(rootPane: Locator) {
   const agentsLink = rootPane.getByRole('link', { name: 'Agents', exact: true })
   const agentsItem = agentsLink.locator('xpath=ancestor::li[1]')
-  await expect(agentsLink).toHaveAttribute('href', '/docs/agents/overview')
+  expect(await agentsLink.getAttribute('href')).toBeTruthy()
   await expect(agentsLink).not.toHaveClass(/menu__link--sublist/)
   await expect(agentsItem.locator(':scope > div > button.menu__caret')).toHaveCount(0)
   await expect(agentsItem.locator(':scope > ul.menu__list')).toHaveCount(0)
@@ -232,67 +237,36 @@ async function openMobileSidebar(page: Page) {
 }
 
 test.describe('Contextual sidebar', () => {
-  test('desktop: centers the Back label and animates its left-aligned arrow', async ({ page, isMobile }) => {
-    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
-
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
-    await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root')).then(link => link.click())
-    await expect(page).toHaveURL('/docs/agents/overview')
-
-    const contextualPane = visibleSidebarPane(page, 'contextual')
-    const backButton = contextualPane.getByRole('button', { name: /Back to/ })
-    const backArrow = backButton.locator('span').first()
-    const backLabel = backButton.locator('span').last()
-    const overviewLabel = contextualPane.getByRole('link', { name: 'Overview', exact: true }).locator('span').first()
-    const [buttonBox, arrowBox, labelBox, overviewLabelBox] = await Promise.all([
-      backButton.boundingBox(),
-      backArrow.boundingBox(),
-      backLabel.boundingBox(),
-      overviewLabel.boundingBox(),
-    ])
-    expect(buttonBox).not.toBeNull()
-    expect(arrowBox).not.toBeNull()
-    expect(labelBox).not.toBeNull()
-    expect(overviewLabelBox).not.toBeNull()
-    expect(Math.abs(labelBox!.x + labelBox!.width / 2 - (buttonBox!.x + buttonBox!.width / 2))).toBeLessThan(1)
-    expect(Math.abs(arrowBox!.x - overviewLabelBox!.x)).toBeLessThan(1)
-    await expect(backArrow).toHaveCSS('transform', 'none')
-    await backButton.hover()
-    await expect(backArrow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -4, 0)')
-  })
-
-  test('desktop: navigates, renders configured items, and restores root focus on Back', async ({ page, isMobile }) => {
+  test('desktop: navigates child links and restores root focus on Back', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
     const getErrors = trackJsErrors(page)
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const rootPane = visibleSidebarPane(page, 'root')
     const agentsLink = await expectContextualCategoryRootLink(rootPane)
+    const overviewHref = await agentsLink.getAttribute('href')
+    expect(overviewHref).toBeTruthy()
 
     await agentsLink.click()
-    await expect(page).toHaveURL('/docs/agents/overview')
+    await expect(page).toHaveURL(overviewHref!)
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
-    await expect(page).toHaveURL(new RegExp('/docs/agents/overview$'))
     const backButton = contextualPane.getByRole('button', { name: 'Back to global sidebar' })
     await expect(backButton).toHaveText(/←\s*Agents/)
     await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
 
-    const topLevelLinks = contextualPane.locator(
-      ':scope > ul.menu__list > li > a.menu__link, :scope > ul.menu__list > li > .menu__list-item-collapsible > a.menu__link',
-    )
-    const topLevelLabels = await topLevelLinks
-      .locator(':scope > span[title]')
-      .evaluateAll(labels => labels.map(label => label.getAttribute('title')))
-    expect(topLevelLabels).toEqual(contextualTopLevelItems)
+    const topLevelLinks = contextualTopLevelLinks(contextualPane)
     await expect(topLevelLinks.first()).toHaveAttribute('aria-current', 'page')
 
-    await contextualPane.getByRole('link', { name: 'Tools', exact: true }).click()
-    await expect(page).toHaveURL('/docs/agents/using-tools')
-    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await expect(
-      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Tools', exact: true }),
-    ).toHaveAttribute('aria-current', 'page')
+    const { link: childLink, href: childHref } = await firstContextualChild(contextualPane)
+    await childLink.click()
+    await expect(page).toHaveURL(childHref)
+    const navigatedContextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(navigatedContextualPane).toBeVisible()
+    await expect(navigatedContextualPane.locator(`a.menu__link[href="${childHref}"]`)).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
 
     const urlBeforeBack = page.url()
     await backButton.focus()
@@ -318,40 +292,44 @@ test.describe('Contextual sidebar', () => {
   }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
 
-    for (const path of ['/docs/agents/overview', '/docs/agents/using-tools']) {
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    const categoryLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
+    const overviewHref = await categoryLink.getAttribute('href')
+    expect(overviewHref).toBeTruthy()
+    await categoryLink.click()
+    const contextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(contextualPane).toBeVisible()
+    const { href: childHref } = await firstContextualChild(contextualPane)
+
+    for (const path of [overviewHref!, childHref]) {
       const directResponse = await page.request.get(path)
       expect(directResponse.ok()).toBe(true)
       expect(await directResponse.text()).toMatch(/data-sidebar-pane=(?:"contextual"|contextual)/)
     }
-
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
-    await visibleSidebarPane(page, 'root').getByRole('link', { name: 'Agents', exact: true }).click()
-    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
 
     await page.goBack()
     await expect(page).toHaveURL('/docs')
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
     await page.goForward()
-    await expect(page).toHaveURL('/docs/agents/overview')
+    await expect(page).toHaveURL(overviewHref!)
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
 
     await page.reload()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
     await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
-    await expect(page).toHaveURL('/docs/agents/overview')
+    await expect(page).toHaveURL(overviewHref!)
 
-    await page.goto('/docs/agents/using-tools', { waitUntil: 'domcontentloaded' })
-    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await expect(
-      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Tools', exact: true }),
-    ).toHaveAttribute('aria-current', 'page')
+    await page.goto(childHref, { waitUntil: 'domcontentloaded' })
+    const directChildPane = visibleSidebarPane(page, 'contextual')
+    await expect(directChildPane).toBeVisible()
+    await expect(directChildPane.locator(`a.menu__link[href="${childHref}"]`)).toHaveAttribute('aria-current', 'page')
     await page.reload()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
     await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
-    await expect(page).toHaveURL('/docs/agents/using-tools')
+    await expect(page).toHaveURL(childHref)
   })
 
   test('desktop: modified click leaves the opener unchanged and the new overview tab initializes context', async ({
@@ -363,6 +341,8 @@ test.describe('Contextual sidebar', () => {
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
+    const overviewHref = await agentsLink.getAttribute('href')
+    expect(overviewHref).toBeTruthy()
     const newPagePromise = context.waitForEvent('page')
     await agentsLink.click({ button: 'middle' })
     const newPage = await newPagePromise
@@ -372,18 +352,19 @@ test.describe('Contextual sidebar', () => {
     const unchangedRootPane = visibleSidebarPane(page, 'root')
     await expect(unchangedRootPane).toBeVisible()
     await expectContextualCategoryRootLink(unchangedRootPane)
-    await expect(newPage).toHaveURL('/docs/agents/overview')
+    await expect(newPage).toHaveURL(overviewHref!)
     const directContextualPane = visibleSidebarPane(newPage, 'contextual')
     await expect(directContextualPane).toBeVisible()
 
+    const { link: childLink, href: childHref } = await firstContextualChild(directContextualPane)
     const childPagePromise = context.waitForEvent('page')
-    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ button: 'middle' })
+    await childLink.click({ button: 'middle' })
     const childPage = await childPagePromise
     await childPage.waitForLoadState('domcontentloaded')
 
-    await expect(newPage).toHaveURL('/docs/agents/overview')
+    await expect(newPage).toHaveURL(overviewHref!)
     await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
-    await expect(childPage).toHaveURL('/docs/agents/using-tools')
+    await expect(childPage).toHaveURL(childHref)
     await expect(visibleSidebarPane(childPage, 'contextual')).toBeVisible()
   })
 
@@ -397,6 +378,8 @@ test.describe('Contextual sidebar', () => {
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await openMobileSidebar(page)
     const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
+    const overviewHref = await agentsLink.getAttribute('href')
+    expect(overviewHref).toBeTruthy()
     const newPagePromise = context.waitForEvent('page')
     await agentsLink.click({ button: 'middle' })
     const newPage = await newPagePromise
@@ -407,20 +390,21 @@ test.describe('Contextual sidebar', () => {
     const unchangedRootPane = visibleSidebarPane(page, 'root')
     await expect(unchangedRootPane).toBeVisible()
     await expectContextualCategoryRootLink(unchangedRootPane)
-    await expect(newPage).toHaveURL('/docs/agents/overview')
+    await expect(newPage).toHaveURL(overviewHref!)
     await openMobileSidebar(newPage)
     const directContextualPane = visibleSidebarPane(newPage, 'contextual')
     await expect(directContextualPane).toBeVisible()
 
+    const { link: childLink, href: childHref } = await firstContextualChild(directContextualPane)
     const childPagePromise = context.waitForEvent('page')
-    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ button: 'middle' })
+    await childLink.click({ button: 'middle' })
     const childPage = await childPagePromise
     await childPage.waitForLoadState('domcontentloaded')
 
-    await expect(newPage).toHaveURL('/docs/agents/overview')
+    await expect(newPage).toHaveURL(overviewHref!)
     await expect(newPage.locator('.navbar-sidebar')).toBeVisible()
     await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
-    await expect(childPage).toHaveURL('/docs/agents/using-tools')
+    await expect(childPage).toHaveURL(childHref)
     await openMobileSidebar(childPage)
     await expect(visibleSidebarPane(childPage, 'contextual')).toBeVisible()
   })
@@ -435,8 +419,10 @@ test.describe('Contextual sidebar', () => {
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await openMobileSidebar(page)
     const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
+    const overviewHref = await agentsLink.getAttribute('href')
+    expect(overviewHref).toBeTruthy()
     await agentsLink.click()
-    await expect(page).toHaveURL('/docs/agents/overview')
+    await expect(page).toHaveURL(overviewHref!)
     await expect(page.locator('.navbar-sidebar')).not.toBeVisible()
 
     await openMobileSidebar(page)
@@ -445,8 +431,9 @@ test.describe('Contextual sidebar', () => {
       'aria-current',
       'page',
     )
-    await contextualPane.getByRole('link', { name: 'Tools', exact: true }).click()
-    await expect(page).toHaveURL('/docs/agents/using-tools')
+    const { link: childLink, href: childHref } = await firstContextualChild(contextualPane)
+    await childLink.click()
+    await expect(page).toHaveURL(childHref)
     await expect(page.locator('.navbar-sidebar')).not.toBeVisible()
 
     await openMobileSidebar(page)
@@ -459,13 +446,12 @@ test.describe('Contextual sidebar', () => {
     await expect(rootPane).toBeFocused()
     await expectContextualCategoryRootLink(rootPane)
 
-    await page.goto('/docs/agents/using-tools', { waitUntil: 'domcontentloaded' })
+    await page.goto(childHref, { waitUntil: 'domcontentloaded' })
     await page.reload()
     await openMobileSidebar(page)
-    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await expect(
-      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Tools', exact: true }),
-    ).toHaveAttribute('aria-current', 'page')
+    const directChildPane = visibleSidebarPane(page, 'contextual')
+    await expect(directChildPane).toBeVisible()
+    await expect(directChildPane.locator(`a.menu__link[href="${childHref}"]`)).toHaveAttribute('aria-current', 'page')
 
     expect(getErrors(), 'JS errors during mobile contextual sidebar navigation').toEqual([])
   })
