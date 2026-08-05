@@ -91,8 +91,8 @@ export type AgentSignalInput =
        * to keep a single fresh copy near the latest message instead of an accumulating history.
        *
        * Transient takes precedence over `persist` delivery behaviors: combining them means the
-       * signal is dropped without being stored or delivered, even though the accepted result
-       * still reports `action: 'persist'`.
+       * signal is dropped without being stored or delivered, and the accepted result reports
+       * `action: 'discard'`.
        */
       transient?: boolean;
     });
