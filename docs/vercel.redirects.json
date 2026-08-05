@@ -71,6 +71,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true

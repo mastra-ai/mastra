@@ -1,4 +1,8 @@
-import { MessageList } from '@mastra/core/agent';
+import {
+  createSignal,
+  isTransientSignalMessage as coreIsTransientSignalMessage,
+  MessageList,
+} from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
@@ -461,6 +465,138 @@ describe('Memory', () => {
 
       expect(stored.messages).toHaveLength(1);
       expect(stored.messages[0]?.id).toBe('raw-user-msg');
+    });
+
+    it('should not save transient signals through saveMessages', async () => {
+      const threadId = 'thread-transient-save-test';
+      const resourceId = 'resource-transient-save-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      const transientSignal = createSignal({
+        id: 'transient-sig',
+        type: 'reactive',
+        contents: 'Steering reminder — not retained',
+        transient: true,
+      }).toDBMessage({ threadId, resourceId });
+      const persistedSignal = createSignal({
+        id: 'persisted-sig',
+        type: 'reactive',
+        contents: 'Regular signal — stored',
+      }).toDBMessage({ threadId, resourceId });
+
+      const result = await memory.saveMessages({ messages: [transientSignal, persistedSignal] });
+
+      expect(result.messages.map(m => m.id)).toEqual(['persisted-sig']);
+
+      const recalled = await memory.recall({ threadId, resourceId, perPage: false, includeSystemReminders: true });
+      expect(recalled.messages.map(m => m.id)).toEqual(['persisted-sig']);
+    });
+
+    it('should not persist transient signals through raw persistMessages', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const threadId = 'thread-transient-raw-persist-test';
+      const resourceId = 'resource-transient-raw-persist-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      await memory.persistMessages([
+        createSignal({
+          id: 'raw-transient-sig',
+          type: 'reactive',
+          contents: 'not retained',
+          transient: true,
+        }).toDBMessage({ threadId, resourceId }),
+        {
+          id: 'raw-user-msg-2',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      ]);
+
+      const memoryStore = await storage.getStore('memory');
+      const stored = await memoryStore!.listMessages({ threadId, resourceId, perPage: false });
+
+      expect(stored.messages).toHaveLength(1);
+      expect(stored.messages[0]?.id).toBe('raw-user-msg-2');
+    });
+  });
+
+  describe('transient signal classification agreement with @mastra/core', () => {
+    it('drops exactly the messages the core classifier flags as transient signals', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const threadId = 'thread-transient-agreement-test';
+      const resourceId = 'resource-transient-agreement-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      const base = {
+        threadId,
+        resourceId,
+        role: 'signal' as const,
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+      const signalMessage = (id: string, signal: unknown): MastraDBMessage =>
+        ({
+          ...base,
+          id,
+          content: { format: 2, parts: [{ type: 'text', text: id }], metadata: { signal } },
+        }) as MastraDBMessage;
+
+      const cases: Array<{ message: MastraDBMessage; expectStored: boolean }> = [
+        { message: signalMessage('transient-true', { transient: true }), expectStored: false },
+        { message: signalMessage('transient-false', { transient: false }), expectStored: true },
+        { message: signalMessage('transient-truthy-non-boolean', { transient: 1 }), expectStored: true },
+        { message: signalMessage('no-transient-key', {}), expectStored: true },
+        { message: signalMessage('null-signal', null), expectStored: true },
+        { message: signalMessage('string-signal', 'reactive'), expectStored: true },
+        { message: signalMessage('array-signal', []), expectStored: true },
+        {
+          message: signalMessage('array-signal-with-transient', Object.assign([], { transient: true })),
+          expectStored: true,
+        },
+        {
+          message: {
+            ...base,
+            id: 'no-metadata',
+            content: { format: 2, parts: [{ type: 'text', text: 'no-metadata' }] },
+          } as MastraDBMessage,
+          expectStored: true,
+        },
+        {
+          message: {
+            ...base,
+            id: 'plain-user-message',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'plain-user-message' }] },
+          } as MastraDBMessage,
+          expectStored: true,
+        },
+      ];
+
+      // The core classifier must agree with the expectation table…
+      for (const { message, expectStored } of cases) {
+        expect(coreIsTransientSignalMessage(message)).toBe(!expectStored);
+      }
+
+      await memory.persistMessages(cases.map(c => c.message));
+
+      // …and memory's local copy must agree with the core classifier.
+      const memoryStore = await storage.getStore('memory');
+      const stored = await memoryStore!.listMessages({ threadId, resourceId, perPage: false });
+      const storedIds = stored.messages.map(m => m.id).sort();
+
+      expect(storedIds).toEqual(
+        cases
+          .filter(c => c.expectStored)
+          .map(c => c.message.id)
+          .sort(),
+      );
     });
   });
 
