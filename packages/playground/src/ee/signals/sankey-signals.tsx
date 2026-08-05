@@ -113,11 +113,12 @@ function DrillFilterBanner({
 }) {
   const bannerColors = selections.map(selection => nodeColor(getSignalHue(selection.signalName)));
   const bannerColor = bannerColors[0] ?? nodeColor(getSignalHue('goal'));
+  const stackedGradientStops = bannerColors
+    .map(color => `color-mix(in srgb, ${color} 32%, var(--color-surface1))`)
+    .join(', ');
   const backgroundImage =
     bannerColors.length > 1
-      ? `linear-gradient(90deg, ${bannerColors
-          .map(color => `color-mix(in srgb, ${color} 32%, transparent)`)
-          .join(', ')})`
+      ? `linear-gradient(90deg, ${stackedGradientStops}), linear-gradient(90deg, ${stackedGradientStops})`
       : undefined;
 
   return (
@@ -125,9 +126,11 @@ function DrillFilterBanner({
       aria-label="Active drill-down filters"
       className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2"
       style={{
-        borderColor: `color-mix(in srgb, ${bannerColor} 35%, transparent)`,
+        borderColor: backgroundImage ? 'transparent' : `color-mix(in srgb, ${bannerColor} 35%, transparent)`,
+        backgroundClip: backgroundImage ? 'padding-box, border-box' : undefined,
         backgroundColor: backgroundImage ? undefined : `color-mix(in srgb, ${bannerColor} 8%, transparent)`,
         backgroundImage,
+        backgroundOrigin: backgroundImage ? 'border-box' : undefined,
       }}
     >
       {selections.map((selection, index) => {
