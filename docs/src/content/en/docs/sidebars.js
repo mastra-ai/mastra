@@ -374,6 +374,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'capabilities/channels/imessage',
+              label: 'iMessage',
+            },
+            {
+              type: 'doc',
               id: 'capabilities/channels/other-adapters',
               label: 'More',
             },
