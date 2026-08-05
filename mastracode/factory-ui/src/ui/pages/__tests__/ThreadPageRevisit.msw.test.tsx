@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -118,9 +118,10 @@ describe('ThreadPage revisit', () => {
   it('shows messages the run produced while the route was elsewhere', async () => {
     const { runProduces } = stubThreadRoute([dbMessage('kickoff', 'user', 'review this PR')]);
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [THREAD_PATH] });
-    renderWithProviders(<RouterProvider router={router} />);
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
 
     expect(await screen.findByText('review this PR')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
 
     await router.navigate(`/factories/${FACTORY_ID}/work`);
     await waitFor(() => expect(screen.queryByText('review this PR')).not.toBeInTheDocument());
@@ -132,6 +133,7 @@ describe('ThreadPage revisit', () => {
     ]);
 
     await router.navigate(THREAD_PATH);
+    await waitForMutationsIdle(client);
 
     expect(await screen.findByText('here is the review')).toBeInTheDocument();
     expect(screen.getByText('reading the diff')).toBeInTheDocument();
