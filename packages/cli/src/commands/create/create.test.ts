@@ -776,6 +776,41 @@ describe('create materialization lifecycle', () => {
     expect(cleanupOwnedStagingDirectory).toHaveBeenCalledWith('/tmp/.my-project.mastra-create-test');
   });
 
+  it('keeps secure temp cleanup guidance actionable after publication', async () => {
+    const { create } = await import('./create');
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    const { publishStagedProject } = await import('./utils');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
+      displayName: 'Anthropic',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+      apiKeyPrerequisite: 'An Anthropic API key',
+      apiKeyWritten: false,
+      skippedAdjustments: [
+        {
+          label: '.env API key',
+          reasons: ['remove .env.mastra-create-test.tmp from the generated project directory'],
+        },
+      ],
+    });
+
+    await create({
+      projectName: 'my-project',
+      llmProvider: 'anthropic',
+      llmApiKey: 'test-provider-key-do-not-use',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(publishStagedProject).toHaveBeenCalled();
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Some provider setup could not be applied: .env API key. Review these items before running the project. remove .env.mastra-create-test.tmp from the generated project directory',
+    );
+    expect(prompts.log.warn).not.toHaveBeenCalledWith(expect.stringContaining('/tmp/.my-project.mastra-create-test'));
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Set ANTHROPIC_API_KEY in .env before starting.'),
+    );
+  });
+
   it('keeps install failures fatal, cleans staging, and never publishes the target', async () => {
     const { create } = await import('./create');
     const { installDependencies } = await import('../../utils/clone-template');

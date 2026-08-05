@@ -46,7 +46,8 @@ export const MANAGED_PROVIDER_CONFIGS: Record<CreateLLMProvider, ManagedProvider
 };
 
 const OPENAI_API_KEY = 'OPENAI_API_KEY';
-const OPENAI_MODEL = /(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g;
+const PRIMARY_OPENAI_MODEL = /(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])(?=\s*,?\s*\n\s*defaultOptions\s*:)/g;
+const OBSERVATIONAL_OPENAI_MODEL = /(observationalMemory\s*:\s*\{[^{}]*?\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g;
 
 type ManagedTemplateAdjustment =
   | 'agent models'
@@ -147,16 +148,14 @@ function normalizeManagedManifest(
 function adaptAgentSource(source: string, provider: CreateLLMProvider, config: ManagedProviderConfig): TransformResult {
   if (provider === 'openai') return { applied: true, content: source };
   if (!config.primaryModel || !config.observationalModel) return { applied: false, content: source };
-  if (findMatches(source, OPENAI_MODEL).length !== 2) return { applied: false, content: source };
+  if (findMatches(source, PRIMARY_OPENAI_MODEL).length !== 1) return { applied: false, content: source };
+  if (findMatches(source, OBSERVATIONAL_OPENAI_MODEL).length !== 1) return { applied: false, content: source };
 
-  const models = [config.primaryModel, config.observationalModel];
-  let modelIndex = 0;
   return {
     applied: true,
-    content: source.replace(OPENAI_MODEL, (_match, prefix: string, suffix: string) => {
-      const model = models[modelIndex++]!;
-      return `${prefix}${model}${suffix}`;
-    }),
+    content: source
+      .replace(PRIMARY_OPENAI_MODEL, `$1${config.primaryModel}$2`)
+      .replace(OBSERVATIONAL_OPENAI_MODEL, `$1${config.observationalModel}$2`),
   };
 }
 
@@ -210,7 +209,7 @@ async function writeSecureEnv(envPath: string, content: string): Promise<{ writt
       await fs.rm(tempPath, { force: true });
       return { written: false };
     } catch {
-      return { written: false, cleanupPath: tempPath };
+      return { written: false, cleanupPath: path.basename(tempPath) };
     }
   }
 }
@@ -305,7 +304,7 @@ export async function adaptDefaultTemplate({
         skip(
           '.env API key',
           envResult.cleanupPath
-            ? `remove the temporary file at ${envResult.cleanupPath}`
+            ? `remove ${envResult.cleanupPath} from the generated project directory`
             : 'API key could not be written securely',
         );
       }

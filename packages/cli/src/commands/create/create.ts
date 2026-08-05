@@ -372,7 +372,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
           const labels = providerConfig.skippedAdjustments.map(adjustment => adjustment.label).join(', ');
           const cleanupInstructions = providerConfig.skippedAdjustments
             .flatMap(adjustment => adjustment.reasons)
-            .filter(reason => reason.startsWith('remove the temporary file at '));
+            .filter(reason => reason.startsWith('remove ') && reason.endsWith(' from the generated project directory'));
           p.log.warn(
             `Some provider setup could not be applied: ${labels}. Review these items before running the project.${cleanupInstructions.length > 0 ? ` ${cleanupInstructions.join(' ')}` : ''}`,
           );

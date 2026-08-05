@@ -212,7 +212,7 @@ describe('adaptDefaultTemplate', () => {
     const drifted =
       shape === 'absent'
         ? source.replace(/^\s*model:\s*['"]openai\/[^'"]+['"],?\s*$/m, '')
-        : `${source}\nconst extra = { model: 'openai/extra' };\n`;
+        : `${source}\nconst duplicate = {\n  model: 'openai/extra',\n  defaultOptions: {},\n};\n`;
     await fs.writeFile(agentPath, drifted, 'utf8');
 
     const result = await adaptFixture({ projectPath, provider: 'google', versionTag: 'latest' });
@@ -222,6 +222,19 @@ describe('adaptDefaultTemplate', () => {
       'GOOGLE_GENERATIVE_AI_API_KEY=\n',
     );
     expect((await fs.readFile(path.join(projectPath, 'README.md'), 'utf8')).startsWith('# my-agent\n')).toBe(true);
+    expect(skippedLabels(result)).toContain('agent models');
+  });
+
+  it('does not mistake an unrelated model for a missing managed model site', async () => {
+    const projectPath = await createFixture();
+    const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
+    const source = await fs.readFile(agentPath, 'utf8');
+    const drifted = `${source.replace(/^\s*model:\s*['"]openai\/[^'"]+['"],?\s*$/m, '')}\nconst extra = { model: 'openai/extra' };\n`;
+    await fs.writeFile(agentPath, drifted, 'utf8');
+
+    const result = await adaptFixture({ projectPath, provider: 'anthropic', versionTag: 'latest' });
+
+    expect(await fs.readFile(agentPath, 'utf8')).toBe(drifted);
     expect(skippedLabels(result)).toContain('agent models');
   });
 
@@ -437,8 +450,9 @@ describe('adaptDefaultTemplate', () => {
     }
     expect(result.apiKeyWritten).toBe(false);
     expect(result.skippedAdjustments.find(adjustment => adjustment.label === '.env API key')?.reasons).toEqual([
-      expect.stringContaining('remove the temporary file at '),
+      `remove ${tempFile} from the generated project directory`,
     ]);
+    expect(JSON.stringify(result)).not.toContain(projectPath);
     expectNoSecret(result);
   });
 
