@@ -14,6 +14,9 @@ export type ScorerWithThreshold<TScorer> = {
 export type ScorerEntry<TScorer> = TScorer | ScorerWithThreshold<TScorer>;
 
 export function checkThresholdPassed(score: number, threshold: ThresholdConfig): boolean {
+  if (!Number.isFinite(score)) {
+    return false;
+  }
   if (typeof threshold === 'number') {
     return score >= threshold;
   }
@@ -41,6 +44,14 @@ export function validateThresholdConfig(threshold: ThresholdConfig, scorerId: st
   if (typeof threshold === 'number') {
     validateThresholdBound(threshold, 'Minimum', scorerId);
     return;
+  }
+  if (typeof threshold !== 'object' || threshold === null || Array.isArray(threshold)) {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'INVALID_SCORER_THRESHOLD',
+      category: 'USER',
+      text: `Threshold for scorer "${scorerId}" must be a number or an object with min/max bounds, got ${threshold === null ? 'null' : Array.isArray(threshold) ? 'an array' : `a ${typeof threshold}`}`,
+    });
   }
   if (threshold.min !== undefined) {
     validateThresholdBound(threshold.min, 'Minimum', scorerId);

@@ -18,6 +18,15 @@ describe('thresholds', () => {
       expect(checkThresholdPassed(0.29, threshold)).toBe(false);
       expect(checkThresholdPassed(0.71, threshold)).toBe(false);
     });
+
+    it('fails non-finite scores for numeric and range thresholds', () => {
+      for (const score of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+        expect(checkThresholdPassed(score, 0.7)).toBe(false);
+        expect(checkThresholdPassed(score, { min: 0.3 })).toBe(false);
+        expect(checkThresholdPassed(score, { max: 0.7 })).toBe(false);
+        expect(checkThresholdPassed(score, { min: 0.3, max: 0.7 })).toBe(false);
+      }
+    });
   });
 
   describe('validateThresholdConfig', () => {
@@ -33,6 +42,17 @@ describe('thresholds', () => {
         expect(() => validateThresholdConfig(threshold, 'quality')).toThrow(/between 0 and 1/);
       },
     );
+
+    it.each([
+      ['a string', '0.7'],
+      ['null', null],
+      ['an array', [0.3, 0.7]],
+      ['a boolean', true],
+    ])('rejects an invalid threshold shape: %s', (_label, threshold) => {
+      expect(() => validateThresholdConfig(threshold as never, 'quality')).toThrow(
+        /must be a number or an object with min\/max bounds/,
+      );
+    });
 
     it('rejects a minimum greater than the maximum', () => {
       expect(() => validateThresholdConfig({ min: 0.8, max: 0.2 }, 'quality')).toThrow(
