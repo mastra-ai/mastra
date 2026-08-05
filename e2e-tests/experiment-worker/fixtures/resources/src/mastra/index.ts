@@ -99,6 +99,53 @@ const workspaceAgent = new Agent({
   model: skillAwareModel,
 });
 
+function createSkillWorkspace(id: string, skillName: string) {
+  const root = join(process.cwd(), `${id}-root`);
+  const path = join(root, 'skills', skillName, 'SKILL.md');
+  mkdirSync(join(root, 'skills', skillName), { recursive: true });
+  writeFileSync(path, `---\nname: ${skillName}\ndescription: ${skillName} workspace marker.\n---\n\n# ${skillName}\n`);
+  return new Workspace({
+    id,
+    filesystem: new LocalFilesystem({ basePath: root }),
+    skills: ['skills'],
+  });
+}
+
+const agentOwnedWorkspace = createSkillWorkspace('agent-owned-workspace', 'agent-owned-skill');
+const tenantAWorkspace = createSkillWorkspace('tenant-a-workspace', 'tenant-a-skill');
+const tenantBWorkspace = createSkillWorkspace('tenant-b-workspace', 'tenant-b-skill');
+
+const workspaceMarkerModel = {
+  ...textModel('workspace marker missing'),
+  doGenerate: async (options: { prompt?: unknown } = {}) => {
+    const prompt = JSON.stringify(options.prompt ?? '');
+    const marker = ['agent-owned-skill', 'tenant-a-skill', 'tenant-b-skill'].find(name => prompt.includes(name));
+    return textModel(marker ?? 'workspace marker missing').doGenerate();
+  },
+};
+
+const agentOwnedWorkspaceAgent = new Agent({
+  id: 'agent-owned-workspace-agent',
+  name: 'Agent Owned Workspace Agent',
+  instructions: 'Report the workspace marker skill.',
+  model: workspaceMarkerModel,
+  workspace: agentOwnedWorkspace,
+});
+
+const dynamicWorkspaceAgent = new Agent({
+  id: 'dynamic-workspace-agent',
+  name: 'Dynamic Workspace Agent',
+  instructions: 'Report the workspace marker skill.',
+  model: workspaceMarkerModel,
+  workspace: ({ mastra, requestContext }) => {
+    const workspaceId = requestContext.get('workspaceId');
+    if (typeof workspaceId !== 'string') throw new Error('workspaceId is required');
+    const resolved = mastra?.getWorkspaceById(workspaceId);
+    if (!resolved) throw new Error(`unknown workspace: ${workspaceId}`);
+    return resolved;
+  },
+});
+
 const workspaceStep = createStep({
   id: 'workspace-step',
   inputSchema: z.object({ note: z.string() }),
@@ -189,6 +236,133 @@ const persistenceWorkflow = createWorkflow({
   .then(persistenceStep)
   .commit();
 
+const searchRoot = join(process.cwd(), 'search-workspace-root');
+mkdirSync(join(searchRoot, 'docs'), { recursive: true });
+writeFileSync(
+  join(searchRoot, 'docs', 'deployment.md'),
+  'Production deployment guide with release and rollback steps.',
+);
+writeFileSync(join(searchRoot, 'docs', 'cooking.md'), 'A recipe for baking bread with flour and yeast.');
+
+const searchVector = new LibSQLVector({ id: 'workspace-search-vector', url: 'file:workspace-search.db' });
+const searchWorkspace = new Workspace({
+  id: 'search-workspace',
+  filesystem: new LocalFilesystem({ basePath: searchRoot }),
+  bm25: true,
+  vectorStore: searchVector,
+  embedder: async (text: string) => {
+    let hash = 0;
+    for (const character of text) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    return [(hash & 0xff) / 255, ((hash >>> 8) & 0xff) / 255, ((hash >>> 16) & 0xff) / 255];
+  },
+  searchIndexName: 'workspace_search',
+  autoIndexPaths: ['docs'],
+});
+
+const searchStep = createStep({
+  id: 'search-step',
+  inputSchema: z.object({ query: z.string() }),
+  outputSchema: z.object({ bm25: z.string(), vector: z.string(), hybrid: z.string() }),
+  execute: async ({ inputData }) => {
+    if (searchWorkspace.status !== 'running') await searchWorkspace.init();
+    const bm25 = await searchWorkspace.search(inputData.query, { mode: 'bm25', topK: 5 });
+    const vector = await searchWorkspace.search(inputData.query, { mode: 'vector', topK: 5 });
+    const hybrid = await searchWorkspace.search(inputData.query, { mode: 'hybrid', topK: 5 });
+    return { bm25: JSON.stringify(bm25), vector: JSON.stringify(vector), hybrid: JSON.stringify(hybrid) };
+  },
+});
+
+const searchWorkflow = createWorkflow({
+  id: 'search-workflow',
+  inputSchema: z.object({ query: z.string() }),
+  outputSchema: z.object({ bm25: z.string(), vector: z.string(), hybrid: z.string() }),
+})
+  .then(searchStep)
+  .commit();
+
+const projectMountRoot = join(process.cwd(), 'mount-project-root');
+const sharedMountRoot = join(process.cwd(), 'mount-shared-root');
+mkdirSync(projectMountRoot, { recursive: true });
+mkdirSync(sharedMountRoot, { recursive: true });
+writeFileSync(join(sharedMountRoot, 'reference.txt'), 'shared mount reference');
+const mountedWorkspace = new Workspace({
+  id: 'mounted-workspace',
+  mounts: {
+    '/project': new LocalFilesystem({ basePath: projectMountRoot }),
+    '/shared': new LocalFilesystem({ basePath: sharedMountRoot, readOnly: true }),
+  },
+});
+
+const mountStep = createStep({
+  id: 'mount-step',
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ project: z.string(), shared: z.string(), readOnlyRejected: z.boolean() }),
+  execute: async ({ inputData }) => {
+    if (mountedWorkspace.status !== 'running') await mountedWorkspace.init();
+    await mountedWorkspace.filesystem.writeFile('/project/output.txt', inputData.value);
+    const project = await mountedWorkspace.filesystem.readFile('/project/output.txt');
+    const shared = await mountedWorkspace.filesystem.readFile('/shared/reference.txt');
+    let readOnlyRejected = false;
+    try {
+      await mountedWorkspace.filesystem.writeFile('/shared/rejected.txt', 'must fail');
+    } catch {
+      readOnlyRejected = true;
+    }
+    return { project: String(project), shared: String(shared), readOnlyRejected };
+  },
+});
+
+const mountWorkflow = createWorkflow({
+  id: 'mount-workflow',
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ project: z.string(), shared: z.string(), readOnlyRejected: z.boolean() }),
+})
+  .then(mountStep)
+  .commit();
+
+const lspRoot = join(process.cwd(), 'lsp-workspace-root');
+mkdirSync(lspRoot, { recursive: true });
+const lspWorkspace = new Workspace({
+  id: 'lsp-workspace',
+  sandbox: new LocalSandbox({ id: 'lsp-sandbox', workingDirectory: lspRoot }),
+  lsp: {
+    root: lspRoot,
+    initTimeout: 15_000,
+    diagnosticTimeout: 5_000,
+    binaryOverrides: {
+      typescript: `${process.execPath} ${join(process.cwd(), 'node_modules', 'typescript-language-server', 'lib', 'cli.mjs')} --stdio`,
+    },
+  },
+});
+
+const lspStep = createStep({
+  id: 'lsp-step',
+  inputSchema: z.object({ source: z.string() }),
+  outputSchema: z.object({ serverName: z.string(), hover: z.string(), diagnosticCount: z.number() }),
+  execute: async ({ inputData }) => {
+    if (lspWorkspace.status !== 'running') await lspWorkspace.init();
+    const filePath = join(lspRoot, 'index.ts');
+    await writeFile(filePath, inputData.source);
+    const query = await lspWorkspace.lsp?.prepareQuery(filePath);
+    if (!query) throw new Error('TypeScript language server was not available');
+    const hover = await query.client.queryHover(query.uri, { line: 1, character: 8 });
+    const diagnostics = await lspWorkspace.lsp?.getDiagnostics(filePath, inputData.source);
+    return {
+      serverName: query.serverName,
+      hover: JSON.stringify(hover),
+      diagnosticCount: diagnostics?.length ?? 0,
+    };
+  },
+});
+
+const lspWorkflow = createWorkflow({
+  id: 'lsp-workflow',
+  inputSchema: z.object({ source: z.string() }),
+  outputSchema: z.object({ serverName: z.string(), hover: z.string(), diagnosticCount: z.number() }),
+})
+  .then(lspStep)
+  .commit();
+
 const resourceScorer = createScorer({
   id: 'resource-score',
   name: 'Resource Score',
@@ -198,11 +372,37 @@ const resourceScorer = createScorer({
 console.error('resources experiment fixture initialized');
 
 export const mastra = new Mastra({
-  agents: { workspaceAgent },
-  workflows: { workspaceWorkflow, sandboxHangWorkflow, persistenceWorkflow },
+  agents: { workspaceAgent, agentOwnedWorkspaceAgent, dynamicWorkspaceAgent },
+  workflows: {
+    workspaceWorkflow,
+    sandboxHangWorkflow,
+    persistenceWorkflow,
+    searchWorkflow,
+    mountWorkflow,
+    lspWorkflow,
+  },
   scorers: { resourceScorer },
   storage: new LibSQLStore({ id: 'resources-store', url: 'file:app-storage.db' }),
   vectors: { libsql: new LibSQLVector({ id: 'resources-vector', url: 'file:vector-store.db' }) },
   workspace,
-  bundler: { externals: ['execa'] },
+  bundler: {
+    externals: [
+      'execa',
+      'typescript',
+      'typescript-language-server',
+      'vscode-jsonrpc',
+      'vscode-languageserver-protocol',
+    ],
+  },
 });
+
+for (const registeredWorkspace of [
+  agentOwnedWorkspace,
+  tenantAWorkspace,
+  tenantBWorkspace,
+  searchWorkspace,
+  mountedWorkspace,
+  lspWorkspace,
+]) {
+  mastra.addWorkspace(registeredWorkspace);
+}

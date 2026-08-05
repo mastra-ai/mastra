@@ -26,6 +26,7 @@ export function createRunRequest(
     scorers?: Array<{ id: string; version: string }>;
     allowedToolIds?: string[];
     timeoutMs?: number;
+    concurrency?: number;
   } = {},
 ) {
   const items = options.items ?? ([{ id: 'item-1', input: 'hello', toolMocks: [] }] satisfies JsonValue[]);
@@ -50,7 +51,7 @@ export function createRunRequest(
       target: { type: options.targetType ?? 'agent', id: options.targetId ?? 'minimal-agent' },
       dataset: { itemCount: items.length, digest, canonicalizationVersion: '1', items },
       scorers: options.scorers ?? [],
-      limits: { concurrency: 1, timeoutMs: options.timeoutMs ?? 10_000 },
+      limits: { concurrency: options.concurrency ?? 1, timeoutMs: options.timeoutMs ?? 10_000 },
       policies: { allowedToolIds: options.allowedToolIds ?? [], allowedNetworkHosts: [] },
       secretReferences: [],
     },
@@ -101,10 +102,13 @@ function assertProtocolResult(events: ProtocolEvent[], expectedExitCode: number)
   }
   if (expectedExitCode === 0) {
     const types = events.map(event => event.type);
-    const expected = ['accepted', 'run-started', 'item-completed', 'terminal'];
-    if (JSON.stringify(types) !== JSON.stringify(expected)) {
-      throw new Error(`Unexpected protocol events: ${types.join(', ')}`);
-    }
+    const valid =
+      types[0] === 'accepted' &&
+      types[1] === 'run-started' &&
+      types.at(-1) === 'terminal' &&
+      types.slice(2, -1).length > 0 &&
+      types.slice(2, -1).every(type => type === 'item-completed');
+    if (!valid) throw new Error(`Unexpected protocol events: ${types.join(', ')}`);
   }
 }
 

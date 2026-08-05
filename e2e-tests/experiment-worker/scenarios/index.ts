@@ -103,6 +103,47 @@ export const persistenceIsolationScenario = resourceScenario('persistence-isolat
   'score-records-absent',
 ]);
 
+const fullResourceScenario = (id: string, assertions: string[]): ScenarioDefinition => ({
+  id,
+  fixture: 'resources',
+  isolationKey: 'resources-pnpm',
+  tier: 'full',
+  services: [],
+  credentials: [],
+  timeoutMs: 180_000,
+  assertions,
+});
+
+export const workspaceOwnedOverrideScenario = fullResourceScenario('workspace-owned-override', [
+  'agent-workspace-overrides-global',
+  'global-workspace-marker-absent',
+]);
+
+export const workspaceDynamicScenario = fullResourceScenario('workspace-dynamic', [
+  'concurrent-items',
+  'same-key-consistent',
+  'different-key-isolated',
+  'workspace-cleanup',
+]);
+
+export const workspaceSearchScenario = fullResourceScenario('workspace-search', [
+  'bm25-search',
+  'vector-search',
+  'hybrid-search',
+]);
+
+export const workspaceMountsScenario = fullResourceScenario('workspace-mounts', [
+  'multi-mount-routing',
+  'read-only-mount',
+  'workspace-cleanup',
+]);
+
+export const workspaceLspScenario = fullResourceScenario('workspace-lsp', [
+  'language-server-launched',
+  'lsp-hover',
+  'lsp-shutdown',
+]);
+
 export const nativeDuckdbScenario: ScenarioDefinition = {
   id: 'native-duckdb',
   fixture: 'native',
@@ -131,5 +172,10 @@ export const scenarios = [
   workspaceSandboxScenario,
   sandboxCancellationScenario,
   persistenceIsolationScenario,
+  workspaceOwnedOverrideScenario,
+  workspaceDynamicScenario,
+  workspaceSearchScenario,
+  workspaceMountsScenario,
+  workspaceLspScenario,
   nativeDuckdbScenario,
 ];
