@@ -122,14 +122,16 @@ export function createCancelFrame(request: ReturnType<typeof createRunRequest>, 
 }
 
 /**
- * Launches the copied worker, waits until the run has started, then delivers a
- * protocol cancel frame while the target item is still in flight.
+ * Launches the copied worker, waits until the run has started (and until the
+ * optional `readyWhen` predicate reports the in-flight item reached the state
+ * under test), then delivers a protocol cancel frame while the target item is
+ * still in flight.
  */
 export async function runCancelledProtocol(
   artifactRoot: string,
   manifest: ExperimentWorkerManifest,
   request: ReturnType<typeof createRunRequest>,
-  options: { cancelAfterEventType?: string; timeoutMs?: number } = {},
+  options: { cancelAfterEventType?: string; timeoutMs?: number; readyWhen?: () => Promise<boolean> } = {},
 ) {
   const cancelAfter = options.cancelAfterEventType ?? 'run-started';
   const startedAt = Date.now();
@@ -142,17 +144,29 @@ export async function runCancelledProtocol(
   let stdout = '';
   let stderr = '';
   let cancelSent = false;
+  let cancelPending = false;
+  const sendCancel = () => {
+    cancelSent = true;
+    child.stdin.end(`${JSON.stringify(createCancelFrame(request, 'cancelled by e2e test'))}\n`);
+  };
+  const sendCancelWhenReady = async () => {
+    while (child.exitCode === null && !(await options.readyWhen!())) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (child.exitCode === null) sendCancel();
+  };
   child.stderr.setEncoding('utf8').on('data', chunk => (stderr += chunk));
   child.stdout.setEncoding('utf8').on('data', chunk => {
     stdout += chunk;
-    if (cancelSent) return;
+    if (cancelSent || cancelPending) return;
     for (const line of stdout.split('\n')) {
       if (!line) continue;
       try {
         const event = JSON.parse(line) as ProtocolEvent;
         if (event.type === cancelAfter) {
-          cancelSent = true;
-          child.stdin.end(`${JSON.stringify(createCancelFrame(request, 'cancelled by e2e test'))}\n`);
+          cancelPending = true;
+          if (options.readyWhen) void sendCancelWhenReady();
+          else sendCancel();
           return;
         }
       } catch {

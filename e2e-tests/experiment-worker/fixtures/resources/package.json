@@ -1,0 +1,15 @@
+{
+  "name": "experiment-worker-resources-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "experiment-worker-e2e-test",
+    "@mastra/libsql": "experiment-worker-e2e-test",
+    "execa": "^9.6.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "mastra": "experiment-worker-e2e-test"
+  }
+}

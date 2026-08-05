@@ -5,13 +5,14 @@
   "type": "module",
   "description": "Installed-package E2E tests for the experiment worker artifact",
   "scripts": {
-    "test": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts",
-    "test:pr": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts",
-    "test:full": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts",
-    "test:full:strict": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts",
+    "test": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts tests/runtime-resources.test.ts tests/native-duckdb.test.ts",
+    "test:pr": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts tests/runtime-resources.test.ts tests/native-duckdb.test.ts",
+    "test:full": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts tests/runtime-resources.test.ts tests/native-duckdb.test.ts",
+    "test:full:strict": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts tests/runtime-resources.test.ts tests/native-duckdb.test.ts",
     "test:scenario": "node scripts/run-scenario.mjs"
   },
   "devDependencies": {
+    "@libsql/client": "^0.17.4",
     "@types/node": "^26.0.0",
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",

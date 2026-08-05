@@ -66,6 +66,60 @@ export const truncatedInputScenario = runtimeScenario('truncated-input', [
   'success-after-protocol-failure',
 ]);
 
+const resourceScenario = (id: string, assertions: string[]): ScenarioDefinition => ({
+  id,
+  fixture: 'resources',
+  isolationKey: 'resources-pnpm',
+  tier: 'pr',
+  services: [],
+  credentials: [],
+  timeoutMs: 180_000,
+  assertions,
+});
+
+export const workspaceSkillAgentScenario = resourceScenario('workspace-skill-agent', [
+  'workspace-inherited',
+  'skill-discovered',
+  'skill-prompt-injected',
+]);
+
+export const workspaceSandboxScenario = resourceScenario('workspace-sandbox', [
+  'filesystem-write',
+  'sandbox-command',
+  'skill-listed',
+]);
+
+export const sandboxCancellationScenario = resourceScenario('sandbox-cancellation', [
+  'sandbox-command-started',
+  'terminal-cancelled',
+  'descendant-terminated',
+  'success-after-cancel',
+]);
+
+export const persistenceIsolationScenario = resourceScenario('persistence-isolation', [
+  'application-storage-written',
+  'vector-adapter-executed',
+  'experiment-records-absent',
+  'score-records-absent',
+]);
+
+export const nativeDuckdbScenario: ScenarioDefinition = {
+  id: 'native-duckdb',
+  fixture: 'native',
+  isolationKey: 'native-duckdb-pnpm',
+  tier: 'pr',
+  services: [],
+  credentials: [],
+  timeoutMs: 240_000,
+  assertions: [
+    'isolated-install-root',
+    'native-dependency-declared',
+    'portable-hoisted-layout',
+    'artifact-relocated',
+    'native-vector-executed',
+  ],
+};
+
 export const scenarios = [
   minimalAgentScenario,
   copiedArtifactScenario,
@@ -73,4 +127,9 @@ export const scenarios = [
   resumableWorkflowScenario,
   processCancellationScenario,
   truncatedInputScenario,
+  workspaceSkillAgentScenario,
+  workspaceSandboxScenario,
+  sandboxCancellationScenario,
+  persistenceIsolationScenario,
+  nativeDuckdbScenario,
 ];
