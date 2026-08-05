@@ -11,6 +11,7 @@ import { materializeProject } from '../helpers/materialize-project.js';
 import { OwnedResources } from '../helpers/process-cleanup.js';
 import { createRunRequest, runCancelledProtocol, runProtocol } from '../helpers/run-protocol.js';
 import {
+  kitchenSinkScenario,
   persistenceIsolationScenario,
   sandboxCancellationScenario,
   workspaceSandboxScenario,
@@ -143,6 +144,37 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       expect(recovered.result.exitCode).toBe(0);
     },
     sandboxCancellationScenario.timeoutMs,
+  );
+
+  test(
+    `${kitchenSinkScenario.id} builds an import-heavy project and executes an agent and workflow without Studio`,
+    async () => {
+      const agent = await runProtocol(
+        artifactRoot,
+        manifest,
+        createRunRequest(manifest, {
+          targetId: 'workspace-agent',
+          items: [{ id: 'kitchen-agent', input: 'are workspace skills visible?', toolMocks: [] }],
+          timeoutMs: 30_000,
+        }),
+      );
+      expect(JSON.stringify(agent.events)).toContain('skills:visible');
+
+      const workflow = await runProtocol(
+        artifactRoot,
+        manifest,
+        createRunRequest(manifest, {
+          targetType: 'workflow',
+          targetId: 'workspace-workflow',
+          items: [{ id: 'kitchen-workflow', input: { note: 'kitchen sink workflow' }, toolMocks: [] }],
+          timeoutMs: 30_000,
+        }),
+      );
+      expect(JSON.stringify(workflow.events)).toContain('kitchen sink workflow');
+      expect(agent.result.exitCode).toBe(0);
+      expect(workflow.result.exitCode).toBe(0);
+    },
+    kitchenSinkScenario.timeoutMs,
   );
 
   test(

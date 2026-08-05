@@ -207,6 +207,31 @@ export const pnpmMonorepoScenario = projectShapeScenario('pnpm-monorepo', 'monor
   'source-independent',
 ]);
 
+export const portabilityIsolationScenario = projectShapeScenario('portability-isolation', 'runtime', [
+  'repeated-build-stable-contract',
+  'volatile-build-metadata',
+  'concurrent-workers',
+  'abrupt-termination-recovery',
+  'artifact-immutable',
+]);
+
+export const kitchenSinkScenario = projectShapeScenario('kitchen-sink', 'resources', [
+  'import-heavy-build',
+  'selected-agent-executed',
+  'selected-workflow-executed',
+  'studio-not-launched',
+]);
+
+export const malformedApprovalsScenario = projectShapeScenario('negative-malformed-approvals', 'runtime', [
+  'invalid-pnpm-approval-diagnostic',
+]);
+export const missingMastraScenario = projectShapeScenario('negative-missing-mastra', 'runtime', [
+  'missing-mastra-diagnostic',
+]);
+export const importFailureScenario = projectShapeScenario('negative-import-failure', 'runtime', [
+  'customer-import-diagnostic',
+]);
+
 export const nativeDuckdbScenario: ScenarioDefinition = {
   id: 'native-duckdb',
   fixture: 'native',
@@ -246,5 +271,10 @@ export const scenarios = [
   npmMinimalScenario,
   yarnMinimalScenario,
   pnpmMonorepoScenario,
+  portabilityIsolationScenario,
+  kitchenSinkScenario,
+  malformedApprovalsScenario,
+  missingMastraScenario,
+  importFailureScenario,
   nativeDuckdbScenario,
 ];
