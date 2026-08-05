@@ -519,18 +519,23 @@ describe('useAgentControllerConnection', () => {
       };
     }
 
-    function cachedMessages(client: QueryClient) {
+    function cachedMessages(client: QueryClient, limit = 100) {
       return client.getQueryData<MastraDBMessage[]>(
-        queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100),
+        queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', limit),
       );
     }
 
-    it('appends a streamed message to the cached window so a remount reads it', async () => {
+    it('appends a streamed message to every cached window of the thread', async () => {
       const { emit } = stubStreamingSession();
       const { client, result } = renderHookWithProviders(() =>
         useAgentControllerConnection({ ...hookArgs, onEvent: () => {} }),
       );
+      // Load-more leaves one cache entry per limit it grew through.
       client.setQueryData(queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100), [
+        dbMessage('kickoff', 'review this PR'),
+      ]);
+      client.setQueryData(queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 200), [
+        dbMessage('older', 'earlier turn'),
         dbMessage('kickoff', 'review this PR'),
       ]);
 
@@ -538,6 +543,7 @@ describe('useAgentControllerConnection', () => {
       emit({ type: 'message_end', message: dbMessage('reply-1', 'here is the review') });
 
       await waitFor(() => expect(cachedMessages(client)?.map(m => m.id)).toEqual(['kickoff', 'reply-1']));
+      expect(cachedMessages(client, 200)?.map(m => m.id)).toEqual(['older', 'kickoff', 'reply-1']);
     });
 
     it('replaces the cached copy of a message it already holds', async () => {

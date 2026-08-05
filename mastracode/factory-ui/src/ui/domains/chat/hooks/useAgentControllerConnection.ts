@@ -122,14 +122,11 @@ export function useAgentControllerConnection({
 }
 
 function isDBMessage(value: unknown): value is MastraDBMessage {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof value.id === 'string' &&
-    'role' in value &&
-    'content' in value
-  );
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('id' in value) || typeof value.id !== 'string' || value.id === '') return false;
+  if (!('role' in value) || typeof value.role !== 'string') return false;
+  if (!('content' in value) || typeof value.content !== 'object' || value.content === null) return false;
+  return 'parts' in value.content && Array.isArray(value.content.parts);
 }
 
 /** The persisted form of a message, emitted once the model finishes writing it. */
