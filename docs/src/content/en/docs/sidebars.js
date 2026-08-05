@@ -114,6 +114,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'workflows/stored-workflows',
+              label: 'Stored Workflows',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'workflows/snapshots',
               label: 'Snapshots',
             },

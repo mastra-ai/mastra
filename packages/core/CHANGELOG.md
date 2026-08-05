@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 1.57.0-alpha.2
+
+### Patch Changes
+
+- Fixed boot-time recovery so nested workflows that already finished inside a parent `.parallel()` are reused instead of restarted. Parent `activeStepsPath` can still list completed children after a crash; restarting those terminal snapshots no longer throws "This workflow run was not active". As part of this, calling `restart()` on a run whose snapshot is already `success`, `failed`, or `tripwire` now returns the stored result without re-executing any steps (it previously threw). Fixes https://github.com/mastra-ai/mastra/issues/20225 ([#20518](https://github.com/mastra-ai/mastra/pull/20518))
+
+- Fixed `DurableAgent` still writing messages to the thread during tool-call suspension (approval / in-execution suspend) and background-task completion when `memory.options.readOnly` was set. Follow-up to the readOnly fix for the durable finish path (#18921) — these mid-run flush paths in `steps/tool-call.ts` had the same missing guard. ([#18856](https://github.com/mastra-ai/mastra/pull/18856))
+
+- Fixed durable agents losing a pending approval on page refresh. The suspended tool's metadata is now persisted to the assistant message, so a reloading client re-renders the approval instead of showing none while the run sits parked and resumable. ([#19713](https://github.com/mastra-ai/mastra/pull/19713))
+
+  This applies whenever the agentic loop executes in a different process than the one that called `stream()` — for example the `@mastra/inngest` `connect()` worker topology.
+
+- Fixed agent model-call retries ignoring the provider's `Retry-After` response header. ([#19906](https://github.com/mastra-ai/mastra/pull/19906))
+
+  An agent that retries a failed model call (via `maxRetries`) backed off on a fixed exponential schedule. A provider replying `429` with `Retry-After: 30` was retried after 1s, 2s and 4s, so every attempt landed inside the window the provider was still throttling. Retries now wait for the delay the provider asks for, reading either `Retry-After` or `Retry-After-Ms`.
+
+  Waits are limited to 30 seconds, so an unusually large `Retry-After` cannot stall a run. When a provider sends no retry delay, the existing exponential backoff is unchanged.
+
+  Fixes #19885
+
+- Exempt memory-sourced messages from the resourceId guard in inputToMastraDBMessage, matching the existing threadId exemption. Memory messages can carry a system resourceId (e.g. observational-memory continuation messages arrive with the observer's resourceId), and the mismatch previously threw inside input processing and hard-aborted the turn. ([#19153](https://github.com/mastra-ai/mastra/pull/19153))
+
+- Fixed non-durable tool-call suspensions writing messages when memory is read-only. ([#20346](https://github.com/mastra-ai/mastra/pull/20346))
+
+- Fixed OpenAI Files API file IDs (e.g. `file-abc123`) being corrupted into invalid base64 data URIs, which caused `MastraError: Failed to download asset`. File IDs are now classified as provider file references and passed through untouched on every conversion path — v5 UI messages, v4 attachments, and v1 prompt messages — so `@ai-sdk/openai` can forward them as `{ file_id: "file-..." }` to the API. ([#16448](https://github.com/mastra-ai/mastra/pull/16448))
+
+- Fixed `RequestContext.toJSON()` so nested contexts reached through shared-reference graphs no longer block the event loop. The serialization safety budget is now shared across nested probes within one serialization, so such values are handled in bounded time — and filtered when they exceed the budget — instead of blocking for seconds. ([#20730](https://github.com/mastra-ai/mastra/pull/20730))
+
+- Fixed AI SDK v5 streams so provider metadata is preserved when a text delta is empty. This keeps Google Gemini thought signatures and other provider continuity metadata available to downstream consumers. Empty deltas without provider metadata remain omitted. Relates to https://github.com/mastra-ai/mastra/issues/20469 ([#20488](https://github.com/mastra-ai/mastra/pull/20488))
+
 ## 1.57.0-alpha.1
 
 ### Minor Changes

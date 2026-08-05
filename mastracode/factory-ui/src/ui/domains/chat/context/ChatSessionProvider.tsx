@@ -138,7 +138,9 @@ export function ChatSessionBoundary({
 
   return (
     <ChatTranscriptProvider
-      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
+      // No `isPending` segment: remounting on the pending -> ready flip would drop
+      // the live SSE listener. Results merge into the reducer instead.
+      key={`${resourceId}:${threadId ?? 'draft'}`}
       threadId={threadId}
       initialMessages={messagesQuery.data}
       hasMoreHistory={messagesQuery.hasMore}
