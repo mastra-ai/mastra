@@ -11,21 +11,19 @@
  * the factory does all of that the same way it already does for GitHub and
  * Linear, and the entry's job shrinks to reading Slack's env vars once.
  *
- * This lives in `mastracode/web` rather than in `@mastra/factory` on purpose:
- * it depends on `@mastra/slack` and `chat`, which are mc-web dependencies. The
- * integration interface is explicitly designed to be implemented from outside
- * ("Third parties add capabilities by implementing this same interface — no
- * factory changes required"), so Slack takes that path instead of pushing two
- * chat-platform dependencies into the factory package.
+ * Slack ships as a factory built-in alongside GitHub and Linear (it originally
+ * lived in `mastracode/web` to keep `@mastra/slack`/`chat` out of this package;
+ * the team reversed that so `create-factory` consumers get Slack channels out
+ * of the box). The integration interface remains open — third parties still add
+ * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
-import type { AgentControllerChannels } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
-import type { FactoryIntegration, IntegrationContext } from '@mastra/factory';
+
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
-import { createAgentControllerSlackChannels, createGithubSourceControl } from './slack.js';
-import type { SlackSourceControl } from './slack.js';
+import { createSlackChannelsConfig, adaptSourceControlOwner } from './slack.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -52,12 +50,6 @@ export interface SlackIntegrationConfig {
   oidcRedirectBaseUrl?: string;
   /** SPA origin the post-connect redirect returns to. */
   uiOrigin?: string;
-  /**
-   * Source-control slice that makes new Slack threads repo-backed. Supplied by
-   * the entry from the GitHub integration when one is configured; absent →
-   * chat-only Slack sessions.
-   */
-  sourceControl?: SlackSourceControl;
 }
 
 export class SlackIntegration implements FactoryIntegration {
@@ -70,6 +62,12 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  /**
+   * Whether `channels()` found a source-control owner on the context and wired
+   * repo-backed sessions. Set at the channels() attach path, which runs once at
+   * boot before diagnostics are served.
+   */
+  #repoBackedSessions = false;
 
   constructor(config: SlackIntegrationConfig) {
     if (!config.signingSecret) {
@@ -80,8 +78,12 @@ export class SlackIntegration implements FactoryIntegration {
     this.#config = config;
   }
 
-  channels(ctx: IntegrationContext): AgentControllerChannels {
-    return createAgentControllerSlackChannels({
+  channels(ctx: IntegrationContext): FactoryChannelsConfig {
+    // Repo-backed sessions come from the factory's source-control owner
+    // (GitHub, when registered) — no config-level wiring by the entry.
+    const sourceControlOwner = ctx.storage.sourceControlOwner;
+    this.#repoBackedSessions = Boolean(sourceControlOwner);
+    return createSlackChannelsConfig({
       slack: {
         clientId: this.#config.clientId,
         clientSecret: this.#config.clientSecret,
@@ -90,7 +92,7 @@ export class SlackIntegration implements FactoryIntegration {
       },
       accountLinks: ctx.storage.channelIdentity,
       projects: ctx.storage.projects,
-      sourceControl: this.#config.sourceControl,
+      sourceControl: sourceControlOwner ? adaptSourceControlOwner(sourceControlOwner) : undefined,
       workItems: ctx.rules?.workItems,
     });
   }
@@ -110,14 +112,12 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   diagnostics(): Record<string, unknown> {
-    const { clientId, clientSecret, botToken, oidcRedirectBaseUrl, sourceControl } = this.#config;
+    const { clientId, clientSecret, botToken, oidcRedirectBaseUrl } = this.#config;
     return {
       configured: true,
       botTokenConfigured: Boolean(botToken),
       oidcConfigured: Boolean(clientId && clientSecret && oidcRedirectBaseUrl),
-      repoBackedSessions: Boolean(sourceControl),
+      repoBackedSessions: this.#repoBackedSessions,
     };
   }
 }
-
-export { createGithubSourceControl };

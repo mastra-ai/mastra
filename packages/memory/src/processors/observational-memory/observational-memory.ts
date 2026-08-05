@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -1704,10 +1705,15 @@ export class ObservationalMemory {
     // fall back to a resource-keyed record which causes deadlocks when
     // multiple threads share the same resourceId.
     if (this.scope === 'thread') {
-      throw new Error(
-        `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
+      throw new MastraError({
+        id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.USER,
+        details: { status: 400 },
+        text:
+          `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
           `Ensure the agent is configured with Memory and a valid threadId is provided.`,
-      );
+      });
     }
 
     return null;

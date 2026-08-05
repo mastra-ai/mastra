@@ -487,17 +487,43 @@ describe('RequestContext', () => {
       });
     });
 
-    it('should replace non-primitive values with type placeholders', () => {
+    it('should pass plain objects and arrays through for deepClean to walk, but collapse other types', () => {
+      class Widget {
+        secret = 'do-not-walk';
+      }
       const ctx = new RequestContext();
-      ctx.set('obj', { nested: 'value' });
-      ctx.set('arr', [1, 2, 3]);
-      ctx.set('fn', () => {});
+      const obj = { nested: 'value' };
+      const arr = [1, 2, 3];
+      const fn = () => {};
+      const instance = new Widget();
+      ctx.set('obj', obj);
+      ctx.set('arr', arr);
+      ctx.set('fn', fn);
+      ctx.set('instance', instance);
 
       const result = ctx.serializeForSpan();
 
-      expect(result['obj']).toBe('[object]');
-      expect(result['arr']).toBe('[object]');
+      // Plain objects/arrays are returned by reference so the downstream
+      // deepClean walks them (nested data stays visible in traces).
+      expect(result['obj']).toBe(obj);
+      expect(result['arr']).toBe(arr);
+      // Functions and class instances are collapsed, not walked — their
+      // internals never reach the trace serializer.
       expect(result['fn']).toBe('[function]');
+      expect(result['instance']).toBe('[object]');
+    });
+
+    it('should collapse values that reject classification (e.g. a revoked Proxy) instead of throwing', () => {
+      const revocable = Proxy.revocable({}, {});
+      revocable.revoke();
+      const ctx = new RequestContext();
+      ctx.set('revoked', revocable.proxy as unknown);
+      ctx.set('userId', 'user-123');
+
+      expect(() => ctx.serializeForSpan()).not.toThrow();
+      const result = ctx.serializeForSpan();
+      expect(result['revoked']).toBe('[object]');
+      expect(result['userId']).toBe('user-123');
     });
 
     it('should return empty object for empty context', () => {

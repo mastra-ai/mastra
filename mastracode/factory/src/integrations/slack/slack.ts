@@ -1,23 +1,24 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  AgentControllerChannels,
-  type ChannelHandler,
-  type ChannelHandlerContext,
-  type ChannelHandlers,
-  type ResolveResourceId,
-  type ResolveThreadId,
+import type {
+  ChannelHandler,
+  ChannelHandlerContext,
+  ChannelHandlers,
+  ResolveResourceId,
+  ResolveThreadId,
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
+import { createSlackAdapter } from '@mastra/slack';
+import { Card, CardText, Actions, LinkButton } from 'chat';
+
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
-  FactoryProjectsStorage,
-  WorkItemsStorage,
-} from '@mastra/factory';
-import { createSlackAdapter } from '@mastra/slack';
-import { Card, CardText, Actions, LinkButton } from 'chat';
+} from '../../storage/domains/channel-identity/base.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { FactoryChannelsConfig } from '../base.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -51,7 +52,8 @@ interface SlackChannelDeps {
    * when the sender is linked and their factory has a repository, the thread's
    * resourceId becomes a Factory user-session id (repo cloned on a
    * `slack/{threadTs}` branch) instead of the chat-only `channel:...` id.
-   * Absent (no GitHub App configured) → chat-only sessions as before.
+   * Absent (no source-control integration registered) → chat-only sessions as
+   * before.
    */
   sourceControl?: SlackSourceControl;
   /**
@@ -64,14 +66,15 @@ interface SlackChannelDeps {
 }
 
 /**
- * The slice of the GitHub integration's source-control storage the Slack
- * wiring needs. Structural (not the storage types themselves) so slack.ts
- * stays decoupled from the integration's module graph and tests can stub it.
+ * The slice of the source-control owner's storage the Slack wiring needs.
+ * Structural (not the storage types themselves) so slack.ts stays decoupled
+ * from the owning integration's module graph and tests can stub it.
  */
 export interface SlackSourceControl {
   /**
    * Resolve the factory's linked repository — first repo on the factory's
-   * GitHub connection, the same single-repo assumption the web kickoff makes.
+   * source-control connection, the same single-repo assumption the web kickoff
+   * makes.
    */
   resolveProjectRepository(args: {
     orgId: string;
@@ -94,65 +97,66 @@ export interface SlackSourceControl {
 }
 
 /**
- * Structural slice of `GithubIntegration` the source-control adapter reads.
- * `sourceControlStorage` is bound during `factory.prepare()`; all access here
- * is lazy (request time), well after preparation.
+ * Structural slice of the source-control owner's storage handle
+ * (`IntegrationContext.storage.sourceControlOwner`, a `SourceControlStorageHandle`)
+ * the adapter reads. Structural so slack.ts stays decoupled from the storage
+ * module graph and tests can stub it. The handle is bound during
+ * `factory.prepare()`; all access here is lazy (request time).
  */
-interface GithubIntegrationSlice {
-  id: string;
-  sourceControlStorage: {
-    connections: {
-      list(args: { orgId: string; factoryProjectId: string }): Promise<Array<{ id: string; integrationId: string }>>;
-    };
-    projectRepositories: {
-      list(args: {
-        orgId: string;
-        connectionId: string;
-      }): Promise<Array<{ id: string; repositoryId: string; branch?: string | null }>>;
-    };
-    repositories: {
-      get(args: { orgId: string; id: string }): Promise<{ defaultBranch: string } | null>;
-    };
-    sessions: {
-      getForBranch(args: {
-        projectRepositoryId: string;
-        userId: string;
-        branch: string;
-      }): Promise<{ sessionId: string } | null>;
-      create(input: {
-        sessionId: string;
-        projectRepositoryId: string;
-        orgId: string;
-        userId: string;
-        branch: string;
-        baseBranch: string;
-      }): Promise<{ sessionId: string }>;
-    };
+interface SourceControlOwnerSlice {
+  integrationId: string;
+  connections: {
+    list(args: { orgId: string; factoryProjectId: string }): Promise<Array<{ id: string; integrationId: string }>>;
+  };
+  projectRepositories: {
+    list(args: {
+      orgId: string;
+      connectionId: string;
+    }): Promise<Array<{ id: string; repositoryId: string; branch?: string | null }>>;
+  };
+  repositories: {
+    get(args: { orgId: string; id: string }): Promise<{ defaultBranch: string } | null>;
+  };
+  sessions: {
+    getForBranch(args: {
+      projectRepositoryId: string;
+      userId: string;
+      branch: string;
+    }): Promise<{ sessionId: string } | null>;
+    create(input: {
+      sessionId: string;
+      projectRepositoryId: string;
+      orgId: string;
+      userId: string;
+      branch: string;
+      baseBranch: string;
+    }): Promise<{ sessionId: string }>;
   };
 }
 
 /**
- * Adapt the GitHub integration's source-control storage into the
- * {@link SlackSourceControl} surface. Repo resolution mirrors the factory's
- * own `ensureFactoryRuleSession`: the factory's GitHub connection → its first
- * linked repository → pinned branch or repo default as the base.
+ * Adapt the source-control owner's storage handle into the
+ * {@link SlackSourceControl} surface. Nothing here is GitHub-specific — the
+ * owner is whichever integration owns source control, matched by its own
+ * `integrationId`. Repo resolution mirrors the factory's own
+ * `ensureFactoryRuleSession`: the owner's connection on the factory → its
+ * first linked repository → pinned branch or repo default as the base.
  */
-export function createGithubSourceControl(github: GithubIntegrationSlice): SlackSourceControl {
+export function adaptSourceControlOwner(owner: SourceControlOwnerSlice): SlackSourceControl {
   return {
     async resolveProjectRepository({ orgId, factoryProjectId }) {
-      const storage = github.sourceControlStorage;
-      const connections = await storage.connections.list({ orgId, factoryProjectId });
-      const connection = connections.find(candidate => candidate.integrationId === github.id);
+      const connections = await owner.connections.list({ orgId, factoryProjectId });
+      const connection = connections.find(candidate => candidate.integrationId === owner.integrationId);
       if (!connection) return null;
-      const projectRepositories = await storage.projectRepositories.list({ orgId, connectionId: connection.id });
+      const projectRepositories = await owner.projectRepositories.list({ orgId, connectionId: connection.id });
       const first = projectRepositories[0];
       if (!first) return null;
-      const repository = await storage.repositories.get({ orgId, id: first.repositoryId });
+      const repository = await owner.repositories.get({ orgId, id: first.repositoryId });
       if (!repository) return null;
       return { projectRepositoryId: first.id, baseBranch: first.branch ?? repository.defaultBranch };
     },
-    getSessionForBranch: args => github.sourceControlStorage.sessions.getForBranch(args),
-    createSession: args => github.sourceControlStorage.sessions.create({ sessionId: randomUUID(), ...args }),
+    getSessionForBranch: args => owner.sessions.getForBranch(args),
+    createSession: args => owner.sessions.create({ sessionId: randomUUID(), ...args }),
   };
 }
 
@@ -358,7 +362,7 @@ function threadBranch(threadId: string): string {
  * session then materializes the repo sandbox via the factory's dynamic
  * workspace (clone + PAT), the session shows up in the web Sessions list, and
  * View Session deep-links land on the normal workspace route. Everything else
- * (unlinked, unrouted, repo-less, or no GitHub) keeps the chat-only
+ * (unlinked, unrouted, repo-less, or no source control) keeps the chat-only
  * `defaultResourceId`.
  *
  * Pure lookups only — cards for unlinked/unrouted senders are the dispatch
@@ -692,10 +696,8 @@ interface SlackCredentials {
   botToken?: string;
 }
 
-export function createAgentControllerSlackChannels(
-  deps: SlackChannelDeps & { slack: SlackCredentials },
-): AgentControllerChannels {
-  const channels = new AgentControllerChannels({
+export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: SlackCredentials }): FactoryChannelsConfig {
+  return {
     adapters: {
       slack: {
         adapter: createSlackAdapter(deps.slack),
@@ -707,7 +709,5 @@ export function createAgentControllerSlackChannels(
     // resourceId, which is what makes the controller session repo-backed.
     resolveResourceId: createChannelResourceIdResolver(deps),
     resolveThreadId: resolveChannelThreadId,
-  });
-
-  return channels;
+  };
 }

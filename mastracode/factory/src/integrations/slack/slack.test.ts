@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createChannelResourceIdResolver,
   resolveChannelThreadId,
+  adaptSourceControlOwner,
   createHandlers,
   resolveLinkedSender,
   resolveFactoryForLink,
@@ -78,8 +79,9 @@ describe('resolveLinkedSender', () => {
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
 
     // Ephemeral (visible only to the sender), with fallbackToDM.
+    // Addressed to the sender, not the channel: the card is a private nudge.
     const [user, , options] = thread.postEphemeral.mock.calls[0];
-    expect(user).toEqual(thread.postEphemeral.mock.calls[0][0]);
+    expect(user).toEqual({ userId: 'U-sender', userName: 'caleb' });
     expect(options).toEqual({ fallbackToDM: true });
 
     // The link carries NO identity: Slack proves the account during OIDC, so
@@ -746,5 +748,106 @@ describe('Slack thread work-item creation', () => {
 
     expect(thread.post).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+/**
+ * The adapter between the factory's source-control storage handle and the
+ * narrow surface the Slack handlers consume. Most of it delegates, but repo
+ * resolution encodes real policy — which connection counts, which repo, and
+ * what the base branch is — so it gets tested against a stubbed owner rather
+ * than through the handlers, which stub the adapted surface instead.
+ */
+describe('adaptSourceControlOwner', () => {
+  function makeOwner({
+    connections = [{ id: 'conn-gh', integrationId: 'github' }],
+    projectRepositories = [{ id: 'pr-1', repositoryId: 'repo-1', branch: null }] as Array<{
+      id: string;
+      repositoryId: string;
+      branch?: string | null;
+    }>,
+    repository = { defaultBranch: 'main' } as { defaultBranch: string } | null,
+  } = {}) {
+    return {
+      integrationId: 'github',
+      connections: { list: vi.fn().mockResolvedValue(connections) },
+      projectRepositories: { list: vi.fn().mockResolvedValue(projectRepositories) },
+      repositories: { get: vi.fn().mockResolvedValue(repository) },
+      sessions: {
+        getForBranch: vi.fn().mockResolvedValue({ sessionId: 'us-existing' }),
+        create: vi.fn(input => Promise.resolve({ sessionId: input.sessionId })),
+      },
+    };
+  }
+
+  const resolveArgs = { orgId: 'org-1', factoryProjectId: 'fp-1' };
+
+  it('resolves the first repository linked to the owner-owned connection, defaulting the base branch to the repo default', async () => {
+    const owner = makeOwner();
+
+    const result = await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs);
+
+    expect(result).toEqual({ projectRepositoryId: 'pr-1', baseBranch: 'main' });
+    expect(owner.projectRepositories.list).toHaveBeenCalledWith({ orgId: 'org-1', connectionId: 'conn-gh' });
+    expect(owner.repositories.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'repo-1' });
+  });
+
+  it('prefers the branch pinned on the project repository over the repository default', async () => {
+    const owner = makeOwner({ projectRepositories: [{ id: 'pr-1', repositoryId: 'repo-1', branch: 'develop' }] });
+
+    const result = await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs);
+
+    expect(result).toEqual({ projectRepositoryId: 'pr-1', baseBranch: 'develop' });
+  });
+
+  // A project can carry connections for several integrations; only the one
+  // belonging to this owner can back a session.
+  it('ignores connections belonging to other integrations', async () => {
+    const owner = makeOwner({ connections: [{ id: 'conn-linear', integrationId: 'linear' }] });
+
+    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
+    expect(owner.projectRepositories.list).not.toHaveBeenCalled();
+  });
+
+  it('resolves nothing when the connection has no linked repository', async () => {
+    const owner = makeOwner({ projectRepositories: [] });
+
+    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
+    expect(owner.repositories.get).not.toHaveBeenCalled();
+  });
+
+  it('resolves nothing when the linked repository row is missing', async () => {
+    const owner = makeOwner({ repository: null });
+
+    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
+  });
+
+  it('delegates branch lookup to the owner unchanged', async () => {
+    const owner = makeOwner();
+    const args = { projectRepositoryId: 'pr-1', userId: 'user-1', branch: 'slack/thread-1' };
+
+    const session = await adaptSourceControlOwner(owner as any).getSessionForBranch(args);
+
+    expect(session).toEqual({ sessionId: 'us-existing' });
+    expect(owner.sessions.getForBranch).toHaveBeenCalledWith(args);
+  });
+
+  // The storage handle requires a session id the caller shouldn't invent, so
+  // the adapter mints one.
+  it('mints a session id when creating a session', async () => {
+    const owner = makeOwner();
+    const args = {
+      projectRepositoryId: 'pr-1',
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'slack/thread-1',
+      baseBranch: 'main',
+    };
+
+    const session = await adaptSourceControlOwner(owner as any).createSession(args);
+
+    expect(owner.sessions.create).toHaveBeenCalledWith(expect.objectContaining(args));
+    expect(session.sessionId).toEqual(expect.any(String));
+    expect(session.sessionId).not.toHaveLength(0);
   });
 });

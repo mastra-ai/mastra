@@ -1021,11 +1021,14 @@ export function createDurableToolCallStep() {
                     {
                       type: 'tool-invocation',
                       toolInvocation: {
-                        state: 'result',
+                        // A failed background task is recorded as `output-error` with the
+                        // message in `errorText`; a successful one keeps `state: 'result'`.
+                        ...(params.status === 'failed'
+                          ? { state: 'output-error' as const, errorText: result }
+                          : { state: 'result' as const, result }),
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         args: cleanedArgs,
-                        result,
                         // Preserve the approval decision for an approved approval-gated tool that
                         // ran in the background so it round-trips on recall, matching the sync path.
                         ...(approvalGrant ?? {}),
