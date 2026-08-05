@@ -1763,6 +1763,7 @@ export type ProviderModelsMap = {
     'laguna-s-2.1-free',
     'ling-2.6-flash-free',
     'ling-3.0-flash-free',
+    'longcat-2.0-free',
     'mimo-v2-flash-free',
     'mimo-v2-omni-free',
     'mimo-v2-pro-free',
