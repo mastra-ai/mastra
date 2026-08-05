@@ -1,0 +1,16 @@
+import { join } from 'node:path';
+import { runCommand } from './command.js';
+
+export async function buildWorker(
+  projectRoot: string,
+  outputDirectory = join(projectRoot, '.mastra', 'experiment-worker'),
+) {
+  const result = await runCommand('pnpm', ['exec', 'mastra', 'experiment', 'build', '--output-dir', outputDirectory], {
+    cwd: projectRoot,
+    timeoutMs: 180_000,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(`mastra experiment build failed (${result.exitCode})\n${result.stdout}\n${result.stderr}`);
+  }
+  return { result, artifactRoot: outputDirectory };
+}

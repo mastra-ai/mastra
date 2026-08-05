@@ -5,10 +5,10 @@
   "type": "module",
   "description": "Installed-package E2E tests for the experiment worker artifact",
   "scripts": {
-    "test": "vitest run tests/setup.test.ts",
-    "test:pr": "vitest run tests/setup.test.ts",
-    "test:full": "vitest run tests/setup.test.ts",
-    "test:full:strict": "vitest run tests/setup.test.ts",
+    "test": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts",
+    "test:pr": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts",
+    "test:full": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts",
+    "test:full:strict": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts",
     "test:scenario": "node scripts/run-scenario.mjs"
   },
   "devDependencies": {
