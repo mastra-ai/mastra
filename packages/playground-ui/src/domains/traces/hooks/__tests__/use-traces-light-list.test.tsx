@@ -188,4 +188,41 @@ describe('useTraces light-list fetching', () => {
     expect(fullRequests).not.toHaveBeenCalled();
     unmount();
   });
+
+  // Only the two legacy-server signals (404/500) may pin a session to full rows.
+  // Transient conditions would hit the full endpoint too — they must propagate
+  // and leave the client unpinned so light loading resumes once they clear.
+  it.each([
+    ['auth failure', 401],
+    ['rate limiting', 429],
+  ])('surfaces %s without falling back or pinning the client', async (_label, status) => {
+    const fullRequests = vi.fn<() => void>();
+    let lightFailures = 0;
+    server.use(
+      http.get(LIGHT_URL, () => {
+        if (lightFailures === 0) {
+          lightFailures += 1;
+          return new HttpResponse(null, { status });
+        }
+        return HttpResponse.json(lightPage0);
+      }),
+      http.get(FULL_URL, () => {
+        fullRequests();
+        return HttpResponse.json(fullTracesPage0);
+      }),
+    );
+
+    const first = renderTraces();
+    await waitFor(() => expect(first.result.current.isError).toBe(true));
+    expect(first.result.current.error?.message).toContain(`status: ${status}`);
+    expect(fullRequests).not.toHaveBeenCalled();
+    first.unmount();
+
+    // The condition clears; the same client must still use the light endpoint.
+    const second = renderTraces();
+    await waitFor(() => expect(second.result.current.isLoading).toBe(false), { timeout: 5000 });
+    expect(second.result.current.data?.spans[0]?.inputPreview).toBeDefined();
+    expect(fullRequests).not.toHaveBeenCalled();
+    second.unmount();
+  });
 });

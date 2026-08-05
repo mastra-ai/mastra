@@ -23,12 +23,11 @@ const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, Del
 
 /**
  * Per-MastraClient light-list support cache. Sticks once the light endpoint
- * fails with a non-permission HTTP error (404 from servers without the route,
- * 500 from servers whose store throws instead of serving the projection), so
- * every subsequent page fetch, delta poll and periodic refresh uses the full
- * list endpoint instead. The pin is deliberately session-sticky even for
- * transient errors — worst case is the pre-light behavior of fetching full
- * rows for the rest of the session.
+ * fails with one of the two legacy-server signals (404 from servers without
+ * the route, 500 from servers whose store throws instead of serving the
+ * projection), so every subsequent page fetch, delta poll and periodic refresh
+ * uses the full list endpoint instead. Other failures (auth, rate limits,
+ * outages) propagate without pinning — they'd hit the full endpoint too.
  */
 type LightListSupport = 'unknown' | 'unsupported';
 const lightListSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, LightListSupport>();
@@ -87,13 +86,15 @@ function isHttp501(error: unknown): boolean {
   return (error as { status?: number } | null)?.status === 501;
 }
 
-/** HTTP failures other than 403 mean the light endpoint isn't served (missing
- *  route, or a store that throws instead of serving the projection). 403 is a
- *  permission denial that the full endpoint would hit too, so it must not
- *  trigger the fallback. */
+/** Only the two legacy-server signals mean the light endpoint isn't served: 404
+ *  from servers without the route, 500 from cores whose store throws instead of
+ *  serving the projection. Anything else (401, 403, 429, 5xx outages, the 501
+ *  disabled-domain signal) is a condition the full endpoint would hit too, so it
+ *  propagates instead of pinning the session to full rows — mirroring how the
+ *  delta-support cache matches exactly 501. */
 function isLightListUnsupportedError(error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status;
-  return typeof status === 'number' && status !== 403;
+  return status === 404 || status === 500;
 }
 
 type FetchTracesFnArgs = TracesFilters & {
