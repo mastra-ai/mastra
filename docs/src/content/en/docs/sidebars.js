@@ -662,7 +662,7 @@ const sidebars = {
       items: [
         {
           type: 'category',
-          label: 'Tracing',
+          label: 'Traces',
           items: [
             {
               type: 'doc',
@@ -672,7 +672,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              label: 'Tracing',
+              label: 'Traces',
             },
             {
               type: 'doc',
