@@ -1,4 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
@@ -49,7 +49,26 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
     delete jsonSchema.anyOf;
     delete jsonSchema.oneOf;
     jsonSchema.type = 'object';
-    jsonSchema.properties = Object.assign({}, ...objectSchemas.map(subSchema => subSchema.properties ?? {}));
+
+    // Merge branch properties. When the same key appears in multiple branches with
+    // differing schemas, preserve every variant via a property-level anyOf instead
+    // of letting later branches overwrite earlier ones.
+    const mergedProperties: Record<string, JSONSchema7Definition[]> = {};
+    for (const subSchema of objectSchemas) {
+      for (const [key, propSchema] of Object.entries(subSchema.properties ?? {})) {
+        const variants = (mergedProperties[key] ??= []);
+        if (!variants.some(existing => JSON.stringify(existing) === JSON.stringify(propSchema))) {
+          variants.push(propSchema);
+        }
+      }
+    }
+    jsonSchema.properties = Object.fromEntries(
+      Object.entries(mergedProperties).map(([key, variants]) => [
+        key,
+        variants.length === 1 ? variants[0]! : { anyOf: variants },
+      ]),
+    );
+
     jsonSchema.required = objectSchemas
       .map(subSchema => subSchema.required ?? [])
       .reduce((required, branchRequired) => required.filter(key => branchRequired.includes(key)));
