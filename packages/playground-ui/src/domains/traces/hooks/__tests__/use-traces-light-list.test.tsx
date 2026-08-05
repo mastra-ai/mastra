@@ -24,8 +24,11 @@ const FULL_URL = `${BASE_URL}/api/observability/traces`;
 
 const server = setupServer();
 
+const queryClients: QueryClient[] = [];
+
 function makeWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClients.push(queryClient);
   return ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -34,6 +37,13 @@ function makeWrapper() {
 }
 
 const renderTraces = () => renderHook(() => useTraces({}), { wrapper: makeWrapper() });
+
+/** Page-0 response with no `deltaCursor`, so the delta query never enables. A test that isn't
+ *  asserting polling must not leave a poller running into the next test, where it lands on that
+ *  test's handlers and inflates its request counts. */
+function pageOnly(response: { deltaCursor?: string }) {
+  return { ...response, deltaCursor: undefined };
+}
 
 /** Serves both page-mode and delta-mode requests for one endpoint, recording each query string. */
 function listHandler(url: string, pageResponse: unknown, deltaResponse: unknown, searches: string[]) {
@@ -48,6 +58,9 @@ function listHandler(url: string, pageResponse: unknown, deltaResponse: unknown,
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   cleanup();
+  // Unmounting stops the observers but leaves the cached queries armed. A leaked poller
+  // lands on the next test's handlers and inflates its request counts.
+  queryClients.splice(0).forEach(queryClient => queryClient.clear());
   server.resetHandlers();
 });
 afterAll(() => server.close());
@@ -84,7 +97,7 @@ describe('useTraces light-list fetching', () => {
     const fullSearches: string[] = [];
     server.use(
       http.get(LIGHT_URL, () => new HttpResponse(null, { status: 500 })),
-      listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
+      listHandler(FULL_URL, pageOnly(fullTracesPage0), fullDeltaBatch, fullSearches),
     );
 
     const { result, unmount } = renderTraces();
@@ -186,6 +199,31 @@ describe('useTraces light-list fetching', () => {
     expect(result.current.error?.message).toContain('status: 403');
     expect(result.current.data).toBeUndefined();
     expect(fullRequests).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  // A 500 also comes from a DB hiccup or a request timeout, not only from an old core's
+  // store throwing. Serving that one request from the full endpoint is right; degrading
+  // the list for the rest of the session is not.
+  it('recovers to the light endpoint after a single 500', async () => {
+    let lightFailures = 0;
+    server.use(
+      http.get(LIGHT_URL, () => {
+        if (lightFailures === 0) {
+          lightFailures += 1;
+          return new HttpResponse(null, { status: 500 });
+        }
+        return HttpResponse.json(lightPage0);
+      }),
+      http.get(FULL_URL, () => HttpResponse.json(pageOnly(fullTracesPage0))),
+    );
+
+    const { result, unmount } = renderTraces();
+
+    // Light rows once the fault clears — a pinned client would be stuck on `trace-full`.
+    await waitFor(() => expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-alpha']));
+    expect(result.current.data?.spans[0]?.inputPreview).toBe('What is the weather in Paris?');
+    expect(result.current.isError).toBe(false);
     unmount();
   });
 

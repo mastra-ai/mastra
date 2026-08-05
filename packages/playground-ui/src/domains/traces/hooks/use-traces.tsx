@@ -22,15 +22,21 @@ type DeltaSupport = 'unknown' | 'unsupported';
 const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, DeltaSupport>();
 
 /**
- * Per-MastraClient light-list support cache. Sticks once the light endpoint
- * fails with one of the two legacy-server signals (404 from servers without
- * the route, 500 from servers whose store throws instead of serving the
- * projection), so every subsequent page fetch, delta poll and periodic refresh
- * uses the full list endpoint instead. Other failures (auth, rate limits,
+ * Per-MastraClient light-list support cache. Sticks once the light endpoint is
+ * shown not to be served, so every subsequent page fetch, delta poll and periodic
+ * refresh uses the full list endpoint instead. Other failures (auth, rate limits,
  * outages) propagate without pinning — they'd hit the full endpoint too.
  */
 type LightListSupport = 'unknown' | 'unsupported';
 const lightListSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, LightListSupport>();
+
+/** Consecutive 500s from the light endpoint, per client. Reset by any light success. */
+const lightListServerErrorsByClient = new WeakMap<ReturnType<typeof useMastraClient>, number>();
+
+/** A 500 is ambiguous — an old core's store throwing, or a transient server fault. Serve the
+ *  request from the full endpoint either way, but only pin the session once a second consecutive
+ *  one rules out a blip; a DB hiccup would otherwise degrade the list for the rest of the session. */
+const LIGHT_LIST_SERVER_ERRORS_BEFORE_PINNING = 2;
 
 /** Tunables for live-tail polling. All fields optional — defaults below.
  *  Platform consumers override individual fields to throttle traffic or
@@ -86,15 +92,22 @@ function isHttp501(error: unknown): boolean {
   return (error as { status?: number } | null)?.status === 501;
 }
 
-/** Only the two legacy-server signals mean the light endpoint isn't served: 404
- *  from servers without the route, 500 from cores whose store throws instead of
- *  serving the projection. Anything else (401, 403, 429, 5xx outages, the 501
- *  disabled-domain signal) is a condition the full endpoint would hit too, so it
- *  propagates instead of pinning the session to full rows — mirroring how the
- *  delta-support cache matches exactly 501. */
-function isLightListUnsupportedError(error: unknown): boolean {
+/** Only 404 and 500 can mean the light endpoint isn't served: 404 from servers without
+ *  the route, 500 from cores whose store throws instead of serving the projection.
+ *  Anything else (401, 403, 429, other 5xx, the 501 disabled-domain signal) is a
+ *  condition the full endpoint would hit too, so it propagates instead of falling
+ *  back — mirroring how the delta-support cache matches exactly 501. */
+function lightListFallbackStatus(error: unknown): 404 | 500 | undefined {
   const status = (error as { status?: number } | null)?.status;
-  return status === 404 || status === 500;
+  return status === 404 || status === 500 ? status : undefined;
+}
+
+/** Whether a failed light-list request should pin the session to the full endpoint.
+ *  Exported for testing — pure function of the status and the prior failure count. */
+export function shouldPinLightList(status: number | undefined, priorConsecutiveServerErrors: number): boolean {
+  if (status === 404) return true;
+  if (status !== 500) return false;
+  return priorConsecutiveServerErrors + 1 >= LIGHT_LIST_SERVER_ERRORS_BEFORE_PINNING;
 }
 
 type FetchTracesFnArgs = TracesFilters & {
@@ -134,10 +147,17 @@ const fetchTracesFn = async (args: FetchTracesFnArgs) => {
         return client.listTraces(params as ListTracesArgs);
       }
     }
+    lightListServerErrorsByClient.delete(client);
     return response;
   } catch (error) {
-    if (!isLightListUnsupportedError(error)) throw error;
-    lightListSupportByClient.set(client, 'unsupported');
+    const status = lightListFallbackStatus(error);
+    if (status === undefined) throw error;
+
+    const priorServerErrors = lightListServerErrorsByClient.get(client) ?? 0;
+    if (status === 500) lightListServerErrorsByClient.set(client, priorServerErrors + 1);
+    if (shouldPinLightList(status, priorServerErrors)) {
+      lightListSupportByClient.set(client, 'unsupported');
+    }
     return client.listTraces(params as ListTracesArgs);
   }
 };

@@ -6,6 +6,7 @@ import {
   mergeDeltaIntoPage0,
   refreshPage0Rows,
   selectUniqueTraces,
+  shouldPinLightList,
   shouldResetAfterIdle,
 } from '../use-traces';
 
@@ -413,5 +414,26 @@ describe('shouldResetAfterIdle', () => {
   it('returns true when past the threshold', () => {
     const now = 1_000_000_000;
     expect(shouldResetAfterIdle(now - threshold - 1, now, threshold)).toBe(true);
+  });
+});
+
+describe('shouldPinLightList', () => {
+  it('pins on 404, which means the server has no light route at all', () => {
+    expect(shouldPinLightList(404, 0)).toBe(true);
+  });
+
+  it('does not pin on a first 500, which is as likely a transient fault as an old store', () => {
+    expect(shouldPinLightList(500, 0)).toBe(false);
+  });
+
+  it('pins once a second consecutive 500 rules out a transient fault', () => {
+    expect(shouldPinLightList(500, 1)).toBe(true);
+    expect(shouldPinLightList(500, 5)).toBe(true);
+  });
+
+  it('never pins on statuses the full endpoint would hit too', () => {
+    for (const status of [401, 403, 429, 501, 502, 503, undefined]) {
+      expect(shouldPinLightList(status, 1)).toBe(false);
+    }
   });
 });
