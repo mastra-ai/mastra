@@ -39,6 +39,7 @@ import { LoggerContextImpl } from '../context/logger';
 import { MetricsContextImpl } from '../context/metrics';
 import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
+import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
 import { addUsageStats } from '../usage';
 
@@ -247,7 +248,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // original creation options so captureExcludedModelUsage can use them.
     if (rest.type === SpanType.MODEL_GENERATION && this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) {
       const attrs = rest.attributes as ModelGenerationAttributes | undefined;
-      const model = attrs?.responseModel ?? attrs?.model;
+      const model = resolveModelId(attrs?.responseModel, attrs?.model);
       if (attrs?.provider || model) {
         this.#excludedModelMeta.set(span, { provider: attrs?.provider, model });
       }
@@ -852,7 +853,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (!ancestor) return undefined;
 
     const provider = endAttrs?.provider ?? liveAttrs?.provider;
-    const model = endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model;
+    const model = resolveModelId(endAttrs?.responseModel, endAttrs?.model, liveAttrs?.responseModel, liveAttrs?.model);
 
     return { ancestor, usage, provider, model };
   }
@@ -881,8 +882,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // (provider, model). Fall back to the stash populated at creation time.
     const stashed = this.#excludedModelMeta.get(span);
     const provider = endAttrs?.provider ?? liveAttrs?.provider ?? stashed?.provider;
-    const model =
-      endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model ?? stashed?.model;
+    const model = resolveModelId(
+      endAttrs?.responseModel,
+      endAttrs?.model,
+      liveAttrs?.responseModel,
+      liveAttrs?.model,
+      stashed?.model,
+    );
 
     return { usage, provider, model };
   }
