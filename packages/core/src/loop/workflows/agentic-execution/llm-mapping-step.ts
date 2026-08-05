@@ -504,33 +504,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 'output-available',
               );
 
-              // Update messageList first so processToolResult sees the result inline
-              if (!toolCall.providerExecuted) {
-                // Update tool invocations from state:'call' to state:'result' for successful client tools.
-                // Provider-executed tools are handled by llm-execution-step.
-                rest.messageList.updateToolInvocation({
-                  type: 'tool-invocation' as const,
-                  toolInvocation: {
-                    state: 'result' as const,
-                    toolCallId: toolCall.toolCallId,
-                    toolName: sanitizeToolName(toolCall.toolName),
-                    args: toolCall.args,
-                    result: toolCall.result,
-                    // Preserve the approval decision for an approved approval-gated tool in a mixed
-                    // turn (one tool errored, another approved) so it round-trips on recall too.
-                    ...(toolCall.approval ? { approval: toolCall.approval } : {}),
-                  },
-                  ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
-                    ? {
-                        providerMetadata: withToolPayloadTransformProviderMetadata(
-                          providerMetadata,
-                          chunk.metadata,
-                        ) as ProviderMetadata,
-                      }
-                    : {}),
-                });
-              }
-
+              // Run processToolResult BEFORE the raw result is committed to messageList.
+              // This honors the documented "before the result is added to the message
+              // list" guarantee — on tripwire the raw value never reaches history.
+              // A processor that redacts via messageList.updateToolInvocation has its
+              // value synced back into chunk.payload.result, which the commit below uses.
               const trResult = await runToolResultProcessors({
                 chunk: chunk as ChunkType<OUTPUT> & {
                   payload: {
@@ -547,6 +525,32 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               if (!trResult.ok) {
                 emitTripwireChunk(trResult.tripwire);
                 continue;
+              }
+
+              if (!toolCall.providerExecuted) {
+                // Update tool invocations from state:'call' to state:'result' for successful client tools.
+                // Provider-executed tools are handled by llm-execution-step.
+                rest.messageList.updateToolInvocation({
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: sanitizeToolName(toolCall.toolName),
+                    args: toolCall.args,
+                    result: (chunk as { payload: { result: unknown } }).payload.result,
+                    // Preserve the approval decision for an approved approval-gated tool in a mixed
+                    // turn (one tool errored, another approved) so it round-trips on recall too.
+                    ...(toolCall.approval ? { approval: toolCall.approval } : {}),
+                  },
+                  ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
+                    ? {
+                        providerMetadata: withToolPayloadTransformProviderMetadata(
+                          providerMetadata,
+                          chunk.metadata,
+                        ) as ProviderMetadata,
+                      }
+                    : {}),
+                });
               }
 
               const processed = await processAndEnqueueChunk(chunk);
@@ -641,35 +645,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             'output-available',
           );
 
-          // Update messageList first so processToolResult sees the result inline.
-          // Provider-executed tools are handled by llm-execution-step; for client-executed
-          // tools we patch state:'call' -> state:'result' here before any processor runs.
-          if (!toolCall.providerExecuted) {
-            rest.messageList.updateToolInvocation({
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                state: 'result' as const,
-                toolCallId: toolCall.toolCallId,
-                toolName: sanitizeToolName(toolCall.toolName),
-                args: toolCall.args,
-                result: toolCall.result,
-                // Preserve the approval decision for an approved approval-gated tool so it
-                // round-trips on recall as `approval: { approved: true }`.
-                ...(toolCall.approval ? { approval: toolCall.approval } : {}),
-              },
-              ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
-                ? {
-                    providerMetadata: withToolPayloadTransformProviderMetadata(
-                      providerMetadata,
-                      chunk.metadata,
-                    ) as ProviderMetadata,
-                  }
-                : {}),
-            });
-          }
-
-          // Run processToolResult before the chunk is enqueued downstream. On tripwire,
-          // emit a tripwire chunk and skip the rest of this tool's emission.
+          // Run processToolResult BEFORE the raw result is committed to messageList.
+          // This honors the documented "before the result is added to the message list"
+          // guarantee — on tripwire the raw value never reaches history. A processor
+          // that redacts via messageList.updateToolInvocation has its value synced
+          // back into chunk.payload.result, which the commit below uses.
           const trResult = await runToolResultProcessors({
             chunk: chunk as ChunkType<OUTPUT> & {
               payload: {
@@ -686,6 +666,32 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           if (!trResult.ok) {
             emitTripwireChunk(trResult.tripwire);
             continue;
+          }
+
+          // Provider-executed tools are handled by llm-execution-step; for client-executed
+          // tools we patch state:'call' -> state:'result' here after processors have run.
+          if (!toolCall.providerExecuted) {
+            rest.messageList.updateToolInvocation({
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: toolCall.toolCallId,
+                toolName: sanitizeToolName(toolCall.toolName),
+                args: toolCall.args,
+                result: (chunk as { payload: { result: unknown } }).payload.result,
+                // Preserve the approval decision for an approved approval-gated tool so it
+                // round-trips on recall as `approval: { approved: true }`.
+                ...(toolCall.approval ? { approval: toolCall.approval } : {}),
+              },
+              ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
+                ? {
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      providerMetadata,
+                      chunk.metadata,
+                    ) as ProviderMetadata,
+                  }
+                : {}),
+            });
           }
 
           const processed = await processAndEnqueueChunk(chunk);

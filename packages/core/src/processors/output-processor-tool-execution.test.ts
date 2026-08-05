@@ -460,6 +460,44 @@ describe('processToolResult lifecycle hook', () => {
     expect(sawTripwire).toBe(true);
   });
 
+  it('abort() prevents the raw tool result from reaching the message list', async () => {
+    let capturedMessageList: any;
+    class BlockingProcessor implements Processor {
+      readonly id = 'blocking';
+      async processToolResult({ abort, messageList }: any) {
+        capturedMessageList = messageList;
+        abort('blocked by tool-result-guard');
+      }
+    }
+
+    const echoTool = createTool({
+      id: 'echoTool',
+      description: 'echo',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async ({ text }) => `Echo: ${text}`,
+    });
+
+    const agent = new Agent({
+      id: 'tr-agent-3b',
+      name: 'Test Agent',
+      instructions: 'tr',
+      model: makeMockToolCallModel('echoTool') as any,
+      tools: { echoTool },
+      outputProcessors: [new BlockingProcessor()],
+    });
+
+    const stream = await agent.stream('go', { maxSteps: 5 });
+    for await (const _ of stream.fullStream) {
+      void _;
+    }
+
+    // The documented guarantee: processToolResult fires BEFORE the result is
+    // added to the message list, so an abort keeps the raw value out of history.
+    expect(capturedMessageList).toBeDefined();
+    const serialized = JSON.stringify(capturedMessageList.get.all.db());
+    expect(serialized).not.toContain('Echo: hello');
+  });
+
   it('persists per-processor state across multiple tool results in one generation', async () => {
     const seenStates: Array<Record<string, unknown>> = [];
 
