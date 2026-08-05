@@ -60,21 +60,9 @@ function fixAISDKNullableUnionTypes(schema: Record<string, any>): Record<string,
     }
   }
 
-  // Recursively fix properties and remove optional ones with no Gemini-compatible type.
-  // Gemini (OpenAPI 3.0) requires every property to have a `type`, `anyOf`, `oneOf`,
-  // `allOf`, or `$ref`. z.any() serialises to `{}` which Gemini rejects even when optional
-  // — causing a misleading "required[N]: property is not defined" error on valid required
-  // properties. Strip such properties to avoid the INVALID_ARGUMENT 400 from Gemini.
   if (result.properties && typeof result.properties === 'object') {
-    const required = new Set(Array.isArray(result.required) ? result.required : []);
     result.properties = Object.fromEntries(
-      Object.entries(result.properties)
-        .filter(([key, value]) => {
-          if (typeof value !== 'object' || value === null || required.has(key)) return true;
-          const v = value as Record<string, unknown>;
-          return !!(v['type'] || v['anyOf'] || v['oneOf'] || v['allOf'] || v['$ref'] || v['enum']);
-        })
-        .map(([key, value]) => [key, fixAISDKNullableUnionTypes(value as any)]),
+      Object.entries(result.properties).map(([key, value]) => [key, fixAISDKNullableUnionTypes(value as any)]),
     );
   }
 
@@ -297,35 +285,6 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
       this.defaultAllOfHandler(schema);
     }
 
-    // Remove optional properties that have no Gemini-compatible type.
-    // Gemini (OpenAPI 3.0) requires every property to have a `type`, `anyOf`, `oneOf`,
-    // `allOf`, or `$ref`. Schemas from z.any() (and similar "catch-all" types) serialize
-    // to `{}`, which Gemini rejects and reports as a misleading "required[N]: property is
-    // not defined" error even for valid required properties like `prompt`. Done here in
-    // pre-processing (before type arrays are collapsed) so a property that legitimately
-    // starts with a type — e.g. `type: ['string', 'null']` — is kept rather than stripped
-    // once that type is later normalized away.
-    if (schema.properties && typeof schema.properties === 'object') {
-      const required = new Set(Array.isArray(schema.required) ? (schema.required as string[]) : []);
-      const props = schema.properties as Record<string, unknown>;
-      for (const key of Object.keys(props)) {
-        const prop = props[key];
-        if (
-          typeof prop === 'object' &&
-          prop !== null &&
-          !required.has(key) &&
-          !(prop as Record<string, unknown>)['type'] &&
-          !(prop as Record<string, unknown>)['anyOf'] &&
-          !(prop as Record<string, unknown>)['oneOf'] &&
-          !(prop as Record<string, unknown>)['allOf'] &&
-          !(prop as Record<string, unknown>)['$ref'] &&
-          !(prop as Record<string, unknown>)['enum']
-        ) {
-          delete props[key];
-        }
-      }
-    }
-
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);
     } else if (isNumberSchema(schema)) {
@@ -362,11 +321,12 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
         s['type'] = 'object';
         s['nullable'] = true;
       } else {
-        // Multiple non-null types — can't represent as single OpenAPI 3.0 type.
-        // Drop `type` entirely; don't emit a bare `nullable` (it's meaningless
-        // without an accompanying type and Gemini may reject it).
+        // Multiple non-null types — can't be a single OpenAPI 3.0 `type`. Emit an
+        // `anyOf` of the per-type variants (the shape Gemini accepts) instead of
+        // dropping `type`, which would leave a typeless property Gemini rejects.
         delete s['type'];
-        delete s['nullable'];
+        s['anyOf'] = nonNull.map(t => ({ type: t }));
+        if (hasNull) s['nullable'] = true;
       }
     }
 
@@ -405,6 +365,26 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
         s['anyOf'] = nonNull;
         s['nullable'] = true;
       }
+    }
+
+    // Any node that still lacks a Gemini-recognised shape (`type`, `anyOf`, `oneOf`,
+    // `allOf`, `$ref`, `enum`, or object/array structure) — e.g. a `z.any()` that
+    // serialises to `{}` — is rewritten into a permissive `anyOf` rather than left
+    // typeless (which Gemini rejects) or deleted (which silently drops a field the
+    // model is expected to fill, e.g. `resumeData` in tool suspend/resume).
+    if (
+      !s['type'] &&
+      !s['anyOf'] &&
+      !s['oneOf'] &&
+      !s['allOf'] &&
+      !s['$ref'] &&
+      !s['enum'] &&
+      !s['const'] &&
+      !s['properties'] &&
+      !s['items']
+    ) {
+      s['anyOf'] = ['string', 'number', 'integer', 'boolean', 'object'].map(t => ({ type: t }));
+      s['nullable'] = true;
     }
   }
 
