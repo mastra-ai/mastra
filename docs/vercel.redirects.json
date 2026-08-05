@@ -1179,6 +1179,11 @@
       "source": "/docs/agent-controller/channels",
       "destination": "/docs/harness/agent-controller",
       "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
     }
   ]
 }

@@ -12,22 +12,15 @@ import TabItem from "@theme/TabItem";
 
 Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction), an open standard for connecting AI agents to external tools and resources. It's a universal plugin system, enabling agents to call tools regardless of language or hosting environment.
 
-Mastra can also be used to author MCP servers, exposing agents, tools, and other structured resources via the MCP interface. These can then be accessed by any system or agent that supports the protocol.
+Use [`MCPClient`](/reference/tools/mcp-client) to connect to one or many MCP servers. Mastra can also be used to author MCP servers, exposing agents, tools, and other structured resources via the MCP interface. Use [`MCPServer`](/reference/tools/mcp-server) to share your Mastra tools with other agents and systems.
 
-Mastra currently supports two MCP classes:
+## Quickstart
 
-1. `MCPClient`: Connects to one or many MCP servers to access their tools, resources, prompts, and handle elicitation requests.
-1. `MCPServer`: Exposes Mastra tools, agents, workflows, prompts, and resources to MCP-compatible clients.
-
-## Get started
-
-To use MCP, install the required dependency:
+Install the required dependency `@mastra/mcp`:
 
 ```bash npm2yarn
 npm install @mastra/mcp@latest
 ```
-
-## Configuring `MCPClient`
 
 The `MCPClient` connects Mastra primitives to external MCP servers, which can be local packages (invoked using `npx`) or remote HTTP(S) endpoints. Each server must be configured with either a `command` or a `url`, depending on how it's hosted.
 
@@ -50,15 +43,11 @@ export const testMcpClient = new MCPClient({
 })
 ```
 
-Visit [MCPClient](/reference/tools/mcp-client) for a full list of configuration options.
-
 :::tip Authentication
 
 For connecting to OAuth-protected MCP servers, including completing the browser-based authorization flow with `authenticate()`, see the [OAuth Authentication](/reference/tools/mcp-client#oauth-authentication) section.
 
 :::
-
-## Using `MCPClient` with an agent
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
@@ -81,26 +70,9 @@ export const testAgent = new Agent({
 })
 ```
 
-Visit [Agent Class](/reference/agents/agent) for a full list of configuration options.
+## MCPServer
 
-## Tool approval
-
-You can require human approval before MCP tools are executed by setting `requireToolApproval` on a server definition. This integrates with the existing [human-in-the-loop](/docs/workflows/human-in-the-loop) approval flow.
-
-```typescript
-export const mcp = new MCPClient({
-  servers: {
-    github: {
-      url: new URL('http://localhost:3000/mcp'),
-      requireToolApproval: true,
-    },
-  },
-})
-```
-
-You can also pass a function to decide per runtime-call. See the [MCPClient reference](/reference/tools/mcp-client#tool-approval) for the full API.
-
-## Configuring `MCPServer`
+### Configuration
 
 To expose agents, tools, and workflows from your Mastra application to external systems over HTTP(S) use the `MCPServer` class. This makes them accessible to any system or agent that supports the protocol.
 
@@ -121,15 +93,7 @@ export const testMcpServer = new MCPServer({
 })
 ```
 
-Visit [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
-
-:::tip Authentication
-
-To protect your MCP server with OAuth, see the [OAuth Protection](/reference/tools/mcp-server#oauth-protection) section.
-
-:::
-
-## Registering an `MCPServer`
+### Registering an `MCPServer`
 
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
@@ -143,7 +107,9 @@ export const mastra = new Mastra({
 })
 ```
 
-## Static and runtime tools
+## Tools
+
+### Static and runtime tools
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
@@ -154,9 +120,9 @@ export const mastra = new Mastra({
 | **Credentials** | Shared across all uses | Can vary per user/request |
 | **Agent Setup** | Tools added in `Agent` constructor | Tools passed in `.generate()` or `.stream()` options |
 
-### Static tools
+#### Static tools
 
-Use the `.listTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent. Visit [listTools()](/reference/tools/mcp-client#listtools) for more information.
+Use the [`.listTools()`](/reference/tools/mcp-client#listtools) method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
 
 ```typescript {6} title="src/mastra/agents/test-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -169,9 +135,9 @@ export const testAgent = new Agent({
 })
 ```
 
-### Dynamic tools
+#### Dynamic tools
 
-Use the `.listToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
+Use the [`.listToolsets()`](/reference/tools/mcp-client#listtoolsets) method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
 
 ```typescript {5-16,21}
 import { MCPClient } from '@mastra/mcp'
@@ -205,7 +171,20 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 }
 ```
 
-Visit [listToolsets()](/reference/tools/mcp-client#listtoolsets) for more information.
+### Tool approval
+
+You can require human approval before MCP tools are executed by setting `requireToolApproval` on a server definition. This integrates with the existing [human-in-the-loop](/docs/workflows/human-in-the-loop) approval flow.
+
+```typescript
+export const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: true,
+    },
+  },
+})
+```
 
 ## Connecting to an MCP registry
 
@@ -408,11 +387,203 @@ MCP servers can be discovered through registries. Here's how to connect to some 
 
 ## MCP Apps
 
-MCP servers can serve interactive HTML UIs via the MCP Apps extension. Tools with associated `ui://` resources render sandboxed iframes in Studio, both on tool detail pages and inline in agent chat. The app iframe can call server tools and inject messages into the conversation. Visit [MCP Apps](/docs/mcp/mcp-apps) for setup instructions and the app bridge API.
+The [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps) allows MCP tools to serve interactive HTML UIs via `ui://` resources. When a tool has an associated app resource, Mastra Studio renders it in a sandboxed iframe alongside the tool form or inline in agent chat.
+
+Define app resources on your `MCPServer` by providing a `ui://` URI mapped to inline HTML or an HTML file path.
+
+```typescript title="src/mastra/mcp/server.ts"
+import { MCPServer } from '@mastra/mcp'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const calculatorTool = createTool({
+  id: 'calculatorWithUI',
+  description: 'An interactive calculator',
+  inputSchema: z.object({
+    num1: z.number(),
+    num2: z.number(),
+    operation: z.enum(['add', 'subtract']),
+  }),
+  execute: async ({ num1, num2, operation }) => {
+    const result = operation === 'add' ? num1 + num2 : num1 - num2
+    return {
+      content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+      structuredContent: { result },
+    }
+  },
+})
+
+const server = new MCPServer({
+  id: 'my-app-server',
+  name: 'My App Server',
+  version: '1.0.0',
+  tools: { calculatorTool },
+  appResources: {
+    'ui://calculator/main': {
+      name: 'Interactive Calculator',
+      html: `<html>
+        <body>
+          <h2>Calculator</h2>
+          <button id="btn">Compute</button>
+          <script type="module">
+            import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm';
+            const app = new App({ name: 'Calculator', version: '1.0.0' });
+            app.ontoolinput = (params) => {
+              console.log('Tool input:', params.arguments);
+            };
+            document.getElementById('btn').addEventListener('click', async () => {
+              const result = await app.callServerTool({
+                name: 'calculatorWithUI',
+                arguments: { num1: 10, num2: 5, operation: 'add' }
+              });
+              document.body.innerHTML += '<p>Result: ' + JSON.stringify(result) + '</p>';
+            });
+            await app.connect();
+          </script>
+        </body>
+      </html>`,
+    },
+  },
+})
+```
+
+Link the tool to its app resource by adding `_meta.ui.resourceUri` to the tool definition:
+
+```typescript
+calculatorTool._meta = {
+  ui: { resourceUri: 'ui://calculator/main' },
+}
+```
+
+### Connecting MCP Apps to agents
+
+Agents consume tools, they don't need to know about MCP servers. Pass tools to the agent's `tools` config, and register the MCP server at the Mastra level so Studio can resolve app resources.
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { calculatorTool } from '../mcp/tools'
+
+export const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You have access to interactive UI tools.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: { calculatorTool },
+})
+```
+
+Register the MCP server at the Mastra level. Studio scans registered MCP servers to map tools to their app resources.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { myAgent } from './agents'
+import { myAppServer } from './mcp/server'
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  mcpServers: { myAppServer },
+})
+```
+
+For remote MCP servers, use `MCPClient.listTools()` to get tools and `toMCPServerProxies()` to register the server:
+
+```typescript title="src/mastra/index.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const mcpClient = new MCPClient({
+  servers: {
+    remoteApp: { url: new URL('https://remote-mcp-server.example.com/mcp') },
+  },
+})
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: await mcpClient.listTools(),
+})
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  mcpServers: { ...mcpClient.toMCPServerProxies() },
+})
+```
+
+When tools come from `MCPClient.listTools()`, each tool's `_meta.ui` is automatically stamped with a `serverId` so Studio can resolve its app resources without scanning all servers.
+
+### Tool result format
+
+Tools with app resources should return two fields:
+
+- `content`: A brief text summary for the model. Keep this short so the agent doesn't parrot the full result.
+- `structuredContent`: The data payload that hydrates the UI. The model doesn't see this field.
+
+```typescript
+execute: async ({ num1, num2, operation }) => {
+  const result = operation === 'add' ? num1 + num2 : num1 - num2
+  return {
+    content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+    structuredContent: { result },
+  }
+}
+```
+
+### App API (guest-side)
+
+MCP App HTML uses the standard [`App` class from `@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps) to communicate with the host. Import it via ESM CDN or bundle it.
+
+```javascript
+import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm'
+const app = new App({ name: 'MyApp', version: '1.0.0' })
+```
+
+### Using external MCP servers with apps
+
+External (non-Mastra) MCP servers that implement the MCP Apps extension work with Mastra via `MCPClient`. Use `.listTools()` for agent tools and `.toMCPServerProxies()` to register them in Studio.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MCPClient } from '@mastra/mcp'
+import { Agent } from '@mastra/core/agent'
+
+const mcpClient = new MCPClient({
+  servers: {
+    'external-server': {
+      command: 'node',
+      args: ['path/to/external-server.js'],
+    },
+  },
+})
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: await mcpClient.listTools(),
+})
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  mcpServers: {
+    ...mcpClient.toMCPServerProxies(),
+  },
+})
+```
+
+### Sandbox security
+
+Mastra Studio uses [`@mcp-ui/client`](https://www.npmjs.com/package/@mcp-ui/client) to render MCP App iframes through a sandbox proxy. The proxy loads app HTML via `postMessage` rather than `srcDoc`, providing additional isolation.
+
+App iframes are sandboxed with the following permissions:
+
+- `allow-scripts`: Enables JavaScript execution
+- `allow-forms`: Allows form submission
+- `allow-popups`: Permits `window.open()` and link targets
+
+The iframe doesn't have access to the parent page's DOM, cookies, or storage. All communication happens through the JSON-RPC postMessage protocol managed by `@mcp-ui/client`'s `AppRenderer` on the host side and `@modelcontextprotocol/ext-apps`'s `App` class on the guest side.
 
 ## Related
 
-- [MCP Apps](/docs/mcp/mcp-apps)
 - [Using Tools](/docs/agents/using-tools)
 - [MCPClient](/reference/tools/mcp-client)
 - [MCPServer](/reference/tools/mcp-server)
