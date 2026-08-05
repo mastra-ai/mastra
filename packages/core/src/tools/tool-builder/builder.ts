@@ -129,17 +129,16 @@ function isZodV4Schema(schema: unknown): boolean {
 
 /**
  * Build a Standard Schema that:
- *  - exposes the spliced JSON Schema (with `_background`/`suspendedToolRunId`/
- *    `resumeData` properties added) so provider compat layers see the override
- *    fields when serializing the tool to an LLM, and
+ *  - exposes the spliced JSON Schema (with the `_background` property added) so
+ *    provider compat layers see the override field when serializing the tool to
+ *    an LLM, and
  *  - delegates runtime `validate` to the *original* schema so Zod v3
  *    `.transform()` / `.default()` / `.refine()` and other Standard Schema
  *    parsing behavior still run before `execute()` sees the args.
  *
- * Injected override keys (`_background`, `suspendedToolRunId`, `resumeData`)
- * are stripped from the input before delegating, then merged back into the
- * validated value so the inner `execute()` still receives them — matching the
- * Zod v4 `.extend()` path's behavior.
+ * Injected override keys are stripped from the input before delegating, then
+ * merged back into the validated value so the inner `execute()` still receives
+ * them — matching the Zod v4 `.extend()` path's behavior.
  *
  * If the original schema has no `~standard.validate` (e.g. a raw JSON Schema
  * with no Standard Schema wrapper), fall back to validating against the
@@ -265,13 +264,9 @@ export class CoreToolBuilder extends MastraBase {
     // schema would be mutated with a v4 Zod field, which breaks v3-authored
     // tools (keyValidator._parse crashes in schema-compat validation).
     const isBackgroundEligible = !!input.backgroundTaskEnabled;
-    const isResumableTool =
-      input.autoResumeSuspendedTools ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
-      if (isBackgroundEligible || isResumableTool) {
+      if (isBackgroundEligible) {
         let schema = this.originalTool.inputSchema;
         if (typeof schema === 'function') {
           schema = schema();
@@ -298,15 +293,6 @@ export class CoreToolBuilder extends MastraBase {
               _background: backgroundOverrideZodSchema,
             });
           }
-          if (isResumableTool) {
-            nextSchema = safeExtendZodObject(nextSchema, {
-              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
-            });
-          }
           this.originalTool.inputSchema = nextSchema;
         } else {
           // Normalize to Standard Schema, extract JSON Schema, splice overrides.
@@ -321,19 +307,6 @@ export class CoreToolBuilder extends MastraBase {
               properties._background = backgroundOverrideJsonSchema;
               injectedKeys.push('_background');
             }
-            if (isResumableTool) {
-              // Match the pre-PR JSON Schema shape so existing provider compat
-              // layers + LLM recordings collapse it identically.
-              properties.suspendedToolRunId = {
-                type: ['string', 'null'],
-                description: 'The runId of the suspended tool',
-              };
-              properties.resumeData = {
-                description: 'The resumeData object created from the resumeSchema of suspended tool',
-              };
-              injectedKeys.push('suspendedToolRunId', 'resumeData');
-            }
-
             // Preserve the original schema's runtime validator (Zod v3
             // `.transform()` / `.default()` / `.refine()` etc.) while exposing
             // the spliced JSON Schema for provider serialization. See

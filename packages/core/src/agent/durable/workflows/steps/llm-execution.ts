@@ -5,7 +5,10 @@ import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
-import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
+import {
+  applyAutoResumeSystemMessage,
+  extractSuspendedToolsFromMessages,
+} from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
@@ -601,10 +604,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Inject the auto-resume directive into the leading system message when
             // there are suspended tools waiting for resumption (parity with the
             // non-durable agentic-execution step).
+            const dbMessages = messageList.get.all.db();
+            const suspendedTools = execOptions.autoResumeSuspendedTools
+              ? extractSuspendedToolsFromMessages(dbMessages)
+              : undefined;
             inputMessages = applyAutoResumeSystemMessage({
               autoResume: execOptions.autoResumeSuspendedTools,
               inputMessages,
-              messages: messageList.get.all.db(),
+              messages: dbMessages,
+              suspendedTools,
             });
 
             // Tell the model about background-task capabilities when a
@@ -972,6 +980,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 tools: currentTools,
                 toolChoice: currentToolChoice,
                 activeTools: currentActiveTools,
+                suspendedTools,
                 options: { abortSignal: executionAbortSignal },
                 headers: mergeLlmCallHeaders({
                   memoryHeaders: buildMemoryHeaders({

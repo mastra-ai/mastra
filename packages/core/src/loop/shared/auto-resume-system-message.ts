@@ -14,6 +14,11 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 
+export type SuspendedToolDescriptor = Record<string, unknown> & {
+  toolName?: string;
+  resumeSchema?: unknown;
+};
+
 /**
  * Returns the list of suspended (or pending-approval) tool descriptors from the
  * most recent assistant message, or an empty array if none are pending.
@@ -23,9 +28,7 @@ import type { MastraDBMessage } from '../../agent/message-list';
  * `data-tool-call-suspended` / `data-tool-call-approval` parts whose `resumed`
  * flag is falsy.
  */
-export function extractSuspendedToolsFromMessages(
-  messages: ReadonlyArray<MastraDBMessage>,
-): Array<Record<string, unknown>> {
+export function extractSuspendedToolsFromMessages(messages: ReadonlyArray<MastraDBMessage>): SuspendedToolDescriptor[] {
   const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
   const suspendedToolsMessage = assistantMessages.find(message => {
     const metadata = message.content.metadata as
@@ -105,7 +108,7 @@ export function extractSuspendedToolsFromMessages(
  * callers can skip the rewrite entirely.
  */
 export function buildAutoResumeSystemMessageSuffix(
-  suspendedTools: ReadonlyArray<Record<string, unknown>>,
+  suspendedTools: ReadonlyArray<SuspendedToolDescriptor>,
 ): string | null {
   if (suspendedTools.length === 0) return null;
   // parentRunId is internal bookkeeping for channel resume routing; the model
@@ -149,13 +152,15 @@ export function applyAutoResumeSystemMessage({
   autoResume,
   inputMessages,
   messages,
+  suspendedTools,
 }: {
   autoResume: boolean | undefined;
   inputMessages: LanguageModelV2Prompt;
   messages: ReadonlyArray<MastraDBMessage>;
+  suspendedTools?: ReadonlyArray<SuspendedToolDescriptor>;
 }): LanguageModelV2Prompt {
   if (!autoResume) return inputMessages;
-  const suspendedTools = extractSuspendedToolsFromMessages(messages);
-  const suffix = buildAutoResumeSystemMessageSuffix(suspendedTools);
+  const resolvedSuspendedTools = suspendedTools ?? extractSuspendedToolsFromMessages(messages);
+  const suffix = buildAutoResumeSystemMessageSuffix(resolvedSuspendedTools);
   return appendSuffixToLeadingSystemMessage(inputMessages, suffix);
 }

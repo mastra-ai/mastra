@@ -76,7 +76,10 @@ import {
   TOOL_PAYLOAD_TRANSFORM_KEY,
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
-import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
+import {
+  applyAutoResumeSystemMessage,
+  extractSuspendedToolsFromMessages,
+} from '../../shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
@@ -1493,10 +1496,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               : messageList.get.all.aiV5.llmPrompt;
         let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
+        const dbMessages = messageList.get.all.db();
+        const suspendedTools = autoResumeSuspendedTools ? extractSuspendedToolsFromMessages(dbMessages) : undefined;
         inputMessages = applyAutoResumeSystemMessage({
           autoResume: autoResumeSuspendedTools,
           inputMessages,
-          messages: messageList.get.all.db(),
+          messages: dbMessages,
+          suspendedTools,
         });
 
         inputMessages = injectBackgroundTaskPrompt({
@@ -1619,6 +1625,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 tools: currentStep.tools,
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
+                suspendedTools,
                 options,
                 // Per-model modelSettings shallow-merge on top of call-time modelSettings.
                 // Per-model maxRetries always wins so p-retry uses the right retry count for this model.

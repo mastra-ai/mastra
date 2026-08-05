@@ -5,3 +5,4 @@ export * from './validation';
 export * from './delayed-promise';
 export * from './prepare-tools';
 export * from './consume-stream';
+export * from './auto-resume-tools';

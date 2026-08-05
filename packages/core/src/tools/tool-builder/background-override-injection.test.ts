@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z as z3 } from 'zod/v3';
 import { z as z4 } from 'zod/v4';
 import { RequestContext } from '../../request-context';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../schema';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '../../schema';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 
@@ -31,8 +31,8 @@ function baseOptions() {
 function extractJsonProperties(tool: { inputSchema?: unknown }) {
   const schema = tool.inputSchema;
   expect(schema).toBeDefined();
-  expect(isStandardSchemaWithJSON(schema)).toBe(true);
-  const json = standardSchemaToJSONSchema(schema as any, { io: 'input' });
+  const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema as any);
+  const json = standardSchemaToJSONSchema(standardSchema as any, { io: 'input' });
   expect(json && typeof json === 'object' && (json as any).type === 'object').toBe(true);
   return (json as any).properties as Record<string, any>;
 }
@@ -209,8 +209,8 @@ describe('CoreToolBuilder background override injection', () => {
     });
   });
 
-  describe('Resumable tools (agent-/workflow- prefixed ids)', () => {
-    it('injects suspendedToolRunId and resumeData for agent- tools', () => {
+  describe('Auto-resume schema injection', () => {
+    it('does not inject resume fields into agent tools during ordinary tool conversion', () => {
       const tool = createTool({
         id: 'agent-foo',
         description: 'Agent-as-tool',
@@ -225,24 +225,14 @@ describe('CoreToolBuilder background override injection', () => {
 
       const properties = extractJsonProperties(tool);
       expect(properties).toHaveProperty('message');
-      expect(properties).toHaveProperty('suspendedToolRunId');
-      expect(properties).toHaveProperty('resumeData');
-
-      // The injected JSON Schema must match the pre-PR shape so existing
-      // provider-compat layers and LLM-recording hashes stay stable.
-      expect(properties.suspendedToolRunId).toEqual({
-        type: ['string', 'null'],
-        description: 'The runId of the suspended tool',
-      });
-      expect(properties.resumeData).toEqual({
-        description: 'The resumeData object created from the resumeSchema of suspended tool',
-      });
+      expect(properties).not.toHaveProperty('suspendedToolRunId');
+      expect(properties).not.toHaveProperty('resumeData');
     });
 
-    it('injects resume fields for workflow- tools as well', () => {
+    it('does not inject resume fields globally when autoResumeSuspendedTools is enabled', () => {
       const tool = createTool({
-        id: 'workflow-bar',
-        description: 'Workflow-as-tool',
+        id: 'plain-tool',
+        description: 'Plain tool',
         inputSchema: z4.object({ message: z4.string() }),
         execute: vi.fn(),
       });
@@ -250,17 +240,16 @@ describe('CoreToolBuilder background override injection', () => {
       new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
+        autoResumeSuspendedTools: true,
       });
 
       const properties = extractJsonProperties(tool);
-      expect(properties).toHaveProperty('suspendedToolRunId');
-      expect(properties).toHaveProperty('resumeData');
+      expect(properties).toHaveProperty('message');
+      expect(properties).not.toHaveProperty('suspendedToolRunId');
+      expect(properties).not.toHaveProperty('resumeData');
     });
 
-    // Both gates can fire at once: a resumable id AND backgroundTaskEnabled.
-    // Ensure all three injected fields end up in the same schema.
-    // https://github.com/mastra-ai/mastra/pull/16915#pullrequestreview
-    it('merges _background and resume fields when both gates apply', () => {
+    it('keeps background overrides independent from resume controls', () => {
       const tool = createTool({
         id: 'agent-combo',
         description: 'Agent-as-tool with background tasks',
@@ -271,14 +260,15 @@ describe('CoreToolBuilder background override injection', () => {
       new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
+        autoResumeSuspendedTools: true,
         backgroundTaskEnabled: true,
       });
 
       const properties = extractJsonProperties(tool);
       expect(properties).toHaveProperty('message');
       expect(properties).toHaveProperty('_background');
-      expect(properties).toHaveProperty('suspendedToolRunId');
-      expect(properties).toHaveProperty('resumeData');
+      expect(properties).not.toHaveProperty('suspendedToolRunId');
+      expect(properties).not.toHaveProperty('resumeData');
     });
   });
 
