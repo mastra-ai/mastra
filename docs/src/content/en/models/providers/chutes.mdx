@@ -16,22 +16,22 @@ CHUTES_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from '@mastra/core/agent'
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'chutes/Nemotron-3-Nano-Omni-30B-TEE',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "chutes/Nemotron-3-Nano-Omni-30B-TEE"
+});
 
 // Generate a response
-const response = await agent.generate('Hello!')
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story')
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
-  console.log(chunk)
+  console.log(chunk);
 }
 ```
 
@@ -46,161 +46,161 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    model: 'chutes/deepseek-ai/DeepSeek-V3.2-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 131072,
-    maxOutput: 65536,
-    inputCost: 1,
-    outputCost: 1,
+    "model": "chutes/deepseek-ai/DeepSeek-V3.2-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 1,
+    "outputCost": 1
   },
   {
-    model: 'chutes/deepseek-ai/DeepSeek-V4-Flash-0731-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 131072,
-    inputCost: 0.14,
-    outputCost: 0.28,
+    "model": "chutes/deepseek-ai/DeepSeek-V4-Flash-0731-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.28
   },
   {
-    model: 'chutes/google/gemma-4-31B-turbo-TEE',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 131072,
-    maxOutput: 65536,
-    inputCost: 0.12,
-    outputCost: 0.37,
+    "model": "chutes/google/gemma-4-31B-turbo-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.12,
+    "outputCost": 0.37
   },
   {
-    model: 'chutes/moonshotai/Kimi-K2.6-TEE',
-    imageInput: true,
-    audioInput: false,
-    videoInput: true,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262144,
-    maxOutput: 65535,
-    inputCost: 0.58,
-    outputCost: 3.4,
+    "model": "chutes/moonshotai/Kimi-K2.6-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65535,
+    "inputCost": 0.58,
+    "outputCost": 3.4
   },
   {
-    model: 'chutes/moonshotai/Kimi-K3-TEE',
-    imageInput: true,
-    audioInput: false,
-    videoInput: true,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 65535,
-    inputCost: 3,
-    outputCost: 15,
+    "model": "chutes/moonshotai/Kimi-K3-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65535,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
-    model: 'chutes/Nemotron-3-Nano-Omni-30B-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: false,
-    reasoning: false,
-    contextWindow: 131072,
-    maxOutput: null,
-    inputCost: 0.0245,
-    outputCost: 0.0978,
+    "model": "chutes/Nemotron-3-Nano-Omni-30B-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": null,
+    "inputCost": 0.0245,
+    "outputCost": 0.0978
   },
   {
-    model: 'chutes/Qwen/Qwen3-235B-A22B-Thinking-2507-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262144,
-    maxOutput: 262144,
-    inputCost: 0.2989,
-    outputCost: 1.1957,
+    "model": "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.2989,
+    "outputCost": 1.1957
   },
   {
-    model: 'chutes/Qwen/Qwen3-32B-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 40960,
-    maxOutput: 40960,
-    inputCost: 0.104,
-    outputCost: 0.416,
+    "model": "chutes/Qwen/Qwen3-32B-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.104,
+    "outputCost": 0.416
   },
   {
-    model: 'chutes/Qwen/Qwen3.5-397B-A17B-TEE',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262144,
-    maxOutput: 65536,
-    inputCost: 0.45,
-    outputCost: 3,
+    "model": "chutes/Qwen/Qwen3.5-397B-A17B-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.45,
+    "outputCost": 3
   },
   {
-    model: 'chutes/Qwen/Qwen3.6-27B-TEE',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262144,
-    maxOutput: 65536,
-    inputCost: 0.3,
-    outputCost: 2,
+    "model": "chutes/Qwen/Qwen3.6-27B-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2
   },
   {
-    model: 'chutes/unsloth/Mistral-Nemo-Instruct-2407-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: false,
-    reasoning: false,
-    contextWindow: 131072,
-    maxOutput: 131072,
-    inputCost: 0.0245,
-    outputCost: 0.0978,
+    "model": "chutes/unsloth/Mistral-Nemo-Instruct-2407-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.0245,
+    "outputCost": 0.0978
   },
   {
-    model: 'chutes/zai-org/GLM-5.1-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 202752,
-    maxOutput: 65535,
-    inputCost: 0.98,
-    outputCost: 3.08,
+    "model": "chutes/zai-org/GLM-5.1-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 65535,
+    "inputCost": 0.98,
+    "outputCost": 3.08
   },
   {
-    model: 'chutes/zai-org/GLM-5.2-TEE',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1048576,
-    maxOutput: 65535,
-    inputCost: 1.25,
-    outputCost: 3.95,
-  },
+    "model": "chutes/zai-org/GLM-5.2-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65535,
+    "inputCost": 1.25,
+    "outputCost": 3.95
+  }
 ]}
 />
 
@@ -210,28 +210,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'custom-agent',
-  name: 'custom-agent',
+  id: "custom-agent",
+  name: "custom-agent",
   model: {
-    url: 'https://llm.chutes.ai/v1',
-    id: 'chutes/Nemotron-3-Nano-Omni-30B-TEE',
+    url: "https://llm.chutes.ai/v1",
+    id: "chutes/Nemotron-3-Nano-Omni-30B-TEE",
     apiKey: process.env.CHUTES_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
-    },
-  },
-})
+      "X-Custom-Header": "value"
+    }
+  }
+});
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'dynamic-agent',
-  name: 'Dynamic Agent',
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'chutes/zai-org/GLM-5.2-TEE' : 'chutes/Nemotron-3-Nano-Omni-30B-TEE'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "chutes/zai-org/GLM-5.2-TEE"
+      : "chutes/Nemotron-3-Nano-Omni-30B-TEE";
+  }
+});
 ```
+
+
