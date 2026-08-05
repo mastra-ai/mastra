@@ -22,18 +22,3 @@ export function getUserSessionLabel(session: FactoryUserSession): string {
   if (!session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)) return session.branch;
   return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
 }
-
-const GENERATED_SESSION_NAME = /^session-(\d+)$/;
-
-/**
- * Name for the next user session. Counts past the highest `session-N` instead
- * of filling gaps — deleting a session drops its row and checkout but not the
- * branch it pushed, so a reused name would land back on that branch.
- */
-export function nextUserSessionName(sessions: FactoryUserSession[]): string {
-  const highest = sessions.reduce((max, session) => {
-    const match = GENERATED_SESSION_NAME.exec(getUserSessionLabel(session));
-    return match ? Math.max(max, Number(match[1])) : max;
-  }, 0);
-  return `session-${highest + 1}`;
-}

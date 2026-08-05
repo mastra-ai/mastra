@@ -15,9 +15,9 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { addCachedSession, removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { USER_SESSION_BRANCH_PREFIX, createUserSession, deleteUserSession } from '../services/github';
+import { createUserSession, deleteUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
-import { getUserSessionLabel, nextUserSessionName } from '../services/sessionPresentation';
+import { getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 
 /** Personal sessions whose isolated repository workspace is prepared lazily by AgentController. */
@@ -51,9 +51,9 @@ export function UserSessionsSection() {
   // Row only: bringing the controller session online provisions a sandbox and
   // clones the repo — minutes the thread page already spends on mount.
   const createSession = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async () => {
       if (!repository) throw new Error('Link a repository to this factory first');
-      return createUserSession(baseUrl, repository.projectRepositoryId, `${USER_SESSION_BRANCH_PREFIX}${name}`);
+      return createUserSession(baseUrl, repository.projectRepositoryId);
     },
     onSuccess: session => {
       // Seed what the thread page reads on mount — this response already
@@ -119,10 +119,8 @@ export function UserSessionsSection() {
           variant="ghost"
           size="icon-sm"
           aria-label="New user session"
-          onClick={() => createSession.mutate(nextUserSessionName(sessions))}
-          // Naming off an unloaded list repeats a name in use, and create is
-          // idempotent per branch — that reopens the old session.
-          disabled={pending || !sessionsQuery.isSuccess}
+          onClick={() => createSession.mutate()}
+          disabled={pending}
         >
           {createSession.isPending ? <Spinner size="sm" /> : <Plus size={15} />}
         </Button>
@@ -150,8 +148,6 @@ export function UserSessionsSection() {
           })}
         </MainSidebar.NavList>
         {sessionsQuery.isError ? (
-          // The Plus button is gated on this list, so a failed load has to say
-          // why it is dead and offer the way out.
           <div className="flex items-center gap-2 px-2 py-1">
             <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
               Couldn’t load sessions

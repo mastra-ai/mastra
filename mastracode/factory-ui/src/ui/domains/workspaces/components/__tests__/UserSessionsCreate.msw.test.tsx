@@ -1,6 +1,6 @@
 /**
- * BDD coverage for the sidebar "New user session" flow: the Plus button mints a
- * `user/session-N` branch and opens its thread in one round trip — no naming
+ * BDD coverage for the sidebar "New user session" flow: the Plus button asks the
+ * server for a session and opens its thread in one round trip — no naming
  * dialog, and no agent-controller work, which is what used to hold the click
  * for as long as the sandbox took to clone the repository.
  */
@@ -101,13 +101,13 @@ function renderSection() {
 }
 
 describe('User sessions creation', () => {
-  it('creates a numbered session and opens its thread without asking for a name', async () => {
+  it('creates a session and opens its thread without asking for a name', async () => {
     stubFactoryWithRepository();
     const controller = trackControllerRequests();
-    let createBody: unknown;
+    let createBody: Record<string, unknown> | undefined;
     server.use(
       http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, async ({ request }) => {
-        createBody = await request.json();
+        createBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ session: userSession() });
       }),
     );
@@ -121,31 +121,12 @@ describe('User sessions creation', () => {
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1/user/threads/sess-1'),
     );
-    expect(createBody).toMatchObject({ branch: 'user/session-1' });
+    // Server names it — only side that can count past a deleted session's branch.
+    expect(createBody).not.toHaveProperty('branch');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     // The sandbox provision behind these belongs to the thread page, not the click.
     expect(controller).toEqual({ createSession: 0, renameThread: 0 });
-  });
-
-  it('counts past the sessions already there', async () => {
-    stubFactoryWithRepository([userSession({ branch: 'user/session-1' }), userSession({ branch: 'user/session-2' })]);
-    trackControllerRequests();
-    let createBody: unknown;
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, async ({ request }) => {
-        createBody = await request.json();
-        return HttpResponse.json({ session: userSession({ sessionId: 'sess-3', branch: 'user/session-3' }) });
-      }),
-    );
-    const user = userEvent.setup();
-
-    renderSection();
-    await screen.findByRole('button', { name: 'session-2' });
-
-    await user.click(screen.getByRole('button', { name: 'New user session' }));
-
-    await waitFor(() => expect(createBody).toMatchObject({ branch: 'user/session-3' }));
   });
 
   it('shows the new session in the sidebar without waiting for the list to refetch', async () => {
@@ -181,19 +162,46 @@ describe('User sessions creation', () => {
     await waitFor(() => expect(listings).toBeGreaterThan(1));
   });
 
-  it('waits for the session list before naming, so it cannot reuse a name in use', async () => {
+  it('creates before the session list has loaded', async () => {
     stubFactoryWithRepository();
+    let landList = () => {};
+    const listed = new Promise<void>(resolve => {
+      landList = resolve;
+    });
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, async () => {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await listed;
         return HttpResponse.json({ sessions: [userSession()] });
       }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+        HttpResponse.json({ session: userSession() }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'New user session' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1/user/threads/sess-1'),
+    );
+    landList();
+  });
+
+  it('says the session list failed instead of claiming there are none', async () => {
+    stubFactoryWithRepository();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+        HttpResponse.json({ message: 'Nope' }, { status: 500 }),
+      ),
     );
 
     renderSection();
 
-    expect(await screen.findByRole('button', { name: 'New user session' })).toBeDisabled();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'New user session' })).toBeEnabled());
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(screen.queryByText('No sessions yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New user session' })).toBeEnabled();
   });
 
   it('reports a failed create and leaves the button usable', async () => {

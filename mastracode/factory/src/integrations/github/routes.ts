@@ -72,6 +72,7 @@ function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): P
   return next;
 }
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
+import { allocateUserSessionBranch } from './user-session-names.js';
 import { handleGithubWebhook } from './webhook.js';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
 
@@ -1317,7 +1318,18 @@ function buildProjectGitRoutes({
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (!isValidGitRefSandbox(body.branch)) return c.json({ error: 'Invalid branch' }, 400);
+        let branch: string;
+        if (body.branch === undefined) {
+          branch = await allocateUserSessionBranch({
+            sourceControl: github.sourceControlStorage,
+            projectRepositoryId: project.id,
+            userId,
+          });
+        } else if (isValidGitRefSandbox(body.branch)) {
+          branch = body.branch;
+        } else {
+          return c.json({ error: 'Invalid branch' }, 400);
+        }
         const baseBranch = body.baseBranch === undefined ? project.defaultBranch : body.baseBranch;
         if (!isValidGitRefSandbox(baseBranch)) return c.json({ error: 'Invalid baseBranch' }, 400);
         const session = await github.sourceControlStorage.sessions.create({
@@ -1325,7 +1337,7 @@ function buildProjectGitRoutes({
           projectRepositoryId: project.id,
           orgId,
           userId,
-          branch: body.branch,
+          branch,
           baseBranch,
         });
         return c.json({ session });

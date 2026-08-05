@@ -636,10 +636,11 @@ export async function listUserSessions(
   return body.sessions;
 }
 
+/** Omit `branch` and the server names the session. */
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
-  branch: string,
+  branch?: string,
   baseBranch?: string,
 ): Promise<FactoryUserSession> {
   const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {

@@ -1774,6 +1774,25 @@ describe('Factory session routes', () => {
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
   });
 
+  it('names the session when the caller asks for no branch', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+
+    const first = await postJson(app, '/web/github/projects/p1/sessions', {});
+    const second = await postJson(app, '/web/github/projects/p1/sessions', {});
+
+    expect((await first.json()).session.branch).toBe('user/session-1');
+    expect((await second.json()).session.branch).toBe('user/session-2');
+    expect(tables.sessions).toHaveLength(2);
+  });
+
+  it('rejects an invalid branch instead of naming one', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 42 });
+    expect(res.status).toBe(400);
+    expect(tables.sessions).toHaveLength(0);
+  });
+
   it('reuses the session for the same repository, user, and branch', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });

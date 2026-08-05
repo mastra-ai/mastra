@@ -10,6 +10,7 @@ const SANDBOXES = 'source_control_project_repository_sandboxes';
 const SANDBOX_POOL = 'source_control_sandbox_pool';
 const WORKTREES = 'source_control_worktrees';
 const SESSIONS = 'source_control_sessions';
+const USER_SESSION_NAMES = 'source_control_user_session_names';
 
 export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
   {
@@ -188,6 +189,22 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       {
         name: 'source_control_sessions_repository_user_branch_unique',
         columns: ['project_repository_id', 'user_id', 'branch'],
+      },
+    ],
+  },
+  {
+    name: USER_SESSION_NAMES,
+    columns: {
+      id: { type: 'uuid-pk' },
+      project_repository_id: { type: 'text' },
+      user_id: { type: 'text' },
+      last_index: { type: 'integer' },
+      updated_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      {
+        name: 'source_control_user_session_names_repository_user_unique',
+        columns: ['project_repository_id', 'user_id'],
       },
     ],
   },
@@ -473,6 +490,15 @@ export interface SourceControlStorageHandle {
     markMaterialized(args: { id: string }): Promise<void>;
     delete(id: string): Promise<void>;
   };
+  readonly userSessionNames: {
+    /**
+     * Hand out an index for a generated session name: above every index handed
+     * out before for this link and user, and at least `atLeast`. Deleting a
+     * session drops its row but not the branch it pushed, so an index that
+     * came back around would put the next session on that branch.
+     */
+    allocate(args: { projectRepositoryId: string; userId: string; atLeast: number }): Promise<number>;
+  };
 }
 
 interface InstallationDbRow extends Record<string, unknown> {
@@ -548,6 +574,14 @@ interface WorktreeDbRow extends Record<string, unknown> {
   base_branch: string;
   worktree_path: string;
   created_at: Date;
+}
+
+interface UserSessionNameDbRow extends Record<string, unknown> {
+  id: string;
+  project_repository_id: string;
+  user_id: string;
+  last_index: number;
+  updated_at: Date;
 }
 
 interface SessionDbRow extends Record<string, unknown> {
@@ -681,6 +715,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany(USER_SESSION_NAMES, {});
     await this.ops.deleteMany(SESSIONS, {});
     await this.ops.deleteMany(WORKTREES, {});
     await this.ops.deleteMany(SANDBOX_POOL, {});
@@ -1248,6 +1283,33 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
         delete: async id => {
           await db().deleteMany(SESSIONS, { id });
+        },
+      },
+      userSessionNames: {
+        allocate: async ({ projectRepositoryId, userId, atLeast }) => {
+          await requireProjectRepositoryById(projectRepositoryId);
+          const where = { project_repository_id: projectRepositoryId, user_id: userId };
+          const bump = () =>
+            db().updateAtomic<UserSessionNameDbRow>(USER_SESSION_NAMES, where, row => ({
+              last_index: Math.max(row.last_index + 1, atLeast),
+              updated_at: new Date(),
+            }));
+          const bumped = await bump();
+          if (bumped) return bumped.last_index;
+          try {
+            const row = await db().insertOne<UserSessionNameDbRow>(USER_SESSION_NAMES, {
+              ...where,
+              last_index: atLeast,
+              updated_at: new Date(),
+            });
+            return row.last_index;
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            // Lost the first-write race — the winner's counter is authoritative.
+            const raced = await bump();
+            if (!raced) throw error;
+            return raced.last_index;
+          }
         },
       },
     };

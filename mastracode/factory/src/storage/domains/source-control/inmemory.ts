@@ -33,6 +33,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   sandboxPoolRows: PooledSandbox[] = [];
   worktreesRows: SourceControlWorktree[] = [];
   sessionsRows: SourceControlSession[] = [];
+  userSessionNameRows = new Map<string, number>();
 
   constructor(integrationId = 'github') {
     this.integrationId = integrationId;
@@ -512,6 +513,24 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));
+    },
+  };
+
+  readonly userSessionNames = {
+    allocate: async ({
+      projectRepositoryId,
+      userId,
+      atLeast,
+    }: {
+      projectRepositoryId: string;
+      userId: string;
+      atLeast: number;
+    }): Promise<number> => {
+      const key = `${projectRepositoryId} ${userId}`;
+      const last = this.userSessionNameRows.get(key);
+      const next = last === undefined ? atLeast : Math.max(last + 1, atLeast);
+      this.userSessionNameRows.set(key, next);
+      return next;
     },
   };
 }

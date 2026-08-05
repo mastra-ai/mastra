@@ -404,6 +404,45 @@ describe('SourceControlStorage', () => {
     ).rejects.toThrow(/does not belong to the connection installation/);
   });
 
+  it('hands out user-session name indexes that never come back around', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const allocate = (atLeast: number) =>
+      github.userSessionNames.allocate({ projectRepositoryId: link.id, userId: 'user-1', atLeast });
+
+    expect(await allocate(1)).toBe(1);
+    expect(await allocate(2)).toBe(2);
+    // The caller deleted session-2, so its branch is the highest one live —
+    // reusing 2 would put the next session back on the deleted one's branch.
+    expect(await allocate(1)).toBe(3);
+    // A session named outside the counter (an explicit branch) pushes it past.
+    expect(await allocate(9)).toBe(9);
+    expect(await allocate(1)).toBe(10);
+  });
+
+  it('counts user-session names per repository link and user', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const otherLink = await linkRepository({
+      factoryProjectId: project.id,
+      repositoryExternalId: 'repository-99',
+      repositorySlug: 'mastra-ai/other',
+    });
+
+    expect(await github.userSessionNames.allocate({ projectRepositoryId: link.id, userId: 'user-1', atLeast: 1 })).toBe(
+      1,
+    );
+    expect(await github.userSessionNames.allocate({ projectRepositoryId: link.id, userId: 'user-2', atLeast: 1 })).toBe(
+      1,
+    );
+    expect(
+      await github.userSessionNames.allocate({ projectRepositoryId: otherLink.id, userId: 'user-1', atLeast: 1 }),
+    ).toBe(1);
+    expect(await github.userSessionNames.allocate({ projectRepositoryId: link.id, userId: 'user-1', atLeast: 1 })).toBe(
+      2,
+    );
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
