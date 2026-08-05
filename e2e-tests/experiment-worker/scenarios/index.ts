@@ -175,6 +175,38 @@ export const postgresScenario: ScenarioDefinition = {
   ],
 };
 
+const projectShapeScenario = (id: string, fixture: string, assertions: string[]): ScenarioDefinition => ({
+  id,
+  fixture,
+  isolationKey: `${id}-install`,
+  tier: 'full',
+  services: [],
+  credentials: [],
+  timeoutMs: 240_000,
+  assertions,
+});
+
+export const npmMinimalScenario = projectShapeScenario('npm-minimal', 'npm', [
+  'isolated-install-root',
+  'npm-install',
+  'artifact-relocated',
+  'minimal-environment',
+]);
+
+export const yarnMinimalScenario = projectShapeScenario('yarn-minimal', 'yarn', [
+  'isolated-install-root',
+  'yarn-berry-node-modules',
+  'artifact-relocated',
+  'minimal-environment',
+]);
+
+export const pnpmMonorepoScenario = projectShapeScenario('pnpm-monorepo', 'monorepo', [
+  'isolated-install-root',
+  'workspace-package-imported',
+  'artifact-relocated',
+  'source-independent',
+]);
+
 export const nativeDuckdbScenario: ScenarioDefinition = {
   id: 'native-duckdb',
   fixture: 'native',
@@ -211,5 +243,8 @@ export const scenarios = [
   workspaceBrowserScenario,
   workspaceFailuresScenario,
   postgresScenario,
+  npmMinimalScenario,
+  yarnMinimalScenario,
+  pnpmMonorepoScenario,
   nativeDuckdbScenario,
 ];

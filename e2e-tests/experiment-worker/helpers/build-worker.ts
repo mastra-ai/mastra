@@ -4,8 +4,16 @@ import { runCommand } from './command.js';
 export async function buildWorker(
   projectRoot: string,
   outputDirectory = join(projectRoot, '.mastra', 'experiment-worker'),
+  packageManager: 'pnpm' | 'npm' | 'yarn' = 'pnpm',
 ) {
-  const result = await runCommand('pnpm', ['exec', 'mastra', 'experiment', 'build', '--output-dir', outputDirectory], {
+  const command = packageManager === 'yarn' ? 'corepack' : packageManager;
+  const execArgs =
+    packageManager === 'npm'
+      ? ['exec', '--', 'mastra']
+      : packageManager === 'yarn'
+        ? ['yarn', 'exec', 'mastra']
+        : ['exec', 'mastra'];
+  const result = await runCommand(command, [...execArgs, 'experiment', 'build', '--output-dir', outputDirectory], {
     cwd: projectRoot,
     timeoutMs: 180_000,
   });
