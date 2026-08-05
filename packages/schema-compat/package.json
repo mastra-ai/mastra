@@ -108,9 +108,9 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "^3.0.98",
-    "@ai-sdk/google": "^3.0.95",
-    "@ai-sdk/openai": "^3.0.86",
+    "@ai-sdk/anthropic": "^3.0.103",
+    "@ai-sdk/google": "^3.0.101",
+    "@ai-sdk/openai": "^3.0.88",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",

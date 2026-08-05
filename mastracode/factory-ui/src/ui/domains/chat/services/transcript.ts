@@ -203,7 +203,7 @@ type Action =
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
-  | { type: 'prependOlder'; messages: MastraDBMessage[] }
+  | { type: 'mergeWindow'; messages: MastraDBMessage[] }
   | {
       type: 'reset';
       threadId?: string;
@@ -257,8 +257,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
-    case 'prependOlder':
-      return prependOlderMessages(state, action.messages);
+    case 'mergeWindow':
+      return mergeServerWindow(state, action.messages);
     case 'clearPending':
       return { ...state, pending: false };
     case 'localNotice':
@@ -606,28 +606,40 @@ function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[
 }
 
 /**
- * Prepend older history messages to the front of the timeline. `messages` is the
- * newest-N window from a grown history fetch (oldest-first). We keep only the
- * portion strictly older than the oldest message already on screen — anchored on
- * the first existing message entry's id — and prepend those. The overlapping tail
- * of the fetch (messages we already have, including any that streamed in live and
- * later persisted) is discarded, so nothing double-renders. If no anchor is found
- * (e.g. the transcript has no message entries yet) the full window is seeded.
+ * Reconcile the persisted newest-N window (oldest-first) with the timeline.
+ * On-screen messages are anchors — they keep their position, live tool state and
+ * streaming flag; the rest are inserted where the window puts them. Insertion
+ * runs both ways: load-more delivers older history, revalidation after a route
+ * revisit delivers everything the run produced meanwhile.
  */
-function prependOlderMessages(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   if (messages.length === 0) return state;
 
-  const firstMessageEntry = state.entries.find(e => e.kind === 'message');
-  const anchorId = firstMessageEntry?.kind === 'message' ? firstMessageEntry.id : undefined;
+  const onScreen = new Set(state.entries.flatMap(entry => (entry.kind === 'message' ? [entry.id] : [])));
+  if (messages.every(message => onScreen.has(message.id))) return state;
 
-  const anchorIndex = anchorId != null ? messages.findIndex(m => m.id === anchorId) : -1;
-  // Older messages are everything before the anchor; if the anchor isn't in this
-  // window (transcript had no message entries, or the window didn't reach it),
-  // treat the whole window as older history to seed.
-  const olderMessages = anchorIndex === -1 ? messages : messages.slice(0, anchorIndex);
-  if (olderMessages.length === 0) return state;
+  const entries: TimelineEntry[] = [];
+  let cursor = 0;
+  let missing: MastraDBMessage[] = [];
 
-  return { ...state, entries: [...messagesToEntries(olderMessages), ...state.entries] };
+  for (const message of messages) {
+    if (!onScreen.has(message.id)) {
+      missing.push(message);
+      continue;
+    }
+    const anchorIndex = state.entries.findIndex(
+      (entry, index) => index >= cursor && entry.kind === 'message' && entry.id === message.id,
+    );
+    // Out-of-order anchor (the window disagrees with the timeline): leave it
+    // where the timeline put it rather than moving rendered content around.
+    if (anchorIndex === -1) continue;
+    entries.push(...state.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    missing = [];
+    cursor = anchorIndex;
+  }
+  entries.push(...state.entries.slice(cursor), ...messagesToEntries(missing));
+
+  return { ...state, entries };
 }
 
 /**
