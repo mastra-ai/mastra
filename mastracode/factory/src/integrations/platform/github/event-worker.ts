@@ -12,7 +12,7 @@ import type { GithubPullRequestReconciler, ReconcileRepository } from '../../git
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { dispatchGithubWebhook } from '../../github/webhook.js';
-import type { GithubWebhookNotification, ParsedGithubWebhook } from '../../github/webhook.js';
+import type { FactorySessionOwner, GithubWebhookNotification, ParsedGithubWebhook } from '../../github/webhook.js';
 import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 
@@ -63,6 +63,9 @@ type Repository = { id: number; fullName?: string; installationId: number };
 
 export interface PlatformGithubEventDispatchIntegration {
   readonly integrationStorage: GithubSubscriptionStorage;
+  readonly sourceControlStorage: {
+    sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
+  };
   getRepositoryCollaboratorPermission(
     installationId: number,
     repoFullName: string,
@@ -383,6 +386,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
           retireSubscription: (id, status) =>
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
+          getFactorySession: sessionId => this.#github.sourceControlStorage.sessions.getBySessionId(sessionId),
           onTargetError: (subscription, error) => {
             this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
               subscriptionId: subscription.id,

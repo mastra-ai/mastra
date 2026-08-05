@@ -60,6 +60,9 @@ export interface GithubWebhookNotification {
   payload: Record<string, unknown>;
 }
 
+/** The Factory session row fields a woken session has to run as. */
+export type FactorySessionOwner = { userId: string; orgId: string };
+
 export interface GithubWebhookDispatchDependencies {
   controller: MountedMastraCode['controller'];
   /**
@@ -74,6 +77,9 @@ export interface GithubWebhookDispatchDependencies {
   ) => Promise<GithubSignalSubscriptionRow[]>;
   retireSubscription?: (id: string, status: 'open' | 'closed' | 'merged') => Promise<void>;
   isAuthorizedSender?: (notification: GithubWebhookNotification) => Promise<boolean>;
+  /** Owner lookup for sessions this dispatch has to recreate. Defaults to
+   * `github`, which the platform event worker does not supply. */
+  getFactorySession?: (sessionId: string) => Promise<FactorySessionOwner | null>;
   onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
 }
 
@@ -287,7 +293,7 @@ export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhoo
 async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: GithubSignalSubscriptionRow,
-  github?: GithubIntegration,
+  getFactorySession: (sessionId: string) => Promise<FactorySessionOwner | null>,
 ) {
   const { sessionId, resourceId, threadId } = subscription;
   if (!sessionId || !resourceId || !threadId) {
@@ -303,7 +309,7 @@ async function resolveSubscriptionSession(
     };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
-    const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(resourceId);
+    const sessionRow = await getFactorySession(resourceId);
     if (!sessionRow) {
       throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${resourceId} to run as.`);
     }
@@ -411,13 +417,19 @@ export async function dispatchGithubWebhook(
       if (!dependencies.github) throw new Error('GitHub integration is required to retire webhook subscriptions.');
       return retirePullRequestSubscription(id, status, dependencies.github.integrationStorage);
     });
+  const getFactorySession =
+    dependencies.getFactorySession ??
+    ((sessionId: string) => {
+      if (!dependencies.github) throw new Error('GitHub integration is required to resolve a Factory session owner.');
+      return dependencies.github.sourceControlStorage.sessions.getBySessionId(sessionId);
+    });
   const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
   let failed = 0;
 
   for (const subscription of subscriptions) {
     try {
-      const session = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
+      const session = await resolveSubscriptionSession(dependencies.controller, subscription, getFactorySession);
       const result = await session.sendNotificationSignal({
         source: 'github',
         kind: notification.kind,
