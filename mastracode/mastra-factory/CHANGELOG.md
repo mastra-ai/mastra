@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.5
+
+### Patch Changes
+
+- Fixed generated Factory projects that enable the Slack integration. ([#20535](https://github.com/mastra-ai/mastra/pull/20535))
+
+- Updated dependencies [[`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`3f8e2f2`](https://github.com/mastra-ai/mastra/commit/3f8e2f2006588171348acdb6dfcba8a37fed1106), [`1cd7a7b`](https://github.com/mastra-ai/mastra/commit/1cd7a7bfb2e2137ca854f8f1a24eb3d900b18e20), [`1d0b2d8`](https://github.com/mastra-ai/mastra/commit/1d0b2d8712f330992bf0c8464e093d14961f83b4), [`b95e551`](https://github.com/mastra-ai/mastra/commit/b95e551e2fdb149848dcdbd5d8f46c6736d6bff4), [`01c14ae`](https://github.com/mastra-ai/mastra/commit/01c14aed071c9580678036f21cb5eb6079c0ca80), [`2631aac`](https://github.com/mastra-ai/mastra/commit/2631aac051dd8ff33f91cb86e3bcac5c03e49d2c), [`b35ed6f`](https://github.com/mastra-ai/mastra/commit/b35ed6f7c257583eafbad6afa3320c88b26d8112), [`37a5de6`](https://github.com/mastra-ai/mastra/commit/37a5de698003e33b33ae647533461444383c1056), [`e58c643`](https://github.com/mastra-ai/mastra/commit/e58c643f15dc251e5d4ca0bc1cddd42a05f10860), [`3ea362f`](https://github.com/mastra-ai/mastra/commit/3ea362f28d36b7a6b248d0d05df3d14d83b50c39), [`a46aba2`](https://github.com/mastra-ai/mastra/commit/a46aba2249ef3cb965431eb063b9281f7e5e1eca), [`ade1ad4`](https://github.com/mastra-ai/mastra/commit/ade1ad487190c05bfeff246e60fdf8c89aa3d8b1)]:
+  - mastra@1.22.0
+
 ## 0.1.5-alpha.8
 
 ### Patch Changes
