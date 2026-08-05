@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -50,6 +50,41 @@ describe('ExperimentBundler', () => {
     expect(entry).toContain('process.stdout.end(resolve)');
     expect(entry).toContain('setTimeout(resolve, 5_000)');
     expect(entry).toContain('process.exit(exitCode)');
+  });
+
+  it('removes pnpm install metadata that embeds build-machine paths', async () => {
+    const { removePnpmInstallMetadata } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const nodeModules = join(output, 'node_modules');
+    const packageRoot = join(nodeModules, 'dependency');
+    await mkdir(join(nodeModules, '.bin'), { recursive: true });
+    await mkdir(join(nodeModules, '.pnpm'), { recursive: true });
+    await mkdir(join(packageRoot, 'node_modules', '.bin'), { recursive: true });
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(join(packageRoot, 'cli.js'), 'export default true;');
+    await symlink(join(packageRoot, 'cli.js'), join(nodeModules, '.bin', 'dependency'));
+    await symlink(join(packageRoot, 'cli.js'), join(packageRoot, 'node_modules', '.bin', 'dependency'));
+    await writeFile(join(nodeModules, '.modules.yaml'), `virtualStoreDir: ${output}/node_modules/.pnpm\n`);
+    await writeFile(join(nodeModules, '.pnpm-workspace-state-v1.json'), JSON.stringify({ root: output }));
+    await writeFile(join(output, 'preflight-local-paths.json'), '[]');
+    await writeFile(join(output, 'preflight-metadata.json'), '{"version":1,"localPaths":[],"userEnvRefs":[]}');
+    await writeFile(join(packageRoot, 'index.js'), 'export default true;');
+
+    await removePnpmInstallMetadata(output);
+
+    for (const name of ['.pnpm', '.modules.yaml', '.pnpm-workspace-state-v1.json']) {
+      await expect(readFile(join(nodeModules, name), 'utf8')).rejects.toMatchObject({
+        code: expect.stringMatching(/EISDIR|ENOENT/),
+      });
+    }
+    await expect(readlink(join(nodeModules, '.bin', 'dependency'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readlink(join(packageRoot, 'node_modules', '.bin', 'dependency'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    for (const name of ['preflight-local-paths.json', 'preflight-metadata.json']) {
+      await expect(readFile(join(output, name), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+    await expect(readFile(join(packageRoot, 'index.js'), 'utf8')).resolves.toBe('export default true;');
   });
 
   it('resolves the runtime from the packaged CLI layout', async () => {

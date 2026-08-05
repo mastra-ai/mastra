@@ -20,6 +20,7 @@ interface ArchitectureOptions {
 
 interface InstallOptions extends ArchitectureOptions {
   pnpmOverrides?: Record<string, string>;
+  pnpmNodeLinker?: 'hoisted';
 }
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
@@ -135,6 +136,10 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
         ),
       ].join('\n'),
     );
+  }
+
+  if (options.pnpmNodeLinker) {
+    blocks.push(`nodeLinker: ${options.pnpmNodeLinker}`);
   }
 
   return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
@@ -292,14 +297,20 @@ export class Deps extends MastraBase {
     dir = this.rootDir,
     architecture,
     pnpmOverrides,
-  }: { dir?: string; architecture?: ArchitectureOptions; pnpmOverrides?: Record<string, string> } = {}) {
+    pnpmNodeLinker,
+  }: {
+    dir?: string;
+    architecture?: ArchitectureOptions;
+    pnpmOverrides?: Record<string, string>;
+    pnpmNodeLinker?: 'hoisted';
+  } = {}) {
     const pm = this.packageManager;
     const installCommand = this.getPackageManagerCommand(pm, 'install');
     let args: string[] = [];
 
     switch (pm) {
       case 'pnpm':
-        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides });
+        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides, pnpmNodeLinker });
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn

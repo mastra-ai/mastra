@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { lstat, readFile, readdir, readlink, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer/build';
@@ -35,6 +35,7 @@ export class ExperimentBundler extends Bundler {
     protocolVersion: EXPERIMENT_WORKER_PROTOCOL_VERSION,
     datasetCanonicalizationVersion: EXPERIMENT_DATASET_CANONICALIZATION_VERSION,
   };
+  protected pnpmNodeLinker = 'hoisted' as const;
 
   constructor() {
     super('ExperimentWorker');
@@ -59,7 +60,17 @@ export class ExperimentBundler extends Bundler {
     await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot });
   }
 
+  protected override async installDependencies(
+    outputDirectory: string,
+    rootDir?: string,
+    pnpmOverrides?: Record<string, string>,
+  ): Promise<void> {
+    await super.installDependencies(outputDirectory, rootDir, pnpmOverrides);
+    await removePnpmInstallMetadata(join(outputDirectory, this.outputDir));
+  }
+
   async writeArtifactManifest(outputDirectory: string, cliVersion: string): Promise<void> {
+    await removePnpmInstallMetadata(outputDirectory);
     const files = await collectFileDigests(outputDirectory);
     const lockfileNames = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb']);
     const lockfile = files.find(file => lockfileNames.has(file.path))?.path;
@@ -123,6 +134,34 @@ export function resolveRuntimePath(
 }
 
 type ArtifactFileDigest = { path: string; sha256: string; type?: 'file' | 'symlink'; target?: string };
+
+export async function removePnpmInstallMetadata(root: string): Promise<void> {
+  const nodeModules = join(root, 'node_modules');
+  await Promise.all([
+    ...['.pnpm', '.modules.yaml', '.pnpm-workspace-state-v1.json'].map(name =>
+      rm(join(nodeModules, name), { recursive: true, force: true }),
+    ),
+    rm(join(root, 'preflight-local-paths.json'), { force: true }),
+    rm(join(root, 'preflight-metadata.json'), { force: true }),
+  ]);
+
+  const visit = async (directory: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const entryPath = join(directory, entry.name);
+      if (entry.name === '.bin') await rm(entryPath, { recursive: true, force: true });
+      else await visit(entryPath);
+    }
+  };
+  await visit(nodeModules);
+}
 
 async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
   const files: ArtifactFileDigest[] = [];

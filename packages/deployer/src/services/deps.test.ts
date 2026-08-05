@@ -74,4 +74,10 @@ describe('copyPnpmWorkspaceSettings', () => {
       `packages:\n  - '.'\n\noverrides:\n  \"@inner/transitive-c\": \"file:./workspace-module/inner-transitive-c-1.0.0.tgz\"\n`,
     );
   });
+
+  it('writes a requested pnpm node linker for portable installs', () => {
+    expect(copyPnpmWorkspaceSettings('', { pnpmNodeLinker: 'hoisted' })).toBe(
+      `packages:\n  - '.'\n\nnodeLinker: hoisted\n`,
+    );
+  });
 });
