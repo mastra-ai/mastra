@@ -1151,6 +1151,16 @@
       "permanent": true
     },
     {
+      "source": "/docs/observability/config",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/storage",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -1943,6 +1953,16 @@
     {
       "source": "/docs/evals/datasets/:path*/llms.txt",
       "destination": "/docs/datasets/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/config/llms.txt",
+      "destination": "/docs/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/storage/llms.txt",
+      "destination": "/docs/observability/overview/llms.txt",
       "permanent": true
     }
   ]
