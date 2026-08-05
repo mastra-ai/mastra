@@ -19,6 +19,18 @@ export interface ThemeSelectionStats {
   stageShare: number;
 }
 
+export function mergeVisibleSignalOrder(
+  signalNames: TraceSignalName[],
+  nextVisibleSignalNames: TraceSignalName[],
+): TraceSignalName[] {
+  const visibleSignalNames = new Set(nextVisibleSignalNames);
+  let nextVisibleIndex = 0;
+  return signalNames.map(signalName => {
+    if (!visibleSignalNames.has(signalName)) return signalName;
+    return nextVisibleSignalNames[nextVisibleIndex++] ?? signalName;
+  });
+}
+
 export function findThemeSelection(
   flow: ThemeFlowResponse,
   signalName: string,
@@ -74,7 +86,6 @@ export function buildDrilledThemeFlow(
     flowNodesBySignalAndTheme.set(stage.signalName, themes);
   }
 
-  let localThemeIndex = 0;
   const nodesBySignalAndAssignment = new Map<TraceSignalName, Map<string, ThemeNode>>();
   const nodeCounts = new Map<string, number>();
   const links = new Map<
@@ -92,7 +103,7 @@ export function buildDrilledThemeFlow(
     const flowNode = theme ? flowNodesBySignalAndTheme.get(signalName)?.get(theme.themeId) : undefined;
     const node: ThemeNode = theme
       ? {
-          nodeId: flowNode?.nodeId ?? `drilled-theme-${localThemeIndex++}`,
+          nodeId: flowNode?.nodeId ?? `drilled-theme-${signalName}-${theme.themeId}`,
           kind: 'theme',
           themeId: theme.themeId,
           label: theme.label,

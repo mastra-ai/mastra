@@ -34,7 +34,8 @@ const snapshotIdSchema = {
 const filterThemesSchema = {
   type: 'string',
   minLength: 1,
-  pattern: '^(goal|sentiment|behavior|outcome):(noise|[0-9]+)(,(goal|sentiment|behavior|outcome):(noise|[0-9]+)){0,3}$',
+  pattern:
+    '^(?!.*(?:^|,)(goal|sentiment|behavior|outcome):(noise|[0-9]+)(?:,[^,]+)*,\\1:)(goal|sentiment|behavior|outcome):(noise|[0-9]+)(,(goal|sentiment|behavior|outcome):(noise|[0-9]+)){0,3}$',
   description:
     'Optional AND filters for examples: 1-4 comma-separated entries with unique signals, using signalName:themeId or signalName:noise.',
 } as const;

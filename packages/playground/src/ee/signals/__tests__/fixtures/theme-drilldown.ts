@@ -266,6 +266,19 @@ export const noiseExamplesResponse = {
   ],
 } satisfies NoiseExamplesResponse;
 
+export const sentimentNoiseResponse = {
+  ...noiseResponse,
+  noise: {
+    signalName: 'sentiment',
+    traceCount: 1,
+    coverage: 1 / 3,
+  },
+} satisfies NoiseResponse;
+
+export const emptyNoiseExamplesResponse = {
+  examples: [],
+} satisfies NoiseExamplesResponse;
+
 export const themeHistoryResponse = {
   theme: {
     themeId: '101',

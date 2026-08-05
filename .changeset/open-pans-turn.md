@@ -1,4 +1,5 @@
 ---
+'@internal/playground': minor
 'mastra': minor
 ---
 

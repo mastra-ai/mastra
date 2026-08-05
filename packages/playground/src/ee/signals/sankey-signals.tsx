@@ -37,7 +37,12 @@ import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-l
 import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
-import { buildDrilledThemeFlow, findNoiseSelection, findThemeSelection } from './theme-drilldown-data';
+import {
+  buildDrilledThemeFlow,
+  findNoiseSelection,
+  findThemeSelection,
+  mergeVisibleSignalOrder,
+} from './theme-drilldown-data';
 import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { ThemeLifelines } from './theme-lifelines';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
@@ -88,7 +93,7 @@ function findSelectionStats(
     if (selection.kind === 'noise') return candidate.kind === 'noise';
     return candidate.kind === 'theme' && candidate.themeId === selection.themeId;
   });
-  return node ? { traceCount: node.traceCount, stageShare: node.stageShare } : undefined;
+  return node ? { traceCount: node.traceCount, stageShare: node.stageShare } : { traceCount: 0, stageShare: 0 };
 }
 
 function DrillFilterBanner({
@@ -479,7 +484,7 @@ export function SankeySignals({
     setIsPlaying(false);
     setDetailSelection(undefined);
     setNoiseSignalName(undefined);
-    perspectiveMutation.mutate(nextSignalNames);
+    perspectiveMutation.mutate(mergeVisibleSignalOrder(signalNames, nextSignalNames));
   };
   const detailFilters =
     viewMode === 'flow' && detailSelection

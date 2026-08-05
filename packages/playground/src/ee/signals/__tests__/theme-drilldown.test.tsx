@@ -7,11 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
-import { buildDrilledThemeFlow } from '../theme-drilldown-data';
+import { buildDrilledThemeFlow, mergeVisibleSignalOrder } from '../theme-drilldown-data';
 import {
   allThemePathsResponse,
   drilldownThemeFlowResponse,
   drilldownThemeSnapshotsResponse,
+  emptyNoiseExamplesResponse,
   firstThemeExamplesResponse,
   firstThemePathsResponse,
   fourSignalThemeFlowResponse,
@@ -27,6 +28,7 @@ import {
   pathsWithCollapsedOutcomeResponse,
   secondThemeExamplesResponse,
   secondThemePathsResponse,
+  sentimentNoiseResponse,
   singleDrilldownThemeSnapshotsResponse,
   themeDetailResponse,
   themeHistoryResponse,
@@ -712,6 +714,43 @@ describe('SankeySignals drill-in', () => {
         offset: '0',
         filterThemes: 'goal:101',
       });
+    });
+  });
+
+  describe('when a noise bucket has no traces under an active filter', () => {
+    it('shows zero filtered stats instead of the unfiltered noise stats', async () => {
+      useFourSignalFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, () =>
+          HttpResponse.json(sentimentNoiseResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise/examples`, ({ request }) => {
+          expect(new URL(request.url).searchParams.get('filterThemes')).toBe('behavior:301');
+          return HttpResponse.json(emptyNoiseExamplesResponse);
+        }),
+      );
+      renderSignals(['goal', 'outcome', 'behavior', 'sentiment']);
+      fireEvent.click(await screen.findByRole('button', { name: /^Opened workspace.+1 trace \(33%\)/ }));
+      await screen.findByText('Showing 1 of 3 traces that match all filters');
+
+      fireEvent.click(screen.getByRole('button', { name: 'View Noise details for Sentiment' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Noise' });
+      expect(
+        await within(dialog).findByText('Filtered to traces matching the active drill-down filters.'),
+      ).not.toBeNull();
+      expect(within(dialog).getByText('0%')).not.toBeNull();
+      expect(within(dialog).getByText('0')).not.toBeNull();
+      expect(within(dialog).getByText('No noise examples in this snapshot.')).not.toBeNull();
+      expect(within(dialog).queryByText('33%')).toBeNull();
+    });
+  });
+
+  describe('when visible signal columns are reordered during a drill-in', () => {
+    it('keeps drilled signals in the requested perspective', () => {
+      expect(
+        mergeVisibleSignalOrder(['goal', 'outcome', 'behavior', 'sentiment'], ['goal', 'behavior', 'outcome']),
+      ).toEqual(['goal', 'behavior', 'outcome', 'sentiment']);
     });
   });
 
