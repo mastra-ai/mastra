@@ -204,14 +204,12 @@ test.describe('Sidebar navigation', () => {
 const contextualTopLevelItems = [
   'Overview',
   'Tools',
-  'Skills',
   'Structured Output',
-  'Agent Approval',
+  'Human-in-the-Loop',
   'Supervisor Agents',
   'Guardrails',
   'Processors',
   'Code Mode',
-  'Connections',
 ]
 
 function visibleSidebarPane(page: Page, pane: 'root' | 'contextual') {
@@ -273,7 +271,7 @@ test.describe('Contextual sidebar', () => {
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
     await expect(page).toHaveURL(new RegExp('/docs/agents/overview$'))
-    const backButton = contextualPane.getByRole('button', { name: 'Back to Agents' })
+    const backButton = contextualPane.getByRole('button', { name: 'Back to global sidebar' })
     await expect(backButton).toHaveText(/←\s*Agents/)
     await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
 
@@ -285,12 +283,6 @@ test.describe('Contextual sidebar', () => {
       .evaluateAll(labels => labels.map(label => label.getAttribute('title')))
     expect(topLevelLabels).toEqual(contextualTopLevelItems)
     await expect(topLevelLinks.first()).toHaveAttribute('aria-current', 'page')
-
-    const connections = contextualPane.getByRole('button', { name: 'Connections', exact: true })
-    await expect(connections).toHaveAttribute('aria-expanded', 'false')
-    await connections.click()
-    await expect(connections).toHaveAttribute('aria-expanded', 'true')
-    await expect(contextualPane.getByRole('link', { name: 'A2A', exact: true })).toBeVisible()
 
     await contextualPane.getByRole('link', { name: 'Tools', exact: true }).click()
     await expect(page).toHaveURL('/docs/agents/using-tools')
@@ -323,7 +315,7 @@ test.describe('Contextual sidebar', () => {
   }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
 
-    for (const path of ['/docs/agents/overview', '/docs/agents/skills']) {
+    for (const path of ['/docs/agents/overview', '/docs/agents/using-tools']) {
       const directResponse = await page.request.get(path)
       expect(directResponse.ok()).toBe(true)
       expect(await directResponse.text()).toMatch(/data-sidebar-pane=(?:"contextual"|contextual)/)
@@ -343,20 +335,20 @@ test.describe('Contextual sidebar', () => {
 
     await page.reload()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to Agents' }).click()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
     await expect(page).toHaveURL('/docs/agents/overview')
 
-    await page.goto('/docs/agents/skills', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/agents/using-tools', { waitUntil: 'domcontentloaded' })
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
     await expect(
-      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Skills', exact: true }),
+      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Tools', exact: true }),
     ).toHaveAttribute('aria-current', 'page')
     await page.reload()
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to Agents' }).click()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
-    await expect(page).toHaveURL('/docs/agents/skills')
+    await expect(page).toHaveURL('/docs/agents/using-tools')
   })
 
   test('desktop: modified click leaves the opener unchanged and the new overview tab initializes context', async ({
@@ -369,7 +361,7 @@ test.describe('Contextual sidebar', () => {
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
     const newPagePromise = context.waitForEvent('page')
-    await agentsLink.click({ modifiers: ['Meta'] })
+    await agentsLink.click({ button: 'middle' })
     const newPage = await newPagePromise
     await newPage.waitForLoadState('domcontentloaded')
 
@@ -382,7 +374,7 @@ test.describe('Contextual sidebar', () => {
     await expect(directContextualPane).toBeVisible()
 
     const childPagePromise = context.waitForEvent('page')
-    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ modifiers: ['Meta'] })
+    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ button: 'middle' })
     const childPage = await childPagePromise
     await childPage.waitForLoadState('domcontentloaded')
 
@@ -403,7 +395,7 @@ test.describe('Contextual sidebar', () => {
     await openMobileSidebar(page)
     const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
     const newPagePromise = context.waitForEvent('page')
-    await agentsLink.click({ modifiers: ['Meta'] })
+    await agentsLink.click({ button: 'middle' })
     const newPage = await newPagePromise
     await newPage.waitForLoadState('domcontentloaded')
 
@@ -418,7 +410,7 @@ test.describe('Contextual sidebar', () => {
     await expect(directContextualPane).toBeVisible()
 
     const childPagePromise = context.waitForEvent('page')
-    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ modifiers: ['Meta'] })
+    await directContextualPane.getByRole('link', { name: 'Tools', exact: true }).click({ button: 'middle' })
     const childPage = await childPagePromise
     await childPage.waitForLoadState('domcontentloaded')
 
@@ -456,7 +448,7 @@ test.describe('Contextual sidebar', () => {
 
     await openMobileSidebar(page)
     const urlBeforeBack = page.url()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to Agents' }).click()
+    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
     const rootPane = visibleSidebarPane(page, 'root')
     await expect(rootPane).toBeVisible()
     await expect(page.locator('.navbar-sidebar')).toBeVisible()
@@ -464,12 +456,12 @@ test.describe('Contextual sidebar', () => {
     await expect(rootPane).toBeFocused()
     await expectContextualCategoryRootLink(rootPane)
 
-    await page.goto('/docs/agents/skills', { waitUntil: 'domcontentloaded' })
+    await page.goto('/docs/agents/using-tools', { waitUntil: 'domcontentloaded' })
     await page.reload()
     await openMobileSidebar(page)
     await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
     await expect(
-      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Skills', exact: true }),
+      visibleSidebarPane(page, 'contextual').getByRole('link', { name: 'Tools', exact: true }),
     ).toHaveAttribute('aria-current', 'page')
 
     expect(getErrors(), 'JS errors during mobile contextual sidebar navigation').toEqual([])
