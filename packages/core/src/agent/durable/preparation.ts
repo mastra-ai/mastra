@@ -12,7 +12,7 @@ import type { VersionOverrides } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
-import { deepMerge } from '../../utils';
+import { deepMerge, isBoundedSerializable } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
@@ -46,13 +46,19 @@ function snapshotRequestContextEntries(
   const out: Record<string, unknown> = {};
   let any = false;
   for (const [key, value] of requestContext.entries()) {
+    // Bounded probe first: a shared-reference graph can otherwise make
+    // JSON.stringify expand exponentially and wedge the event loop on every
+    // durable step. Entries that fail the probe (non-serializable, or too large
+    // to serialize within budget) are skipped — they wouldn't survive the wire
+    // on cross-process engines anyway.
+    if (!isBoundedSerializable(value)) continue;
     try {
       const cloned = JSON.parse(JSON.stringify(value));
       out[key as string] = cloned;
       any = true;
     } catch {
-      // Skip non-serializable entries silently — they wouldn't survive the
-      // wire on cross-process engines anyway.
+      // Defensive: a value that passed the probe should stringify, but keep the
+      // skip so a single bad entry can't break the snapshot.
     }
   }
   return any ? out : undefined;

@@ -11,6 +11,7 @@ import {
   deepEqual,
   deepMerge,
   ensureSerializable,
+  isBoundedSerializable,
   fetchWithRetry,
   generateEmptyFromSchema,
   makeCoreTool,
@@ -807,6 +808,73 @@ describe('ensureSerializable', () => {
     expect(result.screen.properties.color).toBe('red');
     expect(result.screen.properties.variantScreenInstance).toBe('[Circular]');
     expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('should return a serializable shared-reference value unchanged (under budget)', () => {
+    // Shared but acyclic and small — must NOT be collapsed; the fast path
+    // returns the original reference.
+    const shared = { x: 1 };
+    const obj = { a: shared, b: shared };
+    expect(ensureSerializable(obj)).toBe(obj);
+  });
+
+  it('should collapse an over-budget shared-reference graph in bounded time instead of hanging', () => {
+    // 31 heap objects, but JSON.stringify would expand them to 2^30 nodes —
+    // the unbounded version hangs for minutes before throwing.
+    let node: any = { leaf: true };
+    for (let i = 0; i < 30; i++) node = { a: node, b: node };
+    const obj = { dag: node, keep: 'value' };
+
+    const start = Date.now();
+    const result = ensureSerializable(obj) as any;
+    const elapsed = Date.now() - start;
+
+    // Loose threshold: assert "bounded", not "fast".
+    expect(elapsed).toBeLessThan(2000);
+    expect(result).not.toBe(obj);
+    expect(result.keep).toBe('value');
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('should stringify BigInt values through the fallback', () => {
+    const result = ensureSerializable({ big: 10n }) as any;
+    expect(result.big).toBe('10');
+  });
+});
+
+describe('isBoundedSerializable', () => {
+  it('returns true for JSON-safe values', () => {
+    expect(isBoundedSerializable({ a: 1, b: [2, 3], c: { d: 'x' } })).toBe(true);
+    expect(isBoundedSerializable('hello')).toBe(true);
+    expect(isBoundedSerializable(null)).toBe(true);
+  });
+
+  it('returns true for large-but-acyclic shared references under budget', () => {
+    let node: any = { leaf: true };
+    for (let i = 0; i < 10; i++) node = { a: node, b: node }; // 2^10 nodes, well under budget
+    expect(isBoundedSerializable(node)).toBe(true);
+  });
+
+  it('returns false for circular references', () => {
+    const obj: any = {};
+    obj.self = obj;
+    expect(isBoundedSerializable(obj)).toBe(false);
+  });
+
+  it('returns false for BigInt', () => {
+    expect(isBoundedSerializable({ n: 1n })).toBe(false);
+  });
+
+  it('returns false in bounded time for an over-budget shared-reference graph', () => {
+    let node: any = { leaf: true };
+    for (let i = 0; i < 30; i++) node = { a: node, b: node };
+
+    const start = Date.now();
+    const result = isBoundedSerializable(node);
+    const elapsed = Date.now() - start;
+
+    expect(result).toBe(false);
+    expect(elapsed).toBeLessThan(2000);
   });
 });
 
