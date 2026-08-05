@@ -54,6 +54,10 @@ describe('thresholds', () => {
       );
     });
 
+    it('rejects a range with no bounds', () => {
+      expect(() => validateThresholdConfig({}, 'quality')).toThrow(/must specify at least one of min or max/);
+    });
+
     it('rejects a minimum greater than the maximum', () => {
       expect(() => validateThresholdConfig({ min: 0.8, max: 0.2 }, 'quality')).toThrow(
         /min \(0.8\) greater than max \(0.2\)/,

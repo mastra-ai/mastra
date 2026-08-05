@@ -53,6 +53,14 @@ export function validateThresholdConfig(threshold: ThresholdConfig, scorerId: st
       text: `Threshold for scorer "${scorerId}" must be a number or an object with min/max bounds, got ${threshold === null ? 'null' : Array.isArray(threshold) ? 'an array' : `a ${typeof threshold}`}`,
     });
   }
+  if (threshold.min === undefined && threshold.max === undefined) {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'INVALID_SCORER_THRESHOLD',
+      category: 'USER',
+      text: `Threshold for scorer "${scorerId}" must specify at least one of min or max`,
+    });
+  }
   if (threshold.min !== undefined) {
     validateThresholdBound(threshold.min, 'Minimum', scorerId);
   }
