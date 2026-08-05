@@ -1,15 +1,15 @@
 ---
-title: "AgentController overview"
+title: "AgentController | Harness"
 description: "Build interactive agent applications with isolated sessions, persistent threads, modes, approvals, subagents, and channels."
 packages:
   - "@mastra/core"
 ---
 
-# AgentController overview
+# AgentController
 
 :::experimental
 
-The `AgentController` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+The [`AgentController`](/reference/agent-controller/agent-controller-class) feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
 
 :::
 
@@ -17,7 +17,7 @@ The `AgentController` feature is in beta stage and subject to breaking changes i
 
 ## Quickstart
 
-Create the backing agent, storage, and workspace. Initialize the controller once, then create a Session and send work through it:
+Create the backing [`Agent`](/reference/agents/agent), storage, and [`Workspace`](/reference/workspace/workspace-class). Call [`controller.init()`](/reference/agent-controller/agent-controller-class#init) once, then use [`controller.createSession()`](/reference/agent-controller/agent-controller-class#createsessionoptions) to create a Session. Subscribe with [`session.subscribe()`](/reference/agent-controller/session#subscribelistener) and send work with [`session.sendMessage()`](/reference/agent-controller/session#sendmessage-content-files-requestcontext-):
 
 ```typescript title="src/mastra/agent-controller.ts"
 import { Agent } from '@mastra/core/agent'
@@ -84,7 +84,7 @@ The controller, Session, and thread have different lifetimes:
 - **Session**: An isolated live runtime for one user, task, or concurrent work scope. It owns the active mode, model, state, event bus, run state, grants, and current thread binding.
 - **Thread**: A stored conversation containing messages and thread settings. Threads can survive controller and process recreation when you configure storage.
 
-A Session is live state. Arbitrary `session.state`, permission grants, pending approvals, and active runs don't automatically survive process recreation. Thread messages and selected thread settings, including mode and per-mode model choices, can persist through storage.
+A Session is live state. Arbitrary [`session.state`](/reference/agent-controller/session#state), permission grants, pending approvals, and active runs don't automatically survive process recreation. Thread messages and selected thread settings, including mode and per-mode model choices, can persist through storage.
 
 ## Sessions and threads
 
@@ -122,11 +122,11 @@ const session = await controller.createSession({
 })
 ```
 
-Use `session.thread.create()` and `session.thread.switch()` to move one live Session between conversations.
+Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-) to move one live Session between conversations.
 
 ## Switch modes and models
 
-Modes change the instructions and tools used by the shared backing agent without replacing the Session or thread. Define modes on the controller, then switch the live Session:
+Modes change the instructions and tools used by the shared backing agent without replacing the Session or thread. Define modes on the controller, then switch the live Session with [`session.mode.switch()`](/reference/agent-controller/session#sessionmodeswitch-modeid-). Read the active mode with [`session.mode.get()`](/reference/agent-controller/session#sessionmodeget) or [`session.mode.resolve()`](/reference/agent-controller/session#sessionmoderesolve):
 
 ```typescript
 await session.mode.switch({ modeId: 'build' })
@@ -135,7 +135,7 @@ console.log(session.mode.get()) // "build"
 console.log(session.mode.resolve().instructions)
 ```
 
-Switch models independently through `session.model`. Thread-scoped selections are stored per mode and restored when the Session returns to that mode:
+Switch models independently with [`session.model.switch()`](/reference/agent-controller/session#sessionmodelswitch-modelid-scope-modeid-), then read the active selection with [`session.model.get()`](/reference/agent-controller/session#sessionmodelget). Thread-scoped selections are stored per mode and restored when the Session returns to that mode:
 
 ```typescript
 await session.model.switch({
@@ -150,7 +150,7 @@ Use `scope: 'global'` for an in-memory selection that shouldn't be written to th
 
 ## Manage threads and state
 
-Create, list, and switch stored conversations through `session.thread`:
+List stored conversations with [`session.thread.list()`](/reference/agent-controller/session#sessionthreadlistoptions):
 
 ```typescript
 const thread = await session.thread.create({ title: 'Release planning' })
@@ -160,7 +160,7 @@ await session.thread.switch({ threadId: thread.id })
 console.log(threads.length)
 ```
 
-Use `session.state` for structured live state associated with the Session. Define `stateSchema` and `initialState` on the controller when you need validation and defaults:
+Use `session.state` for structured live state associated with the Session. Read it with [`session.state.get()`](/reference/agent-controller/session#sessionstateget) and write updates with [`session.state.set()`](/reference/agent-controller/session#sessionstatesetupdates). Define `stateSchema` and `initialState` on the controller when you need validation and defaults:
 
 ```typescript
 console.log(session.state.get())
@@ -172,7 +172,7 @@ await session.state.set({ activeProject: 'docs-site' })
 
 ## Approve tools and resume suspensions
 
-Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Configure policies on the Session:
+Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Configure category policies with [`session.permissions.setForCategory()`](/reference/agent-controller/session#sessionpermissionssetforcategory-category-policy-) and tool policies with [`session.permissions.setForTool()`](/reference/agent-controller/session#sessionpermissionssetfortool-toolname-policy-):
 
 ```typescript
 await session.permissions.setForCategory({
@@ -186,7 +186,7 @@ await session.permissions.setForTool({
 })
 ```
 
-When a policy resolves to `ask`, subscribe for the approval event and return the user's decision:
+When a policy resolves to `ask`, subscribe for the approval event and return the user's decision with [`session.respondToToolApproval()`](/reference/agent-controller/session#respondtotoolapproval-decision-toolcallid-requestcontext-declinecontext-):
 
 ```typescript
 session.subscribe(event => {
@@ -201,7 +201,7 @@ session.subscribe(event => {
 
 The `always_allow_category` decision grants the tool category for the rest of the live Session. Session grants aren't durable process-level permissions.
 
-Interactive tools such as `ask_user` and `submit_plan` use resumable tool suspensions instead:
+Interactive tools such as [`ask_user`](/reference/tools/ask-user-tool) and [`submit_plan`](/reference/tools/submit-plan-tool) use resumable tool suspensions instead. Resume them with [`session.respondToToolSuspension()`](/reference/agent-controller/session#respondtotoolsuspension-resumedata-toolcallid-requestcontext-):
 
 ```typescript
 session.subscribe(event => {
@@ -220,7 +220,7 @@ For `submit_plan`, resume with `{ action: 'approved' }` or `{ action: 'rejected'
 
 Configure available subagent types on the controller. The built-in `subagent` tool can then delegate focused tasks using those definitions.
 
-A Session can store one default subagent model or a model for a specific agent type:
+Use [`session.subagents.model.set()`](/reference/agent-controller/session#sessionsubagentsmodelset-modelid-agenttype-) to store one default subagent model or a model for a specific agent type. Read the selection with [`session.subagents.model.get()`](/reference/agent-controller/session#sessionsubagentsmodelget-agenttype-):
 
 ```typescript
 await session.subagents.model.set({
@@ -241,7 +241,7 @@ These selections are written to thread settings. An agent-type selection takes p
 
 ## Connect chat channels
 
-Pass channel adapters to the controller and register it on a `Mastra` instance:
+Pass channel adapters to the controller and register it on a [`Mastra`](/reference/core/mastra-class) instance:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -273,7 +273,7 @@ See [Channels](/docs/capabilities/channels/overview) for adapter setup and webho
 
 ## Connect a UI
 
-Subscribe to Session events for incremental updates. Read the reduced display state when the UI needs a complete render snapshot:
+Subscribe to Session events for incremental updates. Read the reduced display state with [`session.displayState.get()`](/reference/agent-controller/session#sessiondisplaystateget) when the UI needs a complete render snapshot:
 
 ```typescript
 const unsubscribe = session.subscribe(event => {
@@ -288,12 +288,10 @@ render(session.displayState.get())
 unsubscribe()
 ```
 
-Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener.
+Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](http://localhost:3000/guides/guide/coding-agent) guide for a complete TUI example.
 
 ## Related
 
-- [AgentController reference](/reference/agent-controller/agent-controller-class)
-- [Session reference](/reference/agent-controller/session)
 - [Agents](/docs/agents/overview)
 - [Workspace](/docs/workspace/overview)
 - [Observational memory](/docs/memory/observational-memory)

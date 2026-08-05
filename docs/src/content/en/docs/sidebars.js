@@ -471,7 +471,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agent-controller/overview',
+          id: 'harness/agent-controller',
           label: 'Agent Controller',
           customProps: {
             tags: ['beta'],
