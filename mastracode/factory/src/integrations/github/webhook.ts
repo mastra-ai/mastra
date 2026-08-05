@@ -301,18 +301,17 @@ async function resolveSubscriptionSession(
       projectRepositoryId: subscription.data.projectRepositoryId,
       ...(scope ? { worktreePath: scope } : {}),
     };
-    // Recreating the session resolves its workspace, which authorizes the
-    // caller against the Factory session row. A webhook has no signed-in user,
-    // so it stands in as the session's owner — read from that row, since a
-    // subscription's `ownerId` may be a non-user id (the SDK's default owner).
+    // Creating the session resolves its workspace, which authorizes the caller
+    // against the Factory session row — no signed-in user, so run as its owner.
     const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(resourceId);
-    const requestContext = new RequestContext();
-    if (sessionRow) {
-      requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
+    if (!sessionRow) {
+      throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${resourceId} to run as.`);
     }
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
     session = await controller.createSession({
       id: sessionId,
-      ownerId: subscription.data.ownerId,
+      ownerId: sessionRow.userId,
       resourceId,
       scope,
       tags,

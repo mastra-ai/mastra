@@ -13,6 +13,13 @@ const getRepositoryCollaboratorPermission = vi.fn<
 >(async () => 'write');
 // Stub integration: dispatch consumes the injected instance for permission checks.
 const githubStub = { getRepositoryCollaboratorPermission } as unknown as GithubIntegration;
+
+function githubWithSessionRow(row: { userId: string; orgId: string } | null) {
+  return {
+    getRepositoryCollaboratorPermission,
+    sourceControlStorage: { sessions: { getBySessionId: async () => row } },
+  } as unknown as GithubIntegration;
+}
 import { classifyGithubWebhook, dispatchGithubWebhook } from './webhook.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
@@ -185,7 +192,7 @@ describe('dispatchGithubWebhook', () => {
     const getSessionByResource = vi.fn(async (_resourceId: string, scope?: string) =>
       scope === '/worktrees/a' ? liveA : undefined,
     );
-    const createSession = vi.fn(async () => resumedB);
+    const createSession = vi.fn(async (_input: { requestContext: RequestContext }) => resumedB);
     const rows = [subscription('a', '/worktrees/a'), subscription('b', '/worktrees/b')];
 
     const result = await dispatchGithubWebhook(
@@ -196,6 +203,7 @@ describe('dispatchGithubWebhook', () => {
       }),
       {
         controller: { getSessionByResource, createSession } as never,
+        github: githubWithSessionRow({ userId: 'user-1', orgId: 'org-1' }),
         listSubscriptions: async () => rows,
         isAuthorizedSender: async () => true,
       },
@@ -203,9 +211,11 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 2, failed: 0, ignored: false });
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
+    // Owner and identity both come from the Factory session row, not from the
+    // subscription's `ownerId` ('owner-1'), which matches no user.
     expect(createSession).toHaveBeenCalledWith({
       id: 'session-b',
-      ownerId: 'owner-1',
+      ownerId: 'user-1',
       resourceId: 'resource-1',
       scope: '/worktrees/b',
       tags: {
@@ -214,6 +224,10 @@ describe('dispatchGithubWebhook', () => {
         worktreePath: '/worktrees/b',
       },
       requestContext: expect.any(RequestContext),
+    });
+    expect(createSession.mock.calls[0]![0]!.requestContext.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
     });
     expect(switchB).not.toHaveBeenCalled();
     expect(sendA).toHaveBeenCalledWith(
@@ -229,39 +243,23 @@ describe('dispatchGithubWebhook', () => {
     expect(sendA.mock.calls[0]).toHaveLength(1);
   });
 
-  it('recreates a session as the owner recorded on its Factory session row', async () => {
-    // Not the subscription's `ownerId`: that can be a non-user id (the SDK's
-    // default owner), and the workspace guard compares against the row.
-    const send = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
-    const createSession = vi.fn(async (_input: { requestContext: RequestContext }) => ({
-      thread: { getId: () => 'thread-a', switch: vi.fn() },
-      sendNotificationSignal: send,
-    }));
-    const github = {
-      sourceControlStorage: {
-        sessions: { getBySessionId: async () => ({ userId: 'user-real', orgId: 'org-real' }) },
-      },
-    } as unknown as GithubIntegration;
-
+  it('fails the delivery instead of reviving a session it cannot attribute to a user', async () => {
+    const createSession = vi.fn();
     const result = await dispatchGithubWebhook(
       parsed('issue_comment', 'created', {
         issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
-        comment: { html_url: 'https://github.com/octo/hello/pull/34#issuecomment-123' },
         pull_request: undefined,
       }),
       {
         controller: { getSessionByResource: async () => undefined, createSession } as never,
-        github,
+        github: githubWithSessionRow(null),
         listSubscriptions: async () => [subscription('a', '/worktrees/a')],
         isAuthorizedSender: async () => true,
       },
     );
 
-    expect(result).toEqual({ delivered: 1, failed: 0, ignored: false });
-    expect(createSession.mock.calls[0]![0].requestContext.get('user')).toEqual({
-      workosId: 'user-real',
-      organizationId: 'org-real',
-    });
+    expect(result).toEqual({ delivered: 0, failed: 1, ignored: false });
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it('switches an exact live scoped session to its subscribed thread', async () => {
