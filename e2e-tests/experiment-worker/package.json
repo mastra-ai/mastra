@@ -9,7 +9,8 @@
     "test:pr": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts tests/runtime-resources.test.ts tests/native-duckdb.test.ts",
     "test:full": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts tests/runtime-resources.test.ts tests/native-duckdb.test.ts tests/full-workspace-lifecycle.test.ts tests/postgres-lifecycle.test.ts tests/project-shapes.test.ts tests/portability-isolation.test.ts tests/installed-boundary-negative.test.ts",
     "test:full:strict": "vitest run tests/setup.test.ts tests/harness.test.ts tests/minimal-agent.test.ts tests/target-process.test.ts tests/runtime-resources.test.ts tests/native-duckdb.test.ts tests/full-workspace-lifecycle.test.ts tests/postgres-lifecycle.test.ts tests/project-shapes.test.ts tests/portability-isolation.test.ts tests/installed-boundary-negative.test.ts",
-    "test:scenario": "node scripts/run-scenario.mjs"
+    "test:scenario": "node scripts/run-scenario.mjs",
+    "test:workflow-routing": "vitest run --config vitest.routing.config.ts"
   },
   "devDependencies": {
     "@libsql/client": "^0.17.4",

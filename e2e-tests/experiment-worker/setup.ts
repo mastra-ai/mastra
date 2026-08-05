@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm, copyFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { glob as globby } from 'tinyglobby';
@@ -37,7 +37,9 @@ async function assertPublishedPackages(registry: string, tag: string) {
 export default async function setup(project: TestProject) {
   const runRoot = await mkdtemp(join(tmpdir(), 'mastra-experiment-worker-e2e-'));
   const artifactRoot = join(runRoot, 'artifacts');
-  const reportRoot = join(runRoot, 'reports');
+  const reportRoot = process.env.MASTRA_EXPERIMENT_E2E_REPORT_DIR
+    ? resolve(process.env.MASTRA_EXPERIMENT_E2E_REPORT_DIR)
+    : join(runRoot, 'reports');
   await Promise.all([mkdir(artifactRoot, { recursive: true }), mkdir(reportRoot, { recursive: true })]);
 
   const hasPublishedRegistryEnv = Boolean(
