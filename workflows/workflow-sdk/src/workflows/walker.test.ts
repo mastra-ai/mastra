@@ -488,6 +488,16 @@ describe('runMastraGraph', () => {
     // than the one the walk is standing on.
     const effects: WalkerEffects = {
       async runOp(request) {
+        if (request.op.kind === 'finalize') {
+          return {
+            status: 'success',
+            output: undefined,
+            identity: FINALIZE_IDENTITY,
+            state: {},
+            startedAt: 0,
+            endedAt: 1,
+          };
+        }
         return {
           status: 'success',
           output: request.inputData,

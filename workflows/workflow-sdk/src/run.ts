@@ -1157,7 +1157,14 @@ export class WorkflowSdkRun<
 
     let inputDataToUse: unknown = args.inputData;
     if (inputDataToUse && steps.length === 1) {
-      inputDataToUse = await this._validateTimetravelInputData(inputDataToUse, this.workflowSteps[steps[0]!]!);
+      const targetStep = this.workflowSteps[steps[0]!];
+      if (!targetStep) {
+        throw new Error(
+          `Step "${steps[0]}" not found in workflow "${this.workflowId}". ` +
+            `Known steps: ${Object.keys(this.workflowSteps).join(', ')}`,
+        );
+      }
+      inputDataToUse = await this._validateTimetravelInputData(inputDataToUse, targetStep);
     }
 
     const timeTravelData = createTimeTravelExecutionParams({

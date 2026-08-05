@@ -241,10 +241,8 @@ describe('WorkflowSdkRun#watch', () => {
     const unwatch = run.watch(event => seen.push(event.type));
 
     await started;
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await expect.poll(() => seen.includes('workflow-finish'), { timeout: 10_000 }).toBe(true);
     unwatch();
-
-    expect(seen).toContain('workflow-finish');
   });
 });
 
@@ -279,11 +277,7 @@ describe('WorkflowSdkRun#stream', () => {
 
     // The stream must not settle on the suspension; resume through the hook the
     // walker parked on and let the run finish.
-    const suspendedSeen = new Promise<void>(resolve => {
-      const check = () => (types.includes('workflow-step-suspended') ? resolve() : setTimeout(check, 25));
-      check();
-    });
-    await suspendedSeen;
+    await expect.poll(() => types.includes('workflow-step-suspended'), { timeout: 10_000 }).toBe(true);
     expect(types).not.toContain('workflow-finish');
 
     await resumeHook(suspendToken(run.runId, 'approval'), { approved: true });

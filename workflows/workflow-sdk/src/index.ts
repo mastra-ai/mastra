@@ -150,6 +150,45 @@ export function init<TRequestContext = unknown>(config: WorkflowSdkInitConfig) {
     );
   }
 
+  function cloneWorkflow<
+    TWorkflowId extends string = string,
+    TState = unknown,
+    TInput = unknown,
+    TOutput = unknown,
+    TSteps extends Step<string, any, any, any, any, any, WorkflowSdkEngineType>[] = Step<
+      string,
+      any,
+      any,
+      any,
+      any,
+      any,
+      WorkflowSdkEngineType
+    >[],
+    TPrev = TInput,
+  >(
+    workflow: WorkflowSdkWorkflow<TSteps, string, TState, TInput, TOutput, TPrev, TRequestContext>,
+    opts: { id: TWorkflowId },
+  ): WorkflowSdkWorkflow<TSteps, TWorkflowId, TState, TInput, TOutput, TPrev, TRequestContext> {
+    const cloned = new WorkflowSdkWorkflow<TSteps, TWorkflowId, TState, TInput, TOutput, TPrev, TRequestContext>(
+      {
+        id: opts.id,
+        description: workflow.description,
+        inputSchema: workflow.inputSchema as PublicSchema<TInput>,
+        outputSchema: workflow.outputSchema as PublicSchema<TOutput>,
+        stateSchema: workflow.stateSchema,
+        requestContextSchema: workflow.requestContextSchema,
+        retryConfig: workflow.retryConfig,
+        steps: workflow.stepDefs,
+        mastra: workflow.mastra,
+        options: workflow.options,
+      },
+      { runner: config.runner },
+    );
+    cloned.setStepFlow(workflow.stepGraph);
+    cloned.commit();
+    return cloned;
+  }
+
   return {
     createTool,
     createStep,
@@ -176,41 +215,22 @@ export function init<TRequestContext = unknown>(config: WorkflowSdkInitConfig) {
       step: Step<TStepId, any, any, any, any, any, WorkflowSdkEngineType>,
       opts: { id: TStepId },
     ): Step<TStepId, any, any, any, any, any, WorkflowSdkEngineType> {
+      // A nested workflow used as a step must stay a real workflow instance:
+      // `#collectStepRetries` and `registerNested` check `instanceof`, which a
+      // spread copy would fail.
+      if (step instanceof WorkflowSdkWorkflow) {
+        return cloneWorkflow(step, { id: opts.id }) as unknown as Step<
+          TStepId,
+          any,
+          any,
+          any,
+          any,
+          any,
+          WorkflowSdkEngineType
+        >;
+      }
       return { ...step, id: opts.id };
     },
-    cloneWorkflow<
-      TWorkflowId extends string = string,
-      TState = unknown,
-      TInput = unknown,
-      TOutput = unknown,
-      TSteps extends Step<string, any, any, any, any, any, WorkflowSdkEngineType>[] = Step<
-        string,
-        any,
-        any,
-        any,
-        any,
-        any,
-        WorkflowSdkEngineType
-      >[],
-      TPrev = TInput,
-    >(
-      workflow: WorkflowSdkWorkflow<TSteps, string, TState, TInput, TOutput, TPrev, TRequestContext>,
-      opts: { id: TWorkflowId },
-    ): WorkflowSdkWorkflow<TSteps, TWorkflowId, TState, TInput, TOutput, TPrev, TRequestContext> {
-      const cloned = new WorkflowSdkWorkflow<TSteps, TWorkflowId, TState, TInput, TOutput, TPrev, TRequestContext>(
-        {
-          id: opts.id,
-          inputSchema: workflow.inputSchema as PublicSchema<TInput>,
-          outputSchema: workflow.outputSchema as PublicSchema<TOutput>,
-          steps: workflow.stepDefs,
-          mastra: workflow.mastra,
-          options: workflow.options,
-        },
-        { runner: config.runner },
-      );
-      cloned.setStepFlow(workflow.stepGraph);
-      cloned.commit();
-      return cloned;
-    },
+    cloneWorkflow,
   };
 }

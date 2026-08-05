@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam } from 'nitro/h3';
+import { createError, defineEventHandler, getRouterParam } from 'nitro/h3';
 
 import { mastra } from '../../../src/mastra';
 
@@ -12,7 +12,7 @@ export default defineEventHandler(async event => {
 
   const state = await mastra.getWorkflow('orderApprovalWorkflow').getWorkflowRunById(runId);
   if (!state) {
-    return { runId, status: 'not-found' };
+    throw createError({ statusCode: 404, statusMessage: `No run found for id "${runId}"` });
   }
 
   return {

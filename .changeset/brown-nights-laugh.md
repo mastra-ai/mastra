@@ -17,8 +17,16 @@ Then create workflows with `init()`:
 ```ts
 import { init } from '@mastra/workflow-sdk';
 import { mastraRunner } from '@mastra/workflow-sdk/workflows';
+import { z } from 'zod';
 
 const { createWorkflow, createStep } = init({ runner: mastraRunner });
+
+const increment = createStep({
+  id: 'increment',
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+  execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+});
 
 export const incrementWorkflow = createWorkflow({
   id: 'increment-workflow',

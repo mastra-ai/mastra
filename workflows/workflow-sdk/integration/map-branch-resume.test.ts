@@ -136,8 +136,8 @@ describe('map + branch resume across a rebuilt workflow', () => {
     expect(conditionSpy).not.toHaveBeenCalled();
 
     expect(resumedResult.status).toBe('success');
-    expect(resumedResult.steps['mb-nested-wf-with-suspend']!.status).toBe('success');
     if (resumedResult.status !== 'success') return;
+    expect(resumedResult.steps['mb-nested-wf-with-suspend']!.status).toBe('success');
     expect(resumedResult.result).toEqual({
       'mb-nested-wf-with-suspend': { result: 'processed: 20, answer: hello' },
     });

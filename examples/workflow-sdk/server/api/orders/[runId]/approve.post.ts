@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, readBody } from 'nitro/h3';
+import { createError, defineEventHandler, getRouterParam, readBody } from 'nitro/h3';
 
 import { mastra } from '../../../../src/mastra';
 
@@ -10,12 +10,15 @@ import { mastra } from '../../../../src/mastra';
  */
 export default defineEventHandler(async event => {
   const runId = getRouterParam(event, 'runId')!;
-  const body = (await readBody(event).catch(() => null)) as { approved?: boolean } | null;
+  const body = (await readBody(event).catch(() => null)) as { approved?: unknown } | null;
+  if (typeof body?.approved !== 'boolean') {
+    throw createError({ statusCode: 400, statusMessage: 'Body must include an explicit boolean "approved"' });
+  }
 
   const run = await mastra.getWorkflow('orderApprovalWorkflow').createRun({ runId });
   const result = await run.resume({
     step: 'approve-order',
-    resumeData: { approved: body?.approved ?? true },
+    resumeData: { approved: body.approved },
   });
 
   return {

@@ -691,8 +691,10 @@ export async function runMastraGraph(params: WalkerParams, effects: WalkerEffect
 
     let retryCount = 0;
     const parkKey = suspendToken(params.runId, stepId, foreachIndex);
+    // Hoisted outside the retry loop so a failed resumed invocation retries
+    // with the same payload instead of suspending again.
+    let resumeData: unknown = timeTravelResumeData;
     for (;;) {
-      let resumeData: unknown = timeTravelResumeData;
       let response = await invoke(op, inputData, step.id, scope, {
         retryCount,
         foreachIndex,
@@ -1228,9 +1230,11 @@ export async function runMastraGraph(params: WalkerParams, effects: WalkerEffect
   // Storage mirroring is best-effort — the event log is the source of truth for
   // execution — so a failure here must not turn a finished run into a failed
   // one. `persistSnapshot()` already swallows its own errors; this catch covers
-  // the step invocation around it.
+  // the step invocation around it. A journal divergence is a different class of
+  // fault, so the identity check happens outside the try and does throw.
+  let finalizeResponse: MastraOpResponse | undefined;
   try {
-    const response = await effects.runOp({
+    finalizeResponse = await effects.runOp({
       workflowId: params.workflowId,
       runId: params.runId,
       resourceId: params.resourceId,
@@ -1244,18 +1248,18 @@ export async function runMastraGraph(params: WalkerParams, effects: WalkerEffect
       state,
       initData,
       stepResults,
-      requestContext: params.requestContext ?? [],
+      requestContext: requestContextEntries,
       ...(params.tracingIds ? { tracingIds: params.tracingIds } : {}),
       ...(params.workflowSpanData ? { workflowSpanData: params.workflowSpanData } : {}),
     });
-    if (response.identity !== FINALIZE_IDENTITY) {
-      throw new Error(
-        `Workflow replay diverged: expected "${FINALIZE_IDENTITY}" at the end of the walk, ` +
-          `but the recorded result was for "${response.identity}".`,
-      );
-    }
   } catch {
     // Left to the event log; see above.
+  }
+  if (finalizeResponse && finalizeResponse.identity !== FINALIZE_IDENTITY) {
+    throw new Error(
+      `Workflow replay diverged: expected "${FINALIZE_IDENTITY}" at the end of the walk, ` +
+        `but the recorded result was for "${finalizeResponse.identity}".`,
+    );
   }
 
   // `state` and `steps` ride along so a client watching the stream can build a

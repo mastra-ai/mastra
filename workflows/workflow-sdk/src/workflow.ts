@@ -106,7 +106,9 @@ export class WorkflowSdkWorkflow<
   __registerMastra(mastra: Mastra): void {
     super.__registerMastra(mastra);
     registerWorkflow(this.#registryEntry());
-    for (const entry of this.executionGraph.steps) {
+    // An uncommitted workflow has no graph yet; `createRun()` rejects it later
+    // with a clearer error than a TypeError here would be.
+    for (const entry of this.executionGraph?.steps ?? []) {
       registerNested(entry, mastra);
     }
   }

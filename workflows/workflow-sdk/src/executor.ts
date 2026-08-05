@@ -2,10 +2,10 @@ import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback } from '@mastra/core/events';
+import type { Mastra } from '@mastra/core/mastra';
 import { EntityType, SpanType, createObservabilityContext, wrapMastra } from '@mastra/core/observability';
 import type { AnySpan, ExportedSpan } from '@mastra/core/observability';
 import { ToolStream } from '@mastra/core/tools';
-import type { Mastra } from '@mastra/core/mastra';
 import type {
   ExecutionGraph,
   SerializedStepFlowEntry,
@@ -135,17 +135,23 @@ function toSerializableChunk(value: unknown, seen = new WeakSet<object>()): unkn
     return undefined;
   }
   seen.add(value);
-  if (Array.isArray(value)) {
-    return value.map(item => toSerializableChunk(item, seen));
-  }
-  const plain: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    const converted = toSerializableChunk(entry, seen);
-    if (converted !== undefined || entry === undefined) {
-      plain[key] = converted;
+  try {
+    if (Array.isArray(value)) {
+      return value.map(item => toSerializableChunk(item, seen));
     }
+    const plain: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      const converted = toSerializableChunk(entry, seen);
+      if (converted !== undefined || entry === undefined) {
+        plain[key] = converted;
+      }
+    }
+    return plain;
+  } finally {
+    // Track only the current ancestor path so repeated (non-circular)
+    // references elsewhere in the chunk are still copied.
+    seen.delete(value);
   }
-  return plain;
 }
 
 /** Walks `executionGraph.steps` to the entry a {@link MastraOp} addresses. */
@@ -172,7 +178,11 @@ function resolveEntry(graph: ExecutionGraph, path: number[]): StepFlowEntry {
 }
 
 /** Returns the `Step` an op addresses, for the op kinds that target one. */
-function resolveStep(entry: StepFlowEntry, path: number[], mastra?: Mastra): Step<any, any, any, any, any, any, any, any> {
+function resolveStep(
+  entry: StepFlowEntry,
+  path: number[],
+  mastra?: Mastra,
+): Step<any, any, any, any, any, any, any, any> {
   const inner: SingleStepEntry | undefined =
     entry.type === 'step' || entry.type === 'agent' || entry.type === 'tool' || entry.type === 'mapping'
       ? entry
