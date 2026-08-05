@@ -132,10 +132,10 @@ describe('DeepEvalExporter', () => {
       tags: ['req-tag'],
     });
 
-    const traces = await run(
-      { threadId: 'config-thread', userId: 'config-user', tags: ['config-tag'] },
-      [started(agent), ended({ ...agent, endTime: new Date() })],
-    );
+    const traces = await run({ threadId: 'config-thread', userId: 'config-user', tags: ['config-tag'] }, [
+      started(agent),
+      ended({ ...agent, endTime: new Date() }),
+    ]);
 
     const trace = traces[0];
     expect(trace.threadId).toBe('thread-123');

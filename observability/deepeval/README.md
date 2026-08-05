@@ -67,17 +67,17 @@ const mastra = new Mastra({
 
 ### Configuration Options
 
-| Option                    | Type                     | Description                                                                    |
-| ------------------------- | ------------------------ | ------------------------------------------------------------------------------ |
-| `apiKey`                  | `string`                 | Confident AI API key. Defaults to the `CONFIDENT_API_KEY` env var              |
-| `environment`             | `string`                 | Trace environment. Defaults to `CONFIDENT_TRACE_ENVIRONMENT` or `development`  |
-| `name`                    | `string`                 | Trace name. Defaults to the Mastra `serviceName`                               |
-| `tags`                    | `string[]`               | Tags applied to every trace                                                    |
-| `metadata`                | `Record<string, any>`    | Metadata applied to every trace                                                |
-| `metricCollection`        | `string`                 | Trace-level metric collection                                                  |
-| `llmMetricCollection`     | `string`                 | Metric collection applied to LLM spans                                         |
-| `agentMetricCollection`   | `string`                 | Metric collection applied to agent spans                                       |
-| `toolMetricCollectionMap` | `Record<string, string>` | Metric collection applied per tool name                                        |
+| Option                    | Type                     | Description                                                                   |
+| ------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| `apiKey`                  | `string`                 | Confident AI API key. Defaults to the `CONFIDENT_API_KEY` env var             |
+| `environment`             | `string`                 | Trace environment. Defaults to `CONFIDENT_TRACE_ENVIRONMENT` or `development` |
+| `name`                    | `string`                 | Trace name. Defaults to the Mastra `serviceName`                              |
+| `tags`                    | `string[]`               | Tags applied to every trace                                                   |
+| `metadata`                | `Record<string, any>`    | Metadata applied to every trace                                               |
+| `metricCollection`        | `string`                 | Trace-level metric collection                                                 |
+| `llmMetricCollection`     | `string`                 | Metric collection applied to LLM spans                                        |
+| `agentMetricCollection`   | `string`                 | Metric collection applied to agent spans                                      |
+| `toolMetricCollectionMap` | `Record<string, string>` | Metric collection applied per tool name                                       |
 | `traceCaptureSink`        | `(trace) => void`        | Receives completed traces locally instead of posting (for offline evaluation) |
 
 ## Features
