@@ -15,6 +15,8 @@ The [`AgentController`](/reference/agent-controller/agent-controller-class) feat
 
 `AgentController` is a shared runtime host for interactive agent applications. It coordinates modes, models, storage, workspaces, tool approvals, subagents, and channels. Each user or active task works through an isolated [`Session`](/reference/agent-controller/session).
 
+[Mastra Code](https://code.mastra.ai) is the flagship AgentController implementation. It's a terminal-based coding agent with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](/guides/guide/coding-agent) for a step-by-step guide.
+
 ## Quickstart
 
 Create the backing [`Agent`](/reference/agents/agent), storage, and [`Workspace`](/reference/workspace/workspace-class). Call [`controller.init()`](/reference/agent-controller/agent-controller-class#init) once, then use [`controller.createSession()`](/reference/agent-controller/agent-controller-class#createsessionoptions) to create a Session. Subscribe with [`session.subscribe()`](/reference/agent-controller/session#subscribelistener) and send work with [`session.sendMessage()`](/reference/agent-controller/session#sendmessage-content-files-requestcontext-):
@@ -288,7 +290,7 @@ render(session.displayState.get())
 unsubscribe()
 ```
 
-Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](http://localhost:3000/guides/guide/coding-agent) guide for a complete TUI example.
+Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](/guides/guide/coding-agent) guide for a complete TUI example.
 
 ## Related
 
