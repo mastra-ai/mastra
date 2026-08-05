@@ -377,6 +377,38 @@ describe('vNext Workflow Handlers', () => {
 
       expect(result.steps['test-step'].status).toEqual('success');
     });
+
+    it('should return a client error when workflow input is invalid', async () => {
+      const step = createStep({
+        id: 'number-step',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async ({ inputData }) => inputData,
+      });
+      const workflow = createWorkflow({
+        id: 'number-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(step)
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        workflows: { 'number-workflow': workflow },
+        storage: new MockStore(),
+      });
+
+      await expect(
+        START_ASYNC_WORKFLOW_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workflowId: 'number-workflow',
+          inputData: { value: 'not-a-number' },
+        } as any),
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining('expected number'),
+      });
+    });
   });
 
   describe('GET_WORKFLOW_RUN_BY_ID_ROUTE', () => {
