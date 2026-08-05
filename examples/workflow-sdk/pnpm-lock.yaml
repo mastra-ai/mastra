@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@mastra/core': link:../../packages/core
+  '@mastra/libsql': link:../../stores/libsql
+  '@mastra/workflow-sdk': link:../../workflows/workflow-sdk
+
 importers:
 
   .:

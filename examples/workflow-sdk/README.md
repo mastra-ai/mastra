@@ -32,7 +32,13 @@ Then, from this directory:
 
 ```sh
 pnpm install
-pnpm dev
+ORDERS_API_TOKEN=dev-secret pnpm dev
+```
+
+All endpoints require `Authorization: Bearer $ORDERS_API_TOKEN`. This shared token is a minimal auth boundary for the example — anyone holding it can inspect and approve any run, so a production app should replace it with real authentication plus per-run ownership/approver checks.
+
+```sh
+export ORDERS_API_TOKEN=dev-secret
 ```
 
 ### Start an order
@@ -40,28 +46,28 @@ pnpm dev
 Low-risk orders complete immediately:
 
 ```sh
-curl -X POST --json '{"amount": 100}' http://localhost:3000/api/orders
+curl -X POST -H "Authorization: Bearer $ORDERS_API_TOKEN" --json '{"amount": 100}' http://localhost:3000/api/orders
 # { "runId": "...", "status": "success", "result": { "orderId": "...", "status": "fulfilled" } }
 ```
 
 High-risk orders suspend at `approve-order`:
 
 ```sh
-curl -X POST --json '{"amount": 700}' http://localhost:3000/api/orders
+curl -X POST -H "Authorization: Bearer $ORDERS_API_TOKEN" --json '{"amount": 700}' http://localhost:3000/api/orders
 # { "runId": "...", "status": "suspended", "suspended": { "reason": "..." }, "resumeWith": "POST /api/orders/<runId>/approve" }
 ```
 
 ### Inspect the run
 
 ```sh
-curl http://localhost:3000/api/orders/<runId>
+curl -H "Authorization: Bearer $ORDERS_API_TOKEN" http://localhost:3000/api/orders/<runId>
 # { "runId": "...", "status": "suspended", "steps": { "validate-order": "success", "approve-order": "suspended" } }
 ```
 
 ### Approve (or reject) it
 
 ```sh
-curl -X POST --json '{"approved": true}' http://localhost:3000/api/orders/<runId>/approve
+curl -X POST -H "Authorization: Bearer $ORDERS_API_TOKEN" --json '{"approved": true}' http://localhost:3000/api/orders/<runId>/approve
 # { "runId": "...", "status": "success", "result": { "orderId": "...", "status": "fulfilled" } }
 ```
 

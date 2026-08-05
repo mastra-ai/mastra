@@ -10,15 +10,22 @@
     "clean": "rm -rf .nitro .output node_modules mastra.db*"
   },
   "dependencies": {
-    "@mastra/core": "link:../../packages/core",
-    "@mastra/libsql": "link:../../stores/libsql",
-    "@mastra/workflow-sdk": "link:../../workflows/workflow-sdk",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/workflow-sdk": "latest",
     "nitro": "3.0.260610-beta",
     "workflow": "5.0.0-beta.36",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/workflow-sdk": "link:../../workflows/workflow-sdk"
+    }
   },
   "engines": {
     "node": ">=22.13.0"

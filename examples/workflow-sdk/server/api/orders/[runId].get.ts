@@ -1,6 +1,7 @@
 import { createError, defineEventHandler, getRouterParam } from 'nitro/h3';
 
 import { mastra } from '../../../src/mastra';
+import { requireApiToken } from '../../utils/require-api-token';
 
 /**
  * Inspect a run's status and step results.
@@ -8,6 +9,8 @@ import { mastra } from '../../../src/mastra';
  * GET /api/orders/:runId
  */
 export default defineEventHandler(async event => {
+  requireApiToken(event);
+
   const runId = getRouterParam(event, 'runId')!;
 
   const state = await mastra.getWorkflow('orderApprovalWorkflow').getWorkflowRunById(runId);
