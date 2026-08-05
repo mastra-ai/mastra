@@ -607,18 +607,10 @@ function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[
 
 /**
  * Reconcile the persisted newest-N window (oldest-first) with the timeline.
- *
- * Messages already on screen are anchors: they keep their position, their live
- * tool state, and their streaming flag, so a window landing mid-run never
- * clobbers what is being rendered. Messages the window has and the timeline does
- * not are inserted at the position the window gives them — before the next
- * anchor, or at the tail when they are newer than every anchor.
- *
- * Both directions matter. Growing the window (scroll-to-top) delivers older
- * history that belongs at the front; refetching the same window after the
- * transcript was rebuilt from a stale cache delivers everything the run produced
- * meanwhile, which belongs at the back. Only prepending would silently drop the
- * latter.
+ * On-screen messages are anchors — they keep their position, live tool state and
+ * streaming flag; the rest are inserted where the window puts them. Insertion
+ * runs both ways: load-more delivers older history, revalidation after a route
+ * revisit delivers everything the run produced meanwhile.
  */
 function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   if (messages.length === 0) return state;

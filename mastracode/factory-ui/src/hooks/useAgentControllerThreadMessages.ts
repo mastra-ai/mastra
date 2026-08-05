@@ -73,10 +73,8 @@ export function useAgentControllerThreadMessages({
     queryFn: () => session!.listMessages(threadId!, limit),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
-    // A thread the agent is still writing to is stale the moment it is read, and
-    // the live stream only reaches a mounted transcript — leaving the route and
-    // coming back must re-read the window rather than serve whatever was cached
-    // when the thread was first opened.
+    // Live stream only reaches a mounted transcript — re-entering the route must
+    // re-read the window, not serve the snapshot from when it was first opened.
     staleTime: 0,
     refetchOnMount: 'always',
     // Growing the limit changes the query key, which would otherwise flip the

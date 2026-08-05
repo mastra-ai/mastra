@@ -497,9 +497,6 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('appends messages the run produced while the transcript was unmounted', () => {
-    // Leaving the thread route drops the live stream, so a transcript rebuilt
-    // from the cached window only holds the kickoff. Revalidating returns
-    // everything the agent wrote meanwhile — all of it newer than the anchor.
     const onScreen = createInitialTranscript({
       messages: [dbMessage('kickoff', 'user', [{ type: 'text', text: 'review this PR' }])],
     });

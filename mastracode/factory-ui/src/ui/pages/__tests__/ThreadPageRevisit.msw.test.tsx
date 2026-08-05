@@ -1,12 +1,3 @@
-/**
- * Regression coverage for re-entering a thread route.
- *
- * The transcript is React state under the thread route, and the live stream is
- * subscribed from the same subtree — leaving for the board tears both down, so
- * everything the run produced meanwhile exists only on the server. Coming back
- * must revalidate the message window and show the full conversation, not the
- * snapshot that was cached when the thread was first opened.
- */
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

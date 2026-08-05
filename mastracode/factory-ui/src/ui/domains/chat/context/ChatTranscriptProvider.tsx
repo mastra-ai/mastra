@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useEffect, useReducer } from 'react';
+import { useEffect, useEffectEvent, useReducer } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
@@ -34,16 +34,13 @@ export function ChatTranscriptProvider({
     dispatchRuntime(event);
   };
 
-  // Every result of the history query — the mount seed, a grown window from
-  // load-more, a revalidation after the route was re-entered — is folded in by
-  // id. The merge is idempotent, so replaying the seed costs nothing and a
-  // window carrying messages the transcript missed lands in the right place.
-  const { mergeWindow } = transcriptApi;
+  // Merge is by id and idempotent — mount seed, grown load-more window and
+  // post-navigation revalidation all fold in through the same path.
+  const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0) {
       mergeWindow(initialMessages);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMessages]);
 
   const loadMore: LoadMoreHistory = {
