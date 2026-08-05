@@ -877,32 +877,32 @@
     },
     {
       "source": "/docs/harness/modes",
-      "destination": "/docs/agent-controller/modes",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview",
-      "destination": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/session",
-      "destination": "/docs/agent-controller/session",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents",
-      "destination": "/docs/agent-controller/subagents",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state",
-      "destination": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals",
-      "destination": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
@@ -1158,6 +1158,41 @@
     {
       "source": "/docs/observability/storage",
       "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/session",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/modes",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/subagents",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/channels",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
@@ -1767,32 +1802,32 @@
     },
     {
       "source": "/docs/harness/modes/llms.txt",
-      "destination": "/docs/agent-controller/modes/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview/llms.txt",
-      "destination": "/docs/agent-controller/overview/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/session/llms.txt",
-      "destination": "/docs/agent-controller/session/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents/llms.txt",
-      "destination": "/docs/agent-controller/subagents/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state/llms.txt",
-      "destination": "/docs/agent-controller/threads-and-state/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals/llms.txt",
-      "destination": "/docs/agent-controller/tool-approvals/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
@@ -1963,6 +1998,41 @@
     {
       "source": "/docs/observability/storage/llms.txt",
       "destination": "/docs/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/overview/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/session/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/modes/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/threads-and-state/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/subagents/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/tool-approvals/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/channels/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     }
   ]
