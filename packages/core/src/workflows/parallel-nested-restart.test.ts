@@ -258,6 +258,10 @@ describe('parallel nested workflow restart recovery (issue #20225)', () => {
             status: 'success',
             output: { done: true },
             endedAt: Date.now(),
+            // Internal bookkeeping that fmtReturnValue strips from live results —
+            // the reconstructed terminal result must strip it too.
+            __state: { internal: true },
+            metadata: { nestedRunId: 'internal-nested-run-id', userField: 'kept' },
           },
         },
         serializedStepGraph: (workflow as any).serializedStepGraph,
@@ -274,5 +278,10 @@ describe('parallel nested workflow restart recovery (issue #20225)', () => {
     expect(result.status).toBe('success');
     expect(result).toMatchObject({ status: 'success', result: { done: true } });
     expect(mockStep).toHaveBeenCalledTimes(0);
+
+    // Reconstructed steps must strip internal bookkeeping, matching fmtReturnValue.
+    const doneStep = result.steps['done-step'] as Record<string, unknown>;
+    expect(doneStep).not.toHaveProperty('__state');
+    expect(doneStep.metadata).toEqual({ userField: 'kept' });
   });
 });

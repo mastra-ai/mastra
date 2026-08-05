@@ -4240,7 +4240,12 @@ export class Run<
       this.cleanup?.();
       // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
       // is also surfaced as a top-level field on the returned WorkflowResult.
-      const steps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
+      const hydratedSteps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
+      // Strip internal bookkeeping (__state, metadata.nestedRunId) from step results so the
+      // reconstructed result matches what a live run would have returned via fmtReturnValue.
+      const steps = Object.fromEntries(
+        Object.entries(hydratedSteps).map(([stepId, stepResult]) => [stepId, cleanStepResult(stepResult)]),
+      ) as typeof hydratedSteps;
       const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
       const base = {
         steps,
