@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'build-with-ai', label: 'Build with AI' },
     { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
@@ -110,6 +111,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/auth0', label: 'Auth0' },
         { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
+        { type: 'doc', id: 'auth/fga', label: 'Fine-Grained Authorization' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/google', label: 'Google' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
@@ -125,6 +127,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
         { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
+        { type: 'doc', id: 'browser/firecrawl-browser', label: 'FirecrawlBrowser' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],
@@ -152,7 +155,6 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'client-js/agent-builder', label: 'Agent Builder API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
@@ -197,6 +199,22 @@ const sidebars = {
         { type: 'doc', id: 'core/mastra-class', label: 'Mastra Class' },
         { type: 'doc', id: 'core/mastra-model-gateway', label: 'MastraModelGateway' },
         { type: 'doc', id: 'core/addGateway', label: '.addGateway()' },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflow',
+          label: '.addStoredWorkflow()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflows',
+          label: '.addStoredWorkflows()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
@@ -250,25 +268,10 @@ const sidebars = {
         { type: 'doc', id: 'editor/blob-store-provider', label: 'BlobStoreProvider' },
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/processor-provider', label: 'ProcessorProvider' },
+        { type: 'doc', id: 'editor/prompt-blocks', label: 'Prompt blocks' },
+        { type: 'doc', id: 'editor/tools', label: 'Tool configuration' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
-        {
-          type: 'category',
-          label: 'Agent Builder',
-          collapsed: true,
-          items: [
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/agent-builder-options',
-              label: 'AgentBuilderOptions',
-            },
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/builder-agent-defaults',
-              label: 'BuilderAgentDefaults',
-            },
-            { type: 'doc', id: 'editor/agent-builder/builder-models', label: 'Models default' },
-          ],
-        },
+        { type: 'doc', id: 'editor/versioning', label: 'Versioning' },
         {
           type: 'category',
           label: 'Browser',
@@ -311,6 +314,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/completeness', label: 'Completeness' },
             { type: 'doc', id: 'evals/content-similarity', label: 'Content Similarity Scorer' },
             { type: 'doc', id: 'evals/context-precision', label: 'Context Precision Scorer' },
+            { type: 'doc', id: 'evals/context-recall', label: 'Context Recall Scorer' },
             { type: 'doc', id: 'evals/context-relevance', label: 'Context Relevance Scorer' },
             { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
             { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },
@@ -318,6 +322,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
             { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
+            { type: 'doc', id: 'evals/summarization', label: 'Summarization Scorer' },
             { type: 'doc', id: 'evals/textual-difference', label: 'Textual Difference Scorer' },
             { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
             { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
@@ -469,6 +474,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
                   label: 'CloudExporter (deprecated)',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/confident-ai',
+                  label: 'Confident AI',
                 },
                 {
                   type: 'doc',
@@ -668,6 +678,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'streaming/ChunkType', label: 'ChunkType' },
+        { type: 'doc', id: 'streaming/smoothStream', label: 'smoothStream()' },
         {
           type: 'category',
           label: 'Agents',
@@ -717,6 +728,12 @@ const sidebars = {
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
+        {
+          type: 'doc',
+          id: 'tools/isolated-vm-transport',
+          label: 'IsolatedVmCodeModeTransport',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
@@ -791,17 +808,32 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Workers',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'workers/overview', label: 'Overview' }],
+    },
+    {
+      type: 'category',
       label: 'Workflows',
       collapsed: true,
       items: [
         { type: 'doc', id: 'workflows/run', label: 'Run Class' },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
+        {
+          type: 'doc',
+          id: 'workflows/stored-workflow-definition',
+          label: 'Stored Workflow Definition',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
         { type: 'doc', id: 'workflows/workflow-state-reader', label: 'Workflow State Reader' },
         {
           type: 'category',
           label: 'Methods',
           items: [
+            { type: 'doc', id: 'workflows/workflow-methods/agent', label: '.agent()' },
             { type: 'doc', id: 'workflows/workflow-methods/branch', label: '.branch()' },
             { type: 'doc', id: 'workflows/workflow-methods/commit', label: '.commit()' },
             { type: 'doc', id: 'workflows/workflow-methods/create-run', label: '.createRun()' },
@@ -813,6 +845,7 @@ const sidebars = {
             { type: 'doc', id: 'workflows/workflow-methods/sleep', label: '.sleep()' },
             { type: 'doc', id: 'workflows/workflow-methods/sleepUntil', label: '.sleepUntil()' },
             { type: 'doc', id: 'workflows/workflow-methods/then', label: '.then()' },
+            { type: 'doc', id: 'workflows/workflow-methods/tool', label: '.tool()' },
           ],
         },
         {
@@ -854,6 +887,8 @@ const sidebars = {
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/mesa-filesystem', label: 'MesaFilesystem' },
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
+        { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },
+        { type: 'doc', id: 'workspace/platform-sandbox', label: 'PlatformSandbox' },
         { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },

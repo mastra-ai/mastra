@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "test": "vitest run",
-    "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
+    "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --ignoreConfig --types node --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
     "dev": "mastra dev"
   },
   "dependencies": {
@@ -48,7 +48,7 @@
     "next": "^16.2.10",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
 }

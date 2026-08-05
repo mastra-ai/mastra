@@ -1913,11 +1913,11 @@ describe('BlaxelSandbox Shared Conformance', () => {
   createMountOperationsTests(getContext);
 });
 
-describe('BlaxelSandbox.derive', () => {
+describe('BlaxelSandbox.clone', () => {
   it('constructs an unstarted sibling without any I/O', () => {
     const template = new BlaxelSandbox({ image: 'blaxel/base', memory: 4096 });
 
-    const child = template.derive({ id: 'mc-project-1' });
+    const child = template.clone({ id: 'mc-project-1' });
 
     expect(child).toBeInstanceOf(BlaxelSandbox);
     expect(child).not.toBe(template);
@@ -1928,7 +1928,7 @@ describe('BlaxelSandbox.derive', () => {
   it('inherits template config and applies env override', () => {
     const template = new BlaxelSandbox({ image: 'blaxel/base', memory: 4096, env: { BASE: '1' } });
 
-    const child = template.derive({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
 
     expect(child['_constructorOptions']).toMatchObject({
       image: 'blaxel/base',
@@ -1940,7 +1940,7 @@ describe('BlaxelSandbox.derive', () => {
   it('maps idleTimeoutMinutes to a Blaxel TTL duration string', () => {
     const template = new BlaxelSandbox({ image: 'blaxel/base', timeout: '5m' });
 
-    const child = template.derive({ idleTimeoutMinutes: 15 });
+    const child = template.clone({ idleTimeoutMinutes: 15 });
 
     expect(child['_constructorOptions']).toMatchObject({ timeout: '15m' });
   });
@@ -1948,7 +1948,7 @@ describe('BlaxelSandbox.derive', () => {
   it('inherits template defaults when no overrides are passed', () => {
     const template = new BlaxelSandbox({ image: 'blaxel/base', timeout: '5m', env: { BASE: '1' } });
 
-    const child = template.derive();
+    const child = template.clone();
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ image: 'blaxel/base', timeout: '5m', env: { BASE: '1' } });

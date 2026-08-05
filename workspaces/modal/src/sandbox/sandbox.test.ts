@@ -559,11 +559,11 @@ describe('ModalSandbox.retryOnDead()', () => {
   });
 });
 
-describe('ModalSandbox.derive', () => {
+describe('ModalSandbox.clone', () => {
   it('constructs an unstarted sibling without any I/O', () => {
     const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra' });
 
-    const child = template.derive({ id: 'mc-project-1' });
+    const child = template.clone({ id: 'mc-project-1' });
 
     expect(child).toBeInstanceOf(ModalSandbox);
     expect(child).not.toBe(template);
@@ -575,7 +575,7 @@ describe('ModalSandbox.derive', () => {
   it('inherits template config and applies env override', () => {
     const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra', env: { BASE: '1' } });
 
-    const child = template.derive({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
 
     expect(child['_constructorOptions']).toMatchObject({
       tokenId: 'tid',
@@ -588,7 +588,7 @@ describe('ModalSandbox.derive', () => {
   it('maps idleTimeoutMinutes to timeoutMs', () => {
     const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000 });
 
-    const child = template.derive({ idleTimeoutMinutes: 15 });
+    const child = template.clone({ idleTimeoutMinutes: 15 });
 
     expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
   });
@@ -596,7 +596,7 @@ describe('ModalSandbox.derive', () => {
   it('inherits template defaults when no overrides are passed', () => {
     const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000, env: { BASE: '1' } });
 
-    const child = template.derive();
+    const child = template.clone();
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ tokenId: 'tid', timeoutMs: 120_000, env: { BASE: '1' } });

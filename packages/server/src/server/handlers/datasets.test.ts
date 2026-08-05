@@ -8,7 +8,9 @@ import {
   DELETE_DATASET_ROUTE,
   GET_DATASET_ROUTE,
   GET_ITEM_ROUTE,
+  GET_ITEM_VERSION_ROUTE,
   LIST_DATASETS_ROUTE,
+  LIST_ITEM_VERSIONS_ROUTE,
   UPDATE_DATASET_ROUTE,
   UPDATE_ITEM_ROUTE,
 } from './datasets';
@@ -348,6 +350,87 @@ describe('Datasets Handlers', () => {
       expect((error as HTTPException).cause).toEqual({ field: 'externalId' });
     });
 
+    it('maps circular dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Circular Payload DS' });
+      const input: Record<string, unknown> = { q: 'cyclic' };
+      input.self = input;
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input,
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('items[0].input.self references items[0].input');
+    });
+
+    it('maps lossy dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Lossy Payload DS' });
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'lossy', extra: undefined },
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('undefined value at items[0].input.extra');
+    });
+
+    it('persists caller request context entries instead of the live server RequestContext', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Request Context DS' });
+
+      // Adapters merge the body's requestContext entries into the live server
+      // RequestContext and pass that instance to the handler in place of the
+      // body field. The handler must recover the caller entries (reserved
+      // mastra__* keys excluded) rather than persisting the live instance.
+      const serverContext = createTestServerContext({ mastra });
+      serverContext.requestContext.set('locale', 'fr-FR');
+      serverContext.requestContext.set('mastra__authMode', 'server');
+
+      const added = await ADD_ITEM_ROUTE.handler({
+        ...serverContext,
+        datasetId: dataset.id,
+        input: { q: 'ctx' },
+      } as any);
+
+      expect(added.requestContext).toEqual({ locale: 'fr-FR' });
+
+      // An empty live RequestContext must not persist an empty object.
+      const bare = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'no-ctx' },
+      } as any);
+      expect(bare.requestContext).toBeUndefined();
+    });
+
+    it('maps non-plain-object dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Non-Plain Payload DS' });
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'date', createdAt: new Date('2026-01-01T00:00:00Z') },
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('non-plain object (Date) at items[0].input.createdAt');
+    });
+
     it('maps incompatible externalId reuse in a batch to HTTP 409', async () => {
       const dataset = await mastra.datasets.create({ name: 'Batch Conflict DS' });
       await BATCH_INSERT_ITEMS_ROUTE.handler({
@@ -390,7 +473,7 @@ describe('Datasets Handlers', () => {
   });
 
   describe('item tool mocks', () => {
-    it('round-trips toolMocks through add, get, and update', async () => {
+    it('round-trips toolMocks and unmockedToolPolicy through add, get, and update', async () => {
       const dataset = await mastra.datasets.create({ name: 'Mocks DS' });
       const toolMocks = [
         { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
@@ -402,9 +485,11 @@ describe('Datasets Handlers', () => {
         datasetId: dataset.id,
         input: { q: 'weather' },
         toolMocks,
+        unmockedToolPolicy: 'deny',
       } as any)) as any;
 
       expect(added.toolMocks).toEqual(toolMocks);
+      expect(added.unmockedToolPolicy).toBe('deny');
 
       const fetched = (await GET_ITEM_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -413,8 +498,9 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
 
       expect(fetched.toolMocks).toEqual(toolMocks);
+      expect(fetched.unmockedToolPolicy).toBe('deny');
 
-      // SCD-2: updating an unrelated field preserves toolMocks
+      // SCD-2: updating an unrelated field preserves tool mock settings
       const updated = (await UPDATE_ITEM_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         datasetId: dataset.id,
@@ -423,6 +509,122 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
 
       expect(updated.toolMocks).toEqual(toolMocks);
+      expect(updated.unmockedToolPolicy).toBe('deny');
+
+      const replaced = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        unmockedToolPolicy: 'allow',
+      } as any)) as any;
+
+      expect(replaced.unmockedToolPolicy).toBe('allow');
+    });
+
+    it('forwards unmockedToolPolicy through batch insertion', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Batch Policy DS' });
+
+      const batch = (await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ input: { q: 'strict' }, unmockedToolPolicy: 'deny' }, { input: { q: 'default' } }],
+      } as any)) as any;
+
+      expect(batch.items[0]?.unmockedToolPolicy).toBe('deny');
+      expect(batch.items[1]?.unmockedToolPolicy).toBeUndefined();
+
+      const fetched = (await GET_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: batch.items[0].id,
+      } as any)) as any;
+
+      expect(fetched.unmockedToolPolicy).toBe('deny');
+    });
+  });
+
+  describe('item scorer IDs', () => {
+    it('round-trips scorerIds through single, batch, update, and version routes', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Scorer IDs DS' });
+      const added = (await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'score me' },
+        scorerIds: ['quality', 'safety'],
+      } as any)) as any;
+      expect(added.scorerIds).toEqual(['quality', 'safety']);
+
+      const fetched = (await GET_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+      } as any)) as any;
+      expect(fetched.scorerIds).toEqual(['quality', 'safety']);
+
+      const preserved = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        input: { q: 'updated' },
+      } as any)) as any;
+      expect(preserved.scorerIds).toEqual(['quality', 'safety']);
+
+      const replaced = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        scorerIds: ['relevance'],
+      } as any)) as any;
+      expect(replaced.scorerIds).toEqual(['relevance']);
+
+      const disabled = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        scorerIds: [],
+      } as any)) as any;
+      expect(disabled.scorerIds).toEqual([]);
+
+      const cleared = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        scorerIds: null,
+      } as any)) as any;
+      expect(cleared.scorerIds).toBeUndefined();
+
+      const history = (await LIST_ITEM_VERSIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+      } as any)) as any;
+      expect(history.history.find((row: any) => row.datasetVersion === 1)?.scorerIds).toEqual(['quality', 'safety']);
+      expect(history.history.find((row: any) => row.datasetVersion === 2)?.scorerIds).toEqual(['quality', 'safety']);
+      expect(history.history.find((row: any) => row.datasetVersion === 3)?.scorerIds).toEqual(['relevance']);
+      expect(history.history.find((row: any) => row.datasetVersion === 4)?.scorerIds).toEqual([]);
+      expect(history.history.find((row: any) => row.datasetVersion === 5)?.scorerIds).toBeUndefined();
+
+      const versionOne = (await GET_ITEM_VERSION_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        datasetVersion: 1,
+      } as any)) as any;
+      expect(versionOne.scorerIds).toEqual(['quality', 'safety']);
+
+      const batch = (await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [
+          { input: { q: 'selected' }, scorerIds: ['quality'] },
+          { input: { q: 'disabled' }, scorerIds: [] },
+          { input: { q: 'inherited' } },
+        ],
+      } as any)) as any;
+      const byInput = new Map(batch.items.map((item: any) => [item.input.q, item]));
+      expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
+      expect(byInput.get('disabled')?.scorerIds).toEqual([]);
+      expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
     });
   });
 });

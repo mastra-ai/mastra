@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
+import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
   getCustomProviderId,
@@ -92,6 +93,98 @@ const builtinPacks = [
     },
   },
 ];
+
+describe('explicit OM configuration', () => {
+  it('reports untouched settings as unconfigured', () => {
+    expect(hasExplicitOMConfiguration(createSettings())).toBe(false);
+  });
+
+  it.each([
+    [
+      'onboarding pack',
+      (settings: GlobalSettings) => {
+        settings.onboarding.omPackId = 'anthropic';
+      },
+    ],
+    [
+      'active pack',
+      (settings: GlobalSettings) => {
+        settings.models.activeOmPackId = 'openai';
+      },
+    ],
+    [
+      'shared model override',
+      (settings: GlobalSettings) => {
+        settings.models.omModelOverride = 'custom/shared';
+      },
+    ],
+    [
+      'observer override',
+      (settings: GlobalSettings) => {
+        settings.models.observerModelOverride = 'custom/observer';
+      },
+    ],
+    [
+      'reflector override',
+      (settings: GlobalSettings) => {
+        settings.models.reflectorModelOverride = 'custom/reflector';
+      },
+    ],
+  ])('treats a persisted %s as explicit configuration', (_name, configure) => {
+    const settings = createSettings();
+    configure(settings);
+    expect(hasExplicitOMConfiguration(settings)).toBe(true);
+  });
+
+  it('ignores a custom pack that carries no model', () => {
+    const settings = createSettings();
+    settings.onboarding.omPackId = 'custom';
+    settings.models.activeOmPackId = 'custom';
+
+    expect(hasExplicitOMConfiguration(settings)).toBe(false);
+  });
+
+  it('treats a custom pack with a model as explicit configuration', () => {
+    const settings = createSettings();
+    settings.onboarding.omPackId = 'custom';
+    settings.models.activeOmPackId = 'custom';
+    settings.models.omModelOverride = 'xai/grok-4.5';
+
+    expect(hasExplicitOMConfiguration(settings)).toBe(true);
+  });
+
+  it('applies a provider default while OM is untouched', () => {
+    const settings = createSettings();
+    const pack = {
+      id: 'openai',
+      name: 'OpenAI Mini',
+      description: 'Via Codex subscription',
+      modelId: 'openai/gpt-5.4-mini',
+    };
+
+    expect(applyOMDefaultIfUnconfigured(settings, pack)).toBe(true);
+    expect(settings.onboarding.omPackId).toBe('openai');
+    expect(settings.models.activeOmPackId).toBe('openai');
+    expect(settings.models.omModelOverride).toBeNull();
+  });
+
+  it('does not overwrite an explicit role model', () => {
+    const settings = createSettings();
+    settings.models.observerModelOverride = 'custom/observer';
+
+    expect(
+      applyOMDefaultIfUnconfigured(settings, {
+        id: 'anthropic',
+        name: 'Claude Haiku',
+        description: 'Via Max subscription',
+        modelId: 'anthropic/claude-haiku-4-5',
+      }),
+    ).toBe(false);
+    expect(settings.onboarding.omPackId).toBeNull();
+    expect(settings.models.activeOmPackId).toBeNull();
+    expect(settings.models.observerModelOverride).toBe('custom/observer');
+  });
+});
 
 function withTempSettingsFile(run: (filePath: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'mastracode-settings-'));

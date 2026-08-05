@@ -29,7 +29,7 @@ import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import type { SandboxDeriveOptions } from './sandbox';
+import type { SandboxCloneOptions } from './sandbox';
 import type { SandboxInfo } from './types';
 
 // =============================================================================
@@ -206,23 +206,23 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
-  // Derivation
+  // Cloning
   // ---------------------------------------------------------------------------
 
   /**
    * Construct a sibling `LocalSandbox` that inherits this sandbox's
-   * configuration (working directory, isolation, native sandbox config,
-   * instructions) with per-instance overrides.
+   * configuration (isolation, native sandbox config, instructions) with
+   * per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox creates its working directory on its
+   * Performs no I/O — the sandbox clone creates its working directory on its
    * own `start()`. `sandboxId` and `idleTimeoutMinutes` have no local
    * equivalent and are ignored: local sandboxes reattach by logical `id` and
    * have no provider-managed idle teardown.
    */
-  derive(options: SandboxDeriveOptions = {}): LocalSandbox {
+  clone(options: SandboxCloneOptions = {}): LocalSandbox {
     return new LocalSandbox({
       ...(options.id !== undefined && { id: options.id }),
-      workingDirectory: this.workingDirectory,
+      workingDirectory: options.workingDirectory ?? this.workingDirectory,
       env: options.env ?? this.env,
       isolation: this.isolation,
       nativeSandbox: {
