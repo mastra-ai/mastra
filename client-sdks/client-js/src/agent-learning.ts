@@ -1,5 +1,14 @@
 export type TraceSignalName = 'goal' | 'sentiment' | 'behavior' | 'outcome';
 
+export type EntityLearningProgressStatus = 'collecting' | 'processing' | 'ready';
+
+export interface EntityLearningProgressResponse {
+  status: EntityLearningProgressStatus;
+  traceCount: number;
+  signals: Record<TraceSignalName, { generated: number; embedded: number }>;
+  availableSignals: TraceSignalName[];
+}
+
 export interface ThemeLearningEntity {
   entityId: string;
   entityType: string;
@@ -14,6 +23,8 @@ export interface ThemeSnapshot {
   snapshotId: string;
   ordinal: number;
   total: number;
+  /** When this snapshot became the current cross-signal state. Drives time-axis placement. */
+  cutoffAt?: string;
   startedAt: string;
   endedAt: string;
   traceCount: number;
@@ -54,9 +65,12 @@ export interface ThemeFlowResponse {
   }>;
 }
 
+export type ThemeSnapshotLandmarkReason = 'range_start' | 'range_end' | 'time_sample';
+
 export interface ThemeSnapshotsResponse {
-  snapshots: Array<ThemeSnapshot & { availableSignals: TraceSignalName[] }>;
+  snapshots: Array<ThemeSnapshot & { availableSignals: TraceSignalName[]; reason?: ThemeSnapshotLandmarkReason }>;
   nextCursor?: string;
+  totalSnapshots?: number;
 }
 
 export interface ThemeEntitiesResponse {
@@ -163,4 +177,22 @@ export interface NoiseResponse {
     traceCount: number;
     coverage: number;
   };
+}
+
+export interface TraceInsightSummary {
+  version: string;
+  summary: string;
+  observations: string[];
+  currentTask?: string;
+  degenerate?: boolean;
+  createdAt: string;
+}
+
+export interface TraceInsightResponse {
+  traceId: string;
+  summary?: TraceInsightSummary;
+  signals: Array<{
+    signalName: TraceSignalName;
+    signalText: string;
+  }>;
 }

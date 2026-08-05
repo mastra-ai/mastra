@@ -112,7 +112,7 @@ Open [Studio](/docs/studio/overview), select **Coding Agent**, and enter:
 Inspect project-notes.md and report the project name, status, and owner. Do not modify files.
 ```
 
-The response should identify the Acme support portal, its development status, and the Platform team without changing the file. Model wording may vary.
+The response should identify the Acme support portal and describe its development status. It should report that the Platform team owns the project and leave the file unchanged. Model wording may vary.
 
 ## Create the agent controller
 
@@ -157,13 +157,13 @@ export async function createCodingAgentSession() {
 }
 ```
 
-This example uses one mode and disables the controller's additional built-in tools so the introductory UI can focus on workspace execution. This is a tutorial simplification, not a production recommendation. In a production application, enable the built-in tools your product needs and implement their UI flows: interactive tools such as `ask_user` and `submit_plan` suspend until your interface resumes them, while task and subagent tools have their own lifecycle events. See [tool approvals and suspensions](/docs/agent-controller/tool-approvals).
+This example uses one mode and disables the controller's additional built-in tools so the introductory UI can focus on workspace execution. The simplified setup is intended for this tutorial. In a production application, enable the built-in tools your product needs and implement their UI flows: interactive tools such as `ask_user` and `submit_plan` suspend until your interface resumes them, while task and subagent tools have their own lifecycle events. See [tool approvals and suspensions](/docs/harness/agent-controller#approve-tools-and-resume-suspensions).
 
 The example also omits storage, so the conversation lasts only for the current process. You can add storage later when you want to resume sessions.
 
 ## Build the terminal UI
 
-Create `src/coding-agent-tui.ts`. The UI renders assistant message updates, shows tool activity, and asks the user to approve or decline each workspace tool call.
+Create `src/coding-agent-tui.ts`. The UI renders assistant message updates and shows tool activity. It also asks the user to approve or decline each workspace tool call.
 
 ```typescript title="src/coding-agent-tui.ts"
 import { pathToFileURL } from 'node:url'
@@ -300,7 +300,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 ```
 
-The optional `Terminal` parameter supports automated tests while using `ProcessTerminal` during normal execution. The UI intentionally renders only the latest response; the `Session` still maintains the conversation context for follow-up prompts.
+The optional `Terminal` parameter supports automated tests while using `ProcessTerminal` during normal execution. The UI intentionally renders only the latest response. The `Session` still maintains the conversation context for follow-up prompts.
 
 ## Run the coding agent
 
@@ -333,6 +333,6 @@ Learn more:
 
 - [`createCodingAgent()` reference](/reference/coding-agent/create-coding-agent)
 - [`buildBasePrompt()` reference](/reference/coding-agent/build-base-prompt)
-- [AgentController overview](/docs/agent-controller/overview)
+- [AgentController overview](/docs/harness/agent-controller)
 - [`AgentController` reference](/reference/agent-controller/agent-controller-class)
 - [Workspace overview](/docs/workspace/overview)

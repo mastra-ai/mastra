@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { renderMarkdown } from '../../src/web/ui/ui/Markdown.js';
+import { renderMarkdown } from '../../../factory-ui/src/ui/ui/Markdown.js';
 
 // Agent output is rendered as markdown via dangerouslySetInnerHTML, and it can
 // contain attacker-influenced text (file contents, tool output, fetched pages).
@@ -66,7 +66,7 @@ describe('markdown sanitization', () => {
         }
       },
     }));
-    const { renderMarkdown: render } = await import('../../src/web/ui/ui/Markdown.js');
+    const { renderMarkdown: render } = await import('../../../factory-ui/src/ui/ui/Markdown.js');
     const html = render('<img src=x onerror=alert(1)>');
     expect(html).not.toMatch(/<img[^>]*onerror/i);
     expect(html).toContain('&lt;img');

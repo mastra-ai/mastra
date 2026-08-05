@@ -11,10 +11,15 @@ export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
+  'issueEdited',
+  'issueCommentCreated',
+  'issueCommentEdited',
+  'issueCommentDeleted',
   'pullRequestOpened',
   'pullRequestUpdated',
   'pullRequestReviewRequested',
   'pullRequestMerged',
+  'pullRequestClosed',
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
@@ -96,7 +101,17 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   deliveryId: string;
   factory: { createdAt: string };
   repository: { id: number; fullName: string };
-  issue?: { number: number; title: string; url: string; createdAt?: string };
+  issue?: { number: number; title: string; url: string; createdAt?: string; updatedAt?: string };
+  issueChange?: { title: boolean; body: boolean };
+  issueComment?: {
+    id: number;
+    body?: string;
+    url?: string;
+    author?: string;
+    authorType?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  };
   pullRequest?: {
     number: number;
     title: string;
@@ -196,6 +211,12 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
   type: 'transition';
   board: FactoryRuleBoard;
   stage: FactoryRuleStage;
+  /**
+   * Delivered to the item's active session (waking it if idle) after the
+   * transition commits. Skipped when the item has no active run binding, so
+   * informational messages never fail the transition.
+   */
+  message?: { text: string; role?: string };
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {

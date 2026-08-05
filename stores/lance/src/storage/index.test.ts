@@ -1,7 +1,13 @@
 import fs from 'node:fs/promises';
-import { createTestSuite, createClientAcceptanceTests, createDomainDirectTests } from '@internal/storage-test-utils';
+import {
+  createTestSuite,
+  createClientAcceptanceTests,
+  createDomainDirectTests,
+  createSampleMessageV2,
+} from '@internal/storage-test-utils';
 import { connect } from '@lancedb/lancedb';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { TABLE_RESOURCES } from '@mastra/core/storage';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StoreMemoryLance } from './domains/memory';
 import { StoreScoresLance } from './domains/scores';
@@ -31,6 +37,78 @@ createDomainDirectTests({
   createMemoryDomain: () => new StoreMemoryLance({ client: testClient }),
   createWorkflowsDomain: () => new StoreWorkflowsLance({ client: testClient }),
   createScoresDomain: () => new StoreScoresLance({ client: testClient }),
+});
+
+describe('StoreMemoryLance write integrity', () => {
+  const memory = new StoreMemoryLance({ client: testClient });
+
+  beforeEach(async () => {
+    await memory.init();
+    await memory.dangerouslyClearAll();
+  });
+
+  it('rejects a mixed batch when any parent thread is missing before saving messages', async () => {
+    const existingThread = {
+      id: 'existing-parent-thread',
+      resourceId: 'resource-1',
+      title: 'Existing thread',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await memory.saveThread({ thread: existingThread });
+
+    const messages = [
+      createSampleMessageV2({ threadId: existingThread.id, resourceId: existingThread.resourceId }),
+      createSampleMessageV2({ threadId: 'missing-parent-thread', resourceId: 'resource-2' }),
+    ];
+
+    await expect(memory.saveMessages({ messages })).rejects.toThrow(
+      'parent thread missing-parent-thread does not exist',
+    );
+    await expect(memory.listMessages({ threadId: existingThread.id })).resolves.toMatchObject({ messages: [] });
+    await expect(memory.listMessages({ threadId: 'missing-parent-thread' })).resolves.toMatchObject({ messages: [] });
+  });
+
+  it('retries a resource update when the matched row disappears', async () => {
+    const resource = {
+      id: 'concurrently-deleted-resource',
+      workingMemory: 'Before deletion',
+      metadata: { original: true },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await memory.saveResource({ resource });
+
+    const originalOpenTable = testClient.openTable.bind(testClient);
+    let resourceOpenCount = 0;
+    const openTableSpy = vi.spyOn(testClient, 'openTable').mockImplementation(async (name, namespacePath, options) => {
+      const table = await originalOpenTable(name, namespacePath, options);
+      if (name === TABLE_RESOURCES && ++resourceOpenCount === 2) {
+        await table.delete(`id = '${resource.id}'`);
+      }
+      return table;
+    });
+
+    try {
+      const updated = await memory.updateResource({
+        resourceId: resource.id,
+        workingMemory: 'After deletion',
+        metadata: { recreated: true },
+      });
+      const persisted = await memory.getResourceById({ resourceId: resource.id });
+
+      expect(updated).toMatchObject({
+        id: resource.id,
+        workingMemory: 'After deletion',
+        metadata: { recreated: true },
+      });
+      expect(persisted).toMatchObject(updated);
+      expect(persisted?.createdAt).toBeInstanceOf(Date);
+    } finally {
+      openTableSpy.mockRestore();
+    }
+  });
 });
 
 // LanceStorage uses async factory methods (create/fromClient), so we test configuration manually

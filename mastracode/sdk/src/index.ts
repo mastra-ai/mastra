@@ -52,7 +52,11 @@ import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveMod
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
-import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
+import {
+  createGitRefInstructionReader,
+  createGitRefReminderReader,
+  getStaticallyLoadedInstructionPaths,
+} from './agents/prompts/agent-instructions.js';
 // import { executeSubagent } from './agents/subagents/execute.js';
 // import { exploreSubagent } from './agents/subagents/explore.js';
 // import { planSubagent } from './agents/subagents/plan.js';
@@ -67,8 +71,9 @@ import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/ind
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
+import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
 import type { ProviderAccess } from './onboarding/packs.js';
-import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
+import { getAvailableModePacks, getAvailableOmPacks, selectPreferredOMPack } from './onboarding/packs.js';
 import {
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
@@ -107,22 +112,37 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-// Global retry policy for transient connection failures (e.g. provider sockets dropping mid-stream).
+// Global retry policy for transient provider failures (e.g. dropped sockets and server errors).
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
-// settings, so all modes/subagents benefit from a short wait before retrying a dropped connection.
+// settings, so all modes/subagents benefit from a short wait before retrying a transient failure.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
-const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 2;
-const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 1000;
+const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 10;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 500;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
 const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
 const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
+const TRANSIENT_SERVER_ERROR_STATUSES = new Set([500, 502, 503]);
+const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api may be experiencing issues/i;
 
 /**
  * Matcher for transient connection failures. Cause-chain traversal is handled
  * by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls each
  * matcher at every level of the cause chain.
  */
+/**
+ * Read the session state fields the AgentsMDInjector callbacks need from the
+ * controller request context (set by hosts like the factory review flow).
+ */
+function getInjectorSessionState(
+  requestContext: { get: (key: string) => unknown } | undefined,
+): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
+  const agentControllerContext = requestContext?.get('controller') as
+    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | undefined;
+  return agentControllerContext?.getState();
+}
+
 function isTransientConnectionError(error: unknown): boolean {
   if (!error) return false;
 
@@ -133,6 +153,45 @@ function isTransientConnectionError(error: unknown): boolean {
   if (typeof message === 'string' && TRANSIENT_CONNECTION_MESSAGE_PATTERN.test(message)) return true;
 
   return false;
+}
+
+function isTransientServerError(error: unknown): boolean {
+  if (!error) return false;
+
+  const errorObj = typeof error === 'object' ? (error as { status?: unknown; statusCode?: unknown }) : undefined;
+  if (
+    (typeof errorObj?.status === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.status)) ||
+    (typeof errorObj?.statusCode === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.statusCode))
+  ) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : undefined;
+  return typeof message === 'string' && TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN.test(message);
+}
+
+function getTransientRetryDelay(retryCount: number): number {
+  return Math.min(
+    MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+    MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
+  );
+}
+
+function emitTransientRetry(
+  error: unknown,
+  retryCount: number,
+  delayMs: number,
+  requestContext?: RequestContext,
+): void {
+  const controllerContext = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
+  controllerContext?.emitEvent?.({
+    type: 'error',
+    error: error instanceof Error ? error : new Error(String(error)),
+    retryable: true,
+    retryDelay: delayMs,
+    retryAttempt: retryCount + 1,
+    maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
+  });
 }
 
 /** Short deterministic hash (sha256, first 12 hex chars) matching project.ts shortHash style. */
@@ -696,12 +755,31 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...(config?.inputProcessors ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
+        // Untrusted checkouts (review sessions on PR branches) must not have
+        // the working tree's instruction files injected as system reminders —
+        // those files are attacker-writable content, not configuration. When
+        // the session carries a trusted base ref, reminders are served from
+        // that ref instead (see getReader); without one they are disabled.
+        isEnabled: ({ requestContext }) => {
+          const state = getInjectorSessionState(requestContext);
+          return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
+        },
+        getReader: ({ requestContext }) => {
+          const state = getInjectorSessionState(requestContext);
+          if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
+          return createGitRefReminderReader(state?.projectPath ?? project.rootPath, state.baseRef);
+        },
         getIgnoredInstructionPaths: ({ requestContext }) => {
-          const agentControllerContext = requestContext?.get('controller') as
-            | AgentControllerRequestContext<{ projectPath?: string }>
-            | undefined;
-          const state = agentControllerContext?.getState();
-          return getStaticallyLoadedInstructionPaths(state?.projectPath ?? project.rootPath);
+          const state = getInjectorSessionState(requestContext);
+          const projectPath = state?.projectPath ?? project.rootPath;
+          // On untrusted checkouts the static prompt loads from the base ref,
+          // so compute the statically-loaded paths through the same reader to
+          // keep the dedup consistent.
+          const projectReader =
+            state?.untrustedCheckout === true && typeof state?.baseRef === 'string'
+              ? createGitRefInstructionReader(projectPath, state.baseRef)
+              : undefined;
+          return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
         },
       }),
       new ProviderHistoryCompat(),
@@ -720,11 +798,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           {
             match: isTransientConnectionError,
             maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
-            delayMs: ({ retryCount }) =>
-              Math.min(
-                MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
-                MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
-              ),
+            delayMs: ({ retryCount }) => getTransientRetryDelay(retryCount),
+            onRetry: ({ error, retryCount, delayMs, requestContext }) =>
+              emitTransientRetry(error, retryCount, delayMs, requestContext),
+          },
+          {
+            match: isTransientServerError,
+            maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
+            delayMs: ({ retryCount }) => getTransientRetryDelay(retryCount),
+            onRetry: ({ error, retryCount, delayMs, requestContext }) =>
+              emitTransientRetry(error, retryCount, delayMs, requestContext),
           },
         ],
       }),
@@ -816,8 +899,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
-  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks);
-  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
+  const activeProviderId = effectiveDefaults.build?.split('/')[0];
+  const preferredOmModel = hasExplicitOMConfiguration(globalSettings)
+    ? undefined
+    : selectPreferredOMPack(startupAccess, activeProviderId)?.modelId;
+  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks) || preferredOmModel;
+  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks) || preferredOmModel;
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;

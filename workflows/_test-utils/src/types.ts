@@ -909,6 +909,18 @@ export interface WorkflowRegistryEntry {
    * Call this in beforeEach to prevent mock call count accumulation.
    */
   resetMocks?: () => void;
+  /**
+   * Agents this workflow expects to be registered on the shared Mastra instance
+   * (used by `.agent('id')` by-id forms). Engine harnesses aggregate these
+   * across all entries when constructing Mastra.
+   */
+  mastraAgents?: Record<string, any>;
+  /**
+   * Tools this workflow expects to be registered on the shared Mastra instance
+   * (used by `.tool('id')` by-id forms). Engine harnesses aggregate these
+   * across all entries when constructing Mastra.
+   */
+  mastraTools?: Record<string, any>;
   // Optional getters/resetters for test state
   [key: string]: any;
 }

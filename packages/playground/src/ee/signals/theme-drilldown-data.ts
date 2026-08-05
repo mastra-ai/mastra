@@ -18,6 +18,17 @@ export function findThemeSelection(
   return { signalName: stage.signalName, themeId: node.themeId, label: node.label };
 }
 
+/** Resolves a chart node to its trace signal when the node is that stage's noise bucket. */
+export function findNoiseSelection(
+  flow: ThemeFlowResponse,
+  signalName: string,
+  nodeId: string | number,
+): TraceSignalName | undefined {
+  const stage = flow.stages.find(candidate => candidate.signalName === signalName);
+  const node = stage?.nodes.find(candidate => candidate.nodeId === String(nodeId));
+  return node?.kind === 'noise' ? stage?.signalName : undefined;
+}
+
 export function buildDrilledThemeFlow(
   flow: ThemeFlowResponse,
   pathsResponse: ThemePathsResponse,

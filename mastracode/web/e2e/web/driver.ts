@@ -5,7 +5,7 @@ import {
   createInitialTranscript,
   initialTranscript,
   transcriptReducer,
-} from '../../src/web/ui/domains/chat/services/transcript';
+} from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 import type {
   ApprovalPrompt,
   NotificationEntry,
@@ -13,7 +13,7 @@ import type {
   SuspensionPrompt,
   TimelineEntry,
   TranscriptState,
-} from '../../src/web/ui/domains/chat/services/transcript';
+} from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 
 /**
  * Scenario driver — the web equivalent of MastraCode's `McE2eTerminal`.

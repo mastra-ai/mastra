@@ -10,7 +10,7 @@ import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
-import type { ItemToolMock, ToolMockReport } from './tool-mocks';
+import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
 
 /**
@@ -126,6 +126,8 @@ export async function executeTarget(
     versions?: VersionOverrides;
     /** Item-level static tool mocks (agent targets only). */
     toolMocks?: ItemToolMock[];
+    /** Handling for agent tool calls not declared in `toolMocks`. */
+    unmockedToolPolicy?: UnmockedToolPolicy;
   },
 ): Promise<ExecutionResult> {
   try {
@@ -147,6 +149,7 @@ export async function executeTarget(
           options?.experimentId,
           options?.versions,
           options?.toolMocks,
+          options?.unmockedToolPolicy,
         );
         break;
       case 'workflow':
@@ -220,6 +223,7 @@ async function executeAgent(
   experimentId?: string,
   versions?: VersionOverrides,
   toolMocks?: ItemToolMock[],
+  unmockedToolPolicy?: UnmockedToolPolicy,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -236,20 +240,21 @@ async function executeAgent(
 
   // Build a fresh matcher per item run so ordered consumption is deterministic and
   // not leaked across retries. Compose with the agent's configured hooks.
-  const matcher = new ToolMockMatcher(toolMocks);
+  const matcher = new ToolMockMatcher(toolMocks, unmockedToolPolicy);
+  const shouldInterceptTools = matcher.hasMocks || matcher.unmockedToolPolicy === 'deny';
 
-  // When the item declares mocks, abort the whole run the instant a mocked tool is
+  // When tool calls are intercepted, abort the whole run the instant a tool is
   // mis-called so the model cannot go on to invoke later (possibly side-effecting,
   // unmocked) tools live. The mock-abort signal is combined with the outer signal.
-  const mockAbort = matcher.hasMocks ? new AbortController() : undefined;
-  const mockHooks = matcher.hasMocks ? buildToolMockHooks(agent, matcher, mockAbort!) : undefined;
+  const mockAbort = shouldInterceptTools ? new AbortController() : undefined;
+  const mockHooks = shouldInterceptTools ? buildToolMockHooks(agent, matcher, mockAbort!) : undefined;
   const generateSignal =
     mockAbort && signal ? AbortSignal.any([signal, mockAbort.signal]) : (mockAbort?.signal ?? signal);
 
   // Force sequential tool execution when mocks exist so the provider's tool-call
   // order equals the execution (and consumption) order — deterministic ordered
   // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
-  const mockConcurrency = matcher.hasMocks ? { toolCallConcurrency: 1 } : undefined;
+  const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
 
   let rawResult: unknown;
   try {
@@ -276,7 +281,7 @@ async function executeAgent(
   } catch (error) {
     // A mock failure aborts the run mid-flight: surface the deterministic coded
     // error instead of the raw abort. Any other error rethrows unchanged.
-    const mockReport = matcher.hasMocks ? matcher.report() : undefined;
+    const mockReport = shouldInterceptTools ? matcher.report() : undefined;
     if (mockReport?.failure) {
       return toolMockFailureResult(mockReport, null);
     }
@@ -289,7 +294,7 @@ async function executeAgent(
   const traceId = result.traceId ?? null;
   const scoringData = result.scoringData;
 
-  const toolMockReport = matcher.hasMocks ? matcher.report() : undefined;
+  const toolMockReport = shouldInterceptTools ? matcher.report() : undefined;
 
   // Fallback for the race where the model finishes a step before the abort
   // propagates: the matcher still recorded the first failure, so fail the item
@@ -329,7 +334,10 @@ function toolMockFailureResult(report: ToolMockReport, traceId: string | null): 
   return {
     output: null,
     error: {
-      message: `Mocked tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`,
+      message:
+        failure.code === 'TOOL_MOCK_NOT_DECLARED'
+          ? `Tool "${failure.toolName}" was called without a declared mock (${failure.code}).`
+          : `Mocked tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`,
       code: failure.code,
     },
     traceId,

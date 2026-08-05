@@ -22,8 +22,23 @@ describe('isObservabilityUnavailableError', () => {
     expect(isObservabilityUnavailableError(error)).toBe(true);
   });
 
+  it('matches the disabled scores domain error from the span scores endpoint', () => {
+    const error = new Error('HTTP error! status: 501 - {"error":"Scores storage domain is not available"}');
+
+    expect(isObservabilityUnavailableError(error)).toBe(true);
+  });
+
   it('does not match unrelated errors', () => {
     expect(isObservabilityUnavailableError(new Error('Network request failed'))).toBe(false);
+    expect(
+      isObservabilityUnavailableError(new Error('HTTP error! status: 500 - {"error":"Storage is not available"}')),
+    ).toBe(false);
+    // Other domains share the message suffix but are not observability concerns.
+    expect(
+      isObservabilityUnavailableError(
+        new Error('HTTP error! status: 500 - {"error":"Agents storage domain is not available"}'),
+      ),
+    ).toBe(false);
     expect(isObservabilityUnavailableError(null)).toBe(false);
   });
 });

@@ -1504,9 +1504,9 @@ Emitted when the task throws or times out. Triggers a continuation turn when con
 
 ### background-task-suspended
 
-Emitted when a tool calls `suspend()` from inside its background execution. Pauses the task's workflow run with its snapshot persisted; resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)`.
+Emitted when a tool calls `suspend()` from inside its background execution. Pauses the task's workflow run with its snapshot persisted. Resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)`.
 
-When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle), this chunk drops the task from the loop's wait set without queuing a continuation — the agent's response ends, and the resumed task's eventual completion injects into the message list for the next user turn.
+When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle), this chunk drops the task from the loop's wait set without queuing a continuation. The agent's response ends, and the resumed task's eventual completion injects into the message list for the next user turn.
 
 <PropertiesTable
   content={[

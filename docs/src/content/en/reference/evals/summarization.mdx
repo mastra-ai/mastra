@@ -1,0 +1,289 @@
+---
+title: "Reference: Summarization scorer | Evals"
+description: Documentation for the Summarization Scorer in Mastra. Evaluates whether a summary stays faithful to its source text and preserves the information the source states.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Summarization scorer
+
+The `createSummarizationScorer()` function creates a scorer that evaluates a summary on two axes: whether every claim it makes is supported by the source text, and whether it preserves the information the source states. The final score is the lower of the two, so a summary can't pass by being faithful but empty, or thorough but wrong.
+
+The summary is the agent's last message that carries text, and the source text defaults to the first user message of the run input. Pass `source` or `sourceExtractor` when the text being summarized lives somewhere else, such as a tool result.
+
+## Usage example
+
+Score a summary against the document it condenses.
+
+```typescript title="src/mastra/scorers/summarization.ts"
+import { createSummarizationScorer } from '@mastra/evals/scorers/prebuilt'
+
+const scorer = createSummarizationScorer({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [{ id: '1', role: 'user', content: sourceDocument }],
+  },
+  output: [{ id: '2', role: 'assistant', content: summary }],
+})
+
+console.log(result.score)
+console.log(result.reason)
+```
+
+## Summarization evaluation
+
+Use this scorer when an agent condenses text:
+
+- Document and transcript summarization
+- Support thread and email digests
+- Any step that compresses a long input into a short output
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for judging claims and coverage questions',
+  },
+  {
+    name: 'options',
+    type: 'SummarizationMetricOptions',
+    description: 'Configuration options for the scorer',
+    isOptional: true,
+    properties: [
+      {
+        type: 'SummarizationMetricOptions',
+        parameters: [
+          {
+            name: 'source',
+            type: 'string',
+            description: 'Text the summary is judged against. Defaults to the user message of the run input',
+            isOptional: true,
+          },
+          {
+            name: 'sourceExtractor',
+            type: '(input, output) => string',
+            description:
+              'Function to derive the source text from the run input and output. Takes precedence over source',
+            isOptional: true,
+          },
+          {
+            name: 'maxQuestions',
+            type: 'number',
+            description: 'Upper bound on the coverage questions drawn from the source (default: 10)',
+            isOptional: true,
+          },
+          {
+            name: 'scale',
+            type: 'number',
+            description: 'Scale factor to multiply the final score (default: 1)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## `.run()` returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'score',
+    type: 'number',
+    description:
+      'Summarization score between 0 and scale (default 0-1), the lower of the alignment and coverage scores',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description:
+      'Human-readable explanation naming the axis that produced the score and the claims or questions behind it. Both axis scores appear in the text',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description: 'The alignment verdicts and the questions drawn from the source',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'alignment',
+            type: '{ claim: string; supported: boolean; reason: string }[]',
+            description: 'One verdict per claim the summary makes',
+          },
+          {
+            name: 'questions',
+            type: 'string[]',
+            description: 'The coverage questions drawn from the source text',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description: 'The coverage verdicts',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'coverage',
+            type: '{ question: string; answered: boolean; reason: string }[]',
+            description: 'One verdict per question, answered from the summary alone',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+The axis scores are derived from these verdicts rather than stored: alignment is the share of `alignment` entries with `supported: true`, and coverage is the share of `questions` whose `coverage` entry has `answered: true`.
+
+## Scoring details
+
+### Two-axis evaluation
+
+The scorer runs a three-step pipeline:
+
+1. **Source judgement**: the claims the summary makes are extracted and checked against the source, and closed-ended questions are drawn from the source. Every question is written so the source answers it "yes".
+1. **Coverage**: each question is answered using the summary alone.
+1. **Scoring**: the two ratios are computed and the lower one becomes the score.
+
+The coverage step runs as a separate model call that never receives the source text. A judge that could see the source would answer questions from it rather than from the summary, which would hide the omissions this axis exists to measure.
+
+### Scoring formula
+
+```
+Alignment    = supported_claims / total_claims
+Coverage     = answered_questions / total_questions
+Summarization = min(Alignment, Coverage) × scale
+```
+
+The score is 0 when the summary yields no claims or the source yields no questions.
+
+### Score interpretation
+
+These ranges assume the default `scale` of 1. When using a custom scale, multiply accordingly.
+
+- **0.9-1.0**: Excellent summary, faithful to the source and covering its main points
+- **0.7-0.8**: Good summary with a small omission or an unsupported detail
+- **0.4-0.6**: Moderate summary, either missing important information or drifting from the source
+- **0.1-0.3**: Poor summary, most of the source is lost or contradicted
+- **0.0**: The summary produced nothing to judge, or it failed to support any claims. A summary that answers no questions also receives this score
+
+### Reading the two axes
+
+Both axes leave their verdicts on the run result: the alignment verdicts on the preprocess step, and the coverage verdicts on the analyze step. Each verdict carries the claim or question it belongs to and the reason behind it. A low alignment score has a different meaning from a low coverage score:
+
+- A low alignment score with high coverage means the summary invents or distorts detail
+- A low coverage score with high alignment means the summary is accurate but leaves too much out
+
+The reason field names whichever axis produced the score.
+
+### What the score leaves out
+
+Length plays no part in the score. A summary that repeats the source word for word supports every claim and answers every question, so it scores 1. Add a length check of your own when compression is part of what you're testing.
+
+### Cost
+
+Each evaluation makes three model calls. `maxQuestions` bounds the coverage half of the work, which otherwise grows with source length. Raise it for long documents where ten questions can't represent the content.
+
+## Scorer configuration
+
+### Summarizing the run input
+
+```typescript
+const scorer = createSummarizationScorer({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+### Summarizing a document from elsewhere
+
+```typescript
+import { extractToolResults } from '@mastra/evals/scorers/utils'
+
+const scorer = createSummarizationScorer({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  options: {
+    sourceExtractor: (input, output) => {
+      return extractToolResults(output)
+        .filter(({ toolName }) => toolName === 'fetchDocument')
+        .map(({ result }) => String(result))
+        .join('\n\n')
+    },
+    maxQuestions: 20,
+  },
+})
+```
+
+## Example
+
+Evaluate a summarization agent against a set of documents:
+
+```typescript title="src/example-summarization.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createSummarizationScorer } from '@mastra/evals/scorers/prebuilt'
+import { summarizerAgent } from './agent'
+
+const scorer = createSummarizationScorer({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  options: { maxQuestions: 10 },
+})
+
+const result = await runEvals({
+  target: summarizerAgent,
+  scorers: [scorer],
+  data: [
+    {
+      input:
+        'The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.',
+    },
+  ],
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    })
+  },
+})
+
+console.log(result.scores)
+```
+
+For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).
+
+To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#adding-scorers-to-agents) guide.
+
+## Comparison with faithfulness
+
+| Use case | Summarization | Faithfulness |
+| - | - | - |
+| **What it measures** | Support and coverage together | Support only |
+| **Judged against** | The source text being condensed | Retrieved context or tool results |
+| **Catches omission** | Yes | No |
+| **Needs the full source** | Yes | No, context alone is enough |
+
+Use `faithfulness` when the question is whether an answer stays grounded in retrieved context. Use `summarization` when the output is meant to stand in for a longer text.
+
+## Related
+
+- [Faithfulness Scorer](/reference/evals/faithfulness): Measures answer groundedness in context
+- [Completeness Scorer](/reference/evals/completeness): Compares element coverage without a model
+- [Content Similarity Scorer](/reference/evals/content-similarity): Compares text similarity without a model
+- [Custom Scorers](/docs/evals/custom-scorers): Creating your own evaluation metrics
