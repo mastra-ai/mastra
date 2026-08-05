@@ -561,5 +561,21 @@ describe('useAgentControllerConnection', () => {
       await waitFor(() => expect(cachedMessages(client)).toHaveLength(1));
       expect(cachedMessages(client)?.[0]?.content.parts).toEqual([{ type: 'text', text: 'complete' }]);
     });
+
+    it('skips a malformed payload rather than caching it', async () => {
+      const { emit } = stubStreamingSession();
+      const { client, result } = renderHookWithProviders(() =>
+        useAgentControllerConnection({ ...hookArgs, onEvent: () => {} }),
+      );
+      client.setQueryData(queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100), []);
+
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      emit({ type: 'message_end', message: { id: 'no-date', role: 'assistant', content: { format: 2, parts: [] } } });
+      emit({ type: 'message_end', message: dbMessage('reply-1', 'here is the review') });
+
+      // The valid event lands after the malformed one, so its arrival proves the
+      // malformed one was seen and dropped.
+      await waitFor(() => expect(cachedMessages(client)?.map(m => m.id)).toEqual(['reply-1']));
+    });
   });
 });

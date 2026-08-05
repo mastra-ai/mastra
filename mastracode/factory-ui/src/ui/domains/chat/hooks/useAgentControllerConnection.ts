@@ -1,7 +1,6 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { useQueryClient } from '@tanstack/react-query';
-import type { QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
@@ -92,7 +91,11 @@ export function useAgentControllerConnection({
     const persisted = persistedMessage(event);
     const streamedThreadId = syncQuery.data?.threadId;
     if (persisted && streamedThreadId) {
-      cacheThreadMessage(queryClient, { agentControllerId, resourceId, threadId: streamedThreadId }, persisted);
+      cacheThreadMessage(
+        queryClient,
+        queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, streamedThreadId),
+        persisted,
+      );
     }
     onEvent(event);
   };
@@ -125,6 +128,11 @@ function isDBMessage(value: unknown): value is MastraDBMessage {
   if (typeof value !== 'object' || value === null) return false;
   if (!('id' in value) || typeof value.id !== 'string' || value.id === '') return false;
   if (!('role' in value) || typeof value.role !== 'string') return false;
+  // client-js coerces createdAt with `new Date(...)`, which yields an Invalid
+  // Date rather than throwing when the field is missing.
+  if (!('createdAt' in value) || !(value.createdAt instanceof Date) || Number.isNaN(value.createdAt.getTime())) {
+    return false;
+  }
   if (!('content' in value) || typeof value.content !== 'object' || value.content === null) return false;
   return 'parts' in value.content && Array.isArray(value.content.parts);
 }
@@ -140,28 +148,15 @@ function persistedMessage(event: AgentControllerEvent): MastraDBMessage | undefi
  * limit-less key prefix covers each window load-more has grown to; a thread
  * nobody fetched has no entry, and `setQueriesData` never creates one.
  */
-function cacheThreadMessage(
-  queryClient: QueryClient,
-  address: { agentControllerId: string; resourceId: string; threadId: string },
-  message: MastraDBMessage,
-) {
-  queryClient.setQueriesData<MastraDBMessage[]>(
-    {
-      queryKey: queryKeys.agentControllerThreadMessages(
-        address.agentControllerId,
-        address.resourceId,
-        address.threadId,
-      ),
-    },
-    current => {
-      if (!current) return current;
-      const index = current.findIndex(candidate => candidate.id === message.id);
-      if (index === -1) return [...current, message];
-      const next = [...current];
-      next[index] = message;
-      return next;
-    },
-  );
+function cacheThreadMessage(queryClient: QueryClient, threadKey: QueryKey, message: MastraDBMessage) {
+  queryClient.setQueriesData<MastraDBMessage[]>({ queryKey: threadKey }, current => {
+    if (!current) return current;
+    const index = current.findIndex(candidate => candidate.id === message.id);
+    if (index === -1) return [...current, message];
+    const next = [...current];
+    next[index] = message;
+    return next;
+  });
 }
 
 export function deriveConnectionStatus({
