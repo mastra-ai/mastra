@@ -5286,6 +5286,7 @@ export type ProviderModelsMap = {
     'deepseek-v3-0324',
     'deepseek-v3.2',
     'deepseek-v4-flash',
+    'deepseek-v4-flash-0731',
     'deepseek-v4-pro',
     'devstral-2512',
     'gemini-2.5-pro',
