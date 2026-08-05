@@ -3,6 +3,7 @@ import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
+import type { ExperimentEventObserver } from './events';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
 /**
@@ -122,6 +123,14 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /**
+   * Awaited observer for versioned, JSON-safe semantic lifecycle events.
+   * Delivery is serialized and applies run-wide backpressure. A rejected
+   * observer aborts the run and rejects `runExperiment` with a typed error.
+   * The terminal event is delivered before terminal status is persisted, so
+   * consumers must not treat it as a read-after-write signal for storage.
+   */
+  onEvent?: ExperimentEventObserver;
   /** Per-item execution timeout in milliseconds */
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */

@@ -710,6 +710,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
+    this.app.use((req, res, next) => {
+      const path = String(req.path || '/');
+      const method = String(req.method || 'GET');
+      res.on('finish', () => {
+        this.warnIfUnregisteredChannelWebhook(path, method, res.statusCode);
+      });
+      next();
+    });
   }
 
   registerAuthMiddleware(): void {
