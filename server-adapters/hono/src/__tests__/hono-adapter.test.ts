@@ -14,6 +14,7 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -229,6 +230,39 @@ describe('Hono Server Adapter', () => {
       } finally {
         await reader.cancel();
       }
+    });
+
+    it('handles a rejected source cancellation when the client disconnects', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+      const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'));
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/rejected-stream-cancellation',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () =>
+          new ReadableStream({
+            cancel,
+          }),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/rejected-stream-cancellation'));
+      const reader = response.body!.getReader();
+
+      await reader.read();
+      await reader.cancel();
+      await waitFor(() => cancel.mock.calls.length === 1);
+
+      expect(cancel).toHaveBeenCalledWith('request aborted');
     });
   });
 
@@ -1231,5 +1265,30 @@ describe('Hono Server Adapter', () => {
         expect(data.isStudio).toBeNull();
       }
     });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => new Hono(),
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      app.use('*', adapter.createContextMiddleware());
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const response = await app.request(
+        new Request(url, {
+          method,
+          headers: options.headers,
+          ...(options.body ? { body: options.body } : {}),
+        }),
+      );
+      return { status: response.status };
+    },
   });
 });

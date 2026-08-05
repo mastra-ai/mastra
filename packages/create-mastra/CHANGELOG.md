@@ -1,5 +1,27 @@
 # create-mastra
 
+## 1.22.0
+
+### Patch Changes
+
+- Add `--no-install` flag to create command. It allows you to skip dependency installation. ([#20619](https://github.com/mastra-ai/mastra/pull/20619))
+
+- Generated projects now pin every Mastra dependency to the exact version published on the invoked release channel instead of writing the channel tag (for example `alpha`) verbatim. If the CLI cannot resolve exact versions, it warns and falls back to the channel tag. ([#20448](https://github.com/mastra-ai/mastra/pull/20448))
+
+## 1.22.0-alpha.8
+
+## 1.22.0-alpha.7
+
+## 1.22.0-alpha.6
+
+### Patch Changes
+
+- Add `--no-install` flag to create command. It allows you to skip dependency installation. ([#20619](https://github.com/mastra-ai/mastra/pull/20619))
+
+## 1.22.0-alpha.5
+
+## 1.22.0-alpha.4
+
 ## 1.22.0-alpha.3
 
 ## 1.22.0-alpha.2
