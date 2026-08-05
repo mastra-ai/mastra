@@ -83,6 +83,7 @@ Set `COMMENT_BODY` to the marker followed by the handoff. Update the oldest mark
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
 - When the current stage is **Intake** or **Triage**, make the terminal `factory_transition_work_item` call: valid/actionable issues go to `planning`; issues that should be closed go to `done` with the close rationale.
+- When the item is marked as a new feature, DO NOT MOVE TO planning. Keep the issue open until manually moved to planning.
 - When the item is already in **Planning** or a later stage, this is a webhook-driven refresh: update the GitHub handoff but do **not** request a stage transition. Report the updated verdict and stop.
 
 `rationale` (max 1000 chars) — the triage verdict and headline understanding in a few sentences (e.g. "Genuine regression from <commit>; root cause understood; ready to plan a fix").

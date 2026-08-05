@@ -97,9 +97,11 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 const UNSET_STATUS_CONFIG = { label: '-', color: Colors.neutral4 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  completed: { label: 'OK', color: Colors.accent2 },
-  ok: { label: 'OK', color: Colors.accent2 },
+  completed: { label: 'OK', color: Colors.accent1 },
+  ok: { label: 'OK', color: Colors.accent1 },
+  success: { label: 'OK', color: Colors.accent1 },
   error: { label: 'ERR', color: Colors.error },
+  running: { label: 'RUN', color: Colors.neutral4 },
   unset: UNSET_STATUS_CONFIG,
 };
 

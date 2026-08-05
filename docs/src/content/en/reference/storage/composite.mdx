@@ -173,6 +173,13 @@ export const mastra = new Mastra({
     isOptional: true,
   },
   {
+    name: 'editor',
+    type: 'MastraCompositeStore',
+    description:
+      'Storage adapter for Editor-owned domains, including agents, prompt blocks, scorers, MCP clients and servers, workspaces, and skills. Takes precedence over default storage but not explicit domain overrides.',
+    isOptional: true,
+  },
+  {
     name: 'disableInit',
     type: 'boolean',
     description: 'When true, automatic initialization is disabled. You must call init() explicitly.',
