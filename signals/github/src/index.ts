@@ -67,6 +67,9 @@ export type GithubPRSubscription = {
   lastObservedMergeableState?: string;
   lastObservedCiState?: string;
   lastObservedReviewStateHash?: string;
+  lastObservedCommentUrl?: string;
+  lastObservedCommentAuthor?: string;
+  lastObservedCommentIsBot?: boolean;
   lastNotificationAt?: string;
   lastNotificationKind?: string;
   lastNotificationPriority?: 'medium' | 'high';
@@ -412,6 +415,15 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       ...(readString(rawSubscription.lastObservedReviewStateHash)
         ? { lastObservedReviewStateHash: readString(rawSubscription.lastObservedReviewStateHash)! }
         : {}),
+      ...(readString(rawSubscription.lastObservedCommentUrl)
+        ? { lastObservedCommentUrl: readString(rawSubscription.lastObservedCommentUrl)! }
+        : {}),
+      ...(readString(rawSubscription.lastObservedCommentAuthor)
+        ? { lastObservedCommentAuthor: readString(rawSubscription.lastObservedCommentAuthor)! }
+        : {}),
+      ...(typeof rawSubscription.lastObservedCommentIsBot === 'boolean'
+        ? { lastObservedCommentIsBot: rawSubscription.lastObservedCommentIsBot }
+        : {}),
       ...(readString(rawSubscription.lastNotificationAt)
         ? { lastNotificationAt: readString(rawSubscription.lastNotificationAt)! }
         : {}),
@@ -680,6 +692,26 @@ function isBotOnlyActivity(snapshot: GithubPullRequestSnapshot): boolean {
   return snapshot.latestCommentIsBot === true && (!snapshot.ciState || snapshot.ciState === 'unknown');
 }
 
+function isKnownMergeableState(state: string | undefined): state is string {
+  return !!state && state.toLowerCase() !== 'unknown';
+}
+
+function hasMeaningfulMergeableStateChange(previous: string | undefined, current: string | undefined): boolean {
+  if (!isKnownMergeableState(current) || current === previous) return false;
+  return current === 'dirty' || previous === 'dirty' || isKnownMergeableState(previous);
+}
+
+function isExistingBotCommentEdit(subscription: GithubPRSubscription, snapshot: GithubPullRequestSnapshot): boolean {
+  return (
+    snapshot.latestCommentIsBot === true &&
+    subscription.lastObservedCommentIsBot === true &&
+    !!snapshot.latestCommentUrl &&
+    snapshot.latestCommentUrl === subscription.lastObservedCommentUrl &&
+    !!snapshot.latestCommentAuthor &&
+    snapshot.latestCommentAuthor === subscription.lastObservedCommentAuthor
+  );
+}
+
 function stringifyEvidence(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
@@ -753,7 +785,7 @@ function classifyGithubActivityNotification(input: {
     };
   }
   if (
-    input.snapshot.mergeableState &&
+    isKnownMergeableState(input.snapshot.mergeableState) &&
     input.subscription.lastObservedMergeableState === 'dirty' &&
     input.snapshot.mergeableState !== 'dirty'
   ) {
@@ -842,9 +874,12 @@ function applySnapshotCursor(subscription: GithubPRSubscription, snapshot: Githu
   if (snapshot.threadContentHash) subscription.lastObservedThreadContentHash = snapshot.threadContentHash;
   if (snapshot.headSha) subscription.lastObservedHeadSha = snapshot.headSha;
   if (snapshot.state) subscription.lastObservedState = snapshot.state;
-  if (snapshot.mergeableState) subscription.lastObservedMergeableState = snapshot.mergeableState;
+  if (isKnownMergeableState(snapshot.mergeableState)) subscription.lastObservedMergeableState = snapshot.mergeableState;
   if (snapshot.ciState) subscription.lastObservedCiState = snapshot.ciState;
   if (snapshot.reviewStateHash) subscription.lastObservedReviewStateHash = snapshot.reviewStateHash;
+  if (snapshot.latestCommentUrl) subscription.lastObservedCommentUrl = snapshot.latestCommentUrl;
+  if (snapshot.latestCommentAuthor) subscription.lastObservedCommentAuthor = snapshot.latestCommentAuthor;
+  if (snapshot.latestCommentIsBot !== undefined) subscription.lastObservedCommentIsBot = snapshot.latestCommentIsBot;
 }
 
 function parseGitHubRemoteUrl(remoteUrl: string): GithubRepository | undefined {
@@ -1413,8 +1448,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     resourceId?: string;
   } {
     const memoryContext = args.requestContext?.get('MastraMemory') as
-      | { thread?: { id?: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id?: string }; resourceId?: string } | undefined;
     return { threadId: memoryContext?.thread?.id, resourceId: memoryContext?.resourceId };
   }
 
@@ -1602,10 +1636,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         const previousContentHash = subscription.lastObservedContentHash;
         const previousThreadContentHash = subscription.lastObservedThreadContentHash;
         const previousHeadSha = subscription.lastObservedHeadSha;
-        const latestCommentChanged =
+        const latestCommentTimestampChanged =
           !!previousGithubUpdatedAt &&
           !!snapshot?.latestCommentUpdatedAt &&
           Date.parse(snapshot.latestCommentUpdatedAt) > Date.parse(previousGithubUpdatedAt);
+        const existingBotCommentEdited =
+          latestCommentTimestampChanged && !!snapshot && isExistingBotCommentEdit(subscription, snapshot);
+        const latestCommentChanged = latestCommentTimestampChanged && !existingBotCommentEdited;
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
         // First observation (no previous cursor) always counts as changed so we
@@ -1626,12 +1663,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
               latestCommentChanged ||
               (previousThreadContentHash &&
                 snapshot.threadContentHash &&
-                previousThreadContentHash !== snapshot.threadContentHash) ||
+                previousThreadContentHash !== snapshot.threadContentHash &&
+                !existingBotCommentEdited) ||
               (previousHeadSha && snapshot.headSha && previousHeadSha !== snapshot.headSha) ||
               (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
-              (subscription.lastObservedMergeableState &&
-                snapshot.mergeableState &&
-                subscription.lastObservedMergeableState !== snapshot.mergeableState) ||
+              hasMeaningfulMergeableStateChange(subscription.lastObservedMergeableState, snapshot.mergeableState) ||
               (subscription.lastObservedCiState &&
                 snapshot.ciState &&
                 subscription.lastObservedCiState !== snapshot.ciState) ||
@@ -2016,6 +2052,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       ...(existing?.lastObservedCiState ? { lastObservedCiState: existing.lastObservedCiState } : {}),
       ...(existing?.lastObservedReviewStateHash
         ? { lastObservedReviewStateHash: existing.lastObservedReviewStateHash }
+        : {}),
+      ...(existing?.lastObservedCommentUrl ? { lastObservedCommentUrl: existing.lastObservedCommentUrl } : {}),
+      ...(existing?.lastObservedCommentAuthor ? { lastObservedCommentAuthor: existing.lastObservedCommentAuthor } : {}),
+      ...(typeof existing?.lastObservedCommentIsBot === 'boolean'
+        ? { lastObservedCommentIsBot: existing.lastObservedCommentIsBot }
         : {}),
     };
 

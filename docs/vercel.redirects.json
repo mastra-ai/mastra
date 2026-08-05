@@ -71,6 +71,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
@@ -862,32 +867,32 @@
     },
     {
       "source": "/docs/harness/modes",
-      "destination": "/docs/agent-controller/modes",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview",
-      "destination": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/session",
-      "destination": "/docs/agent-controller/session",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents",
-      "destination": "/docs/agent-controller/subagents",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state",
-      "destination": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals",
-      "destination": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
@@ -1133,6 +1138,61 @@
     {
       "source": "/docs/evals/datasets/:path*",
       "destination": "/docs/datasets/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/config",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/storage",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/session",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/modes",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/subagents",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/channels",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/supervisor-agents",
+      "destination": "/docs/capabilities/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     }
   ]

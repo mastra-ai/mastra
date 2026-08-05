@@ -862,6 +862,32 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockTask);
       });
     });
+
+    it('streams parsed background-task SSE events', async () => {
+      const encoder = new TextEncoder();
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(': keepalive\r\ndata: {"status":"comple'));
+              controller.enqueue(encoder.encode('ted"}\r\n\r\n'));
+              controller.close();
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const stream = await client.streamBackgroundTasks({ taskId: 'task-1' });
+      const reader = stream.getReader();
+
+      await expect(reader.read()).resolves.toMatchObject({ done: false, value: { status: 'completed' } });
+      await expect(reader.read()).resolves.toMatchObject({ done: true });
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/background-tasks/stream?taskId=task-1',
+        expect.any(Object),
+      );
+    });
   });
 
   describe('Agent Builder Actions', () => {
