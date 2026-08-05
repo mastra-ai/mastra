@@ -210,6 +210,7 @@ export function execute<OUTPUT = undefined>({
   const stream = v5.initialize({
     runId,
     onResult,
+    abortSignal: options?.abortSignal,
     createStream: async () => {
       try {
         const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers']);

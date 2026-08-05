@@ -1,6 +1,7 @@
+import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MastraBase } from '../../base';
-import { attachModelStreamTransport, readModelStreamTransport } from '../types';
+import { attachModelStreamTransport, ChunkFrom, readModelStreamTransport } from '../types';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
 /**
@@ -57,7 +58,17 @@ export abstract class MastraModelInput extends MastraBase {
     controller: ReadableStreamDefaultController<ChunkType>;
   }): Promise<void>;
 
-  initialize({ runId, createStream, onResult }: { createStream: CreateStream; runId: string; onResult: OnResult }) {
+  initialize({
+    runId,
+    createStream,
+    onResult,
+    abortSignal,
+  }: {
+    createStream: CreateStream;
+    runId: string;
+    onResult: OnResult;
+    abortSignal?: AbortSignal;
+  }) {
     const self = this;
 
     let outputStream: ReadableStream<ChunkType>;
@@ -86,6 +97,17 @@ export abstract class MastraModelInput extends MastraBase {
 
           safeClose(controller);
         } catch (error) {
+          if (isAbortError(error) && abortSignal?.aborted) {
+            safeEnqueue(controller, {
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { error },
+            } as ChunkType);
+            safeClose(controller);
+            return;
+          }
+
           safeError(controller, error);
         }
       },

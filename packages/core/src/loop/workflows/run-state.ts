@@ -13,6 +13,7 @@ type State = {
   apiError: unknown | undefined;
   deferredErrorChunk: any | undefined;
   providerOptions: Record<string, any> | undefined;
+  partialText: string;
 };
 
 export class AgenticRunState {
@@ -37,6 +38,7 @@ export class AgenticRunState {
       apiError: undefined,
       deferredErrorChunk: undefined,
       stepResult: undefined,
+      partialText: '',
     };
   }
 
