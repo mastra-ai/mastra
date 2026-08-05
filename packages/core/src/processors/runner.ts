@@ -355,10 +355,20 @@ export class ProcessorRunner {
     const resolvedThreadId = threadId ?? memoryContext?.thread?.id;
     const resolvedResourceId = resourceId ?? memoryContext?.resourceId;
 
-    if (!resolvedMemory || !resolvedThreadId || !resolvedResourceId) {
+    if (!resolvedMemory) {
       throw new Error(
         `[Processor:${processor.id}] computeStateSignal requires Mastra memory with an active resourceId and threadId`,
       );
+    }
+
+    // Memory is configured but this invocation has no thread/resource identity
+    // (e.g. an ephemeral workflow agent step). State signals are thread-scoped,
+    // so skip rather than throw.
+    if (!resolvedThreadId || !resolvedResourceId) {
+      this.logger.debug(
+        `[Processor:${processor.id}] computeStateSignal skipped — no threadId/resourceId resolved for this invocation`,
+      );
+      return;
     }
 
     const loadedThread = (await resolvedMemory.getThreadById({ threadId: resolvedThreadId })) ?? memoryContext?.thread;

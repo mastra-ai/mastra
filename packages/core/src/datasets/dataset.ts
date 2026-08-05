@@ -19,6 +19,7 @@ import type {
   ListExperimentsOutput,
   TargetType,
   UpdateDatasetInput,
+  UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
@@ -284,7 +285,9 @@ export class Dataset {
    * Update an existing item in the dataset. Only the provided payload fields
    * are patched.
    */
-  async updateItem(input: { itemId: string } & Partial<Omit<DatasetItemPayload, 'externalId'>>): Promise<DatasetItem> {
+  async updateItem(
+    input: { itemId: string } & Omit<UpdateDatasetItemInput, 'id' | 'datasetId' | 'filters'>,
+  ): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     const { itemId, ...rest } = input;
     return store.updateItem({ id: itemId, datasetId: this.id, ...rest, filters: this.#scope });
@@ -362,7 +365,8 @@ export class Dataset {
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
-    const experimentsStore = await this.#getExperimentsStore();
+    const persistExperiments = config.persistence?.experiments !== 'none';
+    const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
 
     const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
@@ -390,23 +394,26 @@ export class Dataset {
       });
     }
 
-    const run = await experimentsStore.createExperiment({
-      datasetId: this.id,
-      datasetVersion: targetVersion,
-      targetType: config.targetType ?? 'agent',
-      targetId: config.targetId ?? 'inline',
-      totalItems: items.length,
-      name: config.name,
-      description: config.description,
-      metadata: config.metadata,
-      agentVersion: config.agentVersion,
-      organizationId: dataset.organizationId ?? null,
-      projectId: dataset.projectId ?? null,
-    });
+    const experimentId = crypto.randomUUID();
 
-    const experimentId = run.id;
+    if (experimentsStore) {
+      await experimentsStore.createExperiment({
+        id: experimentId,
+        datasetId: this.id,
+        datasetVersion: targetVersion,
+        targetType: config.targetType ?? 'agent',
+        targetId: config.targetId ?? 'inline',
+        totalItems: items.length,
+        name: config.name,
+        description: config.description,
+        metadata: config.metadata,
+        agentVersion: config.agentVersion,
+        organizationId: dataset.organizationId ?? null,
+        projectId: dataset.projectId ?? null,
+      });
+    }
 
-    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
+    // Fire-and-forget — runExperiment resolves the applicable run, item, or dataset scorer source
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
@@ -414,13 +421,15 @@ export class Dataset {
       version: targetVersion,
       filters: this.#scope,
     } as ExperimentConfig).catch(async err => {
-      await experimentsStore
-        .updateExperiment({
-          id: experimentId,
-          status: 'failed',
-          completedAt: new Date(),
-        })
-        .catch(() => {});
+      if (experimentsStore) {
+        await experimentsStore
+          .updateExperiment({
+            id: experimentId,
+            status: 'failed',
+            completedAt: new Date(),
+          })
+          .catch(() => {});
+      }
       this.#mastra.getLogger()?.error(`Experiment ${experimentId} failed: ${err?.message ?? err}`);
     });
 

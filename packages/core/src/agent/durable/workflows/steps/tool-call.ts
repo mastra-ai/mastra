@@ -74,6 +74,10 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
  * Flush messages to memory before suspending.
  * Mirrors the base Agent's flushMessagesBeforeSuspension() to ensure
  * the thread exists and all pending messages are persisted.
+ *
+ * Skips entirely when memoryConfig.readOnly is set, mirroring the readOnly
+ * guard on the durable finish path — a readOnly run shouldn't get a thread
+ * created or messages written just because it happened to suspend mid-run.
  */
 async function flushMessagesBeforeSuspension({
   saveQueueManager,
@@ -94,7 +98,7 @@ async function flushMessagesBeforeSuspension({
   threadExists?: boolean;
   onThreadCreated?: () => void;
 }) {
-  if (!saveQueueManager || !messageList || !threadId) {
+  if (!saveQueueManager || !messageList || !threadId || memoryConfig?.readOnly) {
     return;
   }
 
@@ -355,7 +359,22 @@ export function createDurableToolCallStep() {
       // full toolset from the agent — the same rebuild the LLM step already does
       // via resolveRuntimeDependencies — and retry. This is the root-cause fix
       // for `ToolNotFoundError` on skill/mastra_workspace_* tools cross-process.
-      if (!tool && mastra) {
+      //
+      // The same rebuild is ALSO the only source of a SaveQueueManager. `createInngestAgent`
+      // registers one on the run-registry entry, but only in the process that called `stream()`;
+      // the connect() worker that actually runs the loop has an empty registry, so
+      // `registryEntry?.saveQueueManager` is undefined there. Without it
+      // `flushMessagesBeforeSuspension()` early-returns and the suspend metadata written by
+      // `addToolMetadata()` is never persisted — a reloading client then sees no pending approval
+      // even though the run is parked. So rebuild when the save queue is missing too, not just
+      // when the tool is.
+      //
+      // Gated on `state?.threadId`: an agent without memory legitimately has no SaveQueueManager
+      // (see preparation.ts — it is only built when `memory` is set), and the flush requires a
+      // threadId regardless. Without this guard every tool call on a memoryless durable run would
+      // pay for a full rebuild to obtain something that can neither exist nor be used.
+      const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
+      if ((!tool || needsSaveQueueForFlush) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
@@ -370,7 +389,11 @@ export function createDurableToolCallStep() {
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
           rebuiltSaveQueueManager = rebuilt.saveQueueManager;
-          tool = rebuiltTools[toolName] as typeof tool;
+          // Keep an already-resolved tool: we may have rebuilt purely to obtain the
+          // SaveQueueManager, and the registry's instance is the live per-request closure.
+          if (!tool) {
+            tool = rebuiltTools[toolName] as typeof tool;
+          }
           if (!tool) {
             tool = findProviderToolByName(rebuiltTools as any, toolName) as typeof tool;
           }
@@ -486,22 +509,7 @@ export function createDurableToolCallStep() {
       }) => {
         if (!messageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
-        const responseMessages = messageList.get.response.db();
-        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
-        if (!lastAssistantMessage?.content) return;
-
-        let metadata: Record<string, any>;
-        if (
-          typeof lastAssistantMessage.content.metadata === 'object' &&
-          lastAssistantMessage.content.metadata !== null
-        ) {
-          metadata = lastAssistantMessage.content.metadata as Record<string, any>;
-        } else {
-          metadata = {};
-          lastAssistantMessage.content.metadata = metadata;
-        }
-        metadata[metadataKey] = metadata[metadataKey] || {};
-        metadata[metadataKey][toolCallId] = {
+        const entry = {
           toolCallId,
           toolName,
           args,
@@ -515,6 +523,54 @@ export function createDurableToolCallStep() {
           ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
+
+        const carriesToolCall = (msg: any) =>
+          msg.role === 'assistant' &&
+          (msg.content?.parts ?? []).some(
+            (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+          );
+
+        const responseMessages = messageList.get.response.db();
+        const lastAssistantMessage = [...responseMessages].reverse().find(carriesToolCall);
+        if (lastAssistantMessage?.content) {
+          let metadata: Record<string, any>;
+          if (
+            typeof lastAssistantMessage.content.metadata === 'object' &&
+            lastAssistantMessage.content.metadata !== null
+          ) {
+            metadata = lastAssistantMessage.content.metadata as Record<string, any>;
+          } else {
+            metadata = {};
+            lastAssistantMessage.content.metadata = metadata;
+          }
+          metadata[metadataKey] = metadata[metadataKey] || {};
+          metadata[metadataKey][toolCallId] = entry;
+          return;
+        }
+
+        // The response view is empty: a sibling parallel tool call already
+        // suspended and its pre-suspension flush drained the unsaved response
+        // messages. Without a fallback this sibling's entry is silently lost
+        // and only the first suspension survives in persisted metadata. Merge
+        // the entry into the assistant message that carries this tool call via
+        // updateMessageMetadataByToolCallId, which also re-marks the message
+        // unsaved so the following flush persists this write too.
+        const allMessages = messageList.get.all.db();
+        const target = [...allMessages].reverse().find(carriesToolCall);
+        if (!target?.content) {
+          logger?.warn?.(
+            `[DurableAgent] addToolMetadata could not find an assistant message for tool call ${toolCallId} (${toolName}); ${metadataKey} entry was not persisted.`,
+          );
+          return;
+        }
+        const existingMeta =
+          typeof target.content.metadata === 'object' && target.content.metadata !== null
+            ? (target.content.metadata as Record<string, any>)
+            : {};
+        const existingEntries = (existingMeta[metadataKey] ?? {}) as Record<string, any>;
+        messageList.updateMessageMetadataByToolCallId(toolCallId, {
+          [metadataKey]: { ...existingEntries, [toolCallId]: entry },
+        });
       };
 
       // Remove suspended-tool / pending-approval metadata from the last
@@ -863,6 +919,7 @@ export function createDurableToolCallStep() {
               type: 'suspension',
               suspendPayload,
               resumeSchema: suspendOptions?.resumeSchema,
+              delegatedRunId,
             });
 
             await doFlush();
@@ -876,6 +933,11 @@ export function createDurableToolCallStep() {
                 toolCallId,
                 toolName,
                 resumeLabel: suspendOptions?.resumeLabel,
+                // Persist the inner suspended run id in the workflow snapshot,
+                // partitioned per tool call (resumeLabel = toolCallId), so the
+                // resume leg continues the delegate's suspended run instead of
+                // restarting it (#20496; mirrors the approval branch above).
+                ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
               },
               { resumeLabel: toolCallId },
             );
@@ -982,11 +1044,14 @@ export function createDurableToolCallStep() {
                     {
                       type: 'tool-invocation',
                       toolInvocation: {
-                        state: 'result',
+                        // A failed background task is recorded as `output-error` with the
+                        // message in `errorText`; a successful one keeps `state: 'result'`.
+                        ...(params.status === 'failed'
+                          ? { state: 'output-error' as const, errorText: result }
+                          : { state: 'result' as const, result }),
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         args: cleanedArgs,
-                        result,
                         // Preserve the approval decision for an approved approval-gated tool that
                         // ran in the background so it round-trips on recall, matching the sync path.
                         ...(approvalGrant ?? {}),
@@ -1045,7 +1110,7 @@ export function createDurableToolCallStep() {
                     );
                   }
 
-                  if (saveQueueManager && state?.threadId) {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
                     await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
                   }
                 },
@@ -1068,7 +1133,7 @@ export function createDurableToolCallStep() {
                   // is persisted. Unlike the regular agent which has a single long-lived
                   // messageList, the durable agent's workflow state is serialized before
                   // this async callback fires, so we must flush directly.
-                  if (saveQueueManager && state?.threadId) {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
                     await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
                   }
                 },

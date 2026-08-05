@@ -9,6 +9,7 @@ import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
+import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
@@ -33,20 +34,10 @@ import type {
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 /**
- * TTL for the cross-process thread lease acquired in the idle-wake path.
- * Kept short so a crashed owner process frees the thread quickly. A
- * background timer renews the lease while the run is still running.
- */
-function readPositiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-/**
- * Lease TTL. Overridable via `MASTRA_AGENT_THREAD_LEASE_TTL_MS` so cross-process
- * tests can shrink the takeover window (production keeps the 15s default).
+ * Lease TTL for the cross-process thread lease acquired in the idle-wake
+ * path. Kept short so a crashed owner process frees the thread quickly; a
+ * background timer renews it while the run is still running. Overridable via
+ * `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (production keeps the 15s default).
  */
 const AGENT_THREAD_LEASE_TTL_MS = readPositiveIntEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', 15_000);
 /**
@@ -58,6 +49,16 @@ const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = readPositiveIntEnv(
   'MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS',
   Math.floor(AGENT_THREAD_LEASE_TTL_MS / 3),
 );
+/**
+ * TTL for a suspended run's warm in-memory state — the parked thread-run record
+ * (swept by #sweepStaleSuspendedRecords). The Mastra internal-workflow registry
+ * reads the same `MASTRA_SUSPENDED_RUN_TTL_MS` so both expire on one bound. A
+ * suspended run is kept warm so a same-instance resume can reattach and the thread
+ * stays blocked; once it lapses the state is evicted and resume falls back to the
+ * durable snapshot. Multi-instance deployments (resume rarely lands on the origin)
+ * can shed it sooner; 30 minute default.
+ */
+const AGENT_SUSPENDED_RUN_TTL_MS = readPositiveIntEnv('MASTRA_SUSPENDED_RUN_TTL_MS', 30 * 60 * 1000);
 
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
@@ -85,6 +86,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   streamSeq: number;
   lifecycle: AgentThreadRunLifecycle;
   suspension?: AgentThreadRunSuspension;
+  /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
+  suspendedAt?: number;
   threadId: string;
   resourceId?: string;
   streamOptions: AgentExecutionOptions<OUTPUT>;
@@ -442,6 +445,30 @@ export class AgentThreadStreamRuntime {
     state.suspendedRunIds.delete(runId);
     state.suspensionMetadataByRunId.delete(runId);
     state.approvalSuspendedRunIds.delete(runId);
+  }
+
+  #generateSignalMessageId(
+    agent: Agent<any, any, any, any>,
+    target: { threadId?: string; resourceId?: string },
+  ): string {
+    return (
+      agent.getMastraInstance?.()?.generateId({
+        idType: 'message',
+        source: 'agent',
+        entityId: agent.id,
+        threadId: target.threadId,
+        resourceId: target.resourceId,
+      }) ?? randomUUID()
+    );
+  }
+
+  #createMessageSignalInput(message: AgentMessageInput): AgentSignal {
+    const normalizedMessage = typeof message === 'string' || Array.isArray(message) ? { contents: message } : message;
+    return {
+      ...normalizedMessage,
+      type: 'user',
+      tagName: 'user',
+    };
   }
 
   getThreadState(options: { resourceId?: string; threadId: string }, pubsub?: PubSub): AgentThreadState {
@@ -858,6 +885,51 @@ export class AgentThreadStreamRuntime {
     this.#broadcastPersistedSignal(state, pubsub, key, runId, signal, resourceId, threadId);
   }
 
+  /**
+   * Evict SUSPENDED records parked longer than {@link AGENT_SUSPENDED_RUN_TTL_MS}.
+   * Called lazily on each registration so cleanup is proportional to activity and
+   * zero-cost when idle — mirrors the internal-workflow registry sweep. Bounds the
+   * records left behind by abandoned suspends and by resumes that land on a
+   * different instance (which never clean the origin instance's record).
+   *
+   * When the expiring record is still the run's current record — an abandoned
+   * suspend, not one superseded by a same-instance resume — the teardown mirrors
+   * #watchThreadRunCompletion's terminal path: it clears run-level state, releases
+   * the cross-process lease, and publishes `run-completed` so remote subscribers
+   * stop treating the thread as blocked and drain any queued follow-up work. A
+   * superseded older stream just has its stream entry dropped; the resumed run
+   * keeps its lease, suspended marker, and active slot.
+   */
+  #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
+    const now = Date.now();
+    for (const [streamId, record] of state.threadRunsByStreamId) {
+      if (record.lifecycle !== 'suspended' || record.suspendedAt === undefined) continue;
+      if (now - record.suspendedAt <= AGENT_SUSPENDED_RUN_TTL_MS) continue;
+      state.threadRunsByStreamId.delete(streamId);
+      state.watchedThreadStreamIds.delete(streamId);
+      // A same-instance resume re-registers the run under a newer streamId, so a
+      // record that is no longer the run's current record is just the superseded
+      // older stream: dropping its stream entry above is enough. Only the current
+      // record (an abandoned suspend) gets the full run-level teardown below.
+      if (state.threadRunsById.get(record.runId) !== record) continue;
+      const staleKey = this.#threadKey(record.resourceId, record.threadId);
+      state.threadRunsById.delete(record.runId);
+      state.threadKeysByRunId.delete(record.runId);
+      this.#clearSuspendedRun(state, record.runId);
+      // Stop renewing and release the cross-process lease, otherwise the run's
+      // lease-renewal timer keeps the thread owned forever on other instances.
+      this.#releaseThreadLease(pubsub, staleKey, record.runId);
+      if (
+        state.activeThreadRunIds.get(staleKey) === record.runId &&
+        state.activeThreadStreamIds.get(staleKey) === streamId
+      ) {
+        state.activeThreadRunIds.delete(staleKey);
+        state.activeThreadStreamIds.delete(staleKey);
+      }
+      this.#publish(pubsub, staleKey, { type: 'run-completed', runId: record.runId, streamId });
+    }
+  }
+
   registerRun<OUTPUT>(
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
@@ -868,6 +940,7 @@ export class AgentThreadStreamRuntime {
     if (!threadId) return;
 
     const state = this.#getState(pubsub);
+    this.#sweepStaleSuspendedRecords(state, pubsub);
     const key = this.#threadKey(resourceId, threadId);
     const { streamId, streamSeq } = this.#nextStreamIdentity(state, output.runId);
     const {
@@ -948,6 +1021,12 @@ export class AgentThreadStreamRuntime {
 
       if (record.output.status === 'suspended' && this.#isSuspendedRun(state, record.runId)) {
         record.lifecycle = 'suspended';
+        // Leak fix: stamp when the run parked so the lazy TTL sweep
+        // (#sweepStaleSuspendedRecords) can evict it. The record stays fully intact
+        // for resume routing / thread-blocking / subscriber replay exactly as before
+        // — it is simply no longer retained for the life of the process. Mirrors the
+        // internal-workflow registry, which already bounds parked runs this way.
+        record.suspendedAt = Date.now();
         this.#publish(pubsub, key, { type: 'run-suspended', runId: record.runId, streamId: record.streamId });
         return;
       }
@@ -1755,7 +1834,7 @@ export class AgentThreadStreamRuntime {
     target: SendAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentMessageResult<OUTPUT> {
-    return this.sendSignal<OUTPUT>(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
+    return this.sendSignal<OUTPUT>(agent, this.#createMessageSignalInput(message), target, pubsub);
   }
 
   queueMessage<OUTPUT = unknown>(
@@ -1765,7 +1844,7 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): QueueAgentMessageResult<OUTPUT> {
     const state = this.#getState(pubsub);
-    const signal = createMessageSignal(message, { acceptedAt: new Date() });
+    const acceptedAt = new Date();
     let key: string | undefined;
     let runId = target.runId;
     let activeRecord: AgentThreadRunRecord<any> | undefined;
@@ -1795,6 +1874,10 @@ export class AgentThreadStreamRuntime {
     }
 
     key ??= this.#threadKey(resourceId, threadId);
+    const signal = createMessageSignal(message, {
+      id: this.#generateSignalMessageId(agent, { resourceId, threadId }),
+      acceptedAt,
+    });
     const queuedRunId = randomUUID();
     const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
 
@@ -1886,7 +1969,6 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult<OUTPUT> {
     const state = this.#getState(pubsub);
-    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -1919,11 +2001,27 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    if (runId) {
+      activeRecord ??= state.threadRunsById.get(runId);
+      if (activeRecord) {
+        key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
+      }
+    }
+
+    const resourceId = target.resourceId ?? activeRecord?.resourceId;
+    const threadId = target.threadId ?? activeRecord?.threadId;
+    if (!resourceId || !threadId) {
+      throw new Error('No active agent run found for signal target');
+    }
+
     const isActiveTarget = Boolean(
       runId && (activeRecord?.output.status === 'running' || (key && state.activeThreadRunIds.get(key) === runId)),
     );
-    const resourceId = target.resourceId ?? activeRecord?.resourceId;
-    const threadId = target.threadId ?? activeRecord?.threadId;
+    let signal = createSignal({
+      ...signalInput,
+      id: signalInput.id ?? this.#generateSignalMessageId(agent, { resourceId, threadId }),
+      acceptedAt: new Date(),
+    });
 
     // Resolve conditional delivery attributes now that we know the delivery path.
     signal = resolveDeliveryAttributes(
@@ -1957,7 +2055,6 @@ export class AgentThreadStreamRuntime {
     }
 
     if (runId) {
-      activeRecord ??= state.threadRunsById.get(runId);
       // A run is "blocking" while it is running or suspended awaiting tool approval. Both
       // states mean the run has already made model requests, so a follow-up signal must be
       // queued as a pending (next-turn) signal rather than folded into a not-yet-started
@@ -2017,10 +2114,6 @@ export class AgentThreadStreamRuntime {
           accepted: Promise.resolve({ action: 'deliver' as const, runId }),
         };
       }
-    }
-
-    if (!resourceId || !threadId) {
-      throw new Error('No active agent run found for signal target');
     }
 
     runId = randomUUID();
