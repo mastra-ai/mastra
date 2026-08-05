@@ -26,7 +26,7 @@ export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-
 export { fetchWithRetry } from './utils/fetchWithRetry';
 export type { FetchWithRetryOptions } from './utils/fetchWithRetry';
 
-export { ensureSerializable, safeStringify } from './utils/safe-stringify';
+export { boundedStringify, ensureSerializable, isBoundedSerializable, safeStringify } from './utils/safe-stringify';
 export { deepEqual } from './utils/deep-equal';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

@@ -1184,11 +1184,6 @@
       "source": "/docs/agents/supervisor-agents",
       "destination": "/docs/capabilities/subagents",
       "permanent": true
-    },
-    {
-      "source": "/docs/mcp/mcp-apps",
-      "destination": "/docs/mcp/overview",
-      "permanent": true
     }
   ]
 }

@@ -70,11 +70,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/supervisor-agents',
-              label: 'Supervisor Agents',
-            },
-            {
-              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -260,6 +255,11 @@ const sidebars = {
         displayAsGroup: true,
       },
       items: [
+        {
+          type: 'doc',
+          id: 'capabilities/subagents',
+          label: 'Subagents',
+        },
         {
           type: 'doc',
           id: 'agents/skills',
