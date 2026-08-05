@@ -172,8 +172,32 @@ describe('GoogleSchemaCompatLayer', () => {
         'integer',
         'boolean',
         'object',
+        'array',
       ]);
       expect(resumeData.description).toBe('Resume data');
+    });
+
+    it('gives the permissive anyOf array branch a Gemini-valid items schema', () => {
+      // z.any() accepts array values too. Gemini's OpenAPI 3.0 schema requires `items`
+      // whenever `type: 'array'` is present, so the array branch needs its own permissive
+      // items schema — without it, an array-valued resumeData would fail Gemini's schema
+      // validation even though the top-level property allows it.
+      const schema = z.object({
+        resumeData: z.any().optional().describe('Resume data'),
+      });
+
+      const result = layer.processToJSONSchema(schema) as Record<string, any>;
+      const arrayBranch = result.properties.resumeData.anyOf.find((v: any) => v.type === 'array');
+
+      expect(arrayBranch).toBeDefined();
+      expect(arrayBranch.items).toBeDefined();
+      expect(arrayBranch.items.anyOf.map((v: any) => v.type)).toEqual([
+        'string',
+        'number',
+        'integer',
+        'boolean',
+        'object',
+      ]);
     });
 
     it('rewrites oneOf to anyOf for discriminated unions', () => {
