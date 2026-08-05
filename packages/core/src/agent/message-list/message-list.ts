@@ -15,6 +15,7 @@ import {
   aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
   aiV5PromptToAIV6Prompt,
+  aiV5PromptToAIV7Prompt,
   coreContentToString,
   messagesAreEqual,
   inputToMastraDBMessage as convertInputToMastraDBMessage,
@@ -24,6 +25,7 @@ import {
   systemMessageToAIV4Core,
   StepContentExtractor,
 } from './conversion';
+import type { ToolCallConversionMode } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
@@ -371,6 +373,15 @@ export class MessageList {
     return this;
   }
 
+  /**
+   * Suspended tool calls are dropped from the prompt by default. When the caller opts out
+   * they stay visible, but they are still paired with a pending result — providers reject a
+   * tool call that has no result regardless of what the caller prefers.
+   */
+  private get promptConversionMode(): ToolCallConversionMode {
+    return this.filterIncompleteToolCalls ? 'prompt' : 'prompt-with-suspended';
+  }
+
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
       if ((message.role as string) !== 'signal') {
@@ -542,7 +553,7 @@ export class MessageList {
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
-          this.filterIncompleteToolCalls,
+          this.promptConversionMode,
         );
 
         const messages = [...systemMessages, ...modelMessages];
@@ -565,7 +576,7 @@ export class MessageList {
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
-          this.filterIncompleteToolCalls,
+          this.promptConversionMode,
         );
 
         const storedModelOutputs = new Map<string, unknown>();
@@ -691,6 +702,17 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
+    },
+    aiV7: {
+      ui: () => this.toAIV6UIMessages(this.all.db()),
+
+      // Builds the v5 prompt, then converts tool-result `media` parts to the
+      // file content shape AI SDK v7 (spec 'v4') providers require.
+      llmPrompt: async (options?: {
+        downloadConcurrency?: number;
+        downloadRetries?: number;
+        supportedUrls?: Record<string, RegExp[]>;
+      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */

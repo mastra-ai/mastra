@@ -11,14 +11,14 @@ import type { IterationCompleteContext } from '../../../../agent';
  * providing visibility into what happened (text, tool calls) and the ability
  * to control whether to continue. This scenario proves:
  *
- * 1. The hook receives the correct context (iteration number, tool calls).
+ * 1. The hook receives the correct context (iteration number, tool calls, tool results).
  * 2. The hook can stop iteration early by returning `continue: false`.
  * 3. The hook can inject feedback that the model sees on the next iteration.
  */
 describeForAllEngines('AIMock loop scenario: onIterationComplete hook', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it('onIterationComplete receives iteration context with tool calls', async () => {
+  it('onIterationComplete receives iteration context with tool calls and results', async () => {
     const iterations: IterationCompleteContext[] = [];
 
     const addTool = createTool({
@@ -63,10 +63,17 @@ describeForAllEngines('AIMock loop scenario: onIterationComplete hook', engine =
     expect(iterations[0].toolCalls).toHaveLength(1);
     expect(iterations[0].toolCalls[0].name).toBe('add');
     expect(iterations[0].toolCalls[0].args).toEqual({ a: 2, b: 3 });
+    expect(iterations[0].toolResults).toHaveLength(1);
+    expect(iterations[0].toolResults[0]).toMatchObject({
+      id: 'call_add_1',
+      name: 'add',
+      result: { sum: 5 },
+    });
     expect(iterations[0].isFinal).toBe(false);
 
     // Second iteration: final response
     expect(iterations[1].iteration).toBe(2);
+    expect(iterations[1].toolResults).toEqual([]);
     expect(iterations[1].isFinal).toBe(true);
 
     // Verify the final output contains the expected text

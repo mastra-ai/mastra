@@ -12,8 +12,6 @@ import type {
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
   AgentControllerMode,
   AgentControllerOMConfig,
   AgentControllerRequestContext,
@@ -50,8 +48,6 @@ export type {
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
   AgentControllerMode,
   AgentControllerOMConfig,
   AgentControllerRequestContext,
@@ -76,6 +72,7 @@ export type {
   BuiltinToolId,
   TokenUsage,
 } from '../agent-controller/types';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../agent/message-list/state/types';
 
 /**
  * @deprecated Use {@link AgentController} instead. `Harness` is retained as a
@@ -128,14 +125,6 @@ export type HarnessEvent = AgentControllerEvent;
  * @deprecated Renamed to `AgentControllerEventListener`. Kept for backwards compatibility.
  */
 export type HarnessEventListener = AgentControllerEventListener;
-/**
- * @deprecated Renamed to `AgentControllerMessage`. Kept for backwards compatibility.
- */
-export type HarnessMessage = AgentControllerMessage;
-/**
- * @deprecated Renamed to `AgentControllerMessageContent`. Kept for backwards compatibility.
- */
-export type HarnessMessageContent = AgentControllerMessageContent;
 /**
  * @deprecated Renamed to `AgentControllerRequestStateUpdateResult`. Kept for backwards compatibility.
  */

@@ -7,7 +7,8 @@ import { discoverFsAgents, discoverFsSingleton, discoverFsWorkflows } from './di
 export interface PrepareFsAgentsEntryResult {
   /**
    * The entry file that should be fed to the bundler/analyzer. When fs-routed
-   * primitives (agents, workflows, storage, observability, server, studio) are
+   * primitives (agents, workflows, storage, observability, logger, server,
+   * studio) are
    * found this is a generated wrapper module that registers them onto the
    * user's mastra instance; otherwise it is the original entry unchanged.
    * When auto-constructing (no user entry), this is always the generated module.
@@ -28,6 +29,8 @@ export interface PrepareFsAgentsEntryResult {
   hasStorage: boolean;
   /** Whether an `observability.ts` singleton was discovered. */
   hasObservability: boolean;
+  /** Whether a `logger.ts` singleton was discovered. */
+  hasLogger: boolean;
   /** Whether a `server.ts` singleton was discovered. */
   hasServer: boolean;
   /** Whether a `studio.ts` singleton was discovered. */
@@ -44,7 +47,7 @@ export interface PrepareFsAgentsEntryResult {
 /**
  * Discover fs-routed agents under `<mastraDir>/agents/*`, workflows under
  * `<mastraDir>/workflows/`, and singleton config files (e.g. `storage.ts`,
- * `observability.ts`, `server.ts`, `studio.ts`).
+ * `observability.ts`, `logger.ts`, `server.ts`, `studio.ts`).
  * When any are found, generate a wrapper entry module that registers them onto
  * the user's mastra instance. Returns the entry the bundler should use plus
  * extra tool glob paths so `agents/*\/tools` are bundled.
@@ -65,18 +68,19 @@ export async function prepareFsAgentsEntry(
   entryFile: string | undefined,
   outputDirectory: string,
 ): Promise<PrepareFsAgentsEntryResult> {
-  const [agents, workflows, storage, observability, server, studio] = await Promise.all([
+  const [agents, workflows, storage, observability, logger, server, studio] = await Promise.all([
     discoverFsAgents(mastraDir),
     discoverFsWorkflows(mastraDir),
     discoverFsSingleton(mastraDir, 'storage'),
     discoverFsSingleton(mastraDir, 'observability'),
+    discoverFsSingleton(mastraDir, 'logger'),
     discoverFsSingleton(mastraDir, 'server'),
     discoverFsSingleton(mastraDir, 'studio'),
   ]);
 
   const standalone = entryFile === undefined;
   const hasFsPrimitives =
-    agents.length > 0 || workflows.length > 0 || !!storage || !!observability || !!server || !!studio;
+    agents.length > 0 || workflows.length > 0 || !!storage || !!observability || !!logger || !!server || !!studio;
 
   if (!hasFsPrimitives && entryFile !== undefined) {
     return {
@@ -87,6 +91,7 @@ export async function prepareFsAgentsEntry(
       workflowCount: 0,
       hasStorage: false,
       hasObservability: false,
+      hasLogger: false,
       hasServer: false,
       hasStudio: false,
     };
@@ -103,6 +108,7 @@ export async function prepareFsAgentsEntry(
     workflows,
     storage,
     observability,
+    logger,
     server,
     studio,
   });
@@ -126,6 +132,7 @@ export async function prepareFsAgentsEntry(
     workflowCount: workflows.length,
     hasStorage: !!storage,
     hasObservability: !!observability,
+    hasLogger: !!logger,
     hasServer: !!server,
     hasStudio: !!studio,
     moduleSource,

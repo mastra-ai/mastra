@@ -3,8 +3,6 @@ import path from 'node:path';
 
 import { execa } from 'execa';
 
-const NON_INTERACTIVE_INSTALL_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
-
 type InstallCommand = {
   command: string;
   args: string[];
@@ -27,16 +25,15 @@ export async function installPluginDependencies(
 
   const packageJson = readPackageJson(pluginRoot);
   const commandPackageJson = commandRoot === pluginRoot ? packageJson : readPackageJson(commandRoot);
-  const installCommand = getInstallCommand(
-    pluginRoot,
-    typeof packageJson.packageManager === 'string' ? packageJson.packageManager : undefined,
-    commandRoot,
-    typeof commandPackageJson.packageManager === 'string' ? commandPackageJson.packageManager : undefined,
-  );
+  const packageManager = Object.hasOwn(packageJson, 'packageManager')
+    ? packageJson.packageManager
+    : commandPackageJson.packageManager;
+  const pnpmVersion = getPnpmVersion(pluginRoot, packageManager);
+  const installCommand = getInstallCommand(pluginRoot, pnpmVersion);
 
   const child = execa(installCommand.command, installCommand.args, {
     cwd: pluginRoot,
-    env: NON_INTERACTIVE_INSTALL_ENV,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     stdout: options.onOutput ? 'pipe' : 'ignore',
     stderr: options.onOutput ? 'pipe' : 'ignore',
     cancelSignal: options.signal,
@@ -50,7 +47,7 @@ export async function installPluginDependencies(
   } catch (error) {
     if (isCommandNotFoundError(error)) {
       throw new Error(
-        `This plugin uses ${installCommand.command}, but ${installCommand.command} is not installed. Install ${installCommand.command} and try again. Plugin path: ${pluginRoot}`,
+        'Mastra Code requires Corepack to install GitHub plugin dependencies. Install it with "npm install --global corepack" and try again.',
         { cause: error },
       );
     }
@@ -103,91 +100,41 @@ function isInsideDirectory(targetPath: string, root: string): boolean {
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
-function getInstallCommand(
-  pluginRoot: string,
-  packageManager?: string,
-  commandRoot = pluginRoot,
-  commandPackageManager?: string,
-): InstallCommand {
-  const manager = packageManager ?? commandPackageManager;
-
-  if (manager?.startsWith('pnpm@')) {
-    return hasFile(pluginRoot, 'pnpm-lock.yaml')
-      ? installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore'])
-      : installCommand('pnpm', ['install', '--ignore-workspace', '--pm-on-fail=ignore']);
+function getPnpmVersion(pluginRoot: string, packageManager: unknown): string {
+  if (typeof packageManager !== 'string') {
+    throw new Error(
+      `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
+    );
   }
 
-  if (manager?.startsWith('npm@')) {
-    return hasNpmLockfile(pluginRoot) ? installCommand('npm', ['ci']) : installCommand('npm', ['install']);
+  const match = /^pnpm@(\d+\.\d+\.\d+)$/.exec(packageManager);
+  if (!match?.[1]) {
+    throw new Error(
+      `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
+    );
   }
-
-  if (manager?.startsWith('yarn@')) {
-    return hasFile(pluginRoot, 'yarn.lock')
-      ? installCommand('yarn', ['install', '--frozen-lockfile'])
-      : installCommand('yarn', ['install']);
-  }
-
-  if (manager?.startsWith('bun@')) {
-    return hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')
-      ? installCommand('bun', ['install', '--frozen-lockfile'])
-      : installCommand('bun', ['install']);
-  }
-
-  if (manager) {
-    return installCommand(manager.split('@')[0] ?? manager, ['install']);
-  }
-
-  if (hasFile(pluginRoot, 'pnpm-lock.yaml')) {
-    return installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore']);
-  }
-
-  if (hasFile(commandRoot, 'pnpm-lock.yaml')) {
-    return installCommand('pnpm', ['install', '--ignore-workspace', '--pm-on-fail=ignore']);
-  }
-
-  if (hasNpmLockfile(pluginRoot)) {
-    return installCommand('npm', ['ci']);
-  }
-
-  if (hasNpmLockfile(commandRoot)) {
-    return installCommand('npm', ['install']);
-  }
-
-  if (hasFile(pluginRoot, 'yarn.lock')) {
-    return installCommand('yarn', ['install', '--frozen-lockfile']);
-  }
-
-  if (hasFile(commandRoot, 'yarn.lock')) {
-    return installCommand('yarn', ['install']);
-  }
-
-  if (hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')) {
-    return installCommand('bun', ['install', '--frozen-lockfile']);
-  }
-
-  if (hasFile(commandRoot, 'bun.lock') || hasFile(commandRoot, 'bun.lockb')) {
-    return installCommand('bun', ['install']);
-  }
-
-  return installCommand('npm', ['install']);
+  return match[1];
 }
 
-function installCommand(command: string, args: string[]): InstallCommand {
-  return { command, args: [...args, '--ignore-scripts'] };
+function getInstallCommand(pluginRoot: string, pnpmVersion: string): InstallCommand {
+  const installArgs = ['install', '--ignore-workspace'];
+  if (hasFile(pluginRoot, 'pnpm-lock.yaml')) installArgs.push('--frozen-lockfile');
+  installArgs.push('--ignore-scripts');
+
+  return {
+    command: 'corepack',
+    args: [`pnpm@${pnpmVersion}`, ...installArgs],
+  };
 }
 
 function isCommandNotFoundError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT';
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
 
 function readPackageJson(pluginRoot: string): { packageManager?: unknown } {
   const packageJsonPath = path.join(pluginRoot, 'package.json');
   if (!fs.existsSync(packageJsonPath)) return {};
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { packageManager?: unknown };
-}
-
-function hasNpmLockfile(pluginRoot: string): boolean {
-  return hasFile(pluginRoot, 'package-lock.json') || hasFile(pluginRoot, 'npm-shrinkwrap.json');
 }
 
 function hasFile(pluginRoot: string, fileName: string): boolean {

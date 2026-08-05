@@ -21,8 +21,8 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
         }
       }}
       className={cn(
-        'flex gap-3 group/entity bg-surface3 rounded-xl border border-border1 py-3 px-4',
-        onClick && 'cursor-pointer hover:bg-surface4 transition-all',
+        'group/entity flex gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-3',
+        onClick && 'cursor-pointer transition-all hover:bg-surface4',
         className,
       )}
       onClick={onClick}
@@ -34,7 +34,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
 
 export const EntityIcon = ({ children, className, style }: EntityProps) => {
   return (
-    <Icon size="lg" className={cn('text-neutral3 mt-1 shrink-0', className)} style={style}>
+    <Icon size="lg" className={cn('mt-1 shrink-0 text-neutral3', className)} style={style}>
       {children}
     </Icon>
   );
@@ -42,7 +42,7 @@ export const EntityIcon = ({ children, className, style }: EntityProps) => {
 
 export const EntityName = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-lg" className={cn('text-neutral6 font-medium', className)}>
+    <Txt as="p" variant="ui-lg" className={cn('font-medium text-neutral6', className)}>
       {children}
     </Txt>
   );
@@ -57,5 +57,5 @@ export const EntityDescription = ({ children, className }: EntityProps) => {
 };
 
 export const EntityContent = ({ children, className }: EntityProps) => {
-  return <div className={cn('flex-1 w-full', className)}>{children}</div>;
+  return <div className={cn('w-full flex-1', className)}>{children}</div>;
 };

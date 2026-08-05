@@ -159,7 +159,21 @@ const result = await thread.listMessages({
 const result = await thread.listMessages({
   orderBy: { field: 'createdAt', direction: 'ASC' },
 })
+
+// Get messages with shallow metadata filters
+const result = await thread.listMessages({
+  filter: {
+    metadata: {
+      category: 'billing',
+      escalated: true,
+      priority: 2,
+      archivedAt: null,
+    },
+  },
+})
 ```
+
+Metadata filters match shallow scalar values only: `string`, finite `number`, `boolean`, and `null`. Every key-value pair must match with AND semantics. `null` matches only keys explicitly set to `null`. Metadata keys must start with a letter or underscore and contain only alphanumeric or underscore characters. The limit is 128 characters. Reserved prototype keys such as `__proto__`, `constructor`, and `prototype` aren't allowed. Performance depends on the server storage backend, and arbitrary metadata filters may scan candidate messages.
 
 ### Delete Messages
 
@@ -217,7 +231,7 @@ await mastraClient.updateWorkingMemory({
 // Returns: { success: true }
 ```
 
-**Note:** For resource-scoped working memory, you must provide the `resourceId` parameter. This allows the memory to persist across all conversation threads for that user.
+For resource-scoped working memory, you must provide the `resourceId` parameter. It allows the memory to persist across all conversation threads for that user.
 
 ### Get Memory Status
 

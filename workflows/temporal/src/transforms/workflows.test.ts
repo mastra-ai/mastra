@@ -108,6 +108,22 @@ describe('workflow transform', () => {
     expect(output).toContain('log');
     expect(output).toContain('sleep');
     expect(output).toContain('class TemporalExecutionEngine');
-    expect(output).toContain('function createWorkflow(workflowId)');
+    expect(output).toContain('function createWorkflow(workflowId, options)');
+  });
+
+  it('injects the configured activity timeout into transformed workflows', async () => {
+    const output = await transform(`
+      import { init } from '@mastra/temporal';
+
+      const { createWorkflow } = init({
+        client: undefined,
+        taskQueue: 'mastra',
+        startToCloseTimeout: '5 minutes',
+      });
+
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather');
+    `);
+
+    expect(output).toMatch(/createWorkflow\('weather-workflow',\s*\{\s*startToCloseTimeout: '5 minutes'\s*\}\)/);
   });
 });

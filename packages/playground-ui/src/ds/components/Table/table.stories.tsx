@@ -23,7 +23,7 @@ type Story = StoryObj<typeof Table>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Name</Th>
@@ -60,7 +60,7 @@ export const Default: Story = {
 
 export const SmallSize: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table size="small">
         <Thead>
           <Th>Name</Th>
@@ -87,7 +87,7 @@ export const SmallSize: Story = {
 
 export const WithDateTimeCell: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Event</Th>
@@ -114,7 +114,7 @@ export const WithDateTimeCell: Story = {
 
 export const WithEntryCell: Story = {
   render: () => (
-    <div className="w-[700px]">
+    <div className="w-175">
       <Table>
         <Thead>
           <Th>Agent</Th>
@@ -141,7 +141,7 @@ export const WithEntryCell: Story = {
 
 export const ClickableRows: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Name</Th>
@@ -168,7 +168,7 @@ export const ClickableRows: Story = {
 
 export const SelectedRow: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Name</Th>

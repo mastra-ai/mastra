@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'build-with-ai', label: 'Build with AI' },
     { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
@@ -110,6 +111,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/auth0', label: 'Auth0' },
         { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
+        { type: 'doc', id: 'auth/fga', label: 'Fine-Grained Authorization' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/google', label: 'Google' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
@@ -125,6 +127,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
         { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
+        { type: 'doc', id: 'browser/firecrawl-browser', label: 'FirecrawlBrowser' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],
@@ -152,7 +155,6 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'client-js/agent-builder', label: 'Agent Builder API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
@@ -212,6 +214,8 @@ const sidebars = {
         { type: 'doc', id: 'core/getServer', label: '.getServer()' },
         { type: 'doc', id: 'core/getStorage', label: '.getStorage()' },
         { type: 'doc', id: 'core/getTelemetry', label: '.getTelemetry()' },
+        { type: 'doc', id: 'core/getTool', label: '.getTool()' },
+        { type: 'doc', id: 'core/getToolById', label: '.getToolById()' },
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },
         { type: 'doc', id: 'core/getWorkflow', label: '.getWorkflow()' },
         { type: 'doc', id: 'core/listAgents', label: '.listAgents()' },
@@ -221,6 +225,7 @@ const sidebars = {
         { type: 'doc', id: 'core/listMCPServers', label: '.listMCPServers()' },
         { type: 'doc', id: 'core/listMemory', label: '.listMemory()' },
         { type: 'doc', id: 'core/listScorers', label: '.listScorers()' },
+        { type: 'doc', id: 'core/listTools', label: '.listTools()' },
         { type: 'doc', id: 'core/listVectors', label: '.listVectors()' },
         { type: 'doc', id: 'core/listWorkflows', label: '.listWorkflows()' },
         { type: 'doc', id: 'core/removeWorkspace', label: '.removeWorkspace()' },
@@ -247,25 +252,10 @@ const sidebars = {
         { type: 'doc', id: 'editor/blob-store-provider', label: 'BlobStoreProvider' },
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/processor-provider', label: 'ProcessorProvider' },
+        { type: 'doc', id: 'editor/prompt-blocks', label: 'Prompt blocks' },
+        { type: 'doc', id: 'editor/tools', label: 'Tool configuration' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
-        {
-          type: 'category',
-          label: 'Agent Builder',
-          collapsed: true,
-          items: [
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/agent-builder-options',
-              label: 'AgentBuilderOptions',
-            },
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/builder-agent-defaults',
-              label: 'BuilderAgentDefaults',
-            },
-            { type: 'doc', id: 'editor/agent-builder/builder-models', label: 'Models default' },
-          ],
-        },
+        { type: 'doc', id: 'editor/versioning', label: 'Versioning' },
         {
           type: 'category',
           label: 'Browser',
@@ -308,6 +298,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/completeness', label: 'Completeness' },
             { type: 'doc', id: 'evals/content-similarity', label: 'Content Similarity Scorer' },
             { type: 'doc', id: 'evals/context-precision', label: 'Context Precision Scorer' },
+            { type: 'doc', id: 'evals/context-recall', label: 'Context Recall Scorer' },
             { type: 'doc', id: 'evals/context-relevance', label: 'Context Relevance Scorer' },
             { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
             { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },
@@ -315,6 +306,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
             { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
+            { type: 'doc', id: 'evals/summarization', label: 'Summarization Scorer' },
             { type: 'doc', id: 'evals/textual-difference', label: 'Textual Difference Scorer' },
             { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
             { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
@@ -364,9 +356,11 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'file-based-agents/config', label: 'config.ts' },
         { type: 'doc', id: 'file-based-agents/instructions', label: 'Instructions' },
+        { type: 'doc', id: 'file-based-agents/logger', label: 'Logger' },
         { type: 'doc', id: 'file-based-agents/memory', label: 'Memory' },
         { type: 'doc', id: 'file-based-agents/observability', label: 'Observability' },
         { type: 'doc', id: 'file-based-agents/processors', label: 'Processors' },
+        { type: 'doc', id: 'file-based-agents/scorers', label: 'Scorers' },
         { type: 'doc', id: 'file-based-agents/server', label: 'Server' },
         { type: 'doc', id: 'file-based-agents/skills', label: 'Skills' },
         { type: 'doc', id: 'file-based-agents/storage', label: 'Storage' },
@@ -464,6 +458,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
                   label: 'CloudExporter (deprecated)',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/confident-ai',
+                  label: 'Confident AI',
                 },
                 {
                   type: 'doc',
@@ -663,6 +662,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'streaming/ChunkType', label: 'ChunkType' },
+        { type: 'doc', id: 'streaming/smoothStream', label: 'smoothStream()' },
         {
           type: 'category',
           label: 'Agents',
@@ -712,6 +712,12 @@ const sidebars = {
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
+        {
+          type: 'doc',
+          id: 'tools/isolated-vm-transport',
+          label: 'IsolatedVmCodeModeTransport',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
@@ -762,6 +768,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
         { type: 'doc', id: 'voice/livekit', label: 'LiveKit' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
+        { type: 'doc', id: 'voice/mistral', label: 'Mistral' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },
         { type: 'doc', id: 'voice/openai-realtime', label: 'OpenAI Realtime' },
@@ -782,6 +789,12 @@ const sidebars = {
         { type: 'doc', id: 'voice/voice.speak', label: '.speak()' },
         { type: 'doc', id: 'voice/voice.updateConfig', label: '.updateConfig()' },
       ],
+    },
+    {
+      type: 'category',
+      label: 'Workers',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'workers/overview', label: 'Overview' }],
     },
     {
       type: 'category',
@@ -848,6 +861,8 @@ const sidebars = {
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/mesa-filesystem', label: 'MesaFilesystem' },
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
+        { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },
+        { type: 'doc', id: 'workspace/platform-sandbox', label: 'PlatformSandbox' },
         { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },

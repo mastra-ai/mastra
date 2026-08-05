@@ -2,7 +2,7 @@ import React from 'react';
 
 export const AmazonIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
-    className="h-3 w-3"
+    className="size-3"
     width="16"
     height="16"
     viewBox="0 0 181 108"

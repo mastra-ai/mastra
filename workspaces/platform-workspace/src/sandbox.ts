@@ -1,0 +1,643 @@
+import type { RequestContext } from '@mastra/core/di';
+import type {
+  CommandResult,
+  ExecuteCommandOptions,
+  InstructionsOption,
+  MastraSandboxOptions,
+  ProcessInfo,
+  ProviderStatus,
+  SandboxCloneOptions,
+  SandboxInfo,
+  SpawnProcessOptions,
+} from '@mastra/core/workspace';
+import { MastraSandbox, ProcessHandle, SandboxNotReadyError, SandboxProcessManager } from '@mastra/core/workspace';
+import type { PlatformClientOptions } from './client.js';
+import { PlatformApiError, PlatformClient } from './client.js';
+import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
+import { execViaLease } from './direct-exec.js';
+
+export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
+
+export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'processes'>, PlatformClientOptions {
+  id?: string;
+  environmentId?: string;
+  sandboxId?: string;
+  idleTimeoutMinutes?: number;
+  networkIsolation?: PlatformSandboxNetworkIsolation;
+  env?: Record<string, string>;
+  timeout?: number;
+  instructions?: InstructionsOption;
+  /**
+   * Injected WebSocket factory used by the direct-exec code path. Defaults to
+   * the global `WebSocket` (available on Node 22+, this package's minimum) and
+   * only exists so tests can drive the exec state machine deterministically
+   * without a real network socket.
+   */
+  webSocketFactory?: DirectExecWebSocketFactory;
+}
+
+interface ExecLeaseResponse {
+  provider: string;
+  sandboxId: string;
+  providerResourceId: string;
+  jwt: string;
+  wsEndpoint: string;
+  subprotocol: string;
+  expiresAt: string | null;
+}
+
+/**
+ * How long before a lease's stated `expiresAt` we should treat it as
+ * expired. Avoids a race where the JWT is valid at cache-hit time but the
+ * server rejects it by the time the WebSocket handshake completes.
+ */
+const LEASE_REFRESH_MARGIN_MS = 60_000;
+
+interface CreateSandboxResponse {
+  id: string;
+  providerResourceId?: string | null;
+  status?: string;
+  createdAt?: string;
+  destroyedAt?: string | null;
+}
+
+/** Max attempts for `POST /sandbox` when the proxy returns transient 5xx errors. */
+const CREATE_MAX_ATTEMPTS = 3;
+/** Base delay between create retries; multiplied by the attempt number. */
+const CREATE_RETRY_BASE_DELAY_MS = 2_000;
+
+/**
+ * Diagnostic error thrown when the direct-exec WebSocket transport fails
+ * twice in a row (opening handshake refused or socket closed mid-stream
+ * without an `exit` frame). Distinguishes "the sandbox transport is broken"
+ * from "your command failed" so callers can decide whether to retry at a
+ * higher level (e.g. reprovision the sandbox) or surface the error.
+ *
+ * `opened` is `true` when the WebSocket completed its handshake at least
+ * once before closing; `false` when Railway refused the upgrade outright.
+ */
+export class SandboxExecTransportError extends Error {
+  readonly sandboxId: string | undefined;
+  readonly command: string;
+  readonly attempts: number;
+  readonly opened: boolean;
+  readonly closeCode: number | undefined;
+  readonly closeReason: string | undefined;
+  readonly wsEndpoint: string;
+
+  constructor(
+    message: string,
+    diagnostics: {
+      sandboxId?: string;
+      command: string;
+      attempts: number;
+      opened: boolean;
+      closeCode?: number;
+      closeReason?: string;
+      wsEndpoint: string;
+    },
+  ) {
+    super(message);
+    this.name = 'SandboxExecTransportError';
+    this.sandboxId = diagnostics.sandboxId;
+    this.command = diagnostics.command;
+    this.attempts = diagnostics.attempts;
+    this.opened = diagnostics.opened;
+    this.closeCode = diagnostics.closeCode;
+    this.closeReason = diagnostics.closeReason;
+    this.wsEndpoint = diagnostics.wsEndpoint;
+  }
+}
+
+/**
+ * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
+ * (Railway destroy, quota reclamation, etc.). The client cannot recover from
+ * this on its own because it does not own the binding store; only the fleet
+ * layer can clear the stale sandbox id and provision a fresh one. Callers
+ * (typically `SandboxFleet`) must catch this and reprovision-and-replay.
+ *
+ * When this is thrown the cached `_lease` and `_sandboxId` on the sandbox
+ * instance are cleared, so the next `ensureRunning()` on a reused instance
+ * will re-provision cleanly.
+ */
+export class SandboxDestroyedError extends Error {
+  readonly sandboxId: string | undefined;
+  readonly command: string;
+  readonly attempts: number;
+
+  constructor(message: string, diagnostics: { sandboxId?: string; command: string; attempts: number }) {
+    super(message);
+    this.name = 'SandboxDestroyedError';
+    this.sandboxId = diagnostics.sandboxId;
+    this.command = diagnostics.command;
+    this.attempts = diagnostics.attempts;
+  }
+}
+
+/**
+ * Compose a shell command line from a `command` string and optional `args`.
+ *
+ * IMPORTANT: `command` is treated as a **shell string** and passed to the
+ * remote shell verbatim so callers can use pipes, redirects, and chaining
+ * (`ls -la | grep foo`). This matches the contract of {@link MastraSandbox}
+ * and the local sandbox implementation. `args` are always shell-quoted so
+ * they cannot inject syntax.
+ *
+ * Callers MUST NOT pass untrusted input as `command`. Untrusted values must
+ * be passed via `args`, where they are safely quoted. Passing untrusted
+ * input as `command` allows arbitrary shell syntax execution on the remote
+ * sandbox.
+ */
+function buildCommand(command: string, args?: string[]): string {
+  return args?.length ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+}
+
+function shellQuote(arg: string): string {
+  if (/^[a-zA-Z0-9._\-/=:@]+$/.test(arg)) return arg;
+  return `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+class PlatformProcessHandle extends ProcessHandle {
+  readonly pid: string;
+  private readonly resultPromise: Promise<CommandResult>;
+  private exitCodeValue: number | undefined;
+
+  constructor(pid: string, resultPromise: Promise<CommandResult>, options?: SpawnProcessOptions) {
+    super(options);
+    this.pid = pid;
+    this.resultPromise = resultPromise.then(result => {
+      this.exitCodeValue = result.exitCode;
+      if (result.stdout) this.emitStdout(result.stdout);
+      if (result.stderr) this.emitStderr(result.stderr);
+      return result;
+    });
+  }
+
+  get exitCode(): number | undefined {
+    return this.exitCodeValue;
+  }
+
+  async wait(): Promise<CommandResult> {
+    return this.resultPromise;
+  }
+
+  async kill(): Promise<boolean> {
+    // The workspace proxy has no cancel-exec endpoint; each `executeCommand`
+    // is a synchronous round-trip that has already completed (or timed out)
+    // by the time a handle exists to kill. Making this explicit avoids
+    // callers silently believing they cancelled a still-running process.
+    throw new Error('Platform sandbox command execution does not support killing individual processes');
+  }
+
+  async sendStdin(): Promise<void> {
+    throw new Error('Platform sandbox command execution does not support stdin');
+  }
+}
+
+class PlatformProcessManager extends SandboxProcessManager<PlatformSandbox> {
+  private spawnCounter = 0;
+
+  /**
+   * Spawn a process on the remote sandbox.
+   *
+   * `command` is interpreted as a shell string by the remote shell, matching
+   * the {@link MastraSandbox} contract. See {@link PlatformSandbox.executeCommand}
+   * for the untrusted-input caveat: never pass untrusted values as `command`.
+   */
+  async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
+    const pid = `platform-proc-${Date.now().toString(36)}-${(this.spawnCounter++).toString(36)}`;
+    const resultPromise = this.sandbox.executeCommand(command, undefined, options);
+    const handle = new PlatformProcessHandle(pid, resultPromise, options);
+    this._tracked.set(handle.pid, handle);
+    return handle;
+  }
+
+  async list(): Promise<ProcessInfo[]> {
+    return Array.from(this._tracked.values()).map(handle => ({
+      pid: handle.pid,
+      command: handle.command,
+      running: handle.exitCode === undefined,
+      ...(handle.exitCode !== undefined && { exitCode: handle.exitCode }),
+    }));
+  }
+}
+
+export class PlatformSandbox extends MastraSandbox {
+  readonly id: string;
+  readonly name = 'PlatformSandbox';
+  readonly provider = 'platform';
+  status: ProviderStatus = 'pending';
+  declare readonly processes: PlatformProcessManager;
+
+  private readonly _client: PlatformClient;
+  private readonly _environmentId: string;
+  private _sandboxId?: string;
+  private readonly _idleTimeoutMinutes?: number;
+  private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
+  private readonly _env: Record<string, string>;
+  private readonly _timeout?: number;
+  private readonly _instructionsOverride?: InstructionsOption;
+  private _createdAt: Date | null = null;
+  private readonly _webSocketFactory?: DirectExecWebSocketFactory;
+  /**
+   * Cached exec lease for this sandbox. `null` before the first exec and
+   * after {@link destroy}. Refreshed when `expiresAt - LEASE_REFRESH_MARGIN_MS < now`
+   * (see {@link _ensureLease}); a lease without a disclosed `expiresAt`
+   * is refreshed on every call.
+   */
+  private _lease: (ExecLease & { expiresAtMs: number | null }) | null = null;
+  /**
+   * In-flight mint request; concurrent `_ensureLease` callers on a cold or
+   * near-expiry cache all await this single promise so we don't burn N
+   * `POST /exec-lease` round-trips when the sandbox is doing N parallel execs.
+   * Cleared (regardless of success or failure) when the request settles.
+   */
+  private _leaseInFlight: Promise<ExecLease & { expiresAtMs: number | null }> | null = null;
+
+  constructor(options: PlatformSandboxOptions = {}) {
+    super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
+    this.id = options.id ?? this.generateId();
+    this._client = new PlatformClient(options);
+    this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
+    if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
+    this._sandboxId = options.sandboxId;
+    this._idleTimeoutMinutes = options.idleTimeoutMinutes;
+    this._networkIsolation = options.networkIsolation;
+    this._env = options.env ?? {};
+    this._timeout = options.timeout;
+    this._instructionsOverride = options.instructions;
+    this._webSocketFactory = options.webSocketFactory;
+  }
+
+  private generateId(): string {
+    return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Construct a sibling {@link PlatformSandbox} that inherits this sandbox's
+   * credentials and defaults (access token, project, environment, network
+   * isolation, timeout, instructions, env, idle timeout) with per-instance
+   * overrides from `options`.
+   *
+   * Performs no I/O and does not require this sandbox to be started — the
+   * returned sandbox is not started and provisions (or reattaches, when
+   * `sandboxId` is set) on its own `start()`. Use it when one configured
+   * sandbox acts as the template for a fleet of independent sandboxes
+   * (e.g. one per project).
+   */
+  clone(options: SandboxCloneOptions = {}): PlatformSandbox {
+    // The proxy hashes `body.id` on POST /sandbox to look up a prior
+    // checkpoint. A stable `checkpointName` is only useful if it round-trips
+    // to `body.id`, so route it through the sandbox id when the caller
+    // didn't pick one explicitly. Without this, every clone gets a random
+    // id and no boot ever hits its captured checkpoint (see
+    // issue-platform-sandbox-clone-drops-checkpoint-name.md).
+    const id = options.id ?? options.checkpointName;
+    return new PlatformSandbox({
+      ...(id !== undefined && { id }),
+      accessToken: this._client.accessToken,
+      projectId: this._client.projectId,
+      fetch: this._client.fetch,
+      environmentId: this._environmentId,
+      ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+      idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
+      ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
+      env: options.env ?? this._env,
+      ...(this._timeout !== undefined && { timeout: this._timeout }),
+      ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+      ...(this._webSocketFactory !== undefined && { webSocketFactory: this._webSocketFactory }),
+    });
+  }
+
+  async start(): Promise<void> {
+    if (this._sandboxId) {
+      try {
+        const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+        const json = (await response.json()) as CreateSandboxResponse;
+        // A destroyed record (idle GC, manual delete) is not reattachable —
+        // treat it like a missing sandbox so we fall through to a fresh
+        // provision instead of pointing exec at a dead resource.
+        if (!json.destroyedAt) {
+          this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+          return;
+        }
+        this._sandboxId = undefined;
+      } catch (error) {
+        if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
+        this._sandboxId = undefined;
+      }
+    }
+
+    if (!this._environmentId) throw new Error('environmentId is required');
+
+    const body = JSON.stringify({
+      // Sent so the platform can associate the provisioned resource with a
+      // caller-stable identifier (used for opt-in checkpoint recovery). The
+      // platform treats it as an advisory key: unknown values fall through
+      // to a fresh sandbox, matching pre-existing behavior.
+      id: this.id,
+      environmentId: this._environmentId,
+      idleTimeoutMinutes: this._idleTimeoutMinutes,
+      networkIsolation: this._networkIsolation,
+      env: this._env,
+    });
+    // Provisioning is observed to fail intermittently with proxy 500s while
+    // the provider is under load. A create either succeeds (201) or fails
+    // without allocating a caller-visible resource, so retrying transient
+    // 5xx responses with a short backoff is safe and keeps a single flaky
+    // window from killing the caller's whole workflow.
+    let response: Response | undefined;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        response = await this._client.request('/sandbox', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+        });
+        break;
+      } catch (error) {
+        const transient = error instanceof PlatformApiError && error.status >= 500;
+        if (!transient || attempt >= CREATE_MAX_ATTEMPTS) throw error;
+        await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
+      }
+    }
+    const json = (await response.json()) as CreateSandboxResponse;
+    this._sandboxId = json.id;
+    this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+  }
+
+  async stop(): Promise<void> {
+    await this.destroy();
+  }
+
+  async destroy(): Promise<void> {
+    if (!this._sandboxId) return;
+    await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`, { method: 'DELETE' });
+    // Clear local state so a subsequent start() creates a fresh remote sandbox
+    // instead of taking the reattach branch and pointing exec at a deleted resource.
+    this._sandboxId = undefined;
+    this._createdAt = null;
+    // Drop the exec lease with the sandbox — the JWT is tied to the provider
+    // instance id and would be rejected against a fresh one.
+    this._lease = null;
+  }
+
+  /**
+   * Execute a command on the remote sandbox.
+   *
+   * `command` is a **shell string**: it is concatenated verbatim into the
+   * command line sent to the remote shell, which lets callers use pipes,
+   * redirects, and chaining (`ls -la | grep foo`). This matches the contract
+   * of {@link MastraSandbox} and the local sandbox implementation.
+   *
+   * `args`, when provided, are always shell-quoted so they cannot inject
+   * additional shell syntax.
+   *
+   * Security: callers MUST NOT pass untrusted input as `command`. If any part
+   * of the invocation is derived from an untrusted source, pass it through
+   * `args` (which is safely quoted) or shell-quote it yourself before
+   * inclusion. Untrusted `command` values allow arbitrary shell syntax
+   * execution on the remote sandbox.
+   */
+  async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
+    await this.ensureRunning();
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+
+    const started = Date.now();
+    const fullCommand = buildCommand(command, args);
+    // Nullish check so an explicit `timeout: 0` still overrides the instance
+    // default. `_runDirectExec` omits `timeoutMs` from the exec payload when
+    // the value is 0, which disables the client-side timer entirely.
+    const effectiveTimeout = options?.timeout ?? this._timeout;
+
+    // Direct-exec (WebSocket straight to Railway's tcp-proxy) is the only
+    // data plane. `_runDirectExec` handles single-shot transport retry and
+    // throws typed errors on unrecoverable failure: `SandboxDestroyedError`
+    // when `/exec-lease` returns 410 (fleet must reprovision),
+    // `SandboxExecTransportError` when the WebSocket transport fails twice
+    // against a live sandbox, `PlatformApiError` for other `/exec-lease`
+    // errors (404/500/501). See ./direct-exec.ts and
+    // `docs/factory/direct-sandbox-connection.md` in the Platform repo.
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
+    // `_runDirectExec` throws on transport failure (see its jsdoc), so a
+    // `null` exitCode here can only mean `timedOut: true` — the sandbox
+    // never got to send an exit frame because we cut the command short.
+    // Use 124 for that (the conventional timeout exit code). We are NOT
+    // coercing transport-failure nulls to fake exit codes — those throw.
+    const exitCode = result.exitCode ?? 124;
+    return {
+      success: exitCode === 0,
+      exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      timedOut: result.timedOut,
+      command: fullCommand,
+      executionTimeMs: Date.now() - started,
+    };
+  }
+
+  /**
+   * Run a single exec against the direct-exec transport, with one in-flight
+   * retry on WebSocket transport failure (socket closed without an `exit`
+   * frame and the exec did not time out). The retry mints a fresh lease
+   * — the failure could be a stale JWT — and reopens a new WebSocket.
+   *
+   * Error taxonomy:
+   * - **410 on `/exec-lease`** (either attempt) → the sandbox is gone.
+   *   Nulls the cached `_lease` and `_sandboxId` and throws
+   *   {@link SandboxDestroyedError}. Callers (typically `SandboxFleet`) must
+   *   catch this, clear the stale binding, and reprovision + replay.
+   * - **Persistent transport failure** (both WS attempts close without an
+   *   `exit` frame against a live sandbox) → {@link SandboxExecTransportError}
+   *   with WebSocket close diagnostics.
+   * - **Other `PlatformApiError`s** (404/500/501) propagate directly.
+   * - **Real command result** (exit code from Railway's exit frame, or
+   *   `timedOut: true`) returns normally.
+   *
+   * Returns a result with a real `exitCode` OR `timedOut: true`. Never
+   * returns `{ exitCode: null, timedOut: false }` — that case throws.
+   */
+  private async _runDirectExec(
+    fullCommand: string,
+    effectiveTimeout: number | undefined,
+    options: ExecuteCommandOptions | undefined,
+  ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+    // Filter undefined values out of the env overlay so we match the
+    // Record<string, string> shape execViaLease expects. `ExecuteCommandOptions.env`
+    // is NodeJS.ProcessEnv (string | undefined).
+    const filteredEnv = options?.env
+      ? Object.fromEntries(
+          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        )
+      : undefined;
+
+    let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
+    let lastLease: (ExecLease & { expiresAtMs: number | null }) | undefined;
+    let attemptsMade = 0;
+    // Two attempts: initial + one retry. On the second attempt we drop the
+    // cached lease so we don't reuse a JWT that may itself be the cause of
+    // the transport failure — but only if the cache still holds the same
+    // lease we just failed against. A concurrent exec sharing this instance
+    // may have already cached a fresh, unrelated lease in between, and we
+    // must not discard that.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
+      let lease: ExecLease & { expiresAtMs: number | null };
+      try {
+        lease = await this._ensureLease();
+      } catch (error) {
+        // 410 → sandbox has been destroyed. Clear all cached state so a
+        // reused instance re-provisions cleanly, then hand off to the fleet
+        // layer via a typed error. Other PlatformApiErrors (404/500/501)
+        // propagate as-is — those are configuration or platform errors, not
+        // a "reprovision me" signal.
+        if (error instanceof PlatformApiError && error.status === 410) {
+          this._lease = null;
+          const priorSandboxId = this._sandboxId;
+          this._sandboxId = undefined;
+          throw new SandboxDestroyedError(
+            `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,
+            {
+              ...(priorSandboxId && { sandboxId: priorSandboxId }),
+              command: fullCommand,
+              attempts: attempt + 1,
+            },
+          );
+        }
+        throw error;
+      }
+      lastLease = lease;
+      attemptsMade = attempt + 1;
+      const result = await execViaLease(lease, {
+        command: fullCommand,
+        ...(options?.cwd !== undefined && { cwd: options.cwd }),
+        ...(filteredEnv !== undefined && { env: filteredEnv }),
+        ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
+        ...(this._webSocketFactory && { webSocketFactory: this._webSocketFactory }),
+      });
+      lastResult = result;
+      // `null` exitCode with `timedOut: false` means the socket closed
+      // without an exit frame — a transport failure (handshake stalled,
+      // mid-stream drop, expired token). Any other outcome (real exit code
+      // or timed-out) is a valid result and we return it.
+      if (result.exitCode !== null || result.timedOut) return result;
+    }
+
+    // Both attempts failed at the transport layer against a live sandbox.
+    // Surface a loud, typed error with close diagnostics so callers can
+    // distinguish "your command failed" from "the sandbox transport is
+    // broken."
+    const result = lastResult!;
+    const lease = lastLease!;
+    // The lease from the failed second attempt is still cached; drop it so
+    // the next `executeCommand` doesn't waste its first attempt on the same
+    // implicated JWT before minting fresh. Identity-check first so a
+    // concurrent exec that has already cached a fresh, unrelated lease
+    // isn't collateral-damaged.
+    if (this._lease === lease) this._lease = null;
+    throw new SandboxExecTransportError(
+      `Direct-exec transport failed for sandbox ${this._sandboxId ?? '(unknown)'} after ${attemptsMade} attempt(s)` +
+        (result.closeCode !== undefined
+          ? ` (close ${result.closeCode}${result.closeReason ? ` ${result.closeReason}` : ''})`
+          : ''),
+      {
+        ...(this._sandboxId && { sandboxId: this._sandboxId }),
+        command: fullCommand,
+        attempts: attemptsMade,
+        opened: result.opened ?? false,
+        ...(result.closeCode !== undefined && { closeCode: result.closeCode }),
+        ...(result.closeReason !== undefined && { closeReason: result.closeReason }),
+        wsEndpoint: lease.wsEndpoint,
+      },
+    );
+  }
+
+  /**
+   * Return a cached exec lease, minting a fresh one when the cache is empty
+   * or the JWT is within {@link LEASE_REFRESH_MARGIN_MS} of `expiresAt`.
+   *
+   * Callers are expected to be on the "sandbox is running" path; we don't
+   * re-check `_sandboxId` here because `executeCommand` already gated on it.
+   */
+  private async _ensureLease(): Promise<ExecLease & { expiresAtMs: number | null }> {
+    const now = Date.now();
+    // Cache hit only when we know the expiry AND we're comfortably before it.
+    // A null `expiresAtMs` means the provider didn't disclose a TTL — treat
+    // that as "refresh every call" rather than "cache forever", so a token
+    // that turns out to be short-lived can't wedge the sandbox until restart.
+    if (this._lease && this._lease.expiresAtMs !== null && this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now) {
+      return this._lease;
+    }
+    // Coalesce concurrent mints on a cold/expired cache.
+    if (this._leaseInFlight) return this._leaseInFlight;
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const sandboxId = this._sandboxId;
+    const inFlight = (async () => {
+      const response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
+        method: 'POST',
+      });
+      const json = (await response.json()) as ExecLeaseResponse;
+      const expiresAtMs = json.expiresAt ? Date.parse(json.expiresAt) : null;
+      const lease = {
+        jwt: json.jwt,
+        wsEndpoint: json.wsEndpoint,
+        subprotocol: json.subprotocol,
+        expiresAt: json.expiresAt,
+        // Guard against `Date.parse` returning NaN for malformed values by
+        // treating them as "no expiry known", which forces a mint every call
+        // rather than silently caching a broken lease forever.
+        expiresAtMs: expiresAtMs !== null && !Number.isNaN(expiresAtMs) ? expiresAtMs : null,
+      };
+      this._lease = lease;
+      return lease;
+    })();
+    this._leaseInFlight = inFlight;
+    try {
+      return await inFlight;
+    } finally {
+      // Clear on both success and failure so a failed mint doesn't wedge
+      // future callers into awaiting the same rejected promise forever.
+      if (this._leaseInFlight === inFlight) this._leaseInFlight = null;
+    }
+  }
+
+  async getInfo(): Promise<SandboxInfo> {
+    if (!this._sandboxId) {
+      return {
+        id: this.id,
+        name: this.name,
+        provider: this.provider,
+        status: this.status,
+        createdAt: this._createdAt ?? new Date(),
+      };
+    }
+    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+    const json = (await response.json()) as CreateSandboxResponse;
+    return {
+      id: json.id,
+      name: this.name,
+      provider: this.provider,
+      status: this.status,
+      createdAt: json.createdAt ? new Date(json.createdAt) : (this._createdAt ?? new Date()),
+      metadata: {
+        // The platform assigns its own sandbox id on create (the advisory id
+        // sent in the POST body is not honored). Expose it so callers that
+        // persist a reattach id (e.g. the Factory sandbox fleet, which reads
+        // `metadata.sandboxId`) store the id the proxy actually recognizes
+        // instead of the locally generated construction id.
+        sandboxId: json.id,
+        providerResourceId: json.providerResourceId ?? undefined,
+        platformStatus: json.status,
+      },
+    };
+  }
+
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    const defaultInstructions = `Platform sandbox${this._sandboxId ? ` ${this._sandboxId}` : ''}. Execute commands with the sandbox command APIs.`;
+    if (typeof this._instructionsOverride === 'function') {
+      return this._instructionsOverride({ defaultInstructions, requestContext: opts?.requestContext });
+    }
+    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
+    return defaultInstructions;
+  }
+}

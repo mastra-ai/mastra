@@ -58,7 +58,7 @@ export const customProviderEditShareImportScenario = {
 
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
-    await runtime.waitForScreenText(/messages\s+0\/30k/i, terminal, 8_000);
+    await runtime.waitForScreenText(/0\/70k/i, terminal, 8_000);
 
     terminal.write('/models');
     await runtime.waitForScreenText(/models\s+Switch model pack/i, terminal, 8_000);

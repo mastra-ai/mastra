@@ -7,7 +7,7 @@
  * populated when `initContextStorage()` is called.
  *
  * The fix is an explicit `initContextStorage()` call in the `Mastra`
- * constructor (rather than a side-effect import that gets tree-shaken by tsup).
+ * constructor (rather than a side-effect import that gets tree-shaken by the bundler).
  *
  * This test instantiates `Mastra` and verifies that the constructor-triggered
  * registration makes `resolveCurrentSpan()` work inside `executeWithContext`.

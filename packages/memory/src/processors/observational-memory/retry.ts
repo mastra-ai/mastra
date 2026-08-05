@@ -61,12 +61,18 @@ function hasTransientMessage(value: unknown): boolean {
   return false;
 }
 
+function isRetryableHttpStatus(status: number): boolean {
+  if (status === 408 || status === 425 || status === 429) return true;
+  return status >= 500 && status <= 599;
+}
+
 function hasRetryableHttpStatus(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  const status = typeof value.statusCode === 'number' ? value.statusCode : undefined;
-  if (status === undefined) return false;
-  if (status === 408 || status === 425 || status === 429) return true;
-  if (status >= 500 && status <= 599) return true;
+  if (typeof value.statusCode === 'number' && isRetryableHttpStatus(value.statusCode)) return true;
+  // OpenRouter-style mid-stream SSE errors carry the HTTP status on a numeric
+  // `code` property (e.g. { code: 502, message: 'JSON error injected into SSE
+  // stream', metadata: { error_type: 'provider_unavailable' } }).
+  if (typeof value.code === 'number' && isRetryableHttpStatus(value.code)) return true;
   return false;
 }
 

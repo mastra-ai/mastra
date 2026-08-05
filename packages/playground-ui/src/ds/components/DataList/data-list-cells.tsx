@@ -28,7 +28,7 @@ export function DataListCell({ children, className, height = 'default', as, stic
   return (
     <Component
       className={cn(
-        'relative grid min-w-0 max-w-full items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:content-["—"] empty:before:text-neutral2',
+        'relative grid max-w-full min-w-0 items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:text-neutral2 empty:before:content-["—"]',
         height === 'compact' ? 'py-1.5' : 'py-2.5',
         sticky === 'start' && dataListStickyStartStyles,
         className,
@@ -65,7 +65,7 @@ function DataListTruncatedCellContent({ children }: { children: ReactNode }) {
     }
 
     return cloneElement(child, {
-      className: cn('min-w-0 max-w-full overflow-hidden', child.props.className),
+      className: cn('max-w-full min-w-0 overflow-hidden', child.props.className),
       children: <DataListTruncatedTextNodes>{child.props.children}</DataListTruncatedTextNodes>,
     });
   });
@@ -108,7 +108,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -ml-5 -mr-4 w-auto max-w-none rounded-l-md pl-5 pr-4 text-left text-ui-sm font-semibold tracking-tight text-neutral2',
+        'data-list-row-header -mr-4 -ml-5 w-auto max-w-none rounded-l-md pr-4 pl-5 text-left text-ui-sm font-semibold tracking-tight text-neutral2',
         className,
       )}
       {...rest}
@@ -145,7 +145,7 @@ export function DataListNumberCell({
       height={height}
       className={cn(
         'justify-items-end text-right text-ui-sm tabular-nums',
-        highlight ? 'text-neutral4 font-semibold' : 'text-neutral3',
+        highlight ? 'font-semibold text-neutral4' : 'text-neutral3',
         className,
       )}
       {...rest}
@@ -166,7 +166,7 @@ export interface DataListIdCellProps {
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
   return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
+    <DataListCell height="compact" className="text-ui-smd text-neutral3 font-mono">
       {getShortId(id)}
     </DataListCell>
   );
@@ -180,22 +180,31 @@ export interface DataListSelectCellProps {
    * before `onToggle` runs, so the host row's `onClick` doesn't fire.
    */
   onToggle: (shiftKey: boolean) => void;
+  /** Disable the checkbox, e.g. while a selection mutation is in flight. */
+  disabled?: boolean;
   'aria-label'?: string;
 }
 
-export function DataListSelectCell({ checked, onToggle, ...rest }: DataListSelectCellProps) {
+export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: DataListSelectCellProps) {
   return (
     <DataListCell
       as="label"
       height="compact"
-      className="h-8 w-8 self-center cursor-pointer justify-items-center overflow-visible px-0 py-0!"
+      className={cn(
+        'size-8 justify-items-center self-center overflow-visible px-0 py-0!',
+        disabled ? 'cursor-not-allowed' : 'cursor-pointer',
+      )}
       onClick={e => e.stopPropagation()}
     >
       <Checkbox
         checked={checked}
+        disabled={disabled}
         onCheckedChange={() => {}} // no-op: selection handled by onClick to capture shiftKey
         onClick={e => {
           e.stopPropagation();
+          // Base UI's Checkbox.Root is a `<span>`, so clicks still fire while
+          // disabled — guard here instead of relying on `:disabled` semantics.
+          if (disabled) return;
           onToggle(e.shiftKey);
         }}
         aria-label={rest['aria-label']}
@@ -221,7 +230,7 @@ export function DataListMonoCell({ children, className, height = 'compact' }: Da
     <DataListCell height={height}>
       <span
         className={cn(
-          'block min-w-0 max-w-full text-ui-smd font-mono text-neutral3 truncate empty:before:content-["—"]',
+          'block max-w-full min-w-0 truncate font-mono text-ui-smd text-neutral3 empty:before:content-["—"]',
           className,
         )}
       >
@@ -258,7 +267,7 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3 flex">
+    <DataListCell height="compact" className="text-ui-smd text-neutral3 flex font-mono">
       {date ? (
         <>
           {format(date, 'HH:mm:ss')}

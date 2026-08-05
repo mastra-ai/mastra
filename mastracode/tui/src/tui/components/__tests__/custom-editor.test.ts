@@ -220,6 +220,7 @@ describe('CustomEditor image paste handling', () => {
     it.each([
       { marker: '/', text: '/1234567890123' },
       { marker: '@', text: '@1234567890123' },
+      { marker: '!', text: '!1234567890123' },
     ])('removes $marker before wrapping and restores editor state', ({ marker, text }) => {
       const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
       editor.getModeColor = vi.fn(() => '#16c858');
@@ -234,7 +235,7 @@ describe('CustomEditor image paste handling', () => {
       expect(stripAnsi(output[1]!)).toBe(`│ ${marker} 1234567890123  │`);
     });
 
-    it.each(['/', '@'])('accounts for a cursor-highlighted %s across explicit multiline input', marker => {
+    it.each(['/', '@', '!'])('accounts for a cursor-highlighted %s across explicit multiline input', marker => {
       const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
       editor.getModeColor = vi.fn(() => '#16c858');
       editor.setText(`${marker}1234567\n7654321`);
@@ -266,7 +267,7 @@ describe('CustomEditor image paste handling', () => {
       expect(stripAnsi(output[1]!)).toHaveLength(20);
     });
 
-    it.each(['/', '@'])('keeps multiline narrow rows and right borders aligned for %s', marker => {
+    it.each(['/', '@', '!'])('keeps multiline narrow rows and right borders aligned for %s', marker => {
       const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
       editor.getModeColor = vi.fn(() => '#16c858');
       editor.setText(`${marker}12345678901234567890`);
@@ -731,6 +732,22 @@ describe('CustomEditor voice push-to-talk', () => {
     vi.advanceTimersByTime(360);
     // After stopping, no further animation ticks occur.
     expect(requestRender).toHaveBeenCalledTimes(1); // only the stop's own render
+  });
+
+  it('uses only the assigned render callback for listening animation', () => {
+    const fallbackRender = vi.fn();
+    const assignedRender = vi.fn();
+    const editor = new CustomEditor({ requestRender: fallbackRender } as any, {} as any);
+    editor.requestRender = assignedRender;
+
+    editor.setVoiceListening(true);
+    fallbackRender.mockClear();
+    assignedRender.mockClear();
+    vi.advanceTimersByTime(120);
+
+    expect(assignedRender).toHaveBeenCalledOnce();
+    expect(fallbackRender).not.toHaveBeenCalled();
+    editor.setVoiceListening(false);
   });
 
   it('renders dictated text greyed-out and stops greying once edited', async () => {

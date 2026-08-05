@@ -35,7 +35,7 @@ export function TimelineTimingCol({
     <HoverCard>
       <HoverCardTrigger
         className={cn(
-          'h-8 p-1 grid grid-cols-[1fr_auto] gap-2 items-center cursor-help pr-2 rounded-r-md',
+          'grid h-8 cursor-help grid-cols-[1fr_auto] items-center gap-2 rounded-r-md p-1 pr-2',
           chartWidth === 'wide' ? 'min-w-72' : 'min-w-32',
           '[&:hover>div]:bg-surface5',
           {
@@ -44,10 +44,10 @@ export function TimelineTimingCol({
           },
         )}
       >
-        <div className={cn('w-full p-1.5 rounded-md bg-surface4 transition-colors duration-1000')}>
-          <div className="relative w-full h-1.5 rounded-sm overflow-hidden">
+        <div className={cn('w-full rounded-md bg-surface4 p-1.5 transition-colors duration-1000')}>
+          <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
             <div
-              className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}
+              className={cn('absolute top-0 h-1.5 rounded-sm bg-neutral1')}
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -57,10 +57,10 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-neutral3 text-ui-xs')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
+        <div className={cn('flex justify-end text-ui-xs text-neutral3')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
       </HoverCardTrigger>
       <HoverCardContent className="bg-surface4 pr-6">
-        <div className={cn('text-ui-sm flex items-center gap-2 mb-2 mt-1')}>Span Timing</div>
+        <div className={cn('mt-1 mb-2 flex items-center gap-2 text-ui-sm')}>Span Timing</div>
         <DataKeysAndValues>
           <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>
           <DataKeysAndValues.Value>{span.latency} ms</DataKeysAndValues.Value>

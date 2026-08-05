@@ -98,7 +98,7 @@ You: [load_tool for "calculator_add"] -> tool is now loading
 You: "I've found and loaded a calculator tool. Let me add those numbers for you now."
 
 Be proactive about searching for tools when you don't have the capability the user needs.`,
-  model: 'openai/gpt-5.2',
+  model: 'openai/gpt-5.5',
   memory,
   inputProcessors: [toolSearchProcessor],
 });

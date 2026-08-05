@@ -166,7 +166,7 @@ export const Variants: Story = {
     <div className="flex flex-col gap-3">
       {(['default', 'outline', 'ghost'] as const).map(variant => (
         <Fragment key={variant}>
-          <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-[200px]" />
+          <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-50" />
         </Fragment>
       ))}
     </div>
@@ -192,7 +192,7 @@ export const Sizes: Story = {
     <div className="flex flex-col gap-3">
       {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
         <Fragment key={size}>
-          <Combobox size={size} options={frameworkOptions} placeholder={size} className="w-[200px]" />
+          <Combobox size={size} options={frameworkOptions} placeholder={size} className="w-50" />
         </Fragment>
       ))}
     </div>
@@ -205,7 +205,7 @@ export const Multiple: Story = {
     const selectedCapabilities = capabilityOptions.filter(option => value.includes(option.value));
 
     return (
-      <div className="flex w-[360px] flex-col gap-3">
+      <div className="flex w-90 flex-col gap-3">
         <Combobox
           multiple
           options={capabilityOptions}
@@ -220,7 +220,7 @@ export const Multiple: Story = {
           {selectedCapabilities.map(option => (
             <span
               key={option.value}
-              className="rounded-full border border-border1 bg-surface3 px-2.5 py-1 text-ui-xs text-neutral4"
+              className="border-border1 bg-surface3 text-ui-xs text-neutral4 rounded-full border px-2.5 py-1"
             >
               {option.label}
             </span>

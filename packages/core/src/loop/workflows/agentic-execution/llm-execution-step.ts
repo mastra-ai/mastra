@@ -15,7 +15,7 @@ import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
-import type { AnySpan, ModelInferenceContext, TracingContext } from '../../../observability';
+import type { AnySpan, IModelSpanTracker, ModelInferenceContext, TracingContext } from '../../../observability';
 import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
 import type { CachedLLMStepResponse, InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
@@ -73,6 +73,8 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import type { PendingProviderToolCall } from './provider-tool-spans';
+import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -150,6 +152,10 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   mastra?: Mastra;
   /** Active tracing context. Parent of any CLIENT_TOOL_CALL spans we create. */
   tracingContext?: TracingContext;
+  /** Closure-scoped map for provider tool calls awaiting a result, which may arrive in a later iteration. */
+  pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
+  /** Live step tracker, consulted at tool-result time to parent PROVIDER_TOOL_CALL spans. */
+  modelSpanTracker?: IModelSpanTracker;
 };
 
 type ToolResolvers = {
@@ -436,6 +442,8 @@ async function processOutputStream<OUTPUT = undefined>({
   toolPayloadTransform,
   mastra,
   tracingContext,
+  pendingProviderToolCallsByToolCallId,
+  modelSpanTracker,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -516,6 +524,9 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     try {
+      // Unlike PROVIDER_TOOL_CALL, this span must exist at call time so proxy.inject
+      // can place its trace carrier into the outgoing tool-call payload, and the tool
+      // runs outside the step lifecycle — so it anchors to AGENT_RUN, not the step.
       const parentSpan =
         tracingContext.currentSpan.type === SpanType.AGENT_RUN
           ? tracingContext.currentSpan
@@ -549,6 +560,52 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     return { toolDef, inferredProviderExecuted };
+  };
+
+  const recordProviderToolCall = ({
+    toolCallId,
+    toolName,
+    args,
+    providerExecuted,
+  }: {
+    toolCallId: string;
+    toolName: string;
+    args?: unknown;
+    providerExecuted?: boolean;
+  }) => {
+    if (!pendingProviderToolCallsByToolCallId || !tracingContext?.currentSpan) {
+      return;
+    }
+
+    const toolDef = resolveDirectOrProviderTool(toolName);
+    const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
+
+    if (!inferredProviderExecuted) {
+      return;
+    }
+
+    const existingEntry = pendingProviderToolCallsByToolCallId.get(toolCallId);
+    if (existingEntry) {
+      // If args arrive after the call was first recorded (e.g. from
+      // tool-call-input-streaming-start), fill them in.
+      if (args !== undefined && existingEntry.args === undefined) {
+        existingEntry.args = args;
+      }
+      return;
+    }
+
+    const fallbackParentSpan =
+      tracingContext.currentSpan.type === SpanType.AGENT_RUN
+        ? tracingContext.currentSpan
+        : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+
+    pendingProviderToolCallsByToolCallId.set(toolCallId, {
+      toolName,
+      args,
+      startTime: new Date(),
+      toolDescription: (toolDef as { description?: string } | undefined)?.description,
+      fallbackParentSpan,
+    });
   };
 
   for await (let chunk of outputStream._getBaseStream()) {
@@ -591,6 +648,11 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       }));
+      recordProviderToolCall({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        providerExecuted: chunk.payload.providerExecuted,
+      });
     } else if (chunk.type === 'tool-call-delta') {
       const toolCallId = chunk.payload.toolCallId;
       if (toolCallId && chunk.payload.argsTextDelta) {
@@ -610,6 +672,12 @@ async function processOutputStream<OUTPUT = undefined>({
         args: chunk.payload.args,
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
+      });
+      recordProviderToolCall({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: chunk.payload.args,
+        providerExecuted: chunk.payload.providerExecuted,
       });
     }
 
@@ -734,6 +802,24 @@ async function processOutputStream<OUTPUT = undefined>({
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
+        }
+        // The result determines which MODEL_STEP owns the provider tool call, so the
+        // PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
+        if (pendingProviderToolCallsByToolCallId) {
+          const pending = pendingProviderToolCallsByToolCallId.get(chunk.payload.toolCallId);
+          if (pending) {
+            // Re-fetch the live step context so the span parents under whichever
+            // MODEL_STEP is open right now (mirrors the durable path); a live
+            // lookup never returns a closed step.
+            endPendingProviderToolSpan({
+              toolCallId: chunk.payload.toolCallId,
+              pending,
+              parentSpan: modelSpanTracker?.getTracingContext()?.currentSpan ?? pending.fallbackParentSpan,
+              result: { output: chunk.payload.result, isError: chunk.payload.isError },
+              logger,
+            });
+            pendingProviderToolCallsByToolCallId.delete(chunk.payload.toolCallId);
+          }
         }
         safeEnqueue(controller, chunk);
         break;
@@ -870,6 +956,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
+  const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+
+  const cleanupProviderToolSpans = (terminal: boolean) => {
+    if (!terminal) {
+      return;
+    }
+    for (const [toolCallId, pending] of pendingProviderToolCallsByToolCallId.entries()) {
+      endPendingProviderToolSpan({ toolCallId, pending, parentSpan: pending.fallbackParentSpan, logger });
+    }
+    pendingProviderToolCallsByToolCallId.clear();
+  };
 
   return createStep({
     id: 'llm-execution' as const,
@@ -1156,7 +1253,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   messageList,
                   messageId: currentStep.messageId,
                   stepTools: tools,
-                  _internal: _internal!,
+                  _internal: _internal,
                 });
               }
               logger?.error('Error in processInputStep processors:', error);
@@ -1182,7 +1279,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           const runState = new AgenticRunState({
-            _internal: _internal!,
+            _internal: _internal,
             model: currentStep.model,
           });
 
@@ -1192,9 +1289,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
           });
           const llmPromptForModel =
-            currentStep.model?.specificationVersion === 'v3' || currentStep.model?.specificationVersion === 'v4'
-              ? messageList.get.all.aiV6.llmPrompt
-              : messageList.get.all.aiV5.llmPrompt;
+            currentStep.model?.specificationVersion === 'v4'
+              ? messageList.get.all.aiV7.llmPrompt
+              : currentStep.model?.specificationVersion === 'v3'
+                ? messageList.get.all.aiV6.llmPrompt
+                : messageList.get.all.aiV5.llmPrompt;
           let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
           inputMessages = applyAutoResumeSystemMessage({
@@ -1257,7 +1356,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 messageList,
                 messageId: currentStep.messageId,
                 stepTools: currentStep.tools,
-                _internal: _internal!,
+                _internal: _internal,
               });
             }
             logger?.error('Error in processLLMRequest processors:', error);
@@ -1431,6 +1530,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
               mastra,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+              pendingProviderToolCallsByToolCallId,
+              modelSpanTracker,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
@@ -1499,7 +1600,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     messageList,
                     messageId: currentStep.messageId,
                     stepTools: currentStep.tools,
-                    _internal: _internal!,
+                    _internal: _internal,
                   });
                 }
                 logger?.error('Error in processLLMResponse processors:', responseProcessorError);
@@ -1507,6 +1608,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               }
             }
           } catch (error) {
+            // Force-close any server tool spans opened during the failed stream
+            // before abort/error/fallback handling can return or throw.
+            cleanupProviderToolSpans(true);
+
             const provider = model?.provider;
             const modelIdStr = model?.modelId;
 
@@ -1637,6 +1742,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
           // so this handles the case where processOutputStream completed normally via `break`.
           if (options?.abortSignal?.aborted) {
+            cleanupProviderToolSpans(true);
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });
@@ -1667,7 +1773,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', existingWorkspace);
       }
 
-      if (callBail) {
+      const bailFromExecution = () => {
         const usage = outputStream._getImmediateUsage();
         const responseMetadata = runState.state.responseMetadata;
         const text = outputStream._getImmediateText();
@@ -1698,6 +1804,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             nonUser: messageList.get.response.aiV5.model(),
           },
         });
+      };
+
+      if (callBail) {
+        return bailFromExecution();
       }
 
       // Handle processAPIError for API rejections
@@ -1757,8 +1867,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
+      if (apiErrorRetryResult?.retry && options?.abortSignal?.aborted) {
+        cleanupProviderToolSpans(true);
+        await options.onAbort?.({
+          steps: inputData?.output?.steps ?? [],
+        });
+        safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+        return bailFromExecution();
+      }
+
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
+        cleanupProviderToolSpans(true);
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -2020,6 +2140,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'content-filter';
       const shouldContinue =
         shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+
+      // On terminal exit, materialize spans for provider tool calls whose result never arrived.
+      // On retry (shouldRetry), pending calls from the rejected attempt must also be flushed —
+      // the LLM will produce a fresh response with new tool calls.
+      cleanupProviderToolSpans(!shouldContinue || shouldRetry);
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;

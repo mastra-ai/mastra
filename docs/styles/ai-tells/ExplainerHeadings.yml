@@ -1,0 +1,20 @@
+---
+extends: existence
+message: "AI explainer heading: '%s'. Name what you're explaining instead."
+level: error
+ignorecase: true
+scope: heading
+tokens:
+  - Deep Dive
+  - Under the Hood
+  - Demystifying
+  - Why It Matters
+  - Why This Matters
+  - Why It Exists
+  - Why This Exists
+  - What It Solves
+  - What This Solves
+  - What It Does
+  - What This Does
+  - A Closer Look
+  - The Inner Workings

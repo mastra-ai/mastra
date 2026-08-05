@@ -1,5 +1,6 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
+import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -48,7 +49,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
   });
 
   const derivedMocks: DatasetItemToolMock[] = trajectory?.steps ? collectToolMocks(trajectory.steps) : [];
-  const initialMocksJson = derivedMocks.length > 0 ? JSON.stringify(derivedMocks, null, 2) : '';
+  const initialMocksJson = derivedMocks.length > 0 ? safeStringify(derivedMocks, 2) : '';
 
   return (
     <SideDialog
@@ -76,7 +77,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
         </SideDialog.Header>
 
         {isTrajectoryLoading ? (
-          <div className="px-2 py-4 text-sm text-neutral4">Loading tool calls from trace...</div>
+          <div className="text-neutral4 px-2 py-4 text-sm">Loading tool calls from trace...</div>
         ) : (
           // Remount when the source trace changes so the form's useState seeds
           // from the freshly derived mocks — no state-reset effect needed.
@@ -178,7 +179,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {datasets.length === 0 ? (
-              <div className="px-2 py-4 text-sm text-neutral4 text-center">No datasets available</div>
+              <div className="text-neutral4 px-2 py-4 text-center text-sm">No datasets available</div>
             ) : (
               datasets.map(dataset => (
                 <SelectItem key={dataset.id} value={dataset.id}>
@@ -206,7 +207,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {items.length === 0 ? (
-              <div className="px-2 py-4 text-sm text-neutral4 text-center">No items available</div>
+              <div className="text-neutral4 px-2 py-4 text-center text-sm">No items available</div>
             ) : (
               items.map(item => (
                 <SelectItem key={item.id} value={item.id}>
@@ -221,7 +222,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
       <div className="grid gap-2">
         <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
         <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-[160px]" />
-        <p className="text-xs text-neutral4">
+        <p className="text-neutral4 text-xs">
           Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
         </p>
       </div>

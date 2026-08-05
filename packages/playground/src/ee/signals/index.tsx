@@ -1,2 +1,3 @@
 export { SignalsOverviewPage as default } from './signals-overview-page';
-export { SignalDetailsPage, SignalTraceIdPage } from './signal-details-page';
+export { SankeySignals } from './sankey-signals';
+export type { SankeySignalsProps } from './sankey-signals';

@@ -76,7 +76,17 @@ export function extractSuspendedToolsFromMessages(
       );
   }
 
-  return suspendedToolObj ? (Object.values(suspendedToolObj) as Array<Record<string, unknown>>) : [];
+  if (!suspendedToolObj) return [];
+
+  // The auto-resume directive tells the model to pass the entry's `runId` back
+  // as `suspendedToolRunId`, which the resume leg uses to resume the suspended
+  // (inner) run. Persisted metadata stores the OUTER resumable runId with the
+  // inner run as `delegatedRunId`, so surface the inner run under `runId` here.
+  return Object.values(suspendedToolObj).map(entry => {
+    if (!entry || typeof entry !== 'object') return entry as Record<string, unknown>;
+    const { delegatedRunId, ...rest } = entry as Record<string, unknown>;
+    return typeof delegatedRunId === 'string' ? { ...rest, runId: delegatedRunId } : rest;
+  });
 }
 
 /**
@@ -88,7 +98,11 @@ export function buildAutoResumeSystemMessageSuffix(
   suspendedTools: ReadonlyArray<Record<string, unknown>>,
 ): string | null {
   if (suspendedTools.length === 0) return null;
-  return `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
+  // parentRunId is internal bookkeeping for channel resume routing; the model
+  // only needs runId (as suspendedToolRunId). Omitting it keeps the prompt
+  // byte-identical to existing LLM recordings.
+  const toolsForPrompt = suspendedTools.map(({ parentRunId: _parentRunId, ...rest }) => rest);
+  return `\n\nAnalyse the suspended tools: ${JSON.stringify(toolsForPrompt)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.

@@ -60,7 +60,7 @@ export function SideDialogRoot({
         <DrawerViewport className={isConfirmation ? 'pointer-events-none' : undefined}>
           <DrawerPopup
             className={cn(
-              'max-w-none rounded-none border-y-0 border-r-0 border-l border-border2 bg-surface2 overflow-visible',
+              'max-w-none overflow-visible rounded-none border-y-0 border-r-0 border-l border-border2 bg-surface2',
               {
                 'w-[75vw] 2xl:w-[65vw] 4xl:w-[55vw]': level === 1,
                 'w-[70vw] 2xl:w-[59vw] 4xl:w-[48vw]': level === 2,
@@ -79,7 +79,7 @@ export function SideDialogRoot({
                   <button
                     type="button"
                     className={cn(
-                      'flex appearance-none items-center justify-center rounded-bl-lg h-14 w-14 absolute top-0 -left-14 bg-surface2 text-neutral3 border-l border-b border-border2',
+                      'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-border2 bg-surface2 text-neutral3',
                       transitions.all,
                       'hover:bg-surface4 hover:text-neutral5',
                     )}

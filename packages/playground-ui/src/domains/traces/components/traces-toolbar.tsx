@@ -46,7 +46,7 @@ export function TracesToolbar({
   return (
     // 1fr | auto — pills wrap in the first column; Clear stays pinned to the
     // top of the second column regardless of how many pill rows render.
-    <div className={cn('grid grid-cols-[1fr_auto] gap-3 items-start ')}>
+    <div className={cn('grid grid-cols-[1fr_auto] items-start gap-3 ')}>
       <PropertyFilterApplied
         fields={filterFields}
         tokens={filterTokens}

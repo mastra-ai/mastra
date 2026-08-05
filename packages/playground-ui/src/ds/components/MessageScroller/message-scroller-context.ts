@@ -21,6 +21,8 @@ export type MessageScrollerVisibility = {
 };
 
 export type MessageScrollerActionsContextValue = {
+  notifyContentResize: () => void;
+  notifyScroll: () => void;
   registerItem: (messageId: string, element: HTMLElement, scrollAnchor: boolean) => () => void;
   scrollToEnd: (options?: MessageScrollerScrollOptions) => boolean;
   scrollToMessage: (messageId: string, options?: MessageScrollerScrollOptions) => boolean;
@@ -36,6 +38,12 @@ export const DEFAULT_VISIBILITY: MessageScrollerVisibility = { currentAnchorId: 
 export const DEFAULT_SCROLL_EDGE_THRESHOLD = 8;
 export const DEFAULT_SCROLL_MARGIN = 0;
 export const DEFAULT_SCROLL_PREVIOUS_ITEM_PEEK = 64;
+export const DEFAULT_REACH_START_THRESHOLD = 160;
+
+// Looser than the edge threshold, which only decides whether the scroll buttons
+// are active: how far from the end a reader may sit and still be carried along
+// by growing content.
+export const AUTO_SCROLL_ATTACH_THRESHOLD = 160;
 
 export const MessageScrollerActionsContext = React.createContext<MessageScrollerActionsContextValue | null>(null);
 export const MessageScrollerScrollableContext = React.createContext<MessageScrollerScrollable | null>(null);

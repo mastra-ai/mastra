@@ -54,7 +54,7 @@ export function CopySkillDialog({
           </AlertDialog.Description>
         </AlertDialog.Header>
         <div className="px-6 py-2">
-          <label className="block text-ui-sm text-neutral4 mb-1.5" htmlFor="copy-skill-name">
+          <label className="text-ui-sm text-neutral4 mb-1.5 block" htmlFor="copy-skill-name">
             New skill name
           </label>
           <Input
@@ -66,7 +66,7 @@ export function CopySkillDialog({
             data-testid="copy-skill-name-input"
           />
           {collides && (
-            <div className="mt-1.5 text-ui-xs text-red-400">You already have a skill named "{trimmed}".</div>
+            <div className="text-ui-xs mt-1.5 text-red-400">You already have a skill named "{trimmed}".</div>
           )}
         </div>
         <AlertDialog.Footer>

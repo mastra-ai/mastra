@@ -10,6 +10,7 @@ import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
+  selectPreferredOMPack,
   ONBOARDING_VERSION,
   loadSettings,
   saveSettings,
@@ -18,19 +19,18 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-  MEMORY_GATEWAY_PROVIDER,
+  MASTRA_GATEWAY_PROVIDER,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { LoadedPlugin } from '@mastra/code-sdk/plugins/types';
 import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
-  runUpdate,
+  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
-import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
@@ -49,6 +49,7 @@ import { dispatchEvent } from './event-dispatch.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
+import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js';
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
@@ -63,6 +64,7 @@ import {
   renderExistingMessages,
   renderTaskDeltaInline,
 } from './render-messages.js';
+import { flushRender, requestRender } from './render-scheduler.js';
 import {
   setupKeyboardShortcuts,
   buildLayout,
@@ -160,6 +162,7 @@ export class MastraTUI {
   private caffeinateProcess: ChildProcess | null = null;
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
+  private cleanupPluginUpdateListener?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -180,7 +183,7 @@ export class MastraTUI {
         lastNotificationPriority: subscription.lastNotificationPriority,
       }));
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
+      flushRender(this.state);
     });
 
     (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
@@ -190,13 +193,14 @@ export class MastraTUI {
       if (!this.state.githubPrGradientAnimator) {
         this.state.githubPrGradientAnimator = new GradientAnimator(() => {
           updateStatusLine(this.state);
+          requestRender(this.state);
         });
       }
       this.state.githubPrPollingActive = event.running;
       if (event.running) this.state.githubPrGradientAnimator.start();
       else this.state.githubPrGradientAnimator.stop();
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
+      flushRender(this.state);
     });
 
     // Load user preferences
@@ -246,7 +250,7 @@ export class MastraTUI {
     this.state.editor.onImagePaste = image => {
       this.state.pendingImages.push(image);
       this.state.editor.insertTextAtCursor?.('[image] ');
-      this.state.ui.requestRender();
+      flushRender(this.state);
     };
     this.state.editor.getPromptAnimator = () => this.state.gradientAnimator;
 
@@ -285,10 +289,10 @@ export class MastraTUI {
         addUserMessage(this.state, {
           id: messageId,
           role: 'user',
-          content: [{ type: 'text', text: msg }],
+          content: { format: 2, parts: [{ type: 'text', text: msg }] },
           createdAt: new Date(),
         });
-        this.state.ui.requestRender();
+        flushRender(this.state);
 
         const allowed = await this.runUserPromptHook(msg);
         if (!allowed) {
@@ -296,7 +300,7 @@ export class MastraTUI {
           if (comp) {
             this.state.chatContainer.removeChild(comp as never);
             this.state.messageComponentsById.delete(messageId);
-            this.state.ui.requestRender();
+            flushRender(this.state);
           }
         } else {
           try {
@@ -374,14 +378,17 @@ export class MastraTUI {
     content: string,
     images?: Array<{ data: string; mimeType: string }>,
     id = '',
-  ): AgentControllerMessage {
+  ): MastraDBMessage {
     return {
       id,
       role: 'user',
-      content: [
-        { type: 'text', text: content },
-        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: content },
+          ...(images?.map(img => ({ type: 'file' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+        ],
+      },
       createdAt: new Date(),
     };
   }
@@ -401,7 +408,7 @@ export class MastraTUI {
     addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
       ...(isInterjection ? { label: 'steer' } : {}),
     });
-    this.state.ui.requestRender();
+    flushRender(this.state);
     return messageId;
   }
 
@@ -410,7 +417,7 @@ export class MastraTUI {
     if (!component) return;
     this.state.chatContainer.removeChild(component as never);
     this.state.messageComponentsById.delete(messageId);
-    this.state.ui.requestRender();
+    flushRender(this.state);
   }
 
   private remapOptimisticUserMessage(optimisticMessageId: string, signalId: string): void {
@@ -525,7 +532,7 @@ export class MastraTUI {
     this.state.pendingFollowUpMessages.push({ content, images });
     this.state.pendingQueuedActions.push('message');
     updateStatusLine(this.state);
-    this.state.ui.requestRender();
+    flushRender(this.state);
   }
 
   /**
@@ -557,9 +564,15 @@ export class MastraTUI {
       this.cleanupPluginReloadListener = undefined;
     }
 
+    if (this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener();
+      this.cleanupPluginUpdateListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
+    this.state.renderScheduler?.dispose();
     this.state.ui.stop();
   }
 
@@ -592,6 +605,14 @@ export class MastraTUI {
           process.stderr.write(`[plugin runtime refresh] ${msg}\n`);
         }),
       );
+    }
+
+    if (this.state.pluginManager && !this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener = this.state.pluginManager.onGithubPluginsUpdated(pluginNames => {
+        if (pluginNames.length === 0) return;
+        const label = pluginNames.length === 1 ? 'Plugin' : 'Plugins';
+        showInfo(this.state, `${label} updated to the latest version: ${pluginNames.join(', ')}`);
+      });
     }
 
     // Load custom slash commands
@@ -644,7 +665,11 @@ export class MastraTUI {
         .initInBackground()
         .then(result => {
           for (const s of result.failed) {
-            showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            if (s.needsAuth) {
+              showInfo(this.state, `MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+            } else {
+              showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            }
           }
           for (const s of result.skipped) {
             showInfo(this.state, `MCP: Skipped "${s.name}": ${s.reason}`);
@@ -684,13 +709,13 @@ export class MastraTUI {
 
   private updateIdleStatusLine(now = Date.now()): void {
     this.state.idleCounter?.setTimingState(this.state, now);
-    this.state.ui.requestRender?.();
+    requestRender(this.state);
   }
 
   private updateActiveStatusTiming(now = Date.now()): void {
     this.state.idleCounter?.setTimingState(this.state, now);
     updateStatusLine(this.state);
-    this.state.ui.requestRender?.();
+    requestRender(this.state);
   }
 
   private startActiveStatusTimingTicker(): void {
@@ -737,7 +762,7 @@ export class MastraTUI {
     }
     if (clearDisplay) {
       this.state.idleCounter?.setTimingState(undefined);
-      this.state.ui.requestRender?.();
+      requestRender(this.state);
     }
   }
 
@@ -938,7 +963,7 @@ export class MastraTUI {
     };
     // Gateway covers all providers
     const mgKey =
-      this.state.authStorage?.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      this.state.authStorage?.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
     if (mgKey) {
       if (!access.anthropic) access.anthropic = 'apikey';
       if (!access.openai) access.openai = 'apikey';
@@ -1111,7 +1136,7 @@ export class MastraTUI {
         if (isGoalJudgeInputLocked(this.state)) {
           this.state.editor.setText(text);
           showGoalJudgeInputLockInfo(this.state);
-          this.state.ui.requestRender();
+          flushRender(this.state);
           return;
         }
 
@@ -1130,6 +1155,13 @@ export class MastraTUI {
             this.handleSlashCommand(text).catch(error => {
               showError(this.state, error instanceof Error ? error.message : 'Slash command failed');
             });
+            return;
+          }
+
+          if (text.startsWith('!')) {
+            // Shell passthrough runs locally and never touches the agent, so
+            // run it immediately instead of steering the active run with it.
+            void handleShellPassthrough(this.state, text.slice(1).trim());
             return;
           }
 
@@ -1280,6 +1312,7 @@ export class MastraTUI {
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
           }
+          await seedOMDefaultAfterLogin(this.state, providerId, message => showInfo(this.state, message));
 
           resolve();
         })
@@ -1311,6 +1344,7 @@ export class MastraTUI {
     const savedSettings = loadSettings();
     const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
     const omPacks = getAvailableOmPacks(access);
+    const preferredOmPack = selectPreferredOMPack(access, savedSettings.models.activeModelPackId ?? undefined);
 
     let prevModePackId = savedSettings.onboarding.modePackId;
     if (prevModePackId === 'custom' && savedSettings.models.activeModelPackId?.startsWith('custom:')) {
@@ -1330,6 +1364,7 @@ export class MastraTUI {
         authProviders,
         modePacks,
         omPacks,
+        preferredOmPackId: preferredOmPack?.id,
         hasProviderAccess,
         previous,
         onComplete: async (result: OnboardingResult) => {
@@ -1355,7 +1390,9 @@ export class MastraTUI {
               const updatedAccess = await this.buildProviderAccess();
               const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
               component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-              component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+              const updatedOmPacks = getAvailableOmPacks(updatedAccess);
+              const preferred = selectPreferredOMPack(updatedAccess, providerId);
+              component.updateOmPacks(updatedOmPacks, preferred?.id);
               component.updateHasProviderAccess(updatedHasAccess);
             } catch (err) {
               console.error('Failed to refresh provider access after login:', err);
@@ -1428,15 +1465,17 @@ export class MastraTUI {
       }
     }
 
-    const omPack = result.omPack;
-    void this.state.session.state.set({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
-    void this.state.session.state.set({ yolo: result.yolo });
+    // With no reachable provider the OM step only offers an empty custom pack;
+    // recording that non-choice would block every later provider-aware seed.
+    const omPack = result.omPack.modelId ? result.omPack : undefined;
+    if (omPack) await applyOMModelToSession(this.state, omPack.modelId);
+    await this.state.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();
     settings.onboarding.skippedAt = null;
     settings.onboarding.version = ONBOARDING_VERSION;
-    settings.onboarding.omPackId = omPack.id;
+    settings.onboarding.omPackId = omPack?.id ?? null;
 
     const modeDefaults: Record<string, string> = {};
     for (const mode of modes) {
@@ -1467,8 +1506,8 @@ export class MastraTUI {
       await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
-    settings.models.activeOmPackId = omPack.id;
-    settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
+    settings.models.activeOmPackId = omPack?.id ?? null;
+    settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;
     // Clear any per-role overrides from prior /om use so the newly-selected
     // pack (or custom modelId above) applies to both observer and reflector.
     settings.models.observerModelOverride = null;
@@ -1514,7 +1553,7 @@ export class MastraTUI {
       tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
       tool.setQuietPreviewLineLimit?.(previewLineLimit);
     }
-    this.state.ui.requestRender();
+    flushRender(this.state);
   }
 
   private parseQuietPreviewLineAnswer(answer: string | null): number {
@@ -1652,19 +1691,19 @@ export class MastraTUI {
       insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
       this.state.activeInlineQuestion = component;
       component.focused = true;
-      this.state.ui.requestRender();
+      flushRender(this.state);
     });
 
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
-      const ok = await runUpdate(pm, latestVersion);
-      if (ok) {
-        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+      const outcome = await performUpdate(pm, latestVersion);
+      if (outcome.status === 'updated') {
+        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
         this.stop();
+        console.info(outcome.message);
         process.exit(0);
       } else {
-        const cmd = getInstallCommand(pm, latestVersion);
-        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+        showError(this.state, outcome.message);
       }
     } else {
       // User declined — save the dismissed version

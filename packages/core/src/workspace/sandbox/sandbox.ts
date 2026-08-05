@@ -34,6 +34,81 @@ import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
+// Networking Capability
+// =============================================================================
+
+/**
+ * Optional networking capability for sandboxes that can expose ports publicly.
+ *
+ * Providers that support public port exposure (Vercel Sandbox, E2B, Daytona,
+ * Modal, Blaxel, etc.) implement this to surface public URLs through the
+ * abstraction. Enables preview URLs and sandbox deploys.
+ */
+export interface SandboxNetworking {
+  /**
+   * Get the public URL for an exposed port.
+   *
+   * @param port - The port number inside the sandbox
+   * @returns The public URL for the port, or null if the port is not exposed
+   *   or the sandbox is not running
+   */
+  getPortUrl(port: number): Promise<string | null>;
+}
+
+/** A file to write into the sandbox filesystem via {@link WorkspaceSandbox.writeFiles}. */
+export interface SandboxFileInput {
+  /** Destination path inside the sandbox */
+  path: string;
+  /** File contents */
+  content: string | Buffer;
+}
+
+/**
+ * Type guard: does this sandbox support the networking capability?
+ *
+ * @example
+ * ```typescript
+ * if (supportsNetworking(sandbox)) {
+ *   const url = await sandbox.networking.getPortUrl(4111);
+ * }
+ * ```
+ */
+export function supportsNetworking(
+  sandbox: WorkspaceSandbox,
+): sandbox is WorkspaceSandbox & { networking: SandboxNetworking } {
+  return typeof sandbox.networking?.getPortUrl === 'function';
+}
+
+// =============================================================================
+// Sandbox Derivation
+// =============================================================================
+
+/**
+ * Options for cloning a configured sandbox's configuration into an independent
+ * sibling sandbox. See {@link WorkspaceSandbox.clone}.
+ */
+export interface SandboxCloneOptions {
+  /** Unique identifier for the sandbox clone instance. */
+  id?: string;
+  /**
+   * Reattach to an existing provider sandbox (by the provider's own id)
+   * instead of provisioning a new one.
+   */
+  sandboxId?: string;
+  /** Environment variables baked into the sandbox clone. */
+  env?: Record<string, string>;
+  /** Provider working directory for the sandbox clone. */
+  workingDirectory?: string;
+  /** Idle teardown window (minutes) for the sandbox clone. */
+  idleTimeoutMinutes?: number;
+  /**
+   * Provider checkpoint used to seed and preserve the sandbox clone.
+   * Providers without checkpoint support may ignore this option.
+   */
+  checkpointName?: string;
+}
+
+// =============================================================================
 // Sandbox Interface
 // =============================================================================
 
@@ -73,6 +148,25 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   // ---------------------------------------------------------------------------
+  // Cloning (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Construct an independent sibling sandbox that inherits this sandbox's
+   * configuration (credentials, provider settings, defaults) with
+   * per-instance overrides.
+   *
+   * Performs no I/O — the sandbox clone provisions (or reattaches, when
+   * `sandboxId` is set) on its own `start()`. Implement this when one
+   * configured sandbox should act as the template for a fleet of independent
+   * sandboxes (e.g. one per project).
+   *
+   * Optional — consumers that need fleets (like the MastraCode web factory)
+   * only support sandboxes that implement it.
+   */
+  clone?(options?: SandboxCloneOptions): WorkspaceSandbox;
+
+  // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
 
@@ -95,6 +189,38 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  // ---------------------------------------------------------------------------
+  // Networking (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Networking capability for sandboxes that can expose ports publicly.
+   * Optional - only available on providers that support public port exposure.
+   * Enables preview URLs and sandbox deploys.
+   *
+   * @example
+   * ```typescript
+   * const url = await sandbox.networking?.getPortUrl(4111);
+   * ```
+   */
+  readonly networking?: SandboxNetworking;
+
+  // ---------------------------------------------------------------------------
+  // File Upload (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-write files into the sandbox's own filesystem.
+   * Optional fast path - providers with a native file-upload API implement this.
+   * Callers should fall back to `executeCommand` when unavailable.
+   *
+   * @example
+   * ```typescript
+   * await sandbox.writeFiles?.([{ path: '/app/index.mjs', content: bundle }]);
+   * ```
+   */
+  writeFiles?(files: SandboxFileInput[]): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Process Management (Optional)

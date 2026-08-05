@@ -1,0 +1,6 @@
+extends: occurrence
+message: 'Too many hedging phrases (found %d, max 2)'
+level: warning
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+max: 2
+token: '\b(clearly|obviously|undoubtedly|there is no doubt)\b'

@@ -16,8 +16,7 @@ describe('Spinner', () => {
     expect(spinner.tagName).toBe('svg');
     expect(spinner.getAttribute('data-size')).toBe('md');
     expect(spinner.getAttribute('data-variant')).toBe('default');
-    expect(spinner.classList.contains('w-6')).toBe(true);
-    expect(spinner.classList.contains('h-6')).toBe(true);
+    expect(spinner.classList.contains('size-6')).toBe(true);
     expect(container.querySelector('.spinner-ring')).not.toBeNull();
   });
 
@@ -26,10 +25,8 @@ describe('Spinner', () => {
 
     const spinner = screen.getByRole('status', { name: 'Loading' });
     expect(spinner.getAttribute('data-size')).toBe('sm');
-    expect(spinner.classList.contains('w-4')).toBe(true);
-    expect(spinner.classList.contains('h-4')).toBe(true);
-    expect(spinner.classList.contains('w-6')).toBe(false);
-    expect(spinner.classList.contains('h-6')).toBe(false);
+    expect(spinner.classList.contains('size-4')).toBe(true);
+    expect(spinner.classList.contains('size-6')).toBe(false);
   });
 
   it('renders the pulse variant with pulse-specific shapes', () => {
@@ -43,7 +40,7 @@ describe('Spinner', () => {
   });
 
   it('merges className overrides without adding color props', () => {
-    render(<Spinner aria-label="Saving" className="size-3 text-neutral3" />);
+    render(<Spinner aria-label="Saving" className="text-neutral3 size-3" />);
 
     const spinner = screen.getByRole('status', { name: 'Saving' });
     expect(spinner.classList.contains('spinner')).toBe(true);

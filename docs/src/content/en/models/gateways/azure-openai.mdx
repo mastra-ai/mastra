@@ -62,13 +62,13 @@ import { Mastra } from "@mastra/core";
 import { AzureOpenAIGateway } from "@mastra/core/llm";
 
 export const mastra = new Mastra({
-  gateways: [
-    new AzureOpenAIGateway({
+  gateways: {
+    "azure-openai": new AzureOpenAIGateway({
       resourceName: "my-openai-resource",
       apiKey: process.env.AZURE_API_KEY!,
       deployments: ["gpt-5-4-prod", "gpt-5-4-mini-dev"],
     }),
-  ],
+  },
 });
 ```
 
@@ -81,8 +81,8 @@ import { Mastra } from "@mastra/core";
 import { AzureOpenAIGateway } from "@mastra/core/llm";
 
 export const mastra = new Mastra({
-  gateways: [
-    new AzureOpenAIGateway({
+  gateways: {
+    "azure-openai": new AzureOpenAIGateway({
       resourceName: "my-openai-resource",
       apiKey: process.env.AZURE_API_KEY!,
       management: {
@@ -93,7 +93,7 @@ export const mastra = new Mastra({
         resourceGroup: "my-resource-group",
       },
     }),
-  ],
+  },
 });
 ```
 
@@ -111,8 +111,8 @@ import { Mastra } from "@mastra/core";
 import { AzureOpenAIGateway } from "@mastra/core/llm";
 
 export const mastra = new Mastra({
-  gateways: [
-    new AzureOpenAIGateway({
+  gateways: {
+    "azure-openai": new AzureOpenAIGateway({
       resourceName: "my-openai-resource",
       authentication: {
         type: "entraId",
@@ -120,7 +120,7 @@ export const mastra = new Mastra({
       },
       deployments: ["gpt-5-4-prod", "gpt-5-4-mini-dev"],
     }),
-  ],
+  },
 });
 ```
 
@@ -143,12 +143,12 @@ import { Mastra } from "@mastra/core";
 import { AzureOpenAIGateway } from "@mastra/core/llm";
 
 export const mastra = new Mastra({
-  gateways: [
-    new AzureOpenAIGateway({
+  gateways: {
+    "azure-openai": new AzureOpenAIGateway({
       resourceName: "my-openai-resource",
       apiKey: process.env.AZURE_API_KEY!,
     }),
-  ],
+  },
 });
 ```
 
@@ -161,14 +161,14 @@ import { Mastra } from "@mastra/core";
 import { AzureOpenAIGateway } from "@mastra/core/llm";
 
 export const mastra = new Mastra({
-  gateways: [
-    new AzureOpenAIGateway({
+  gateways: {
+    "azure-openai": new AzureOpenAIGateway({
       resourceName: "my-openai-resource",
       apiKey: process.env.AZURE_API_KEY!,
       useResponsesAPI: true,
       deployments: ["my-gpt-5-4-deployment"],
     }),
-  ],
+  },
 });
 ```
 

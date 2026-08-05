@@ -152,7 +152,7 @@ If `init()` isn't called, tables won't be created and storage operations will fa
 store.pool // mssql connection pool instance
 ```
 
-This enables direct queries and custom transaction management. When using these fields:
+It supports direct queries and custom transaction management. When using these fields:
 
 - You are responsible for proper connection and transaction handling.
 - Closing the store (`store.close()`) will destroy the associated connection pool.

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 // line: gradient hairline, fits a visible container edge.
 // pill: small floating pill, for handles with no container around.
 const indicatorVariants = cva(
-  'block pointer-events-none transition-all duration-150 ease-out motion-reduce:transition-none',
+  'pointer-events-none block transition-all duration-150 ease-out motion-reduce:transition-none',
   {
     variants: {
       variant: {
