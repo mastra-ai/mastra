@@ -407,7 +407,9 @@ export class AIV5Adapter {
               ? categorizeFileData(fileData, fileMimeType)
               : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
-          if (categorized.type === 'url' && typeof fileData === 'string') {
+          // Provider file IDs (e.g. OpenAI "file-...") ride the url branch untouched so
+          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
+          if ((categorized.type === 'url' || categorized.type === 'providerFileId') && typeof fileData === 'string') {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
               url: fileData,

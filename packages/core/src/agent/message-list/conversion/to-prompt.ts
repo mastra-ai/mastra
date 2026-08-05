@@ -98,13 +98,26 @@ export function aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): La
         } else if (Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer) {
           processedImage = new Uint8Array(part.image);
         } else {
-          // part.image is a string - could be a URL, data URI, or raw base64
+          // part.image is a string - could be a URL, data URI, raw base64, or a
+          // provider file ID (e.g. OpenAI "file-...")
           const categorized = categorizeFileData(part.image, part.mimeType);
 
           if (categorized.type === 'raw') {
             // Raw base64 — keep as Uint8Array so providers receive raw bytes
             // and don't double-wrap in a data URI (e.g. Gemini inline_data.data)
             processedImage = new Uint8Array(Buffer.from(part.image, 'base64'));
+          } else if (categorized.type === 'providerFileId') {
+            // Provider file IDs (e.g. OpenAI "file-...") are not parseable URLs and
+            // can't be expressed as a V1 image part. Emit a file part instead so the
+            // ID survives untouched and providers can forward it by reference.
+            const { image: _image, type: _type, ...rest } = part;
+            roleContent[role].push({
+              ...rest,
+              type: 'file',
+              data: part.image,
+              mimeType: categorized.mimeType || 'application/octet-stream',
+            });
+            break;
           } else {
             processedImage = new URL(part.image);
           }

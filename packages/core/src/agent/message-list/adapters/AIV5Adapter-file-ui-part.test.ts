@@ -109,8 +109,10 @@ describe('AIV5Adapter — FileUIPart (url-based) through fromModelMessage', () =
       expect(parts[1].data).toBe('https://example.com/report.pdf');
     }
   });
+});
 
-  it('passes through an OpenAI Files API file ID without base64-encoding it', () => {
+describe('AIV5Adapter — OpenAI Files API file IDs', () => {
+  it('toUIMessage passes through an OpenAI Files API file ID without base64-encoding it', () => {
     const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
     const dbMessage = {
       id: 'msg-1',
@@ -138,7 +140,7 @@ describe('AIV5Adapter — FileUIPart (url-based) through fromModelMessage', () =
     }
   });
 
-  it('preserves an OpenAI Files API file ID through the full ingestion round trip', () => {
+  it('fromModelMessage + toUIMessage preserve a file ID through the full ingestion round trip', () => {
     const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
 
     // Ingestion: incoming model message with a file ID as data (the #16408 scenario)
