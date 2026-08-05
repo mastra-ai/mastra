@@ -1,4 +1,5 @@
 {
-  "attachment": ["thinkingmachines/Inkling-NVFP4"],
-  "temperature": ["thinkingmachines/Inkling-NVFP4"]
+  "attachment": ["moonshotai/Kimi-K3", "thinkingmachines/Inkling-NVFP4"],
+  "temperature": ["thinkingmachines/Inkling-NVFP4"],
+  "structuredOutput": ["moonshotai/Kimi-K3"]
 }

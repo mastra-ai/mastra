@@ -11,6 +11,7 @@ import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { ObservabilityInMemory } from '../../../storage/domains/observability/inmemory';
 import { ScoresInMemory } from '../../../storage/domains/scores/inmemory';
 import { createStep, createWorkflow } from '../../../workflows';
+import type { ExperimentEvent } from '../index';
 import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -1365,6 +1366,391 @@ describe('runExperiment', () => {
         pagination: { page: 0, perPage: 10 },
       });
       expect(result.experiments.length).toBe(0);
+    });
+  });
+
+  describe('semantic event observer', () => {
+    it('reports the pinned dataset version used for execution', async () => {
+      const versionedDataset = await datasetsStorage.createDataset({ name: 'Versioned Dataset' });
+      await datasetsStorage.addItem({ datasetId: versionedDataset.id, input: 'version 1' });
+      await datasetsStorage.addItem({ datasetId: versionedDataset.id, input: 'version 2' });
+      const events: ExperimentEvent[] = [];
+
+      const summary = await runExperiment(mastra, {
+        datasetId: versionedDataset.id,
+        version: 1,
+        task: async ({ input }) => input,
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      expect(summary.totalItems).toBe(1);
+      expect(summary.results[0]?.input).toBe('version 1');
+      expect(events[0]).toMatchObject({
+        type: 'experiment.run.started',
+        datasetId: versionedDataset.id,
+        datasetVersion: 1,
+        totalItems: 1,
+      });
+    });
+
+    it('awaits run start before executing items and emits ordered JSON-safe events with stable item identity', async () => {
+      const events: ExperimentEvent[] = [];
+      let releaseStart!: () => void;
+      const startGate = new Promise<void>(resolve => {
+        releaseStart = resolve;
+      });
+      const mockAgent = createMockAgent('Response');
+      const mockScorer = createMockScorer('event-score', 'Event Score');
+      const localMastra = {
+        ...mastra,
+        getAgent: vi.fn().mockReturnValue(mockAgent),
+        getAgentById: vi.fn().mockReturnValue(mockAgent),
+      } as unknown as Mastra;
+
+      const run = runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [mockScorer],
+        onEvent: async event => {
+          events.push(event);
+          if (event.type === 'experiment.run.started') await startGate;
+        },
+      });
+
+      await vi.waitFor(() => expect(events).toHaveLength(1));
+      expect(mockAgent.generate).not.toHaveBeenCalled();
+      releaseStart();
+
+      const summary = await run;
+      expect(events.map(event => event.type)).toEqual([
+        'experiment.run.started',
+        'experiment.item.completed',
+        'experiment.item.completed',
+        'experiment.run.finished',
+      ]);
+      expect(events.map(event => event.sequence)).toEqual([1, 2, 3, 4]);
+      expect(() => JSON.stringify(events)).not.toThrow();
+
+      const itemEvents = events.filter(event => event.type === 'experiment.item.completed');
+      expect(itemEvents.map(event => event.itemIndex).sort()).toEqual([0, 1]);
+      for (const event of itemEvents) {
+        expect(event.itemId).toBe(summary.results[event.itemIndex]?.itemId);
+        expect(event.scores).toEqual([expect.objectContaining({ scorerId: 'event-score', score: 1 })]);
+      }
+    });
+
+    it('serializes observer delivery while item execution remains concurrent', async () => {
+      let activeObservers = 0;
+      let maxActiveObservers = 0;
+      const generate = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return { text: 'Response' };
+      });
+      const localMastra = {
+        ...mastra,
+        getAgentById: vi.fn().mockReturnValue({
+          ...createMockAgent('Response'),
+          generate,
+        }),
+      } as unknown as Mastra;
+
+      await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 2,
+        onEvent: async () => {
+          activeObservers++;
+          maxActiveObservers = Math.max(maxActiveObservers, activeObservers);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          activeObservers--;
+        },
+      });
+
+      expect(maxActiveObservers).toBe(1);
+      expect(generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws a typed fatal error and emits no terminal event when the observer rejects', async () => {
+      const eventTypes: string[] = [];
+
+      await expect(
+        runExperiment(mastra, {
+          datasetId,
+          targetType: 'agent',
+          targetId: 'test-agent',
+          maxConcurrency: 1,
+          onEvent: event => {
+            eventTypes.push(event.type);
+            if (event.type === 'experiment.item.completed') throw new Error('observer unavailable');
+          },
+        }),
+      ).rejects.toMatchObject({
+        id: 'EXPERIMENT_EVENT_OBSERVER_FAILED',
+        details: {
+          eventType: 'experiment.item.completed',
+          eventSequence: 2,
+        },
+      });
+
+      expect(eventTypes).toEqual(['experiment.run.started', 'experiment.item.completed']);
+    });
+
+    it('drains active item work before persisting observer failure counters', async () => {
+      let releaseSlowItem!: () => void;
+      let slowItemFinished = false;
+      const slowItemGate = new Promise<void>(resolve => {
+        releaseSlowItem = resolve;
+      });
+      const eventTypes: string[] = [];
+      const task = vi.fn(async ({ input }) => {
+        if (input === 'fast') return 'fast response';
+        await slowItemGate;
+        slowItemFinished = true;
+        return 'slow response';
+      });
+
+      const run = runExperiment(mastra, {
+        data: [
+          { id: 'fast-item', input: 'fast' },
+          { id: 'slow-item', input: 'slow' },
+        ],
+        task,
+        maxConcurrency: 2,
+        onEvent: event => {
+          eventTypes.push(event.type);
+          if (event.type === 'experiment.item.completed') throw new Error('observer unavailable');
+        },
+      });
+      const rejection = expect(run).rejects.toMatchObject({ id: 'EXPERIMENT_EVENT_OBSERVER_FAILED' });
+
+      await vi.waitFor(() => expect(eventTypes).toContain('experiment.item.completed'));
+      let settled = false;
+      void run.catch(() => {
+        settled = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(settled).toBe(false);
+
+      releaseSlowItem();
+      await rejection;
+
+      expect(slowItemFinished).toBe(true);
+      const experiments = await experimentsStorage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+      expect(experiments.experiments[0]).toMatchObject({
+        status: 'failed',
+        succeededCount: 2,
+        failedCount: 0,
+        skippedCount: 0,
+      });
+      const persistedResults = await experimentsStorage.listExperimentResults({
+        experimentId: experiments.experiments[0]!.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedResults.results).toHaveLength(2);
+      expect(eventTypes).not.toContain('experiment.run.finished');
+    });
+
+    it('drains other active mapper errors after an observer failure', async () => {
+      let observerRejected = false;
+      let activeScorerFailed = false;
+      let notifyObserverRejected!: () => void;
+      let releaseSlowItem!: () => void;
+      let slowItemFinished = false;
+      const observerRejectionGate = new Promise<void>(resolve => {
+        notifyObserverRejected = resolve;
+      });
+      const slowItemGate = new Promise<void>(resolve => {
+        releaseSlowItem = resolve;
+      });
+      const scorer = createMockScorer('throwing-scorer', 'Throwing scorer');
+      Object.defineProperty(scorer, 'type', {
+        get() {
+          if (observerRejected) {
+            activeScorerFailed = true;
+            throw new Error('active scorer failed');
+          }
+          return undefined;
+        },
+      });
+      const task = vi.fn(async ({ input }) => {
+        if (input === 'active-error') {
+          await observerRejectionGate;
+          await new Promise(resolve => setTimeout(resolve, 0));
+        } else if (input === 'slow') {
+          await slowItemGate;
+          slowItemFinished = true;
+        }
+        return input;
+      });
+
+      const run = runExperiment(mastra, {
+        data: [
+          { id: 'fast-item', input: 'fast' },
+          { id: 'error-item', input: 'active-error' },
+          { id: 'slow-item', input: 'slow' },
+        ],
+        task,
+        scorers: [scorer],
+        maxConcurrency: 3,
+        onEvent: event => {
+          if (event.type === 'experiment.item.completed') {
+            observerRejected = true;
+            notifyObserverRejected();
+            throw new Error('observer unavailable');
+          }
+        },
+      });
+      const rejection = expect(run).rejects.toMatchObject({ id: 'EXPERIMENT_EVENT_OBSERVER_FAILED' });
+
+      await observerRejectionGate;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      let settled = false;
+      void run.catch(() => {
+        settled = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(settled).toBe(false);
+
+      releaseSlowItem();
+      await rejection;
+
+      expect(activeScorerFailed).toBe(true);
+      expect(slowItemFinished).toBe(true);
+      expect(task).toHaveBeenCalledTimes(3);
+
+      const experiments = await experimentsStorage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+      expect(experiments.experiments[0]).toMatchObject({
+        status: 'failed',
+        succeededCount: 1,
+        failedCount: 0,
+        skippedCount: 2,
+      });
+      const persistedResults = await experimentsStorage.listExperimentResults({
+        experimentId: experiments.experiments[0]!.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedResults.results).toHaveLength(1);
+      expect(persistedResults.results[0]).toMatchObject({ itemId: 'fast-item' });
+    });
+
+    it('preserves fail-fast behavior for non-observer mapper failures when an observer is present', async () => {
+      const unserializableOutput = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('output serialization failed');
+          },
+        },
+      );
+      const task = vi.fn(async ({ input }) => (input === 'first' ? unserializableOutput : 'done'));
+      const events: ExperimentEvent[] = [];
+
+      const summary = await runExperiment(mastra, {
+        data: [
+          { id: 'broken-item', input: 'first' },
+          { id: 'later-item', input: 'second' },
+        ],
+        task,
+        maxConcurrency: 1,
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      expect(summary).toMatchObject({
+        status: 'failed',
+        succeededCount: 1,
+        failedCount: 0,
+        skippedCount: 1,
+      });
+      expect(task).toHaveBeenCalledTimes(1);
+      expect(events.map(event => event.type)).toEqual(['experiment.run.started', 'experiment.run.finished']);
+      expect(events.at(-1)).toMatchObject({
+        status: 'failed',
+        error: { message: 'output serialization failed' },
+      });
+    });
+
+    it('normalizes invalid dates and reports inline task identity in events', async () => {
+      const events: ExperimentEvent[] = [];
+
+      await runExperiment(mastra, {
+        data: [{ id: 'inline-item', input: { invalidDate: new Date(Number.NaN) } }],
+        task: async () => 'done',
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      expect(events.every(event => event.target.type === 'task' && event.target.id === 'inline')).toBe(true);
+      expect(events.find(event => event.type === 'experiment.item.completed')).toMatchObject({
+        input: { invalidDate: null },
+      });
+      expect(() => JSON.stringify(events)).not.toThrow();
+    });
+
+    it('emits item failures and a completed-with-errors terminal outcome', async () => {
+      let callCount = 0;
+      const flakyAgent = createMockAgent('Response');
+      flakyAgent.generate.mockImplementation(async () => {
+        if (callCount++ === 0) throw new Error('first item failed');
+        return { text: 'Response' };
+      });
+      const localMastra = {
+        ...mastra,
+        getAgentById: vi.fn().mockReturnValue(flakyAgent),
+      } as unknown as Mastra;
+      const events: ExperimentEvent[] = [];
+
+      const summary = await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 1,
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      const itemEvents = events.filter(event => event.type === 'experiment.item.completed');
+      expect(itemEvents.map(event => event.status)).toEqual(['failed', 'succeeded']);
+      expect(itemEvents[0]?.error).toMatchObject({ message: 'first item failed' });
+      expect(events.at(-1)).toMatchObject({
+        type: 'experiment.run.finished',
+        status: 'completed',
+        completedWithErrors: true,
+      });
+      expect(summary.completedWithErrors).toBe(true);
+    });
+
+    it('emits cancellation as a terminal failed outcome before final persistence', async () => {
+      const controller = new AbortController();
+      const events: ExperimentEvent[] = [];
+      let storedStatusAtTerminal: string | undefined;
+
+      const summary = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        signal: controller.signal,
+        onEvent: async event => {
+          events.push(event);
+          if (event.type === 'experiment.run.started') controller.abort();
+          if (event.type === 'experiment.run.finished') {
+            storedStatusAtTerminal = (await experimentsStorage.getExperimentById({ id: event.experimentId }))?.status;
+          }
+        },
+      });
+
+      expect(summary.status).toBe('failed');
+      expect(events.map(event => event.type)).toEqual(['experiment.run.started', 'experiment.run.finished']);
+      expect(events.at(-1)).toMatchObject({ outcome: 'cancelled', error: { name: 'AbortError' } });
+      expect(storedStatusAtTerminal).toBe('running');
+      expect((await experimentsStorage.getExperimentById({ id: summary.experimentId }))?.status).toBe('failed');
     });
   });
 
