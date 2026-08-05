@@ -2,4 +2,4 @@
 '@mastra/railway': patch
 ---
 
-Improved Railway sandbox lifecycle and checkpoint test coverage.
+Improved Railway sandbox checkpoint recovery and reconnection resilience.
