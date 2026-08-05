@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState, KnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -70,7 +70,10 @@ export function useAgentControllerConnection({
     });
   };
 
-  const handleEvent = (event: AgentControllerEvent) => {
+  const handleEvent = (raw: AgentControllerEvent) => {
+    // Same cast as applyEvent in services/transcript.ts: OtherAgentControllerEvent
+    // is `{ type: string }`, so it never drops out of the union on its own.
+    const event = raw as KnownAgentControllerEvent;
     const displayStateRunning =
       event.type === 'display_state_changed' &&
       typeof event.displayState === 'object' &&
@@ -88,13 +91,12 @@ export function useAgentControllerConnection({
         { updatedAt },
       );
     }
-    const persisted = persistedMessage(event);
     const streamedThreadId = syncQuery.data?.threadId;
-    if (persisted && streamedThreadId) {
+    if (event.type === 'message_end' && streamedThreadId) {
       cacheThreadMessage(
         queryClient,
         queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, streamedThreadId),
-        persisted,
+        event.message,
       );
     }
     onEvent(event);
@@ -122,25 +124,6 @@ export function useAgentControllerConnection({
     state: syncQuery.data,
     threadId: syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
   };
-}
-
-function isDBMessage(value: unknown): value is MastraDBMessage {
-  if (typeof value !== 'object' || value === null) return false;
-  if (!('id' in value) || typeof value.id !== 'string' || value.id === '') return false;
-  if (!('role' in value) || typeof value.role !== 'string') return false;
-  // client-js coerces createdAt with `new Date(...)`, which yields an Invalid
-  // Date rather than throwing when the field is missing.
-  if (!('createdAt' in value) || !(value.createdAt instanceof Date) || Number.isNaN(value.createdAt.getTime())) {
-    return false;
-  }
-  if (!('content' in value) || typeof value.content !== 'object' || value.content === null) return false;
-  return 'parts' in value.content && Array.isArray(value.content.parts);
-}
-
-/** The persisted form of a message, emitted once the model finishes writing it. */
-function persistedMessage(event: AgentControllerEvent): MastraDBMessage | undefined {
-  if (event.type !== 'message_end') return undefined;
-  return isDBMessage(event.message) ? event.message : undefined;
 }
 
 /**
