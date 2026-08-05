@@ -116,7 +116,7 @@ function DrillFilterBanner({
   const backgroundImage =
     bannerColors.length > 1
       ? `linear-gradient(90deg, ${bannerColors
-          .map(color => `color-mix(in srgb, ${color} 18%, transparent)`)
+          .map(color => `color-mix(in srgb, ${color} 32%, transparent)`)
           .join(', ')})`
       : undefined;
 
