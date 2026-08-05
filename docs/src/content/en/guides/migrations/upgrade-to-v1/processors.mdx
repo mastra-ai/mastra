@@ -30,7 +30,7 @@ To migrate, update processor definitions to use `id` as the required field.
 
 ### Processor message types from `MastraMessageV2` to `MastraDBMessage`
 
-Processor message types have changed from `MastraMessageV2` to `MastraDBMessage`. This change provides consistency with scorer configuration and better type safety by aligning with the database message format.
+Processor message types have changed from `MastraMessageV2` to `MastraDBMessage`. Processors and scorers now use the database message format and its types.
 
 To migrate, update processor message type imports and usage.
 

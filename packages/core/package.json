@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.54.0-alpha.3",
+  "version": "1.57.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -581,6 +581,16 @@
         "default": "./dist/workflows/index.cjs"
       }
     },
+    "./workflows/builder": {
+      "import": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.cjs"
+      }
+    },
     "./workflows/evented": {
       "import": {
         "types": "./dist/workflows/evented/index.d.ts",
@@ -856,8 +866,7 @@
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",
     "@ai-sdk/provider-v6": "npm:@ai-sdk/provider@3.0.14",
     "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.3",
-    "@ai-sdk/ui-utils-v5": "npm:@ai-sdk/ui-utils@1.2.11",
-    "@isaacs/ttlcache": "^2.1.4",
+    "@isaacs/ttlcache": "^2.1.5",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",

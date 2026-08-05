@@ -12,7 +12,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 The `createContextRecallScorer()` function creates a scorer that evaluates how well retrieved context covers the claims in a ground-truth reference answer. It measures retrieval completeness by checking what fraction of the ground truth's claims are attributable to the retrieved context.
 
-This scorer requires a ground-truth reference answer, making it suitable for labeled datasets in CI or test environments. When `groundTruth` is not provided in the run, the scorer returns a score of 0 rather than throwing an error.
+This scorer requires a ground-truth reference answer, making it suitable for labeled datasets in CI or test environments. When `groundTruth` isn't provided in the run, the scorer returns a score of 0 rather than throwing an error.
 
 ## RAG retrieval evaluation
 
@@ -69,7 +69,7 @@ Use when running evaluations against curated test sets:
 ]}
 />
 
-**Note**: Either `context` or `contextExtractor` must be provided. When both are provided, `contextExtractor` is used only if the run input and output are agent-shaped (`MastraDBMessage[]`); otherwise the scorer falls back to `context`.
+Either `context` or `contextExtractor` must be provided. When both are provided, `contextExtractor` is used only if the run input and output are agent-shaped (`MastraDBMessage[]`); otherwise the scorer falls back to `context`.
 
 ## `.run()` returns
 
@@ -115,11 +115,11 @@ Where:
 
 These ranges assume the default `scale` of 1. When using a custom scale, multiply accordingly.
 
-- **0.9-1.0**: Excellent recall — context covers nearly all ground-truth claims
-- **0.7-0.8**: Good recall — most claims are covered, minor gaps
-- **0.4-0.6**: Moderate recall — significant information missing from context
-- **0.1-0.3**: Poor recall — most ground-truth claims not found in context
-- **0.0**: No recall — none of the ground-truth claims are in the context
+- **0.9-1.0**: Excellent recall, context covers nearly all ground-truth claims
+- **0.7-0.8**: Good recall. Most claims are covered, with minor gaps
+- **0.4-0.6**: Moderate recall, substantial information missing from context
+- **0.1-0.3**: Poor recall, most ground-truth claims not found in context
+- **0.0**: No recall, none of the ground-truth claims are in the context
 
 ### Reason analysis
 
@@ -140,7 +140,7 @@ Use results to:
 
 ### Example calculation
 
-Given ground truth: "Einstein was born in 1879. He developed relativity. He won the Nobel Prize."
+ground truth: "Einstein was born in 1879. He developed relativity. He won the Nobel Prize."
 
 Claims extracted: 3
 

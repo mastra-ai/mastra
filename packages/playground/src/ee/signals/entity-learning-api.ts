@@ -2,12 +2,14 @@ import type {
   NoiseExamplesResponse,
   NoiseResponse,
   ThemeDetailResponse,
+  EntityLearningProgressResponse,
   ThemeEntitiesResponse,
   ThemeExamplesResponse,
   ThemeFlowResponse,
   ThemeHistoryResponse,
   ThemePathsResponse,
   ThemeSnapshotsResponse,
+  TraceInsightResponse,
   TraceSignalName,
 } from './types';
 
@@ -16,17 +18,27 @@ export function fetchThemeEntities(entityType: string) {
   return learningJson<ThemeEntitiesResponse>(`/api/learning/entities?${query}`);
 }
 
+export function fetchEntityLearningProgress(entityId: string, entityType: string) {
+  const query = new URLSearchParams({ entityType });
+  return learningJson<EntityLearningProgressResponse>(
+    `/api/learning/entities/${encodeURIComponent(entityId)}/progress?${query}`,
+  );
+}
+
 export function fetchThemeSnapshots(
   entityId: string,
   entityType: string,
   signalNames: string[],
   dateFrom?: Date,
   dateTo?: Date,
-  limit = 50,
+  limit = 24,
 ) {
+  // Landmarks presentation returns a bounded, time-balanced selection over the
+  // whole range instead of the newest-first inventory page.
   const query = new URLSearchParams({
     entityType,
     signalNames: signalNames.join(','),
+    presentation: 'landmarks',
     limit: String(limit),
   });
   if (dateFrom) query.set('from', dateFrom.toISOString());
@@ -154,6 +166,10 @@ function fetchThemePathsPage(
   return learningJson<ThemePathsResponse>(
     `/api/learning/entities/${encodeURIComponent(entityId)}/theme-paths?${query}`,
   );
+}
+
+export function fetchTraceInsight(traceId: string) {
+  return learningJson<TraceInsightResponse>(`/api/learning/traces/${encodeURIComponent(traceId)}/summary`);
 }
 
 function themePath(entityId: string, themeId: string, suffix: string) {
