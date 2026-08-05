@@ -47,12 +47,17 @@ export const mastra = new Mastra({
   deployer: new SandboxDeployer({
     sandbox: new VercelSandbox({
       sandboxName: 'my-preview',
-      timeout: 3_600_000, // 1 hour
+      timeout: 2_400_000, // 40 minutes
       ports: [4111],
     }),
   }),
 })
 ```
+
+Two Vercel-specific requirements:
+
+- `timeout` can't exceed the maximum sandbox lifetime of your plan, 45 minutes on Pro. A higher value fails the deploy with a 400 from the Vercel API.
+- Declare the server port in `ports`. Vercel exposes only ports declared at creation, unlike E2B and Daytona.
 
 Build and deploy in one command:
 
@@ -70,6 +75,63 @@ Studio: https://<sandbox-id>-4111.vercel.run
 The manifest includes `expiresAt` when the sandbox provider reports an expiration time.
 
 Redeploys to the same sandbox skip the dependency install when its inputs are unchanged. These inputs are `package.json`, the bundled lockfiles, and the install command.
+
+### What the URLs serve
+
+The Studio URL is the sandbox root, without `/api`. Open it in a browser to use Studio. When the deploy runs with `studio: false`, the root serves the Mastra welcome page instead.
+
+The API URL is only a prefix for the endpoints below it, such as `/api/agents`. `/api` has no handler of its own, so opening it in a browser returns a "Not Found" response even though the server is healthy.
+
+To check a deployment, call an endpoint directly:
+
+```bash
+curl -s -X POST https://4111-<sandbox-id>.e2b.app/api/agents/weatherAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Weather in London"}]}' | jq -r '.text'
+```
+
+### Provider credentials
+
+Each provider authenticates with its own credentials. Set the ones for the sandbox you deploy to:
+
+```bash title=".env"
+# E2B
+E2B_API_KEY=
+
+# Daytona
+DAYTONA_API_KEY=
+
+# Vercel
+VERCEL_TOKEN=
+VERCEL_TEAM_ID=
+VERCEL_PROJECT_ID=
+```
+
+Every provider also accepts these as constructor options. Self-hosted E2B and Daytona installations take `E2B_DOMAIN` or `DAYTONA_API_URL`.
+
+Unlike `mastra dev`, `mastra build` doesn't load `.env` files. The deploy happens inside the build, so a sandbox provider that reads its credentials from the environment, such as E2B with `E2B_API_KEY`, sees an empty value and the deploy fails with an authentication error.
+
+Adding `import 'dotenv/config'` to `src/mastra/index.ts` doesn't fix this. To find the deployer, the build extracts only the `deployer` option from your entry file and tree-shakes everything else away, including that import.
+
+Load the `.env` file into the shell environment before the build runs. [`dotenv-cli`](https://www.npmjs.com/package/dotenv-cli) is one way to do that:
+
+```bash npm2yarn
+npm install --save-dev dotenv-cli
+```
+
+```json title="package.json"
+{
+  "scripts": {
+    "deploy": "dotenv -e .env -- mastra build"
+  }
+}
+```
+
+Then run `npm run deploy`. The script is named for what it does, since `mastra build` deploys once a `SandboxDeployer()` is configured. Keep it separate from a plain `build` script so a hosting platform or CI job that runs `npm run build` doesn't deploy a sandbox by accident.
+
+In continuous integration (CI), export the credentials as secrets instead. Whatever mechanism you use, the variables must exist in the shell environment, not only in the `.env` file.
+
+This applies to credentials the deployer needs on your machine. Variables the deployed server needs are handled separately: the deployer reads `.env`, `.env.production`, and `.env.local` and injects them into the sandbox. See [Security](#security).
 
 ### Using E2B
 
@@ -108,6 +170,18 @@ const deployer = new SandboxDeployer({
 ```
 
 Stopping a Daytona sandbox persists its filesystem but not running processes, so waking works like Vercel: the resolver relaunches the server on `wake: true`.
+
+Daytona filters outbound traffic per destination. Requests to some hosts connect over Transport Layer Security (TLS) normally, while others are reset during the handshake, which surfaces in an agent or a tool as Node's generic `fetch failed`. Rule out your code before debugging it, by running `curl` against the same host from inside the sandbox:
+
+```typescript
+const sandbox = new DaytonaSandbox({ id: 'my-preview' })
+await sandbox.start()
+
+const result = await sandbox.executeCommand('curl -v --max-time 10 https://api.example.com')
+console.info(result.stdout, result.stderr)
+```
+
+A `Connection reset by peer` during the TLS handshake points at the filtering rather than your agent. Ask Daytona support to allow the destination. Restricted Daytona tiers also block cloud storage endpoints, which the mount helpers report with a dedicated error.
 
 ## Deploying programmatically
 

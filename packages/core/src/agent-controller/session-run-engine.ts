@@ -212,10 +212,15 @@ type StreamState = {
 export class SessionRunEngine {
   readonly #session: Session;
   readonly #machinery: SessionMachinery;
+  #requestContext?: RequestContext;
 
   constructor(session: Session, machinery: SessionMachinery) {
     this.#session = session;
     this.#machinery = machinery;
+  }
+
+  setRequestContext(requestContext?: RequestContext): void {
+    if (requestContext) this.#requestContext = requestContext;
   }
 
   private createEmptyAssistantMessage(): MastraDBMessage {
@@ -1034,7 +1039,6 @@ export class SessionRunEngine {
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
-    const requestContext = await this.#machinery.buildRequestContext();
     let currentRun: StreamState | undefined;
 
     try {
@@ -1058,6 +1062,7 @@ export class SessionRunEngine {
         }
 
         try {
+          const requestContext = await this.#machinery.buildRequestContext(this.#requestContext);
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
           if (
             streamResult ||

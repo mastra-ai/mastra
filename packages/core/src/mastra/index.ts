@@ -66,6 +66,7 @@ import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
+import { readPositiveIntEnv } from '../utils';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
@@ -698,6 +699,7 @@ export class Mastra<
 
   #storage?: MastraCompositeStore;
   #storageExplicit = false;
+  #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #scorers?: TScorers;
   #tools?: TTools;
@@ -815,9 +817,12 @@ export class Mastra<
   // last unregisters. See `./run-scope.ts`.
   #runScopes: Map<string, RunScope> = new Map();
   #runScopeRefcounts: Map<string, number> = new Map();
-  // Run-scoped internal workflows older than this TTL (ms) are evicted during
-  // the lazy sweep that runs on each new registration.
-  static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  // Run-scoped internal workflows older than this TTL (ms) are evicted during the
+  // lazy sweep that runs on each new registration. Reads the shared
+  // `MASTRA_SUSPENDED_RUN_TTL_MS` so this registry and the agent thread-stream
+  // runtime expire a suspended run's state on one bound; production keeps the 30
+  // minute default.
+  static readonly INTERNAL_WORKFLOW_TTL_MS = readPositiveIntEnv('MASTRA_SUSPENDED_RUN_TTL_MS', 30 * 60 * 1000);
   // Per-run tracing context for evented workflow runs. `currentSpan` is a
   // non-serializable AISpan, so it cannot ride the engine's pubsub events —
   // the event processor reads it from here, keyed by runId, instead.
@@ -1411,11 +1416,19 @@ export class Mastra<
       this.#storageExplicit = true;
     } else {
       storage = new InMemoryStore();
-      this.#logger?.warn(
-        'No `storage` configured on Mastra — falling back to an in-memory store. ' +
-          'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
-          'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
-      );
+      this.#storageFallbackWarningPending = true;
+      queueMicrotask(() => {
+        if (!this.#storageFallbackWarningPending) {
+          return;
+        }
+
+        this.#storageFallbackWarningPending = false;
+        this.#logger?.warn(
+          'No `storage` configured on Mastra — falling back to an in-memory store. ' +
+            'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
+            'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+        );
+      });
     }
     storage = augmentWithInit(storage);
 
@@ -5106,6 +5119,7 @@ export class Mastra<
    * ```
    */
   public setStorage(storage: MastraCompositeStore) {
+    this.#storageFallbackWarningPending = false;
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
