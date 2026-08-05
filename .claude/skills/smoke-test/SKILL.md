@@ -296,13 +296,13 @@ After completing all tests, provide a summary:
 
 ## Quick Reference
 
-| Step           | Action                                                                                         |
-| -------------- | ---------------------------------------------------------------------------------------------- |
-| Create Project | `cd <directory> && <pm> create mastra@<tag> <name> --no-git --llm <provider> --timeout 120000` |
-| Install Deps   | Automatic during creation                                                                      |
-| Set Env Vars   | Check global env first, then `.env`, ask user only if needed                                   |
-| Start Server   | `cd <directory>/<name> && <pm> run dev`                                                        |
-| Studio URL     | `http://localhost:4111`                                                                        |
+| Step           | Action                                                                |
+| -------------- | --------------------------------------------------------------------- |
+| Create Project | Use the package-manager-specific command from Step 1 in `<directory>` |
+| Install Deps   | Automatic during creation                                             |
+| Set Env Vars   | Check global env first, then `.env`, ask user only if needed          |
+| Start Server   | `cd <directory>/<name> && <pm> run dev`                               |
+| Studio URL     | `http://localhost:4111`                                               |
 
 ## Troubleshooting
 
