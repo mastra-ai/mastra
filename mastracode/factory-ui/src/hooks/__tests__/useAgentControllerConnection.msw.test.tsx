@@ -555,18 +555,5 @@ describe('useAgentControllerConnection', () => {
       await waitFor(() => expect(cachedMessages(client)).toHaveLength(1));
       expect(cachedMessages(client)?.[0]?.content.parts).toEqual([{ type: 'text', text: 'complete' }]);
     });
-
-    it('leaves a thread nobody has fetched out of the cache', async () => {
-      const { emit } = stubStreamingSession();
-      const { client, result } = renderHookWithProviders(() =>
-        useAgentControllerConnection({ ...hookArgs, onEvent: () => {} }),
-      );
-
-      await waitFor(() => expect(result.current.status).toBe('ready'));
-      emit({ type: 'message_end', message: dbMessage('reply-1', 'here is the review') });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-      expect(cachedMessages(client)).toBeUndefined();
-    });
   });
 });

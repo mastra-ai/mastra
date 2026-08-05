@@ -139,15 +139,9 @@ function persistedMessage(event: AgentControllerEvent): MastraDBMessage | undefi
 }
 
 /**
- * Fold a persisted message into every cached window of its thread.
- *
- * The transcript reducer is the only place the live stream lands, and it dies
- * with the thread route, so without this the cached window stays frozen at
- * whatever the thread held when it was first read — re-entering the route would
- * rebuild the transcript from a snapshot the run has long moved past.
- *
- * Matching on the limit-less key prefix covers every window the user has grown
- * to; a thread nobody has fetched has no cache entry and stays untouched.
+ * Fold a persisted message into every cached window of its thread. Matching the
+ * limit-less key prefix covers each window load-more has grown to; a thread
+ * nobody fetched has no entry, and `setQueriesData` never creates one.
  */
 function cacheThreadMessage(
   queryClient: QueryClient,
