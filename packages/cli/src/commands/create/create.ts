@@ -54,7 +54,7 @@ const DEFAULT_TEMPLATE: Template = {
   slug: 'template-agent-harness',
   agents: ['agent'],
   mcp: [],
-  tools: ['web-fetch'],
+  tools: [],
   networks: [],
   workflows: [],
 };
