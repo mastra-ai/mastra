@@ -82,13 +82,24 @@ async function fixExportBugInDtsFile(dtsFile: string) {
   }
 }
 
+// NOTE: `src/test.ts` is intentionally built separately (tsdown.test.config.ts).
+// It pulls in Node-only dependencies (http, createRequire CJS interop, ...). When it
+// shared a build with `src/index.ts`, tsdown hoisted an eager
+// `createRequire(import.meta.url)` into a shared chunk that @mastra/core's
+// browser-consumable entries (e.g. agent/message-list -> @mastra/ai-sdk/ui) load,
+// crashing browser bundles. Do not merge `src/test.ts` back into this entry list.
+// Regression test: client-sdks/ai-sdk/src/__tests__/browser-bundle.test.ts
+//
+// Ordering: the test config runs FIRST (and owns `clean: true`) because this
+// config's onSuccess (copyAIDtsFiles) only copies a .d.ts for entries whose .js
+// already exists in dist/ — dist/test.js must be present or test.d.ts is skipped.
 export default defineConfig({
-  entry: ['src/index.ts', 'src/mcp-stdio.ts', 'src/test.ts'],
+  entry: ['src/index.ts', 'src/mcp-stdio.ts'],
   format: ['esm'],
   fixedExtension: false,
   nodeProtocol: 'strip',
   target: 'node22',
-  clean: true,
+  clean: false,
   dts: false,
   treeshake: true,
   sourcemap: true,
