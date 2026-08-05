@@ -137,7 +137,7 @@ Frontmatter accepts every option below except `handler`, which needs a function 
     name: 'handler',
     type: '(ctx) => ScheduleOverrides | null | undefined',
     description:
-      'Computes the fire at trigger time. Return overrides to apply, `null` to skip this fire, or nothing to use the declared defaults. Set this or `prompt`, not both.',
+      'Computes the fire at trigger time. Return overrides to apply, or `null` to skip this fire. Returning nothing applies no overrides, which fails the fire because handler mode has no stored prompt. Set this or `prompt`, not both.',
     isOptional: true,
   },
   {
