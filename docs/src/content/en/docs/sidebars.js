@@ -16,13 +16,8 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'doc',
-      id: 'index',
-      label: 'Get Started',
-    },
-    {
       type: 'category',
-      label: 'Essentials',
+      label: 'Start',
       collapsible: false,
       collapsed: false,
       customProps: {
@@ -31,39 +26,16 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'what-is-mastra',
-          label: 'What is Mastra?',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/build-with-ai',
-          label: 'Build with AI',
-        },
-        {
-          type: 'doc',
-          id: 'storage/overview',
-          label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/file-based-agents',
-          label: 'File-based Agents',
-          customProps: {
-            tags: ['beta'],
-          },
+          id: 'index',
+          label: 'Get Started',
         },
       ],
     },
     {
       type: 'category',
-      label: 'Core',
-      collapsed: false,
+      label: 'Build',
       collapsible: false,
+      collapsed: false,
       customProps: {
         displayAsGroup: true,
       },
@@ -261,6 +233,17 @@ const sidebars = {
             },
           ],
         },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Core',
+      collapsed: false,
+      collapsible: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
         {
           type: 'category',
           label: 'Studio',
