@@ -227,6 +227,7 @@ function DocSidebarItemCategoryCollapsible({
         },
         className,
       )}
+      data-contextual-sidebar={isContextualSidebarCategory ? 'true' : undefined}
     >
       <div
         className={clsx('menu__list-item-collapsible', {

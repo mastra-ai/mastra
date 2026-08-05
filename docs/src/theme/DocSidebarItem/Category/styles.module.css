@@ -2,11 +2,13 @@
   overflow: hidden;
 }
 
-.categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist)) {
+:global([data-contextual-sidebar='true']) .categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist)) {
   overflow: visible;
 }
 
-.categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist)) .categoryLinkLabel {
+:global([data-contextual-sidebar='true'])
+  .categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist))
+  .categoryLinkLabel {
   color: inherit;
 }
 
