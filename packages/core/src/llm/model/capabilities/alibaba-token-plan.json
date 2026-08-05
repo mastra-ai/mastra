@@ -8,12 +8,14 @@
     "qwen3.6-flash",
     "qwen3.6-plus",
     "qwen3.7-plus",
+    "qwen3.8-max",
     "qwen3.8-max-preview"
   ],
   "temperature": [
     "MiniMax-M2.5",
     "deepseek-v3.2",
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "glm-5",
     "glm-5.1",
@@ -29,6 +31,7 @@
     "qwen3.6-plus",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "qwen3.8-max",
     "qwen3.8-max-preview",
     "wan2.7-image",
     "wan2.7-image-pro"
@@ -36,6 +39,7 @@
   "structuredOutput": [
     "deepseek-v3.2",
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "glm-5",
     "glm-5.1",
@@ -47,6 +51,7 @@
     "qwen3.6-plus",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "qwen3.8-max",
     "qwen3.8-max-preview"
   ]
 }

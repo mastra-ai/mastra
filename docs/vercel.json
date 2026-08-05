@@ -16,13 +16,28 @@
   ],
   "redirects": [
     {
+      "source": "/docs/editor/prompts",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/tools",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/workspace",
+      "destination": "/docs/mastra-platform/workspaces",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels",
       "destination": "/docs/capabilities/channels/overview",
       "permanent": true
     },
     {
       "source": "/docs/voice/livekit",
-      "destination": "/docs/voice/realtime-voice",
+      "destination": "/guides/voice/realtime-voice",
       "permanent": true
     },
     {
@@ -112,7 +127,7 @@
     },
     {
       "source": "/docs/agents/adding-voice",
-      "destination": "/docs/voice/overview",
+      "destination": "/guides/voice/overview",
       "permanent": true
     },
     {
@@ -207,12 +222,7 @@
     },
     {
       "source": "/guides/guide/manual-install",
-      "destination": "/docs/getting-started/manual-install",
-      "permanent": true
-    },
-    {
-      "source": "/guides/getting-started/manual-install",
-      "destination": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
       "permanent": true
     },
     {
@@ -272,82 +282,82 @@
     },
     {
       "source": "/examples/rag/chunking/chunk-text",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-html",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-json",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-markdown",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-size",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-delimiters",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-chunk",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-chunk-array",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-with-cohere",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/upsert/upsert-embeddings",
-      "destination": "/docs/rag/vector-databases",
+      "destination": "/guides/rag/vector-databases",
       "permanent": true
     },
     {
       "source": "/examples/rag/query/retrieve-results",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-cohere",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-zeroentropy",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/basic-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
@@ -487,12 +497,12 @@
     },
     {
       "source": "/examples/rag/query/hybrid-vector-search",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/graph-rag",
-      "destination": "/docs/rag/graph-rag",
+      "destination": "/guides/rag/graph-rag",
       "permanent": true
     },
     {
@@ -672,7 +682,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
       "permanent": true
     },
     {
@@ -777,12 +787,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/evals/datasets/overview",
+      "destination": "/docs/datasets/overview",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/evals/datasets/running-experiments",
+      "destination": "/docs/datasets/running-experiments",
       "permanent": true
     },
     {
@@ -827,12 +837,12 @@
     },
     {
       "source": "/docs/build-with-ai/skills",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
       "permanent": true
     },
     {
@@ -957,7 +967,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/getting-started/file-based-agents",
+      "destination": "/docs/getting-started/develop",
       "permanent": true
     },
     {
@@ -1031,13 +1041,138 @@
       "permanent": true
     },
     {
+      "source": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/docs/what-is-mastra",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/build-with-ai",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/file-based-agents",
+      "destination": "/docs/getting-started/develop",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/overview",
+      "destination": "https://agent-builder.mastra.ai/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/access-control",
+      "destination": "https://agent-builder.mastra.ai/access-control",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/browser",
+      "destination": "https://agent-builder.mastra.ai/browser",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/channels",
+      "destination": "https://agent-builder.mastra.ai/channels",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/configuration",
+      "destination": "https://agent-builder.mastra.ai/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/deploying",
+      "destination": "https://agent-builder.mastra.ai/deployment",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/integrations",
+      "destination": "https://agent-builder.mastra.ai/tool-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/memory",
+      "destination": "https://agent-builder.mastra.ai/memory",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/model-policy",
+      "destination": "https://agent-builder.mastra.ai/model-policy",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/skill-registries",
+      "destination": "https://agent-builder.mastra.ai/skill-registries",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/workspace",
+      "destination": "https://agent-builder.mastra.ai/workspace",
+      "permanent": true
+    },
+    {
+      "source": "/reference/editor/agent-builder/agent-builder-options",
+      "destination": "https://agent-builder.mastra.ai/reference/agent-builder-options",
+      "permanent": true
+    },
+    {
+      "source": "/reference/editor/agent-builder/builder-agent-defaults",
+      "destination": "https://agent-builder.mastra.ai/reference/builder-agent-defaults",
+      "permanent": true
+    },
+    {
+      "source": "/reference/editor/agent-builder/builder-models",
+      "destination": "https://agent-builder.mastra.ai/reference/builder-models",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/agent-builder",
+      "destination": "https://agent-builder.mastra.ai/reference/client",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*",
+      "destination": "/guides/rag/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*",
+      "destination": "/guides/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/:path*",
+      "destination": "/docs/datasets/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/prompts/llms.txt",
+      "destination": "/docs/editor/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/tools/llms.txt",
+      "destination": "/docs/editor/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/workspace/llms.txt",
+      "destination": "/docs/mastra-platform/workspaces/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels/llms.txt",
       "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/voice/livekit/llms.txt",
-      "destination": "/docs/voice/realtime-voice/llms.txt",
+      "destination": "/guides/voice/realtime-voice/llms.txt",
       "permanent": true
     },
     {
@@ -1107,7 +1242,7 @@
     },
     {
       "source": "/docs/agents/adding-voice/llms.txt",
-      "destination": "/docs/voice/overview/llms.txt",
+      "destination": "/guides/voice/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1192,12 +1327,7 @@
     },
     {
       "source": "/guides/guide/manual-install/llms.txt",
-      "destination": "/docs/getting-started/manual-install/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/guides/getting-started/manual-install/llms.txt",
-      "destination": "/docs/getting-started/manual-install/llms.txt",
+      "destination": "/guides/getting-started/manual-install/llms.txt",
       "permanent": true
     },
     {
@@ -1467,7 +1597,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
       "permanent": true
     },
     {
@@ -1537,12 +1667,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview/llms.txt",
-      "destination": "/docs/evals/datasets/overview/llms.txt",
+      "destination": "/docs/datasets/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments/llms.txt",
-      "destination": "/docs/evals/datasets/running-experiments/llms.txt",
+      "destination": "/docs/datasets/running-experiments/llms.txt",
       "permanent": true
     },
     {
@@ -1587,12 +1717,12 @@
     },
     {
       "source": "/docs/build-with-ai/skills/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
       "permanent": true
     },
     {
@@ -1707,7 +1837,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents/llms.txt",
-      "destination": "/docs/getting-started/file-based-agents/llms.txt",
+      "destination": "/docs/getting-started/develop/llms.txt",
       "permanent": true
     },
     {
@@ -1778,6 +1908,41 @@
     {
       "source": "/docs/guide/tools/llms.txt",
       "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/manual-install/llms.txt",
+      "destination": "/guides/getting-started/manual-install/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/what-is-mastra/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/reference/build-with-ai/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/file-based-agents/llms.txt",
+      "destination": "/docs/getting-started/develop/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*/llms.txt",
+      "destination": "/guides/rag/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*/llms.txt",
+      "destination": "/guides/voice/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/:path*/llms.txt",
+      "destination": "/docs/datasets/:path*/llms.txt",
       "permanent": true
     }
   ]

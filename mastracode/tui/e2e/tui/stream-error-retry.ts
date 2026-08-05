@@ -23,11 +23,16 @@ export const streamErrorRetryScenario = {
   async inProcessApp({ startMastraCodeApp }): Promise<McE2eInProcessApp> {
     const patches = createGlobalPatchScope();
     const originalFetch = globalThis.fetch.bind(globalThis);
-    let failedOnce = false;
+    let failedAttempts = 0;
     patches.setProperty(globalThis, 'fetch', async (input, init) => {
-      if (!failedOnce && requestUrl(input).includes('/responses')) {
-        failedOnce = true;
-        throw Object.assign(new Error('Cannot connect to API: write EPIPE'), { code: 'EPIPE' });
+      if (requestUrl(input).includes('/responses')) {
+        failedAttempts++;
+        if (failedAttempts === 1) {
+          throw Object.assign(new Error('Cannot connect to API: write EPIPE'), { code: 'EPIPE' });
+        }
+        if (failedAttempts === 2) {
+          throw Object.assign(new Error('Server error. The API may be experiencing issues.'), { status: 503 });
+        }
       }
       return originalFetch(input, init);
     });
@@ -52,6 +57,7 @@ export const streamErrorRetryScenario = {
 
     terminal.submit(PROMPT);
     await runtime.waitForScreenText(/write EPIPE.*retry 1\/10 in 0\.5s/i, terminal);
+    await runtime.waitForScreenText(/Server error.*retry 2\/10 in 1s/i, terminal);
     await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 30_000);
 
     terminal.keyCtrlC();

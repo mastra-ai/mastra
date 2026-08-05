@@ -1,5 +1,48 @@
 # @mastra/deployer-vercel
 
+## 1.2.13-alpha.1
+
+### Patch Changes
+
+- Fixed custom API routes being unreachable when deploying to Vercel with `studio: true`. ([#20517](https://github.com/mastra-ai/mastra/pull/20517))
+
+  Routes registered with `registerApiRoute()` are mounted at the root of the server, but the generated Vercel route table only forwarded `/api/*` and `/health` to your app. Every other path fell through to Studio's `index.html`, so a request to a custom route returned the Studio HTML page and the handler never ran. Moving the route under `/api` was not an option either, since that prefix is reserved for built-in routes.
+
+  The route table now serves the paths Studio owns from the CDN and sends everything else to your server, so custom routes behave the same as they do with `mastra dev` and `studio: false`. Studio and its assets are still served as static files with no function invocations.
+
+  ```ts
+  export const mastra = new Mastra({
+    deployer: new VercelDeployer({ studio: true }),
+    server: {
+      apiRoutes: [registerApiRoute('/my/webhook', { method: 'POST', handler: c => c.json({ ok: true }) })],
+    },
+  });
+  ```
+
+  `POST /my/webhook` now returns `{"ok":true}` instead of Studio's `index.html`.
+
+  Requests to a custom `server.apiPrefix` now reach your server too, instead of being answered with the Studio page. Studio's own UI still calls `/api`, so pointing Studio at a custom prefix is not supported yet.
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`b1abe41`](https://github.com/mastra-ai/mastra/commit/b1abe41fbb5060b864aaa79e0ac3b5afcd414513), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+  - @mastra/deployer@1.56.0-alpha.4
+
+## 1.2.13-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7f4e26d`](https://github.com/mastra-ai/mastra/commit/7f4e26dd57bd9b23c278ea21235ab823a3810a6c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c), [`6306f2c`](https://github.com/mastra-ai/mastra/commit/6306f2cac6fbe9a89d881044a609cc1d4aace797), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c)]:
+  - @mastra/core@1.56.0-alpha.0
+  - @mastra/deployer@1.56.0-alpha.0
+
+## 1.2.12
+
+### Patch Changes
+
+- Updated dependencies [[`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d), [`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`35b929b`](https://github.com/mastra-ai/mastra/commit/35b929b7abc3d20d85c7985880960ac2d04a6c86), [`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`9b3626a`](https://github.com/mastra-ai/mastra/commit/9b3626aeb1d16fcd34b0a8e94c114ddb80a3b240), [`4696963`](https://github.com/mastra-ai/mastra/commit/469696312ac4c618bc8475b0c5ed7949b8a3455e), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0
+  - @mastra/deployer@1.55.0
+
 ## 1.2.12-alpha.0
 
 ### Patch Changes

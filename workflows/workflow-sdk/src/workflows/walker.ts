@@ -110,6 +110,62 @@ type SerializedEntry =
     }
   | { type: 'foreach'; step: SerializedStepLike; opts?: { concurrency?: number; fn?: string } };
 
+/**
+ * Normalizes core's raw `SerializedStepFlowEntry[]` into the walker's internal
+ * model. Core carries two shapes the walker flattens away:
+ *
+ * - nested workflows are `{ type: 'workflow', id, serializedStepFlow }`
+ *   entries; the walker keys nested workflows off `serializedStepFlow`
+ *   presence on a step-like, so they normalize to a plain step wrapper.
+ * - `loop` / `foreach` bodies and `parallel` / `conditional` branches carry a
+ *   single-step-entry wrapper (`{ type: 'step', step }`) rather than the bare
+ *   step the walker reads.
+ *
+ * Declarative entries (agent / tool / mapping) normalize to their bare id;
+ * when one executes, the host rejects the op with an actionable error.
+ */
+function normalizeEntries(rawEntries: unknown[]): SerializedEntry[] {
+  type Raw = { type?: string; id?: string; step?: unknown; steps?: unknown[]; serializedStepFlow?: unknown[] };
+
+  const withNormalizedFlow = (step: SerializedStepLike): SerializedStepLike =>
+    step?.serializedStepFlow ? { ...step, serializedStepFlow: normalizeEntries(step.serializedStepFlow) } : step;
+
+  const normalizeStepLike = (raw: Raw): SerializedStepLike => {
+    if (raw?.type === 'step' && raw.step) {
+      return withNormalizedFlow(raw.step as SerializedStepLike);
+    }
+    if (raw?.type === 'workflow') {
+      return raw.serializedStepFlow
+        ? { id: raw.id!, serializedStepFlow: normalizeEntries(raw.serializedStepFlow) }
+        : { id: raw.id! };
+    }
+    // Bare step-likes (older snapshots) and declarative entries both carry `id`.
+    return withNormalizedFlow(raw as SerializedStepLike);
+  };
+
+  return (rawEntries as Raw[]).map(raw => {
+    switch (raw.type) {
+      case 'step':
+      case 'workflow':
+      case 'agent':
+      case 'tool':
+      case 'mapping':
+        return { type: 'step', step: normalizeStepLike(raw) };
+      case 'parallel':
+      case 'conditional':
+        return {
+          ...raw,
+          steps: (raw.steps ?? []).map(branch => ({ type: 'step', step: normalizeStepLike(branch as Raw) })),
+        } as SerializedEntry;
+      case 'loop':
+      case 'foreach':
+        return { ...raw, step: normalizeStepLike(raw.step as Raw) } as SerializedEntry;
+      default:
+        return raw as unknown as SerializedEntry;
+    }
+  });
+}
+
 /** Thrown by `bail()`; unwinds the walk and finishes the run early. */
 class BailSignal {
   constructor(public readonly output: unknown) {}
@@ -184,7 +240,7 @@ export function toSerializedError(error: unknown): SerializedOpError {
  * status off the return value.
  */
 export async function runMastraGraph(params: WalkerParams, effects: WalkerEffects): Promise<MastraRunnerResult> {
-  const graph = (params.serializedStepGraph ?? []) as SerializedEntry[];
+  const graph = normalizeEntries(params.serializedStepGraph ?? []);
   const state: Record<string, unknown> = { ...(params.initialState ?? {}) };
   // `input` mirrors the default engine's step-results shape: the workflow input
   // travels alongside step entries so `result.steps.input` and persisted

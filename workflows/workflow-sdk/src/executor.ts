@@ -5,9 +5,11 @@ import type { Event, EventCallback } from '@mastra/core/events';
 import { EntityType, SpanType, createObservabilityContext, wrapMastra } from '@mastra/core/observability';
 import type { AnySpan, ExportedSpan } from '@mastra/core/observability';
 import { ToolStream } from '@mastra/core/tools';
+import type { Mastra } from '@mastra/core/mastra';
 import type {
   ExecutionGraph,
   SerializedStepFlowEntry,
+  SingleStepEntry,
   Step,
   StepFlowEntry,
   SuspendOptions,
@@ -15,7 +17,12 @@ import type {
   WorkflowRunState,
 } from '@mastra/core/workflows';
 import {
+  getEntryId,
+  getEntrySchemas,
+  runAgentEntry,
+  runMappingEntry,
   runScorersForStep,
+  runToolEntry,
   validateStepInput,
   validateStepRequestContext,
   validateStepStateData,
@@ -108,6 +115,39 @@ function serializableFields(error: Error): Record<string, unknown> {
   return fields;
 }
 
+/**
+ * Deep-plainifies a stream chunk so it survives the Workflow SDK's structured
+ * serialization boundary, which rejects non-POJO objects. Agent steps forward
+ * their full model stream through the step writer, and finish chunks carry AI
+ * SDK class instances (e.g. `DefaultStepResult`) whose data lives in own
+ * enumerable fields — copying those into plain objects preserves the shape
+ * consumers see on the default engine. Dates pass through (the serializer
+ * supports them), functions/symbols are dropped, and circular refs are cut.
+ */
+function toSerializableChunk(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (value === null || typeof value !== 'object') {
+    return typeof value === 'function' || typeof value === 'symbol' ? undefined : value;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (seen.has(value)) {
+    return undefined;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.map(item => toSerializableChunk(item, seen));
+  }
+  const plain: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const converted = toSerializableChunk(entry, seen);
+    if (converted !== undefined || entry === undefined) {
+      plain[key] = converted;
+    }
+  }
+  return plain;
+}
+
 /** Walks `executionGraph.steps` to the entry a {@link MastraOp} addresses. */
 function resolveEntry(graph: ExecutionGraph, path: number[]): StepFlowEntry {
   const [head, ...rest] = path;
@@ -132,11 +172,60 @@ function resolveEntry(graph: ExecutionGraph, path: number[]): StepFlowEntry {
 }
 
 /** Returns the `Step` an op addresses, for the op kinds that target one. */
-function resolveStep(entry: StepFlowEntry, path: number[]): Step<any, any, any, any, any, any, any, any> {
-  if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
-    return entry.step;
+function resolveStep(entry: StepFlowEntry, path: number[], mastra?: Mastra): Step<any, any, any, any, any, any, any, any> {
+  const inner: SingleStepEntry | undefined =
+    entry.type === 'step' || entry.type === 'agent' || entry.type === 'tool' || entry.type === 'mapping'
+      ? entry
+      : entry.type === 'loop' || entry.type === 'foreach'
+        ? entry.step
+        : undefined;
+  if (!inner) {
+    throw new Error(`Entry at ${JSON.stringify(path)} is a "${entry.type}" and has no single step`);
   }
-  throw new Error(`Entry at ${JSON.stringify(path)} is a "${entry.type}" and has no single step`);
+  if (inner.type !== 'step') {
+    return materializeDeclarativeStep(inner, mastra);
+  }
+  return inner.step;
+}
+
+/**
+ * Materializes a declarative entry (agent / tool / mapping) into a live step
+ * shell around core's shared entry executors — the same interpretation both
+ * core engines use, so behavior stays identical across engines (mirrors
+ * `createStepFromAgent` / `createStepFromTool` / `createMappingStep`).
+ */
+function materializeDeclarativeStep(
+  entry: Exclude<SingleStepEntry, { type: 'step' }>,
+  mastra?: Mastra,
+): Step<any, any, any, any, any, any, any, any> {
+  const schemas = getEntrySchemas(entry, mastra);
+  switch (entry.type) {
+    case 'agent':
+      return {
+        id: entry.id,
+        ...schemas,
+        retries: entry.options?.retries,
+        scorers: entry.options?.scorers,
+        metadata: entry.options?.metadata,
+        component: 'AGENT',
+        execute: async (ctx: any) => runAgentEntry(entry, ctx, mastra),
+      } as Step<any, any, any, any, any, any, any, any>;
+    case 'tool':
+      return {
+        id: entry.id,
+        ...schemas,
+        retries: entry.options?.retries,
+        scorers: entry.options?.scorers,
+        metadata: entry.options?.metadata,
+        component: 'TOOL',
+        execute: async (ctx: any) => runToolEntry(entry, ctx, mastra),
+      } as Step<any, any, any, any, any, any, any, any>;
+    case 'mapping':
+      return {
+        id: entry.id,
+        execute: async (ctx: any) => runMappingEntry(entry, ctx),
+      } as Step<any, any, any, any, any, any, any, any>;
+  }
 }
 
 interface ResolvedCallable {
@@ -186,12 +275,12 @@ function resolveOpGraph(rootGraph: ExecutionGraph, op: MastraOp): ExecutionGraph
   return graph;
 }
 
-function resolveCallable(graph: ExecutionGraph, op: MastraOp): ResolvedCallable {
+function resolveCallable(graph: ExecutionGraph, op: MastraOp, mastra?: Mastra): ResolvedCallable {
   const entry = resolveEntry(graph, op.path);
 
   switch (op.kind) {
     case 'step': {
-      const step = resolveStep(entry, op.path);
+      const step = resolveStep(entry, op.path, mastra);
       return { fn: step.execute as (params: any) => Promise<unknown>, step, id: step.id };
     }
     case 'condition': {
@@ -211,7 +300,7 @@ function resolveCallable(graph: ExecutionGraph, op: MastraOp): ResolvedCallable 
       if (entry.type !== 'loop') {
         throw new Error(`Expected a loop entry at ${JSON.stringify(op.path)}, got "${entry.type}"`);
       }
-      return { fn: entry.condition as (params: any) => Promise<unknown>, id: `${entry.step.id}_condition` };
+      return { fn: entry.condition as (params: any) => Promise<unknown>, id: `${getEntryId(entry.step)}_condition` };
     }
     case 'sleep-duration':
     case 'sleep-until-date': {
@@ -229,9 +318,9 @@ function resolveCallable(graph: ExecutionGraph, op: MastraOp): ResolvedCallable 
       }
       const resolver = entry.opts.concurrency;
       if (typeof resolver !== 'function') {
-        throw new Error(`Foreach entry "${entry.step.id}" has a static concurrency, not a resolver`);
+        throw new Error(`Foreach entry "${getEntryId(entry.step)}" has a static concurrency, not a resolver`);
       }
-      return { fn: async (params: any) => resolver(params), id: `${entry.step.id}_concurrency` };
+      return { fn: async (params: any) => resolver(params), id: `${getEntryId(entry.step)}_concurrency` };
     }
     default: {
       const exhaustive = op as { kind: string };
@@ -308,7 +397,11 @@ export async function runMastraOp(request: MastraOpRequest): Promise<MastraOpRes
 
   try {
     const workflow = requireRegisteredWorkflow(request.workflowId);
-    const { fn, step, id } = resolveCallable(resolveOpGraph(workflow.executionGraph, request.op), request.op);
+    const { fn, step, id } = resolveCallable(
+      resolveOpGraph(workflow.executionGraph, request.op),
+      request.op,
+      workflow.mastra,
+    );
     identity = opIdentity(request.op, id);
 
     // Dotted id nested steps are known by everywhere outside their own graph:
@@ -383,7 +476,10 @@ export async function runMastraOp(request: MastraOpRequest): Promise<MastraOpRes
     const writer = new ToolStream(
       { prefix: 'workflow-step', callId: `${request.runId}:${qualifiedId}`, name: qualifiedId, runId: request.runId },
       async (chunk: unknown) => {
-        const event = chunk as Record<string, unknown>;
+        // Plainified up front: user chunks (agent stream events in particular)
+        // can carry class instances that the SDK's serializer rejects, and a
+        // failed background flush of stream ops is fatal to the whole run.
+        const event = toSerializableChunk(chunk) as Record<string, unknown>;
         const streamWriter = writable.getWriter();
         try {
           await streamWriter.write({

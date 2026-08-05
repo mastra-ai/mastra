@@ -1,5 +1,83 @@
 # @mastra/libsql
 
+## 1.19.0-alpha.2
+
+### Patch Changes
+
+- Dataset item scorer selections now persist across LibSQL writes and reads. Setting `scorerIds` to `null` clears an item override, while `[]` remains an explicit override with no scorers. ([#20191](https://github.com/mastra-ai/mastra/pull/20191))
+
+  ```typescript
+  await dataset.addItem({
+    input: 'Evaluate this response',
+    scorerIds: [],
+  });
+  ```
+
+- Updated dependencies [[`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866)]:
+  - @mastra/core@1.56.0-alpha.6
+
+## 1.19.0-alpha.1
+
+### Patch Changes
+
+- Stored workflow definitions now persist across restarts on every major database backend. ([#20471](https://github.com/mastra-ai/mastra/pull/20471))
+
+  Implement the `workflowDefinitions` storage domain for libsql, pg, mysql, mssql, mongodb, and spanner. Previously the stored-workflow persistence path (`POST /stored/workflows`, `Mastra.addStoredWorkflow`) only worked against `@mastra/core`'s in-memory store. Persistent adapters returned `undefined` from `storage.getStore('workflowDefinitions')` and threw when the HTTP handler tried to read/write a workflow.
+
+  ```ts
+  const workflowDefinitions = await storage.getStore('workflowDefinitions');
+  if (!workflowDefinitions) {
+    throw new Error('This storage adapter does not support the workflowDefinitions domain');
+  }
+
+  await workflowDefinitions.upsert({
+    id: 'greeting-workflow',
+    inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    outputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+    graph: [{ type: 'agent', id: 'greet', agentId: 'greeter-agent' }],
+  });
+
+  const { definitions, total } = await workflowDefinitions.list({ status: 'active' });
+  const definition = await workflowDefinitions.get('greeting-workflow');
+  await workflowDefinitions.delete('greeting-workflow');
+  ```
+
+  Each adapter now ships a `WorkflowDefinitions*` domain that:
+
+  - Creates the shared `mastra_workflow_definitions` table (or Mongo collection) from `WORKFLOW_DEFINITIONS_SCHEMA` during `init()`, plus a default index on `status`.
+  - Implements `upsert` / `get` / `list` / `delete` matching `WorkflowDefinitionsStorage` semantics (`list` supports `status` and `authorId` filters and orders by `updatedAt` desc). Partial upserts preserve unspecified fields, including `authorId` updates and `createdAt` / `updatedAt` semantics.
+  - Handles concurrent first-writes race-safely: if two callers upsert the same new id simultaneously, the losing insert detects the duplicate key, re-reads the row, and applies the partial-update path instead of failing.
+  - Round-trips the JSON columns (`inputSchema`, `outputSchema`, `stateSchema`, `requestContextSchema`, `metadata`, `graph`) through each adapter's JSON handling, so declarative workflow graphs rehydrate identically no matter which backend they were stored in. Malformed persisted JSON surfaces as an actionable error naming the row and column instead of hydrating raw strings.
+
+  Exported class names by adapter: `WorkflowDefinitionsLibSQL`, `WorkflowDefinitionsPG`, `WorkflowDefinitionsMySQL`, `WorkflowDefinitionsMSSQL`, `MongoDBWorkflowDefinitionsStore`, `WorkflowDefinitionsSpanner`. The composite stores (`LibSQLStore`, `PostgresStore`, `MySQLStore`, `MSSQLStore`, `MongoDBStore`, `SpannerStore`) auto-wire the new domain, so callers do not need to construct it manually — `storage.getStore('workflowDefinitions')` now returns a live handle.
+
+  The pg adapter reads `createdAt` / `updatedAt` from the auto-added `createdAtZ` / `updatedAtZ` `timestamptz` companion columns to avoid the naive-timestamp / local-TZ drift that a plain `TIMESTAMP` read exhibits under node-pg.
+
+  `@mastra/clickhouse` and `@mastra/cloudflare` register the new `mastra_workflow_definitions` table in their table/type maps so shared table constants stay exhaustive (no workflow-definitions domain implementation yet).
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+
+## 1.19.0-alpha.0
+
+### Minor Changes
+
+- Added persistence for dataset item undeclared tool policies. ([#19643](https://github.com/mastra-ai/mastra/pull/19643))
+
+  ```typescript
+  await dataset.addItem({
+    input: 'What is the weather?',
+    unmockedToolPolicy: 'deny',
+  });
+  ```
+
+### Patch Changes
+
+- Added a comment column to experiment results so review comments persist. The column is added automatically and non-destructively on startup for existing databases (https://github.com/mastra-ai/mastra/issues/19857). ([#19865](https://github.com/mastra-ai/mastra/pull/19865))
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+
 ## 1.18.0
 
 ### Minor Changes

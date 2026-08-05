@@ -761,6 +761,25 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    // Add test stored workflow definition so GET /stored/workflows/:storedWorkflowId
+    // finds a row matching getDefaultValidPathParams' 'test-stored-workflow'
+    const workflowDefinitions = await storage.getStore('workflowDefinitions');
+    if (workflowDefinitions) {
+      await workflowDefinitions.upsert({
+        id: 'test-stored-workflow',
+        description: 'Test stored workflow',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+        graph: [
+          {
+            type: 'mapping',
+            id: 'greet',
+            mapConfig: JSON.stringify({ message: { template: 'Hello, ${initData.name}!' } }),
+          },
+        ],
+      });
+    }
+
     const backgroundTasks = await storage.getStore('backgroundTasks');
     if (backgroundTasks) {
       await backgroundTasks.createTask({

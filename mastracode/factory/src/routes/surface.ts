@@ -16,6 +16,7 @@ import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
@@ -68,6 +69,7 @@ export interface FactoryApiRoutesDeps {
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
+    channelIdentity: ChannelIdentityStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -205,7 +207,7 @@ export function buildIntegrationContext(
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
     factoryReady: boolean;
-    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems'>;
+    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems' | 'channelIdentity'>;
   },
   integrationId: string,
 ): IntegrationContext {
@@ -221,6 +223,7 @@ export function buildIntegrationContext(
       sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
       projects: deps.domains.projects,
       intake: deps.domains.intake,
+      channelIdentity: deps.domains.channelIdentity,
     },
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),

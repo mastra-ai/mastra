@@ -35,6 +35,8 @@ export class WorkflowRunOutput<
 
   #streamError: Error | undefined;
 
+  #finalWorkflowResult: unknown;
+
   #delayedPromises = {
     usage: new DelayedPromise<LanguageModelUsage>(),
     result: new DelayedPromise<TResult>(),
@@ -135,6 +137,9 @@ export class WorkflowRunOutput<
                 output: {
                   usage: self.#usageCount,
                 },
+                ...(self.#status === 'success' && self.#finalWorkflowResult !== undefined
+                  ? { finalWorkflowResult: self.#finalWorkflowResult }
+                  : {}),
                 // Include tripwire data when status is 'tripwire'
                 ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
@@ -213,6 +218,9 @@ export class WorkflowRunOutput<
    * @internal
    */
   updateResults(results: TResult) {
+    if (results.status === 'success') {
+      this.#finalWorkflowResult = results.result;
+    }
     this.#delayedPromises.result.resolve(results);
   }
 
@@ -311,6 +319,9 @@ export class WorkflowRunOutput<
                 output: {
                   usage: self.#usageCount,
                 },
+                ...(self.#status === 'success' && self.#finalWorkflowResult !== undefined
+                  ? { finalWorkflowResult: self.#finalWorkflowResult }
+                  : {}),
                 // Include tripwire data when status is 'tripwire'
                 ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
@@ -346,6 +357,12 @@ export class WorkflowRunOutput<
 
   get fullStream(): ReadableStream<WorkflowStreamEvent> {
     const self = this;
+    // Holds this subscriber's own detach function once start() registers its
+    // listeners. cancel() must only remove this subscriber's handlers — the
+    // emitter is shared across every concurrent fullStream/observe consumer of
+    // the same run, so removeAllListeners() here would silently kill every
+    // other subscriber (see #19743).
+    let detach: (() => void) | undefined;
     return new ReadableStream<WorkflowStreamEvent>({
       start(controller) {
         // Replay existing buffered chunks
@@ -372,6 +389,11 @@ export class WorkflowRunOutput<
 
         self.#emitter.on('chunk', chunkHandler);
         self.#emitter.on('finish', finishHandler);
+
+        detach = () => {
+          self.#emitter.off('chunk', chunkHandler);
+          self.#emitter.off('finish', finishHandler);
+        };
       },
 
       pull(_controller) {
@@ -382,8 +404,8 @@ export class WorkflowRunOutput<
       },
 
       cancel() {
-        // Stream was cancelled, clean up
-        self.#emitter.removeAllListeners();
+        // Only detach this subscriber's own listeners — never the whole emitter.
+        detach?.();
       },
     });
   }

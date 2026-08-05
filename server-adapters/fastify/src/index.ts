@@ -708,10 +708,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     };
 
     // Add body limit if configured
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
 
-    const config = shouldApplyBodyLimit && maxSize ? { bodyLimit: maxSize } : undefined;
+    // Fastify enforces body size limits via the route-level `bodyLimit` option,
+    // not `config` (which is arbitrary metadata exposed as request.routeOptions.config
+    // and is never read by Fastify's body-parsing pipeline).
+    const bodyLimit = shouldApplyBodyLimit && maxSize ? maxSize : undefined;
 
     // Handle ALL method by registering for each HTTP method
     // Fastify doesn't support 'ALL' method natively like Express
@@ -725,7 +729,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method,
             url: fastifyPath,
             handler,
-            config,
+            bodyLimit,
           });
         } catch (err) {
           // Skip duplicate route errors - can happen if route is registered multiple times
@@ -740,7 +744,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
         url: fastifyPath,
         handler,
-        config,
+        bodyLimit,
       });
     }
   }

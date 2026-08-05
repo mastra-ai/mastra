@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
-import { Workflow } from '@mastra/core/workflows';
+import { getEntryId, Workflow } from '@mastra/core/workflows';
 import type { Step, StepFlowEntry, WorkflowConfig, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import { WORKFLOW_SDK_ENGINE_TYPE } from './constants';
 import { WorkflowSdkExecutionEngine } from './execution-engine';
@@ -144,14 +144,17 @@ export class WorkflowSdkWorkflow<
     const retries: Record<string, number> = {};
     const visit = (entry: StepFlowEntry, prefix: string) => {
       if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
-        const id = prefix ? `${prefix}.${entry.step.id}` : entry.step.id;
-        if (typeof entry.step.retries === 'number') {
-          retries[id] = entry.step.retries;
+        const inner = entry.type === 'step' ? entry : entry.step;
+        const stepId = getEntryId(inner);
+        const id = prefix ? `${prefix}.${stepId}` : stepId;
+        const live = inner.type === 'step' ? inner.step : undefined;
+        if (live && typeof live.retries === 'number') {
+          retries[id] = live.retries;
         }
         // Nested workflow steps are interpreted inline by the walker, which
         // looks retries up by qualified dotted id.
-        if (entry.step instanceof WorkflowSdkWorkflow) {
-          entry.step.executionGraph.steps.forEach(nested => visit(nested, id));
+        if (live instanceof WorkflowSdkWorkflow) {
+          live.executionGraph.steps.forEach(nested => visit(nested, id));
         }
       } else if (entry.type === 'parallel' || entry.type === 'conditional') {
         entry.steps.forEach(sub => visit(sub, prefix));

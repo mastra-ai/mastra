@@ -145,34 +145,6 @@ function getBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function getLabels(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(label => (typeof label === 'string' ? label : getString(getObject(label)?.name)))
-    .filter((label): label is string => Boolean(label));
-}
-
-function getIssueTriageRunInput(parsed: ParsedGithubWebhook): GithubIssueTriageRunInput | null {
-  if (parsed.event !== 'issues' || getString(parsed.payload.action) !== 'opened') return null;
-  const repository = getString(getObject(parsed.payload.repository)?.full_name);
-  const issue = getObject(parsed.payload.issue);
-  const sender = getString(getObject(parsed.payload.sender)?.login);
-  const installationId = getNumber(getObject(parsed.payload.installation)?.id);
-  const issueNumber = getNumber(issue?.number);
-  const issueTitle = getString(issue?.title);
-  const issueUrl = getString(issue?.html_url);
-  if (!repository || !installationId || !issueNumber || !issueTitle || !issueUrl) return null;
-  return {
-    repository,
-    issueNumber,
-    issueTitle,
-    issueUrl,
-    labels: getLabels(issue?.labels),
-    sender,
-    installationId,
-  };
-}
-
 export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): GithubWebhookMetadata {
   const { event, deliveryId, payload } = parsed;
   const repository = getObject(payload.repository);
@@ -486,18 +458,6 @@ export async function handleGithubWebhook(
 
   if (options.ingestFactoryEvent) {
     await options.ingestFactoryEvent(parsed);
-  } else {
-    const issueTriageRun = getIssueTriageRunInput(parsed);
-    if (issueTriageRun && options.runIssueTriage) {
-      void options.runIssueTriage(issueTriageRun).catch((error: unknown) => {
-        console.error('[GitHub Webhook] Failed to run issue triage', {
-          deliveryId: metadata.deliveryId,
-          repository: metadata.repository,
-          issueNumber: metadata.issueNumber,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    }
   }
 
   if (!options.controller) {

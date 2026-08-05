@@ -1,4 +1,4 @@
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -9,15 +9,25 @@ import {
   transitionWorkItem,
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
-import type { CreateWorkItemInput, UpdateWorkItemInput, WorkItem } from '../ui/domains/factory/services/workItems';
+import type {
+  CreateWorkItemInput,
+  FactoryBoard,
+  FactoryStage,
+  UpdateWorkItemInput,
+  WorkItem,
+} from '../ui/domains/factory/services/workItems';
+
+function requireFactoryProjectId(factoryProjectId: string | undefined): string {
+  if (!factoryProjectId) throw new Error('No Factory selected');
+  return factoryProjectId;
+}
 
 /** The org's persisted work items (kanban cards) for a project. */
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.workItems(factoryProjectId),
-    queryFn: () => listWorkItems(baseUrl, factoryProjectId!),
-    enabled: Boolean(factoryProjectId),
+    queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
     // Relationships can be created by GitHub ingestion or another open tab.
     // Keep thread-page counterpart links current without requiring a reload.
     refetchInterval: 5_000,
@@ -35,7 +45,8 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateWorkItemInput) => createWorkItem(baseUrl, factoryProjectId!, input),
+    mutationFn: (input: CreateWorkItemInput) =>
+      createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
     onSuccess: item => {
       queryClient.setQueryData<WorkItem[]>(queryKeys.workItems(factoryProjectId), existing => {
         const rest = (existing ?? []).filter(i => i.id !== item.id);
@@ -76,10 +87,30 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
 
 type TransitionWorkItemVariables = {
   item: WorkItem;
-  board: 'work' | 'review';
+  board: FactoryBoard;
   stage: string;
   cause?: string;
 };
+
+function isFactoryStage(stage: unknown): stage is FactoryStage {
+  switch (stage) {
+    case 'intake':
+    case 'triage':
+    case 'planning':
+    case 'execute':
+    case 'review':
+    case 'done':
+    case 'canceled':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function requireFactoryStage(stage: string): FactoryStage {
+  if (!isFactoryStage(stage)) throw new Error(`Unsupported Factory stage: ${stage}`);
+  return stage;
+}
 
 export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
@@ -89,9 +120,9 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const mutation = useMutation({
     mutationKey,
     mutationFn: ({ item, board, stage, cause = 'board_drag' }: TransitionWorkItemVariables) =>
-      transitionWorkItem(baseUrl, factoryProjectId!, item.id, {
+      transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
-        stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled',
+        stage: requireFactoryStage(stage),
         expectedRevision: item.revision,
         requestId: crypto.randomUUID(),
         cause,
@@ -130,7 +161,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     filters: { mutationKey, status: 'pending' },
     select: pending => {
       const variables = pending.state.variables;
-      return isTransitionWorkItemVariables(variables)
+      return isPendingTransitionVariables(variables)
         ? { itemId: variables.item.id, stage: variables.stage }
         : undefined;
     },
@@ -138,10 +169,17 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   return { ...mutation, pendingTransitions };
 }
 
-function isTransitionWorkItemVariables(value: unknown): value is TransitionWorkItemVariables {
+interface PendingTransitionVariables {
+  item: { id: string };
+  stage: FactoryStage;
+}
+
+function isPendingTransitionVariables(value: unknown): value is PendingTransitionVariables {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  if (!('stage' in value) || typeof value.stage !== 'string') return false;
-  return 'item' in value && typeof value.item === 'object' && value.item !== null && 'id' in value.item;
+  if (!('stage' in value) || !isFactoryStage(value.stage)) return false;
+  if (!('item' in value) || typeof value.item !== 'object' || value.item === null || !('id' in value.item))
+    return false;
+  return typeof value.item.id === 'string';
 }
 
 /** Remove a work item from the board, dropping it from the cache optimistically. */

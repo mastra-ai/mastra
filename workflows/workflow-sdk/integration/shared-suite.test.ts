@@ -49,9 +49,25 @@ createWorkflowTestSuite({
   },
 
   registerWorkflows: async registry => {
+    // Collect all workflows + any Mastra-level agents/tools the entries declare
+    // (used by `.agent('id')` / `.tool('id')` by-id forms).
     const workflows: Record<string, any> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow;
+      for (const [agentId, agent] of Object.entries(entry.mastraAgents ?? {})) {
+        if (agentId in agents && agents[agentId] !== agent) {
+          throw new Error(`registerWorkflows: agent id collision across registry entries: "${agentId}"`);
+        }
+        agents[agentId] = agent;
+      }
+      for (const [toolId, tool] of Object.entries(entry.mastraTools ?? {})) {
+        if (toolId in tools && tools[toolId] !== tool) {
+          throw new Error(`registerWorkflows: tool id collision across registry entries: "${toolId}"`);
+        }
+        tools[toolId] = tool;
+      }
     }
     // Binds mastra (and thus storage) to every workflow, which re-registers the
     // registry facades with the mastra instance the dispatcher needs for
@@ -60,6 +76,8 @@ createWorkflowTestSuite({
       logger: false,
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
     });
   },
 

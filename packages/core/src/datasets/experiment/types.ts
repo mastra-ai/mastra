@@ -1,9 +1,9 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
-import type { MastraScorer } from '../../evals/base';
+import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
-import type { ItemToolMock, ToolMockReport } from './tool-mocks';
+import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
 /**
  * A single data item for inline experiment data.
@@ -20,6 +20,12 @@ export interface DataItem<I = unknown, E = unknown> {
   metadata?: Record<string, unknown>;
   /** Per-item request context merged over the global request context (item takes precedence) */
   requestContext?: Record<string, unknown>;
+  /**
+   * Scorer IDs that override dataset-attached scorers for this item when run-level
+   * `config.scorers` is absent. Run-level scorers, including an empty configuration,
+   * take precedence. An empty array explicitly disables scoring for the item.
+   */
+  scorerIds?: string[];
   /**
    * Resume data for suspended workflow steps, keyed by step ID.
    * When a workflow suspends during experiment execution, the executor
@@ -48,6 +54,31 @@ export interface DataItem<I = unknown, E = unknown> {
    * real tool; calling a mocked tool with non-matching args fails the item.
    */
   toolMocks?: ItemToolMock[];
+  /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
+}
+
+/**
+ * Per-domain persistence selection for a single experiment run.
+ *
+ * - `default` — write through the `Mastra` instance's configured storage (current behavior).
+ * - `none` — perform no writes for that domain for this run. Execution, scoring, and the
+ *   returned {@link ExperimentSummary} are unaffected; only the storage writes are skipped.
+ *
+ * The two domains are independent: selecting `none` for one does not change the other.
+ *
+ * This policy governs *experiment bookkeeping* only. It does not disable unrelated
+ * application storage the target itself may use — agent memory, vectors, working memory,
+ * observability traces, or arbitrary code the target runs. It is not a sandbox.
+ */
+export interface ExperimentPersistencePolicy {
+  /**
+   * Experiment records, progress updates, and per-item results
+   * (`mastra_experiments` / `mastra_experiment_results`). Default: `default`.
+   */
+  experiments?: 'default' | 'none';
+  /** Scores emitted by experiment scorers. Default: `default`. */
+  scores?: 'default' | 'none';
 }
 
 /**
@@ -95,6 +126,27 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
+  /**
+   * Per-run, per-domain persistence policy. Omitted or partially specified fields
+   * default to `default`, so omitting this preserves existing behavior exactly.
+   *
+   * Selecting `none` lets a caller own persistence itself — for example a run
+   * executing inside a sandbox whose results are recorded by the host rather than
+   * through the bundled `Mastra` instance's storage.
+   *
+   * @example
+   * ```ts
+   * await runExperiment(mastra, {
+   *   data: items,
+   *   targetType: 'agent',
+   *   targetId: 'my-agent',
+   *   persistence: { experiments: 'none', scores: 'none' },
+   * });
+   * ```
+   */
+  persistence?: ExperimentPersistencePolicy;
+  /** Default handling for agent tool calls not declared in an item's `toolMocks` (default: `allow`). */
+  unmockedToolPolicy?: UnmockedToolPolicy;
   /** Pre-created experiment ID (for async trigger — skips experiment creation). */
   experimentId?: string;
   /** Experiment name (used for display / grouping) */
@@ -176,12 +228,16 @@ export interface ScorerResult {
   scorerId: string;
   /** Display name of the scorer */
   scorerName: string;
-  /** Computed score (null if scorer failed) */
+  /** Computed score, or null when no score was produced */
   score: number | null;
-  /** Reason/explanation for the score */
+  /** Reason/explanation for the score, or null when no reason was produced */
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /** Scorer stage that failed, when the scorer exposes stage context */
+  failedStep?: ScorerStepName;
+  /** Scorer stages that completed before the failure */
+  completedSteps?: ScorerStepName[];
   /**
    * Scope this score targets. Mirrors the canonical `ScorerTargetScope`
    * taxonomy from observability so consumers can differentiate span-level

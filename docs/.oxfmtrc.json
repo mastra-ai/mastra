@@ -11,14 +11,5 @@
   "arrowParens": "avoid",
   "sortPackageJson": false,
   "sortTailwindcss": true,
-  "ignorePatterns": [
-    "**/*.mdx",
-    ".turbo/**",
-    ".docusaurus/**",
-    "build/**",
-    "node_modules/**",
-    "static/**",
-    "src/content/ja/**",
-    "styles/**"
-  ]
+  "ignorePatterns": ["**/*.mdx", ".turbo/**", ".docusaurus/**", "build/**", "node_modules/**", "static/**", "styles/**"]
 }
