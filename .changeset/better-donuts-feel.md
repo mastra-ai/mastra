@@ -1,8 +1,12 @@
 ---
+'@mastra/libsql': minor
+'@mastra/mongodb': minor
+'@mastra/mysql': minor
 '@mastra/pg': minor
+'@mastra/spanner': minor
 ---
 
-Added experiment provenance and grouping support to `@mastra/pg`. When PostgreSQL is configured as Mastra storage, these fields remain available for later grouping and filtering.
+Added experiment provenance and grouping support to the LibSQL, MongoDB, MySQL, PostgreSQL, and Spanner storage adapters. These fields remain available for later grouping and filtering.
 
 ```ts
 import { PostgresStore } from '@mastra/pg';
