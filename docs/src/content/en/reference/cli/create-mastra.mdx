@@ -17,7 +17,7 @@ npx create-mastra@latest
 
 ### Default starter
 
-The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Gemini, or xAI as your model provider.
+The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Gemini, or xAI as your model provider. If part of the automatic provider setup can't be applied, project creation continues and the command warns what needs manual attention.
 
 Provide both the project name and provider to create the project without prompts. This example uses Anthropic; you can also pass `openai`, `google`, or `xai`:
 
@@ -97,7 +97,8 @@ Invalid input is rejected before templates are fetched or files are created.
   {
     name: '-k, --llm-api-key <key>',
     type: 'string',
-    description: 'Write the selected provider API key to the generated .env file.',
+    description:
+      'Write the selected provider API key to the generated .env file when automatic provider setup succeeds.',
     isOptional: true,
   },
   {
