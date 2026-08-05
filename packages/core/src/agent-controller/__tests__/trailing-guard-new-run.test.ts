@@ -12,8 +12,9 @@
  *
  * Fix: clear lastFinishedRunId when creating a new run (`!currentRun` branch).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
 import type { Session } from '../session';
@@ -92,5 +93,32 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     // The null-runId chunks from run B must have been processed, not skipped.
     expect(processedChunkTypes).toContain('data-user-message');
     expect(processedChunkTypes).toContain('data-om-status');
+  });
+
+  it('uses the latest caller context when an approval arrives on the subscribed stream', async () => {
+    const controller = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
+    session.runEngine.setRequestContext(requestContext);
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    const approveToolCall = vi.spyOn(session, 'approveToolCall').mockResolvedValue();
+
+    await processSubscribedChunks(session, [
+      { type: 'start', runId: 'run-a' },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-a',
+        payload: { toolCallId: 'tool-call-1', toolName: 'factory_transition_work_item', args: {} },
+      },
+      { type: 'finish', runId: 'run-a', payload: { stepResult: { reason: 'stop' } } },
+    ]);
+
+    expect(approveToolCall).toHaveBeenCalledOnce();
+    expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({
+      id: 'user-1',
+      organizationId: 'org-1',
+    });
   });
 });

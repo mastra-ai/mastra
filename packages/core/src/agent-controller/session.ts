@@ -3082,6 +3082,7 @@ export class Session<TState = unknown> {
       const threadId = this.thread.getId()!;
 
       const agent = this.machinery.getAgent();
+      this.runEngine.setRequestContext(requestContextInput);
       await this.thread.ensureSubscription(threadId);
 
       if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
