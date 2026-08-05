@@ -79,11 +79,12 @@ export async function runProtocol(
   manifest: ExperimentWorkerManifest,
   request = createRunRequest(manifest),
   expectedExitCode = 0,
+  options: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
 ) {
   const result = await runCommand(manifest.launch.executable, manifest.launch.arguments, {
     cwd: artifactRoot,
-    timeoutMs: 90_000,
-    env: minimalWorkerEnvironment(),
+    timeoutMs: options.timeoutMs ?? 90_000,
+    env: { ...minimalWorkerEnvironment(), ...options.env },
     stdin: `${JSON.stringify(request)}\n`,
   });
   if (result.timedOut || result.exitCode !== expectedExitCode) {

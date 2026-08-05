@@ -144,6 +144,23 @@ export const workspaceLspScenario = fullResourceScenario('workspace-lsp', [
   'lsp-shutdown',
 ]);
 
+export const postgresScenario: ScenarioDefinition = {
+  id: 'postgres',
+  fixture: 'postgres',
+  isolationKey: 'postgres-pnpm',
+  tier: 'full',
+  services: ['docker', 'postgres'],
+  credentials: [],
+  timeoutMs: 300_000,
+  assertions: [
+    'application-state-persisted',
+    'experiment-persistence-absent',
+    'bounded-shutdown',
+    'connection-reuse',
+    'docker-cleanup',
+  ],
+};
+
 export const nativeDuckdbScenario: ScenarioDefinition = {
   id: 'native-duckdb',
   fixture: 'native',
@@ -177,5 +194,6 @@ export const scenarios = [
   workspaceSearchScenario,
   workspaceMountsScenario,
   workspaceLspScenario,
+  postgresScenario,
   nativeDuckdbScenario,
 ];
