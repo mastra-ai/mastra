@@ -3256,9 +3256,14 @@ export class Run<
     const validatedInputData = await schema['~standard'].validate(data);
 
     if (validatedInputData.issues) {
-      throw new Error(
-        `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-      );
+      throw new MastraError({
+        category: ErrorCategory.USER,
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+        text:
+          `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        details: { type },
+      });
     }
 
     return validatedInputData.value;
