@@ -1879,6 +1879,8 @@ type Shared_Type_80 = {
   executionSource?: string | undefined;
   /** Filter by tags (must have all specified tags) */
   tags?: string[] | undefined;
+  /** Filter by one or more trace IDs */
+  traceIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -8824,6 +8826,7 @@ export type GetObservabilityMetrics_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | unknown;
+  traceIds?: ((string[] | undefined) | undefined) | unknown;
   name?: ((string[] | undefined) | undefined) | unknown;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;

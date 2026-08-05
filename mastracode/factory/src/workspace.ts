@@ -154,7 +154,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     const user = requestContext.get('user') as FactoryAuthUser | undefined;
     const userId = getFactoryAuthUserId(user);
-    if (!user?.organizationId || !userId || user.organizationId !== session.orgId || userId !== session.userId) {
+    // No identity at all is a server-side caller that forgot to seed one
+    // (webhook, cron), not someone reaching for another user's session.
+    if (!user?.organizationId || !userId) {
+      throw new Error(`Factory session ${session.sessionId} was resolved without a caller identity`);
+    }
+    if (user.organizationId !== session.orgId || userId !== session.userId) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
     if (!sandboxConfig || !github || !fleet) {
