@@ -1,8 +1,6 @@
-import path from 'node:path';
-
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
-import { resolveContainedLocalWorkdir, SandboxFleet } from './fleet.js';
+import { SandboxFleet } from './fleet.js';
 import type { MaterializationSandbox, SandboxBindingStore } from './fleet.js';
 
 /** Minimal cloneable template sandbox standing in for Railway/Local instances. */
@@ -89,39 +87,6 @@ describe('idleMinutes', () => {
 
   it('reads the window back from the template sandbox', () => {
     expect(fleet({ idleTimeoutMinutes: 45 }).idleMinutes).toBe(45);
-  });
-});
-
-describe('computeLocalSessionWorkdir', () => {
-  it('builds deterministic session checkout paths under the local sandbox root', () => {
-    expect(
-      fleet({ provider: 'local', workingDirectory: '/tmp/mastracode-local-root' }).computeLocalSessionWorkdir(
-        'octocat/hello',
-        'session-1',
-      ),
-    ).toBe(path.resolve('/tmp/mastracode-local-root/github-sessions/octocat/hello/session-1'));
-  });
-
-  it('sanitizes repo path segments and keeps the result contained', () => {
-    const result = fleet({
-      provider: 'local',
-      workingDirectory: '/tmp/mastracode-local-root',
-    }).computeLocalSessionWorkdir('..owner/..hidden repo', '../../session');
-
-    expect(result).toBe(path.resolve('/tmp/mastracode-local-root/github-sessions/owner/hidden-repo/-..-session'));
-    expect(result.startsWith(path.resolve('/tmp/mastracode-local-root') + path.sep)).toBe(true);
-  });
-
-  it('throws when the active provider is not local', () => {
-    expect(() => fleet({ provider: 'railway' }).computeLocalSessionWorkdir('octocat/hello', 'session-1')).toThrow(
-      /local sandbox provider/,
-    );
-  });
-});
-
-describe('resolveContainedLocalWorkdir', () => {
-  it('refuses paths outside the configured root', () => {
-    expect(() => resolveContainedLocalWorkdir('/tmp/local-root', '..', 'other')).toThrow(/outside configured root/);
   });
 });
 

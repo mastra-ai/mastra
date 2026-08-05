@@ -17,8 +17,6 @@
  * swap the low-level construction via {@link SandboxFleet.setFactory}.
  */
 
-import path from 'node:path';
-
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 
 /** Minimal command result shape sandbox consumers depend on. */
@@ -200,14 +198,6 @@ function sanitizeSegment(segment: string): string {
   return cleaned || 'repo';
 }
 
-/** Resolve a workdir under `root`, refusing any path that escapes the configured root. */
-export function resolveContainedLocalWorkdir(root: string, ...segments: string[]): string {
-  const resolvedRoot = path.resolve(root);
-  const resolved = path.resolve(resolvedRoot, ...segments);
-  if (resolved !== resolvedRoot && resolved.startsWith(`${resolvedRoot}${path.sep}`)) return resolved;
-  throw new Error(`Refusing to use local sandbox path outside configured root: ${resolved}`);
-}
-
 /**
  * Factory-resolved sandbox runtime the fleet is constructed with: the machine
  * projects clone their per-project sandboxes from, plus the knobs the factory
@@ -322,32 +312,6 @@ export class SandboxFleet {
     if (!this.#config) throw new Error('No sandbox configured');
     const [owner, name] = repoFullName.split('/', 2);
     return `${this.#config.workdirBase}/${sanitizeSegment(owner || 'unknown')}/${sanitizeSegment(name || 'repo')}`;
-  }
-
-  /**
-   * Compute the host working directory for a local GitHub session checkout.
-   * This is server-derived only: repo pieces are sanitized and the trusted
-   * session id is kept as a single path segment under the configured local root.
-   */
-  computeLocalSessionWorkdir(repoFullName: string, sessionId: string): string {
-    if (!this.#config) throw new Error('No sandbox configured');
-    if (this.#config.machine.provider !== 'local') {
-      throw new Error('Local session workdirs require the local sandbox provider');
-    }
-
-    const localRoot = (this.#config.machine as { workingDirectory?: unknown }).workingDirectory;
-    if (typeof localRoot !== 'string' || localRoot.length === 0) {
-      throw new Error('Local sandbox working directory is not configured');
-    }
-
-    const [owner, name] = repoFullName.split('/', 2);
-    return resolveContainedLocalWorkdir(
-      localRoot,
-      'github-sessions',
-      sanitizeSegment(owner || 'unknown'),
-      sanitizeSegment(name || 'repo'),
-      sanitizeSegment(sessionId),
-    );
   }
 
   /**

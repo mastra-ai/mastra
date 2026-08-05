@@ -215,13 +215,21 @@ export class LocalSandbox extends MastraSandbox {
    * per-instance overrides.
    *
    * Performs no I/O — the sandbox clone creates its working directory on its
-   * own `start()`. `sandboxId` and `idleTimeoutMinutes` have no local
-   * equivalent and are ignored: local sandboxes reattach by logical `id` and
-   * have no provider-managed idle teardown.
+   * own `start()`. `idleTimeoutMinutes` has no local equivalent and is
+   * ignored: local sandboxes have no provider-managed idle teardown.
+   *
+   * When `sandboxId` is passed the clone reattaches by adopting it as its
+   * own `id`, so the id round-trips through `getInfo().metadata.sandboxId`
+   * unchanged. There is no host VM to actually reattach to — the id is a
+   * stable logical handle that lets local participate in the same
+   * release/claim pool as remote providers. `id` and `sandboxId` are
+   * equivalent here; `sandboxId` wins when both are set to match how remote
+   * providers treat it as the reattach handle.
    */
   clone(options: SandboxCloneOptions = {}): LocalSandbox {
+    const reattachId = options.sandboxId ?? options.id;
     return new LocalSandbox({
-      ...(options.id !== undefined && { id: options.id }),
+      ...(reattachId !== undefined && { id: reattachId }),
       workingDirectory: options.workingDirectory ?? this.workingDirectory,
       env: options.env ?? this.env,
       isolation: this.isolation,
@@ -379,6 +387,11 @@ export class LocalSandbox extends MastraSandbox {
         cpuCores: os.cpus().length,
       },
       metadata: {
+        // Provider-native reattach handle read back by fleet pools
+        // (`readProviderSandboxId`). Local has no host VM to reattach to, but
+        // publishing the id matches the Railway/Platform contract so local
+        // participates in the same release/claim code path.
+        sandboxId: this.id,
         workingDirectory: this.workingDirectory,
         platform: os.platform(),
         nodeVersion: process.version,

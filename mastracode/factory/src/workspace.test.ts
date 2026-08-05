@@ -473,8 +473,8 @@ describe('GitHub session workspace preparation', () => {
     };
   }
 
-  it('prepares distinct local session checkouts and branches through the factory', async () => {
-    const { root, workspace } = await createLocalFactory();
+  it('prepares local session checkouts through the factory, sharing the per-repo workdir like remote providers', async () => {
+    const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', branch: 'feature-a' });
     addSession({ id: 'session-b', branch: 'feature-b' });
@@ -482,8 +482,11 @@ describe('GitHub session workspace preparation', () => {
     const workspaceA = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const workspaceB = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
-    const workdirA = path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a');
-    const workdirB = path.join(root, 'github-sessions', 'octocat', 'hello', 'session-b');
+    // Local now uses the same per-project workdir contract as remote:
+    // `projectRepository.sandboxWorkdir` is the single source of truth,
+    // shared across sessions on the same repo (analogous to sessions
+    // pooling onto the same warm VM on remote providers).
+    const sharedWorkdir = '/workspace/octocat/hello';
     expect(workspaceA.id).toContain('project-1-session-a');
     expect(workspaceB.id).toContain('project-1-session-b');
     expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
@@ -491,23 +494,19 @@ describe('GitHub session workspace preparation', () => {
       expect.any(Object),
       { GH_TOKEN: 'repo-token-repository-1' },
       undefined,
-      {
-        workingDirectory: workdirA,
-      },
+      { workingDirectory: sharedWorkdir },
     );
     expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
       2,
       expect.any(Object),
       { GH_TOKEN: 'repo-token-repository-1' },
       undefined,
-      {
-        workingDirectory: workdirB,
-      },
+      { workingDirectory: sharedWorkdir },
     );
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        row: expect.objectContaining({ id: 'session-a', sandboxWorkdir: workdirA }),
+        row: expect.objectContaining({ id: 'session-a', sandboxWorkdir: sharedWorkdir }),
         repoInfo: expect.objectContaining({ repoFullName: 'octocat/hello' }),
         token: 'repo-token-repository-1',
       }),
@@ -515,16 +514,16 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.checkoutSessionBranch).toHaveBeenNthCalledWith(
       2,
       expect.any(Object),
-      workdirB,
+      sharedWorkdir,
       expect.objectContaining({ branch: 'feature-b', baseBranch: 'main' }),
     );
     expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
-    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
-    expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(sharedWorkdir);
+    expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(sharedWorkdir);
   });
 
   it('pins the session workdir into controller state so the agent prompt never points at the host checkout', async () => {
-    const { root, workspace } = await createLocalFactory();
+    const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
     const requestContext = createGithubRequestContext('project-1', 'session-a');
@@ -534,7 +533,7 @@ describe('GitHub session workspace preparation', () => {
     const ctx = requestContext.get('controller') as {
       getState: () => { projectPath?: string; projectName?: string };
     };
-    expect(ctx.getState().projectPath).toBe(path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'));
+    expect(ctx.getState().projectPath).toBe('/workspace/octocat/hello');
     expect(ctx.getState().projectName).toBe('octocat/hello');
   });
 
@@ -678,7 +677,11 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.pooledSandboxes).toHaveLength(1);
   });
 
-  it('never claims pooled sandboxes for local sandbox sessions', async () => {
+  it('claims pooled sandboxes for local sessions the same way remote sessions do', async () => {
+    // Local runs the same release/claim code path as remote providers. The
+    // "reattach" is functionally a no-op on local (there is no host VM to
+    // warm), but the pool row is still drained and the workdir is still
+    // recycled — that uniformity is the whole point of the parity change.
     const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
@@ -691,8 +694,9 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.pooledSandboxes).toHaveLength(1);
-    expect(mocks.recycleClaimedWorkdir).not.toHaveBeenCalled();
+    expect(mocks.sessions.find(row => row.id === 'session-a')?.sandboxId).toBe('sb-pooled');
+    expect(mocks.recycleClaimedWorkdir).toHaveBeenCalled();
+    expect(mocks.pooledSandboxes).toHaveLength(0);
   });
 
   it('uses repository-scoped access when materializing a Factory session', async () => {
