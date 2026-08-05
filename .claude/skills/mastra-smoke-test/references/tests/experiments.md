@@ -29,13 +29,13 @@ MANIFEST=.mastra/experiment-worker/experiment-worker-manifest.json
 jq '{launch, protocol, buildId: .build.buildId}' "$MANIFEST"
 ```
 
-At the time of writing the manifest reports `launch.executable: "node"`, `launch.arguments: ["index.mjs"]`, `launch.workingDirectory: "."`, `protocol.framing: "ndjson"`, `protocol.versions: ["1"]`, and `protocol.datasetCanonicalizationVersion: "1"`. Record the actual values. If any differ from those defaults, use the manifest values in the steps below and report the difference — the commands here assume the defaults and the next step asserts them before running.
+Record the reported values. At the time of writing the manifest reports `launch.executable: "node"`, `launch.arguments: ["index.mjs"]`, `launch.workingDirectory: "."`, `protocol.framing: "ndjson"`, `protocol.versions: ["1"]`, and `protocol.datasetCanonicalizationVersion: "1"`, but the steps below read every one of these from the manifest rather than assuming them. Report any value that differs from the defaults above.
 
 `packet.artifacts.buildId` always comes from `.build.buildId`. A deliberately incorrect build ID should fail with protocol exit code `70` before loading the experiment.
 
 ### 3. Run one correctly attested request
 
-From the project root, replace `YOUR_WORKFLOW_REGISTRY_KEY` below with a registered workflow key. This script asserts the manifest's launch and protocol values, then creates one dataset item, canonicalizes it by recursively sorting object keys while preserving array order, computes the SHA-256 attestation, and writes a complete NDJSON request using the manifest's protocol and canonicalization versions:
+From the project root, replace `YOUR_WORKFLOW_REGISTRY_KEY` below with a registered workflow key. This script creates one dataset item, canonicalizes it by recursively sorting object keys while preserving array order, computes the SHA-256 attestation, and writes a complete NDJSON request using the manifest's protocol and canonicalization versions. The worker is then launched from `launch.workingDirectory` using `launch.executable` and `launch.arguments`:
 
 ```bash
 node --input-type=module > .mastra/experiment-request.ndjson <<'EOF'
@@ -65,9 +65,7 @@ const assert = (actual, expected, what) => {
   }
 };
 
-assert(manifest.launch.executable, 'node', 'launch.executable');
-assert(manifest.launch.arguments, ['index.mjs'], 'launch.arguments');
-assert(manifest.launch.workingDirectory, '.', 'launch.workingDirectory');
+// This request is written as one NDJSON line, so a different framing invalidates it.
 assert(manifest.protocol.framing, 'ndjson', 'protocol.framing');
 
 const protocolVersion = manifest.protocol.versions.at(-1);
@@ -103,8 +101,16 @@ console.log(JSON.stringify({
 }));
 EOF
 
-# Launch matches manifest.launch (executable + arguments, run from workingDirectory)
-(cd .mastra/experiment-worker && node index.mjs) \
+# Build the invocation from manifest.launch rather than assuming it.
+# workingDirectory and arguments are relative to the worker output directory.
+WORKER_DIR=.mastra/experiment-worker
+MANIFEST="$WORKER_DIR/experiment-worker-manifest.json"
+LAUNCH_CWD=$(cd "$WORKER_DIR/$(jq -r '.launch.workingDirectory' "$MANIFEST")" && pwd)
+LAUNCH_EXE=$(jq -r '.launch.executable' "$MANIFEST")
+LAUNCH_ARGS=()
+while IFS= read -r arg; do LAUNCH_ARGS+=("$arg"); done < <(jq -r '.launch.arguments[]' "$MANIFEST")
+
+(cd "$LAUNCH_CWD" && "$LAUNCH_EXE" "${LAUNCH_ARGS[@]}") \
   < .mastra/experiment-request.ndjson \
   > .mastra/experiment-stdout.ndjson \
   2> .mastra/experiment-stderr.log

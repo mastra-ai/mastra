@@ -88,7 +88,7 @@ pnpm create mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 1
 bunx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 ```
 
-The removed `-c` and `-e` flags must not be used. Use the managed template by default, `--empty` for a deliberately empty project, or `--template <template>` for a specific template. If a flag is rejected, inspect `<pm> create mastra@<tag> --help` rather than retrying a legacy command.
+`-c/--components` and `-e/--example` were removed and must not be used. `-l/--llm` is still supported and is the flag used above. Use the managed template by default, `--empty` for a deliberately empty project, or `--template <template>` for a specific template. If a flag is rejected, inspect `<pm> create mastra@<tag> --help` rather than retrying a legacy command.
 
 Wait for the installation to complete. This may take 1-2 minutes depending on network speed.
 
