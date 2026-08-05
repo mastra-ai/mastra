@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- Fixed Claude requests failing when tool inputs use a top-level union of object schemas. ([#20724](https://github.com/mastra-ai/mastra/pull/20724))
+
 ## 1.3.4
 
 ### Patch Changes

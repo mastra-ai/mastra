@@ -87,15 +87,26 @@ describe('MastraAuthStudio', () => {
       delete process.env.MASTRA_SHARED_API_URL;
     });
 
-    it('should fall back to localhost default when no config or env var', () => {
+    it('should fall back to the platform default when no config or env var', () => {
       delete process.env.MASTRA_SHARED_API_URL;
       const a = new MastraAuthStudio();
       const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
-      expect(url).toContain('http://localhost:3010/v1/auth/login');
+      expect(url).toContain('https://platform.mastra.ai/v1/auth/login');
     });
 
     it('should set isMastraCloudAuth to true', () => {
       expect(auth.isMastraCloudAuth).toBe(true);
+    });
+
+    it('should not auto-detect a .mastra.ai cookie domain from the built-in default URL', () => {
+      // The platform.mastra.ai fallback must not flip on production cookies —
+      // a localhost studio using the default would mint Domain=.mastra.ai
+      // cookies the browser rejects.
+      delete process.env.MASTRA_SHARED_API_URL;
+      const a = new MastraAuthStudio();
+      const headers = a.getSessionHeaders({ id: 'sess', userId: 'u1' } as any);
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
+      expect(headers['Set-Cookie']).not.toContain('Secure');
     });
   });
 
@@ -232,6 +243,117 @@ describe('MastraAuthStudio', () => {
       const user = await auth.authenticateToken('', req);
 
       expect(user?.name).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // verification caching + fetch timeout
+  // -------------------------------------------------------------------------
+
+  describe('verification caching', () => {
+    it('should reuse a successful cookie verification without refetching', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const req = mockRequest({ cookie: 'wos-session=sealed-token-abc' });
+      const first = await auth.authenticateToken('', req);
+      const second = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-token-abc' }));
+
+      expect(first?.id).toBe('user-1');
+      expect(second).toEqual(first);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reuse a successful bearer verification without refetching', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockVerifyResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('cli-token-xyz', mockRequest());
+      const second = await auth.authenticateToken('cli-token-xyz', mockRequest());
+
+      expect(first?.id).toBe('user-2');
+      expect(second).toEqual(first);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not share cache entries between different credentials', async () => {
+      fetchSpy.mockResolvedValue(new Response(JSON.stringify(mockVerifyResponse), { status: 200 }));
+
+      await auth.authenticateToken('token-a', mockRequest());
+      await auth.authenticateToken('token-b', mockRequest());
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should refetch after the cache TTL expires', async () => {
+      vi.useFakeTimers();
+      try {
+        fetchSpy.mockResolvedValue(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+        await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed' }));
+        vi.advanceTimersByTime(31_000);
+        await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed' }));
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not cache users whose org bootstrap has not completed', async () => {
+      // First response: brand-new user, no organization yet. Caching it would
+      // pin the no-org state for the TTL and delay org bootstrap pickup.
+      const noOrgMe = { ...mockMeResponse, organizationId: undefined };
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(noOrgMe), { status: 200 }));
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=new-user' }));
+      const second = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=new-user' }));
+
+      expect(first?.organizationId).toBeUndefined();
+      expect(second?.organizationId).toBe(mockMeResponse.organizationId);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not cache bearer users whose org bootstrap has not completed', async () => {
+      const noOrgVerify = { ...mockVerifyResponse, organizationId: undefined };
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(noOrgVerify), { status: 200 }));
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockVerifyResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('new-user-token', mockRequest());
+      const second = await auth.authenticateToken('new-user-token', mockRequest());
+
+      expect(first?.organizationId).toBeUndefined();
+      expect(second?.organizationId).toBe(mockVerifyResponse.organizationId);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not cache failed verifications', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=flaky' }));
+      const second = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=flaky' }));
+
+      expect(first).toBeNull();
+      expect(second?.id).toBe('user-1');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should pass an abort signal so verification fetches are time-bounded', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+      await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=abc' }));
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${SHARED_API}/auth/me`,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+
+    it('should return null when the verification fetch times out', async () => {
+      fetchSpy.mockRejectedValueOnce(new DOMException('The operation timed out.', 'TimeoutError'));
+
+      const user = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=slow' }));
+
+      expect(user).toBeNull();
     });
   });
 

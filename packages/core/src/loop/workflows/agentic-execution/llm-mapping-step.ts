@@ -201,9 +201,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       }) {
         const tool = ((
           readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as
-            Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
+            | Record<string, { toModelOutput?: (output: unknown) => unknown }>
+            | undefined
         )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
-          { toModelOutput?: (output: unknown) => unknown } | undefined;
+          | { toModelOutput?: (output: unknown) => unknown }
+          | undefined;
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
           const parentSpan = observabilityContext?.tracingContext?.currentSpan;
@@ -331,7 +333,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
-                state: 'result' as const,
+                state: 'output-error' as const,
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
@@ -339,7 +341,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 // plain {name,message,stack} shape after the pubsub JSON round-trip).
                 // Without reification the `instanceof Error` check below falls through to
                 // `safeStringify`, dumping the whole stringified payload into the history.
-                result: reifiedError.message || 'Tool execution failed',
+                errorText: reifiedError.message || 'Tool execution failed',
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
@@ -383,7 +385,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 ? await getProviderMetadataWithModelOutput(toolCall)
                 : undefined;
               const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
-                ProviderMetadata | undefined;
+                | ProviderMetadata
+                | undefined;
 
               const chunk = await transformToolChunk(
                 {

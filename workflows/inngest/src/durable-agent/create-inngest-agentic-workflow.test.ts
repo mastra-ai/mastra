@@ -18,8 +18,12 @@ import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-wo
 function findForeachEntry(steps: any[]): any {
   for (const entry of steps ?? []) {
     if (entry.type === 'foreach') return entry;
-    if (entry.step?.executionGraph) {
-      const nested = findForeachEntry(entry.step.executionGraph.steps);
+    // Loop/foreach entries wrap their body in a `SingleStepEntry`, so a nested
+    // workflow lives one level deeper (`entry.step.step`); plain `type: 'step'`
+    // entries still hold the workflow directly on `entry.step`.
+    const inner = entry.step?.executionGraph ? entry.step : entry.step?.step;
+    if (inner?.executionGraph) {
+      const nested = findForeachEntry(inner.executionGraph.steps);
       if (nested) return nested;
     }
     if (entry.steps) {

@@ -881,13 +881,15 @@ export interface ObservationalMemoryOptions {
    * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
    * - `{ scope: 'thread' }` — restricts the recall tool to the current thread only
    * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
+   * - `{ instructions: '...' }` — appends application-specific recall guidance after
+   *   Mastra's built-in retrieval instructions (never replaces them)
    *
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 }
 
 /**
@@ -1053,8 +1055,8 @@ type BaseMemoryConfig = {
    * Set to false to allow the agent to see suspended tool calls in context.
    * This is useful for suspend/resume patterns where the agent should be aware of pending interactions.
    *
-   * Note: Some providers (e.g. OpenAI) may return errors when incomplete tool calls are included.
-   * Anthropic handles incomplete tool calls without issues.
+   * Note: providers reject a tool call that has no matching tool result, so a suspended call kept
+   * in context is paired with a `{ status: 'pending' }` placeholder result before the prompt is sent.
    *
    * @default true
    * @example
@@ -1238,7 +1240,8 @@ export type SharedMemoryConfig = {
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
 export type WorkingMemoryTemplate =
-  { format: 'markdown'; content: string } | { format: 'json'; content: string | Record<string, unknown> };
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -1325,7 +1328,7 @@ export type SerializedObservationalMemoryConfig = {
   /**
    * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;

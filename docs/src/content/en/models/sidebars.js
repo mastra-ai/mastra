@@ -123,6 +123,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aiand',
+          label: 'ai&',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -215,6 +220,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hyper',
+          label: 'Charm Hyper',
         },
         {
           type: 'doc',
@@ -343,11 +353,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/github-models',
-          label: 'GitHub Models',
-        },
-        {
-          type: 'doc',
           id: 'providers/gmicloud',
           label: 'GMI Cloud',
         },
@@ -358,8 +363,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/greenpt',
+          label: 'GreenPT',
+        },
+        {
+          type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hetzner',
+          label: 'Hetzner',
         },
         {
           type: 'doc',
@@ -375,6 +390,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/iflowcn',
           label: 'iFlow',
+        },
+        {
+          type: 'doc',
+          id: 'providers/impossibl',
+          label: 'Impossibl',
         },
         {
           type: 'doc',
@@ -395,6 +415,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/inferx',
           label: 'InferX',
+        },
+        {
+          type: 'doc',
+          id: 'providers/infomaniak',
+          label: 'Infomaniak',
         },
         {
           type: 'doc',
@@ -508,8 +533,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/modal',
+          label: 'Modal',
+        },
+        {
+          type: 'doc',
           id: 'providers/model-oracle-ai',
           label: 'Model Oracle AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/modelis',
+          label: 'Modelis',
         },
         {
           type: 'doc',
@@ -570,6 +605,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nvidia',
           label: 'Nvidia',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ofox',
+          label: 'Ofox',
         },
         {
           type: 'doc',
@@ -673,6 +713,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/scx',
+          label: 'SCX.ai',
+        },
+        {
+          type: 'doc',
           id: 'providers/siliconflow',
           label: 'SiliconFlow',
         },
@@ -740,6 +785,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/tencent-tokenhub',
           label: 'Tencent TokenHub',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tensorx',
+          label: 'TensorX',
         },
         {
           type: 'doc',

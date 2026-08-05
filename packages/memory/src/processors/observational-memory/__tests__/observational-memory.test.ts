@@ -1,5 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
@@ -13,7 +14,7 @@ import {
   createSuggestedResponseExtractor,
   createThreadTitleExtractor,
 } from '../built-in-extractors';
-import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import { OBSERVATIONAL_MEMORY_DEFAULTS, getRetrievalInstructions } from '../constants';
 import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
@@ -4138,6 +4139,147 @@ describe('ObservationalMemory Integration', () => {
 
     it('should default retrieval mode to false', () => {
       expect(om.config.retrieval).toBe(false);
+    });
+  });
+
+  describe('retrieval instructions', () => {
+    const makeRetrievalOm = (
+      retrieval: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string },
+    ) =>
+      new ObservationalMemory({
+        storage,
+        retrieval,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+    it('describes cross-thread routing between search, threads, and messages for resource scope', () => {
+      const instructions = getRetrievalInstructions('resource');
+
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Fallback guidance: irrelevant search results should lead to thread discovery
+      expect(instructions).toContain('If search results look irrelevant, do not give up');
+      // Threads without observations may still hold the answer in raw history
+      expect(instructions).toContain('raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only resource retrieval', () => {
+      const instructions = getRetrievalInstructions('resource', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Thread discovery is still the fallback for finding past conversations
+      expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only thread retrieval', () => {
+      const instructions = getRetrievalInstructions('thread', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain('mode: "threads"');
+    });
+
+    it('describes current-thread usage for thread scope', () => {
+      const instructions = getRetrievalInstructions('thread');
+
+      expect(instructions).toContain('limited to the current conversation thread');
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).not.toContain("ALL of this user's conversation threads");
+      expect(instructions).not.toContain('do not give up');
+    });
+
+    it('appends custom instructions after the native guidance without replacing it', () => {
+      const custom = 'Prefer the current conversation when it already contains the answer.';
+      const instructions = getRetrievalInstructions('resource', custom);
+
+      expect(instructions).toContain('## Recall — looking up source messages');
+      expect(instructions).toContain('### Additional recall guidance');
+      expect(instructions.indexOf(custom)).toBeGreaterThan(instructions.indexOf('### Additional recall guidance'));
+    });
+
+    it('omits the custom guidance section when custom instructions are empty', () => {
+      expect(getRetrievalInstructions('resource', '   ')).not.toContain('### Additional recall guidance');
+      expect(getRetrievalInstructions('resource')).not.toContain('### Additional recall guidance');
+    });
+
+    it('injects scope-aware instructions into actor context', () => {
+      const observations = '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 Fact\n</observation-group>';
+
+      const resourceText = (makeRetrievalOm({ vector: true, scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(resourceText).toContain('If search results look irrelevant, do not give up');
+
+      // Browsing-only retrieval (no vector) must not steer the agent toward search
+      const browsingText = (makeRetrievalOm({ scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(browsingText).not.toContain('mode: "search"');
+      expect(browsingText).toContain('mode: "threads"');
+
+      const threadText = (makeRetrievalOm({ scope: 'thread' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(threadText).toContain('limited to the current conversation thread');
+    });
+
+    it('injects appended custom instructions into actor context', () => {
+      const custom = 'Use a small limit with detail="low" for an initial scan.';
+      const text = (makeRetrievalOm({ scope: 'resource', instructions: custom }) as any)
+        .formatObservationsForContext('- 🔴 Fact', undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+
+      expect(text).toContain('### Additional recall guidance');
+      expect(text).toContain(custom);
+    });
+
+    it('returns recall guidance without observations for resource-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'resource', instructions: 'Avoid historical tool calls.' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+      expect(record.activeObservations).toBeFalsy();
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeDefined();
+      const text = messages!.join('\n\n');
+      expect(text).toContain('## Recall — looking up source messages');
+      expect(text).toContain('mode: "threads"');
+      expect(text).toContain('Avoid historical tool calls.');
+    });
+
+    it('returns undefined without observations for thread-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'thread' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('returns undefined without observations when retrieval is disabled', async () => {
+      const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await om.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('defaults retrieval scope to resource when retrieval is true', () => {
+      expect(makeRetrievalOm(true).retrievalScope).toBe('resource');
+      expect(makeRetrievalOm({ scope: 'thread' }).retrievalScope).toBe('thread');
     });
   });
 
@@ -10563,104 +10705,101 @@ describe('Full Async Buffering Flow', () => {
   // activate(). The core hint-propagation behavior is covered by the direct test below:
   // "should clear stale thread continuation hints after buffered activation when latest
   // activated chunk has no hints"
-  it.todo(
-    'should clear stale thread continuation hints on sync observation when latest output omits them',
-    async () => {
-      // Use enough messages and a low threshold so that two activation rounds can
-      // succeed sequentially.  The first observer response includes continuation
-      // hints; the second omits them.  After the second activation, the stale
-      // hints from the first round must be cleared (written as undefined).
-      const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
-        messageTokens: 1000,
-        bufferTokens: 500,
-        bufferActivation: 0.7,
-        reflectionObservationTokens: 50000,
-        messageCount: 10,
-        observerResponses: [
-          // Call 1 (async buffering from step 0): hints are parsed from the mock
-          // response and stored in the buffered chunk.
-          // Note: closing tags must be on their own line — the parser regex
-          // requires `^<\/current-task>` (start-of-line anchor with /m flag).
-          '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
-          // Call 2 (async buffering from step 2): no hints → activation clears them.
-          '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
-        ],
-      });
+  it.todo('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+      observerResponses: [
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
+        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+      ],
+    });
 
-      // Step 0 triggers async buffering. After waiting, save fresh messages
-      // so the threshold is met, then a fresh step 0 activates the buffered chunk,
-      // propagating continuation hints to thread metadata.
-      await step(0);
-      await waitForAsyncOps();
+    // Step 0 triggers async buffering. After waiting, save fresh messages
+    // so the threshold is met, then a fresh step 0 activates the buffered chunk,
+    // propagating continuation hints to thread metadata.
+    await step(0);
+    await waitForAsyncOps();
 
-      // Add messages so unobserved token count meets the threshold on the next turn
-      const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const round1Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round1-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
-      }));
-      await storage.saveMessages({ messages: round1Messages });
+    // Add messages so unobserved token count meets the threshold on the next turn
+    const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const round1Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round1-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+    }));
+    await storage.saveMessages({ messages: round1Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterFirstObservation = await storage.getThreadById({ threadId });
-      const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(firstOM.currentTask).toBe('Implement sync path');
-      expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(firstOM.currentTask).toBe('Implement sync path');
+    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
 
-      // Save fresh messages so the threshold is exceeded again on the next round.
-      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const freshMessages = Array.from({ length: 10 }, (_, i) => ({
-        id: `sync-clear-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
-      }));
-      await storage.saveMessages({ messages: freshMessages });
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
 
-      // New step 0 triggers another async buffering round (observer call 2, no hints).
-      // After waiting, another step 0 with fresh messages activates the new chunk,
-      // clearing the stale hints.
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
+    // New step 0 triggers another async buffering round (observer call 2, no hints).
+    // After waiting, another step 0 with fresh messages activates the new chunk,
+    // clearing the stale hints.
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
 
-      // Add more messages for the final activation round
-      const round3Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round3-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
-      }));
-      await storage.saveMessages({ messages: round3Messages });
+    // Add more messages for the final activation round
+    const round3Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round3-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
+    }));
+    await storage.saveMessages({ messages: round3Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterSecondObservation = await storage.getThreadById({ threadId });
-      const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(secondOM.currentTask).toBeUndefined();
-      expect(secondOM.suggestedResponse).toBeUndefined();
-    },
-  );
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(secondOM.currentTask).toBeUndefined();
+    expect(secondOM.suggestedResponse).toBeUndefined();
+  });
 
   it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
     // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
@@ -12897,6 +13036,32 @@ describe('threadId validation in thread scope', () => {
     });
 
     await expect(om.getOrCreateRecord('', 'resource-1')).rejects.toThrow(/requires a threadId/);
+  });
+
+  it('should classify missing thread context as a bad request', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 500, model: 'test-model' },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+    });
+
+    let error: unknown;
+    try {
+      om.getThreadContext(undefined, new MessageList());
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error).toMatchObject({
+      id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+    });
+    expect((error as Error).message).toMatch(/requires a threadId/);
   });
 
   it('should NOT throw when getOrCreateRecord is called without threadId in resource scope', async () => {
