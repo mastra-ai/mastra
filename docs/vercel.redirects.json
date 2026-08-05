@@ -1134,6 +1134,16 @@
       "source": "/docs/evals/datasets/:path*",
       "destination": "/docs/datasets/:path*",
       "permanent": true
+    },
+    {
+      "source": "/docs/observability/config",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/storage",
+      "destination": "/docs/observability/overview",
+      "permanent": true
     }
   ]
 }

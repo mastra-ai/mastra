@@ -715,13 +715,9 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'observability/config',
-              label: 'Config',
-            },
-            {
-              type: 'doc',
-              id: 'observability/storage',
-              label: 'Storage',
+              id: 'observability/tracing/overview',
+              key: 'observability.tracing.overview',
+              label: 'Tracing',
             },
             {
               type: 'doc',
@@ -732,12 +728,6 @@ const sidebars = {
               type: 'doc',
               id: 'observability/feedback',
               label: 'Feedback',
-            },
-            {
-              type: 'doc',
-              id: 'observability/tracing/overview',
-              key: 'observability.tracing.overview',
-              label: 'Tracing',
             },
             {
               type: 'category',
