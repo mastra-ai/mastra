@@ -144,7 +144,7 @@ export const mainNav: NavSection[] = [
         name: 'Datasets',
         url: '/datasets',
         Icon: DatasetsIcon,
-        docs: { href: 'https://mastra.ai/en/docs/evals/datasets/overview', label: 'Datasets documentation' },
+        docs: { href: 'https://mastra.ai/en/docs/datasets/overview', label: 'Datasets documentation' },
         isOnMastraPlatform: true,
       },
       {
@@ -152,7 +152,7 @@ export const mainNav: NavSection[] = [
         url: '/experiments',
         Icon: ExperimentsIcon,
         docs: {
-          href: 'https://mastra.ai/en/docs/evals/datasets/running-experiments',
+          href: 'https://mastra.ai/en/docs/datasets/running-experiments',
           label: 'Experiments documentation',
         },
         isOnMastraPlatform: true,

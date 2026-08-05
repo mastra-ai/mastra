@@ -112,7 +112,11 @@ export function smoothStream<OUTPUT = undefined>({
   let bufferedProviderMetadata: SmoothableChunk<OUTPUT>['payload']['providerMetadata'];
 
   const enqueueBufferedText = (controller: TransformStreamDefaultController<ChunkType<OUTPUT>>, text: string) => {
-    if (!bufferedChunk || !text) {
+    // Emit even when the text is empty if metadata is still pending, so a
+    // trailing metadata-only delta (e.g. Gemini thought signatures, #20469)
+    // is not silently dropped on flush.
+    const hasPendingMetadata = bufferedMetadata !== undefined || bufferedProviderMetadata !== undefined;
+    if (!bufferedChunk || (!text && !hasPendingMetadata)) {
       return;
     }
 

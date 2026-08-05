@@ -17,10 +17,15 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-function createToolCallingModel(toolName: string, toolArgs: Record<string, unknown>) {
+function createToolCallingModel(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  onPrompt?: (prompt: unknown) => void,
+) {
   let callCount = 0;
   return new MockLanguageModelV2({
-    doStream: async () => {
+    doStream: async ({ prompt }) => {
+      onPrompt?.(prompt);
       callCount++;
       if (callCount === 1) {
         return {
@@ -34,6 +39,7 @@ function createToolCallingModel(toolName: string, toolArgs: Record<string, unkno
               toolCallId: 'tc-1',
               toolName,
               args: JSON.stringify(toolArgs),
+              input: JSON.stringify(toolArgs),
             },
             {
               type: 'finish',
@@ -168,5 +174,59 @@ describe('DurableAgent toModelOutput parity', () => {
     // The normalization happens inside the mapping step — we verify the spy was called
     // and the stream completed without errors, which proves the normalizeModelOutput
     // path was exercised (image-url → media conversion).
+  });
+
+  it('keeps the raw tool result when toModelOutput returns undefined', async () => {
+    // Mastra's built-in tools (workspace read_file, the sandbox tools) return `undefined`
+    // from toModelOutput to mean "no special mapping needed". Storing that as
+    // providerMetadata.mastra.modelOutput used to blank out `output` on the tool message,
+    // so the next LLM step sent a tool-result the provider could not read.
+    const toModelOutputSpy = vi.fn(() => undefined);
+
+    const testTool = createTool({
+      id: 'text-tool',
+      description: 'A tool that only maps media results',
+      inputSchema: z.object({ path: z.string() }),
+      outputSchema: z.object({ contents: z.string() }),
+      execute: async () => ({ contents: 'the answer is 42' }),
+      toModelOutput: toModelOutputSpy,
+    });
+
+    const prompts: any[] = [];
+    const model = createToolCallingModel('text-tool', { path: 'data.txt' }, prompt => prompts.push(prompt));
+
+    const baseAgent = new Agent({
+      name: 'text-agent',
+      instructions: 'You are a test agent.',
+      model,
+      tools: { 'text-tool': testTool },
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      agents: { 'text-agent': durableAgent as any },
+      storage: new InMemoryStore(),
+    });
+
+    const result = await durableAgent.stream('Read data.txt');
+
+    const errors: any[] = [];
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'error') errors.push(chunk);
+    }
+
+    expect(errors).toEqual([]);
+    expect(toModelOutputSpy).toHaveBeenCalledTimes(1);
+
+    // The follow-up LLM call must carry a tool message whose result still has an `output`
+    // — providers switch on `output.type`, so a missing one is a hard TypeError.
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    const toolMessages = prompts[1].filter((m: any) => m.role === 'tool');
+    expect(toolMessages).toHaveLength(1);
+    const toolResultPart = toolMessages[0].content.find((p: any) => p.type === 'tool-result');
+    expect(toolResultPart).toBeDefined();
+    expect(toolResultPart.output).toBeDefined();
+    expect(JSON.stringify(toolResultPart.output)).toContain('the answer is 42');
   });
 });

@@ -7,7 +7,6 @@
  *
  * Source files:
  *   - src/mastra/index.ts
- *   - src/web/channels/slack/{integration,connect-route,slack}.ts
  *   - .env.schema
  *   - docker-compose.yml
  *
@@ -64,8 +63,6 @@ const RUNTIME_DEPENDENCIES = [
   '@mastra/pg',
   '@mastra/platform-workspace',
   '@mastra/redis-streams',
-  '@mastra/slack',
-  'chat',
   // @mastra/factory's runtime schema surface is externalized by the CLI build.
   'zod',
 ];
@@ -320,9 +317,6 @@ if (fs.existsSync(outDir)) {
 }
 fs.mkdirSync(outDir, { recursive: true });
 copySourceFile('src/mastra/index.ts');
-copySourceFile('src/web/channels/slack/integration.ts');
-copySourceFile('src/web/channels/slack/connect-route.ts');
-copySourceFile('src/web/channels/slack/slack.ts');
 copySourceFile('.env.schema');
 copySourceFile('docker-compose.yml');
 writePackageJson();
