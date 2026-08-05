@@ -264,25 +264,9 @@ const sidebars = {
               label: 'Observability',
             },
             {
-              type: 'category',
+              type: 'doc',
+              id: 'editor/overview',
               label: 'Editor',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'editor/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'editor/tools',
-                  label: 'Tools',
-                },
-                {
-                  type: 'doc',
-                  id: 'editor/prompts',
-                  label: 'Prompts',
-                },
-              ],
             },
           ],
         },
@@ -405,6 +389,11 @@ const sidebars = {
               type: 'doc',
               id: 'capabilities/channels/whatsapp',
               label: 'WhatsApp',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/imessage',
+              label: 'iMessage',
             },
             {
               type: 'doc',
@@ -826,22 +815,6 @@ const sidebars = {
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
-            {
-              type: 'category',
-              label: 'Datasets',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'evals/datasets/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'evals/datasets/running-experiments',
-                  label: 'Running Experiments',
-                },
-              ],
-            },
           ],
         },
         {
@@ -890,6 +863,22 @@ const sidebars = {
               customProps: {
                 tags: ['beta'],
               },
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'datasets/running-experiments',
+              label: 'Running Experiments',
             },
           ],
         },

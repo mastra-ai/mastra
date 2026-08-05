@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/docs/editor/prompts",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/tools",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/workspace",
       "destination": "/docs/mastra-platform/workspaces",
       "permanent": true
@@ -762,12 +772,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/evals/datasets/overview",
+      "destination": "/docs/datasets/overview",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/evals/datasets/running-experiments",
+      "destination": "/docs/datasets/running-experiments",
       "permanent": true
     },
     {
@@ -852,32 +862,32 @@
     },
     {
       "source": "/docs/harness/modes",
-      "destination": "/docs/harness/agent-controller",
+      "destination": "/docs/agent-controller/modes",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview",
-      "destination": "/docs/harness/agent-controller",
+      "destination": "/docs/agent-controller/overview",
       "permanent": true
     },
     {
       "source": "/docs/harness/session",
-      "destination": "/docs/harness/agent-controller",
+      "destination": "/docs/agent-controller/session",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents",
-      "destination": "/docs/harness/agent-controller",
+      "destination": "/docs/agent-controller/subagents",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state",
-      "destination": "/docs/harness/agent-controller",
+      "destination": "/docs/agent-controller/threads-and-state",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals",
-      "destination": "/docs/harness/agent-controller",
+      "destination": "/docs/agent-controller/tool-approvals",
       "permanent": true
     },
     {
@@ -1121,33 +1131,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/agent-controller/session",
-      "destination": "/docs/harness/agent-controller",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agent-controller/modes",
-      "destination": "/docs/harness/agent-controller",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agent-controller/threads-and-state",
-      "destination": "/docs/harness/agent-controller",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agent-controller/subagents",
-      "destination": "/docs/harness/agent-controller",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agent-controller/tool-approvals",
-      "destination": "/docs/harness/agent-controller",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agent-controller/channels",
-      "destination": "/docs/harness/agent-controller",
+      "source": "/docs/evals/datasets/:path*",
+      "destination": "/docs/datasets/:path*",
       "permanent": true
     }
   ]
