@@ -277,14 +277,6 @@ export async function generateFsAgentsModule(
   }
   lines.push(`];`);
   lines.push(``);
-  lines.push(`const __fsAgents = Object.create(null);`);
-  lines.push(`for (const __entry of __fsAgentEntries) {`);
-  lines.push(`  __fsAgents[__entry.name] = assembleAgentFromFsEntry(__entry, {`);
-  lines.push(`    onWarn: msg => __mastra?.getLogger?.()?.warn?.(msg) ?? console.warn(msg),`);
-  lines.push(`  });`);
-  lines.push(`}`);
-  lines.push(``);
-
   // Singleton registration (storage, observability, etc.) MUST run before
   // agents/workflows. `addMemory`/`addAgent` bind the current store to
   // storage-dependent primitives at registration time, so the fs singletons
@@ -327,6 +319,14 @@ export async function generateFsAgentsModule(
     lines.push(`}`);
     lines.push(``);
   }
+
+  lines.push(`const __fsAgents = Object.create(null);`);
+  lines.push(`for (const __entry of __fsAgentEntries) {`);
+  lines.push(`  __fsAgents[__entry.name] = assembleAgentFromFsEntry(__entry, {`);
+  lines.push(`    onWarn: msg => __mastra?.getLogger?.()?.warn?.(msg) ?? console.warn(msg),`);
+  lines.push(`  });`);
+  lines.push(`}`);
+  lines.push(``);
 
   lines.push(`if (__mastra && typeof __mastra.__registerFsAgents === 'function') {`);
   lines.push(`  __mastra.__registerFsAgents(__fsAgents);`);

@@ -20,4 +20,5 @@ export {
   aiV4CoreMessagesToAIV5ModelMessages,
   systemMessageToAIV4Core,
 } from './output-converter';
+export type { ToolCallConversionMode } from './output-converter';
 export { StepContentExtractor } from './step-content';

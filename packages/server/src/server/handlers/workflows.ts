@@ -2,7 +2,13 @@ import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/di';
 import type { Event } from '@mastra/core/events';
 import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
-import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
+import type {
+  WorkflowInfo,
+  ChunkType,
+  StreamEvent,
+  WorkflowStateField,
+  WorkflowRunStatus,
+} from '@mastra/core/workflows';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
@@ -33,6 +39,14 @@ import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 import { getEffectiveResourceId, validateRunOwnership } from './utils';
+
+/**
+ * Statuses a run cannot come back from. Streaming one of these runIds again would
+ * start a fresh execution under the same runId and overwrite its stored snapshot —
+ * the in-memory de-dupe that protects concurrent streams only covers runs still held
+ * in the workflow's run map, and a finished run has already been dropped from it.
+ */
+const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -403,6 +417,17 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
+
+      const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+
+      if (existingRun && TERMINAL_RUN_STATUSES.includes(existingRun.status)) {
+        throw new HTTPException(409, {
+          message:
+            `Workflow run ${runId} already finished with status "${existingRun.status}". ` +
+            `Use /observe to read its stream back, or stream a new runId.`,
+        });
+      }
+
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
