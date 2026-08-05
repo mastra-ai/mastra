@@ -1,5 +1,193 @@
 # create-factory
 
+## 0.1.6-alpha.0
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.22.1-alpha.0
+
+## 0.1.5
+
+### Patch Changes
+
+- Fixed generated Factory projects that enable the Slack integration. ([#20535](https://github.com/mastra-ai/mastra/pull/20535))
+
+- Updated dependencies [[`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`3f8e2f2`](https://github.com/mastra-ai/mastra/commit/3f8e2f2006588171348acdb6dfcba8a37fed1106), [`1cd7a7b`](https://github.com/mastra-ai/mastra/commit/1cd7a7bfb2e2137ca854f8f1a24eb3d900b18e20), [`1d0b2d8`](https://github.com/mastra-ai/mastra/commit/1d0b2d8712f330992bf0c8464e093d14961f83b4), [`b95e551`](https://github.com/mastra-ai/mastra/commit/b95e551e2fdb149848dcdbd5d8f46c6736d6bff4), [`01c14ae`](https://github.com/mastra-ai/mastra/commit/01c14aed071c9580678036f21cb5eb6079c0ca80), [`2631aac`](https://github.com/mastra-ai/mastra/commit/2631aac051dd8ff33f91cb86e3bcac5c03e49d2c), [`b35ed6f`](https://github.com/mastra-ai/mastra/commit/b35ed6f7c257583eafbad6afa3320c88b26d8112), [`37a5de6`](https://github.com/mastra-ai/mastra/commit/37a5de698003e33b33ae647533461444383c1056), [`e58c643`](https://github.com/mastra-ai/mastra/commit/e58c643f15dc251e5d4ca0bc1cddd42a05f10860), [`3ea362f`](https://github.com/mastra-ai/mastra/commit/3ea362f28d36b7a6b248d0d05df3d14d83b50c39), [`a46aba2`](https://github.com/mastra-ai/mastra/commit/a46aba2249ef3cb965431eb063b9281f7e5e1eca), [`ade1ad4`](https://github.com/mastra-ai/mastra/commit/ade1ad487190c05bfeff246e60fdf8c89aa3d8b1)]:
+  - mastra@1.22.0
+
+## 0.1.5-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`2631aac`](https://github.com/mastra-ai/mastra/commit/2631aac051dd8ff33f91cb86e3bcac5c03e49d2c)]:
+  - mastra@1.22.0-alpha.8
+
+## 0.1.5-alpha.7
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.22.0-alpha.7
+
+## 0.1.5-alpha.6
+
+### Patch Changes
+
+- Fixed generated Factory projects that enable the Slack integration. ([#20535](https://github.com/mastra-ai/mastra/pull/20535))
+
+- Updated dependencies [[`1cd7a7b`](https://github.com/mastra-ai/mastra/commit/1cd7a7bfb2e2137ca854f8f1a24eb3d900b18e20), [`e58c643`](https://github.com/mastra-ai/mastra/commit/e58c643f15dc251e5d4ca0bc1cddd42a05f10860), [`ade1ad4`](https://github.com/mastra-ai/mastra/commit/ade1ad487190c05bfeff246e60fdf8c89aa3d8b1)]:
+  - mastra@1.22.0-alpha.6
+
+## 0.1.5-alpha.5
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.22.0-alpha.5
+
+## 0.1.5-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2)]:
+  - mastra@1.22.0-alpha.4
+
+## 0.1.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.22.0-alpha.3
+
+## 0.1.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`3f8e2f2`](https://github.com/mastra-ai/mastra/commit/3f8e2f2006588171348acdb6dfcba8a37fed1106), [`1d0b2d8`](https://github.com/mastra-ai/mastra/commit/1d0b2d8712f330992bf0c8464e093d14961f83b4), [`01c14ae`](https://github.com/mastra-ai/mastra/commit/01c14aed071c9580678036f21cb5eb6079c0ca80)]:
+  - mastra@1.22.0-alpha.2
+
+## 0.1.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b35ed6f`](https://github.com/mastra-ai/mastra/commit/b35ed6f7c257583eafbad6afa3320c88b26d8112), [`a46aba2`](https://github.com/mastra-ai/mastra/commit/a46aba2249ef3cb965431eb063b9281f7e5e1eca)]:
+  - mastra@1.21.1-alpha.1
+
+## 0.1.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b95e551`](https://github.com/mastra-ai/mastra/commit/b95e551e2fdb149848dcdbd5d8f46c6736d6bff4), [`37a5de6`](https://github.com/mastra-ai/mastra/commit/37a5de698003e33b33ae647533461444383c1056), [`3ea362f`](https://github.com/mastra-ai/mastra/commit/3ea362f28d36b7a6b248d0d05df3d14d83b50c39)]:
+  - mastra@1.21.1-alpha.0
+
+## 0.1.4
+
+### Patch Changes
+
+- Improved contributor guidance for the Factory scaffolder. ([#20327](https://github.com/mastra-ai/mastra/pull/20327))
+
+- Updated dependencies [[`6b1e467`](https://github.com/mastra-ai/mastra/commit/6b1e46731b3062a3c26c1c5889299eb186bbf08c), [`1d3a2cf`](https://github.com/mastra-ai/mastra/commit/1d3a2cf9111d947c344c4168579fb244c52ee9f8), [`4b9dc7a`](https://github.com/mastra-ai/mastra/commit/4b9dc7a6a3e7d96831efc2a1e6a7fb0d7632ca82), [`c539a25`](https://github.com/mastra-ai/mastra/commit/c539a25b620eb27c92ac8585b2740981ba1c28bf)]:
+  - mastra@1.21.0
+
+## 0.1.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.21.0-alpha.3
+
+## 0.1.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`6b1e467`](https://github.com/mastra-ai/mastra/commit/6b1e46731b3062a3c26c1c5889299eb186bbf08c), [`4b9dc7a`](https://github.com/mastra-ai/mastra/commit/4b9dc7a6a3e7d96831efc2a1e6a7fb0d7632ca82)]:
+  - mastra@1.21.0-alpha.2
+
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`1d3a2cf`](https://github.com/mastra-ai/mastra/commit/1d3a2cf9111d947c344c4168579fb244c52ee9f8)]:
+  - mastra@1.21.0-alpha.1
+
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- Improved contributor guidance for the Factory scaffolder. ([#20327](https://github.com/mastra-ai/mastra/pull/20327))
+
+- Updated dependencies [[`c539a25`](https://github.com/mastra-ai/mastra/commit/c539a25b620eb27c92ac8585b2740981ba1c28bf)]:
+  - mastra@1.21.0-alpha.0
+
+## 0.1.3
+
+### Patch Changes
+
+- Improved Factory onboarding so any key skips optional Mastra Platform setup while Ctrl+C cancels project creation. ([#20299](https://github.com/mastra-ai/mastra/pull/20299))
+
+- Generated Factory projects now use the Factory UI bundled with the Mastra CLI instead of including editable browser source and its build dependencies. ([#20246](https://github.com/mastra-ai/mastra/pull/20246))
+
+- Updated dependencies [[`6ce9581`](https://github.com/mastra-ai/mastra/commit/6ce9581ba0ef671dd04e9ad6c6290f2aa7028550)]:
+  - mastra@1.20.3
+
+## 0.1.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.4
+
+## 0.1.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.3
+
+## 0.1.3-alpha.2
+
+### Patch Changes
+
+- Improved Factory onboarding so any key skips optional Mastra Platform setup while Ctrl+C cancels project creation. ([#20299](https://github.com/mastra-ai/mastra/pull/20299))
+
+- Updated dependencies [[`6ce9581`](https://github.com/mastra-ai/mastra/commit/6ce9581ba0ef671dd04e9ad6c6290f2aa7028550)]:
+  - mastra@1.20.3-alpha.2
+
+## 0.1.3-alpha.1
+
+### Patch Changes
+
+- Generated Factory projects now use the Factory UI bundled with the Mastra CLI instead of including editable browser source and its build dependencies. ([#20246](https://github.com/mastra-ai/mastra/pull/20246))
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.1
+
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.0
+
+## 0.1.2
+
+### Patch Changes
+
+- Fixed generated Factory projects to allow newly published Mastra packages when pnpm minimum release age policies are configured. ([#20104](https://github.com/mastra-ai/mastra/pull/20104))
+
+- Fixed Factory template generation during release transitions by selecting exact published package versions that match the local source release and configuring npm for compatible prerelease installs. ([#20097](https://github.com/mastra-ai/mastra/pull/20097))
+
+- Updated dependencies:
+  - mastra@1.20.2
+
+## 0.1.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.20.2-alpha.5
+
 ## 0.1.2-alpha.4
 
 ### Patch Changes

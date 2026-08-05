@@ -95,9 +95,88 @@ export function shellQuote(value: string): string {
   return `'` + value.split(`'`).join(`'\\''`) + `'`;
 }
 
-/** Run a shell script in the sandbox via `sh -c`. */
-async function sh(sandbox: MaterializationSandbox, script: string): Promise<SandboxCommandResult> {
-  return sandbox.executeCommand('sh', ['-c', script]);
+/**
+ * Default hang guard for sandbox shell commands. Generous by design — large
+ * clones and dependency installs legitimately take minutes; the guard exists
+ * so a wedged sandbox surfaces a failure instead of hanging the request that
+ * triggered materialization forever.
+ */
+const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
+/** Branch checkout only fetches one ref — a much tighter budget applies. */
+export const CHECKOUT_COMMAND_TIMEOUT_MS = 5 * 60_000;
+
+interface ShOptions {
+  /** Override the hang-guard budget for this command. */
+  timeoutMs?: number;
+  /** Human-readable phase name included in the timeout error. */
+  phase?: string;
+}
+
+/**
+ * A thrown transport-level failure that is worth retrying: remote sandbox
+ * providers (e.g. the platform workspace proxy) surface transient 5xx errors
+ * as exceptions carrying an HTTP `status` — typically while a freshly
+ * provisioned VM is still coming up. Command failures are NOT exceptions
+ * (they resolve with a non-zero exit code), so retrying here never re-runs a
+ * command that the sandbox already executed and rejected.
+ */
+function isTransientTransportError(error: unknown): boolean {
+  const status = (error as { status?: unknown })?.status;
+  return typeof status === 'number' && status >= 500;
+}
+
+const SH_RETRIES = 2;
+const SH_RETRY_DELAY_MS = 2000;
+
+/**
+ * Run a shell script in the sandbox via `sh -c`, bounded by a hang guard.
+ * Transient transport-level 5xx failures (proxy hiccups while the VM boots)
+ * are retried with a short backoff; every script routed through here is safe
+ * to re-run. Hang-guard timeouts are NOT retried — the budget applies to the
+ * command as a whole.
+ */
+async function sh(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions = {},
+): Promise<SandboxCommandResult> {
+  // One budget for the command as a whole: each attempt only gets the time
+  // remaining, so transport retries can never multiply the hang guard.
+  const deadlineMs = Date.now() + (options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await shOnce(sandbox, script, { ...options, timeoutMs: Math.max(deadlineMs - Date.now(), 1) });
+    } catch (error) {
+      if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
+      const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
+      if (deadlineMs - Date.now() <= delayMs) throw error;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+/** Single `sh -c` execution attempt, bounded by the hang guard. */
+async function shOnce(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions,
+): Promise<SandboxCommandResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const hangGuard = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const phase = options.phase ? ` during ${options.phase}` : '';
+      reject(new Error(`Sandbox command timed out after ${Math.round(timeoutMs / 1000)}s${phase}.`));
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  try {
+    // Forward the budget to the provider too so it can terminate the wedged
+    // process; the race stays as the outer guard for providers that ignore it.
+    return await Promise.race([sandbox.executeCommand('sh', ['-c', script], { timeout: timeoutMs }), hangGuard]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Error raised when the sandbox cannot materialize the repo (actionable). */
@@ -183,12 +262,17 @@ export async function materializeRepo(options: {
 
   const authUrl = tokenUrl(repo, token);
 
-  // The DB's `materializedAt` can drift from disk — a fresh per-user binding
-  // row over an already-populated workdir (local dev DB resets, repaired
-  // rows, earlier flows) would make `git clone` fail on the non-empty
-  // directory. Re-detect an existing checkout of this repo and pull instead.
-  const alreadyMaterialized = Boolean(sandboxRow.materializedAt) || (await hasExistingCheckout(sandbox, workdir, repo));
+  // The DB's `materializedAt` can drift from disk in both directions: a fresh
+  // binding row over an already-populated workdir (local dev DB resets,
+  // repaired rows, earlier flows) must pull instead of failing `git clone` on
+  // the non-empty directory, and a stale `materializedAt` over an empty
+  // sandbox (an expired/recreated VM whose disk was wiped) must re-clone
+  // instead of running `git -C <workdir>` against a directory that no longer
+  // exists. Disk is the source of truth: detect the checkout instead of
+  // trusting the row.
+  const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
+  let succeeded = false;
   try {
     if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
@@ -201,6 +285,7 @@ export async function materializeRepo(options: {
       const clone = await sh(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
+        { phase: 'repository clone' },
       );
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
@@ -212,22 +297,69 @@ export async function materializeRepo(options: {
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
-      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`);
+      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
       if (pull.exitCode !== 0) {
-        throw classifyGitFailure(pull, 'pull-failed');
+        if (!isBenignNonFastForward(pull)) {
+          throw classifyGitFailure(pull, 'pull-failed');
+        }
+        // The workdir was left on a session's working branch that can't be
+        // fast-forwarded (diverged from upstream, no upstream, or detached
+        // HEAD). That branch holds the session's local work — never rebase or
+        // reset it here. The checkout is still perfectly usable; leave it
+        // as-is and let the session reconcile with the remote itself.
+        reportProgress(onProgress, {
+          phase: 'pulling',
+          message: 'Workspace has local changes that diverge from the remote — keeping them as-is.',
+        });
       }
     }
+    succeeded = true;
   } finally {
     // 3. Always scrub the token from the remote so it isn't left in the VM's
     // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not exist yet after a
-    // failed clone); on the success path the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, alreadyMaterialized);
+    // is best-effort on the failure path (the workdir may not even exist, and
+    // a scrub error must never mask the primary failure); on the success path
+    // the scrub must succeed or we surface it.
+    await scrubRemote(sandbox, workdir, repo, succeeded);
   }
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
   await storage.markMaterialized({ id: sandboxRow.id });
+}
+
+/**
+ * Reset a pooled workdir that a new session just claimed: the previous
+ * session's branch and dirty state must not leak into the new session, so
+ * force-checkout the default branch and drop all local modifications. When
+ * the claimed VM was reaped and re-provisioned there is no checkout yet and
+ * this is a no-op (the clone path handles it). A wedged checkout falls back
+ * to wiping the workdir so `materializeRepo` re-clones inside the same VM
+ * instead of permanently failing the session.
+ */
+export async function recycleClaimedWorkdir(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  defaultBranch: string,
+): Promise<void> {
+  if (!/^[A-Za-z0-9_./-]+$/.test(defaultBranch)) {
+    throw new MaterializeError(`Refusing to recycle: invalid default branch '${defaultBranch}'.`, 'clone-failed');
+  }
+  const w = shellQuote(workdir);
+  const inspect = await sh(sandbox, `git -C ${w} rev-parse --is-inside-work-tree`);
+  if (inspect.exitCode !== 0) return;
+  const recycle = await sh(
+    sandbox,
+    // `-x` also drops gitignored files (.env, build caches) so no session
+    // state survives into the next claim.
+    `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
+    { phase: 'claimed workdir recycle' },
+  );
+  if (recycle.exitCode === 0) return;
+  const wipe = await sh(sandbox, `rm -rf ${w}`);
+  if (wipe.exitCode !== 0) {
+    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${recycle.stderr}`, 'clone-failed');
+  }
 }
 
 /** Check out a session's branch inside its isolated repository clone. */
@@ -254,7 +386,16 @@ export async function checkoutSessionBranch(
   );
   if (local.exitCode === 0) {
     const checkout = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
-    if (checkout.exitCode !== 0) throw classifyGitFailure(checkout, 'clone-failed');
+    if (checkout.exitCode !== 0) {
+      // The session's agent may have switched branches itself (e.g. `gh pr
+      // checkout`) and left uncommitted work in the tree. Git refuses to
+      // switch back over those files — that work must win. The checkout is
+      // intact and usable on its current branch; keep it as-is rather than
+      // fail the workspace open, and never reset or stash to force the
+      // switch through.
+      if (isBlockedByLocalWork(checkout)) return;
+      throw classifyGitFailure(checkout, 'clone-failed');
+    }
     return;
   }
 
@@ -265,11 +406,30 @@ export async function checkoutSessionBranch(
     const fetch = await sh(
       sandbox,
       `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
+      { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
     );
-    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
+    if (fetch.exitCode !== 0) {
+      // Same rule as above: uncommitted work in the tree blocks the switch
+      // to the new branch. Leave the checkout on its current branch.
+      if (isBlockedByLocalWork(fetch)) return;
+      throw classifyGitFailure(fetch, 'clone-failed');
+    }
   } finally {
     await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
   }
+}
+
+/**
+ * True when a failed `git checkout` just means uncommitted or untracked files
+ * in the working tree would be clobbered by the branch switch. Those files are
+ * a session's work in progress — the switch must yield to them, never the
+ * other way around.
+ */
+function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /Your local changes to the following files would be overwritten by checkout|untracked working tree files would be overwritten by checkout/i.test(
+    output,
+  );
 }
 
 /**
@@ -293,7 +453,8 @@ async function hasExistingCheckout(
  * Reset the git remote back to the tokenless URL. On a successful clone/pull the
  * workdir always has a `.git`, so a non-zero exit code here means the token may
  * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated.
+ * (e.g. a failed clone), so a non-zero exit is tolerated — and never masks the
+ * primary failure being thrown through the `finally`.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,
@@ -311,6 +472,26 @@ async function scrubRemote(
       'pull-failed',
     );
   }
+}
+
+/**
+ * True when a failed `git pull --ff-only` on re-open just means the current
+ * branch can't be fast-forwarded — not that anything is broken. The shared
+ * workdir is routinely left on a session's working branch, which may have
+ * local commits diverging from upstream, no upstream at all (session branches
+ * are created from `FETCH_HEAD`), or a detached HEAD. A checkout can also
+ * hold uncommitted or untracked files (a build or script run left residue,
+ * or an older session worked directly in the shared checkout), which makes
+ * git refuse the merge outright. In all of these cases the checkout is
+ * intact and may hold real work; materialization must keep it as-is rather
+ * than fail the workspace open — and must never discard the local state to
+ * force the pull through.
+ */
+function isBenignNonFastForward(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge/i.test(
+    output,
+  );
 }
 
 /**
@@ -667,7 +848,7 @@ export async function runWorktreeSetup(
   worktreePath: string,
   command: string,
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`);
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, { phase: 'worktree setup' });
   if (result.exitCode !== 0) {
     const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
     throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');

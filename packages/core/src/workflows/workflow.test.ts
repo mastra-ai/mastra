@@ -41,10 +41,15 @@ createWorkflowTestSuite({
 
   // Register workflows with Mastra for storage/resume support
   registerWorkflows: async registry => {
-    // Collect all workflows
+    // Collect all workflows + any Mastra-level agents/tools the entries declare
+    // (used by `.agent('id')` / `.tool('id')` by-id forms).
     const workflows: Record<string, any> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
 
     // Create Mastra with all workflows - this automatically binds mastra to each workflow
@@ -52,6 +57,8 @@ createWorkflowTestSuite({
       logger: false,
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
     });
   },
 

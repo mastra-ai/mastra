@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "gpt-5.6-luna",
     "grok-4.5",
     "kimi-k2.5",
     "kimi-k2.6",
@@ -11,7 +12,8 @@
     "mimo-v2.5-pro",
     "qwen3.5-plus",
     "qwen3.6-plus",
-    "qwen3.7-plus"
+    "qwen3.7-plus",
+    "qwen3.8-max"
   ],
   "temperature": [
     "deepseek-v4-flash",
@@ -33,7 +35,17 @@
     "qwen3.5-plus",
     "qwen3.6-plus",
     "qwen3.7-max",
-    "qwen3.7-plus"
+    "qwen3.7-plus",
+    "qwen3.8-max"
   ],
-  "structuredOutput": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "grok-4.5", "kimi-k2.7-code", "kimi-k3"]
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "glm-5.2",
+    "gpt-5.6-luna",
+    "grok-4.5",
+    "kimi-k2.7-code",
+    "kimi-k3",
+    "qwen3.8-max"
+  ]
 }

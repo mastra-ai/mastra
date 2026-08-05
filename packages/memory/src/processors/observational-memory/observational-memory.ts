@@ -20,7 +20,7 @@ import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
-  OBSERVATION_RETRIEVAL_INSTRUCTIONS,
+  getRetrievalInstructions,
 } from './constants';
 
 /**
@@ -207,6 +207,7 @@ import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
+import type { ObservationRunResult } from './observation-strategies/types';
 import { ObservationTurn } from './observation-turn/index';
 import type { ObservationTurnHooks } from './observation-turn/types';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
@@ -230,8 +231,10 @@ import type {
   ObservationDebugEvent,
   ObservationalMemoryConfig,
   ObservationalMemoryModel,
+  ObserveHookContext,
   ObserveHookUsage,
   ObserveHooks,
+  ObserveTrigger,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
@@ -284,6 +287,11 @@ export class ObservationalMemory {
   readonly scope: 'resource' | 'thread';
   /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
+  /** Scope the recall tool was registered with — controls which retrieval instructions are injected. */
+  readonly retrievalScope: 'thread' | 'resource';
+  /** Application-provided guidance appended after the native retrieval instructions. */
+  private retrievalInstructions?: string;
+  private retrievalSearch: boolean;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -295,6 +303,8 @@ export class ObservationalMemory {
     resourceId: string;
     observedAt?: Date;
   }) => Promise<void>;
+  /** Config-level lifecycle hooks fired for every observation/reflection cycle. */
+  readonly hooks?: ObserveHooks;
 
   /** Observer agent runner — handles LLM calls for extracting observations. */
   readonly observer: ObserverRunner;
@@ -388,7 +398,11 @@ export class ObservationalMemory {
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
+    this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
+    this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;
+    this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
+    this.hooks = config.hooks;
     this.mastra = config.mastra;
     this.memory = config.memory;
 
@@ -1603,7 +1617,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -2147,17 +2161,21 @@ ${formattedMessages}
       `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${tokensToBuffer}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
     );
 
-    await ObservationStrategy.create(this, {
-      record: freshRecord,
-      threadId,
-      resourceId: freshRecord.resourceId ?? undefined,
-      messages: messagesToBuffer,
-      cycleId,
-      startedAt,
-      writer,
-      requestContext,
-      observabilityContext,
-    }).run();
+    await this.runBufferedObservationCycle(
+      { threadId, resourceId: freshRecord.resourceId ?? undefined, trigger: 'async-buffer' },
+      () =>
+        ObservationStrategy.create(this, {
+          record: freshRecord,
+          threadId,
+          resourceId: freshRecord.resourceId ?? undefined,
+          messages: messagesToBuffer,
+          cycleId,
+          startedAt,
+          writer,
+          requestContext,
+          observabilityContext,
+        }).run(),
+    );
 
     // Update the buffer cursor so the next buffer only sees messages newer than this one.
     const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
@@ -2509,7 +2527,14 @@ ${formattedMessages}
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
-    if (!record.activeObservations) return undefined;
+    if (!record.activeObservations) {
+      // Resource-scoped recall can browse and search other threads even before any
+      // observation group exists, so the actor still needs to know how to use it.
+      if (this.retrieval && this.retrievalScope === 'resource') {
+        return [getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)];
+      }
+      return undefined;
+    }
 
     // Read thread metadata for continuation hints
     const thread = await this.storage.getThreadById({ threadId });
@@ -3071,21 +3096,26 @@ ${formattedMessages}
         void writer.custom({ ...startMarker, transient: true }).catch(() => {});
       }
 
-      // Call the observer via strategy pattern
-      await ObservationStrategy.create(this, {
-        record,
-        threadId,
-        resourceId: record.resourceId ?? undefined,
-        messages: candidateMessages,
-        cycleId,
-        startedAt,
-        writer,
-        agent: opts.agent,
-        sendSignal: opts.sendSignal,
-        requestContext,
-        currentModel: opts.currentModel,
-        observabilityContext,
-      }).run();
+      // Call the observer via strategy pattern, firing config-level hooks
+      // around the cycle — fire-and-forget callers never see this result.
+      await this.runBufferedObservationCycle(
+        { threadId, resourceId: record.resourceId ?? resourceId, trigger: 'async-buffer' },
+        () =>
+          ObservationStrategy.create(this, {
+            record,
+            threadId,
+            resourceId: record.resourceId ?? undefined,
+            messages: candidateMessages,
+            cycleId,
+            startedAt,
+            writer,
+            agent: opts.agent,
+            sendSignal: opts.sendSignal,
+            requestContext,
+            currentModel: opts.currentModel,
+            observabilityContext,
+          }).run(),
+      );
 
       if (isOmReproCaptureEnabled()) {
         writeObserverExchangeReproCapture({
@@ -3375,6 +3405,96 @@ ${formattedMessages}
   }
 
   /**
+   * Compose the config-level hooks with optional per-call hooks into a single
+   * `ObserveHooks` object, binding call context onto the config-level
+   * callbacks. Config-level hooks are guarded so a throwing consumer hook can
+   * never fail an observation/reflection cycle; per-call hooks keep their
+   * existing payloads and propagation semantics. Returns undefined when
+   * neither is configured, so call sites stay zero-cost.
+   *
+   * Used internally by every pipeline path (manual observe/reflect,
+   * turn-engine sync observation, async buffering); public only so the
+   * observation turn engine can thread config-level reflection hooks into
+   * reflector calls.
+   *
+   * @internal
+   */
+  composeHooks(callHooks: ObserveHooks | undefined, context: ObserveHookContext): ObserveHooks | undefined {
+    const configHooks = this.hooks;
+    if (!configHooks) return callHooks;
+    if (!callHooks && !Object.keys(configHooks).length) return undefined;
+
+    const fireConfigHook = (name: keyof ObserveHooks, arg: unknown) => {
+      const hook = configHooks[name] as ((arg?: unknown) => void | Promise<void>) | undefined;
+      if (!hook) return;
+      const logHookFailure = (error: unknown) =>
+        omDebug(
+          `[OM:hooks] config-level ${name} hook failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      try {
+        const out = hook(arg) as unknown;
+        // Guard async consumer hooks too: a rejected promise from a config
+        // hook must not surface as an unhandled rejection.
+        if (out && typeof (out as Promise<unknown>).then === 'function') {
+          void (out as Promise<unknown>).then(undefined, logHookFailure);
+        }
+      } catch (error) {
+        logHookFailure(error);
+      }
+    };
+
+    return {
+      onObservationStart: () => {
+        fireConfigHook('onObservationStart', context);
+        callHooks?.onObservationStart?.();
+      },
+      onObservationEnd: result => {
+        fireConfigHook('onObservationEnd', { ...context, ...result });
+        callHooks?.onObservationEnd?.(result);
+      },
+      onReflectionStart: () => {
+        fireConfigHook('onReflectionStart', context);
+        callHooks?.onReflectionStart?.();
+      },
+      onReflectionEnd: result => {
+        fireConfigHook('onReflectionEnd', { ...context, ...result });
+        callHooks?.onReflectionEnd?.(result);
+      },
+    };
+  }
+
+  /**
+   * Run one buffered observation cycle, firing config-level hooks around it.
+   * Shared by both async-buffer lanes — buffer() and
+   * runAsyncBufferedObservation() — whose fire-and-forget callers never see
+   * the strategy result. The async-buffer strategy swallows failures
+   * (rethrowOnFailure=false) and surfaces them on the result instead, so the
+   * end hook reports `error` for failed cycles even though nothing throws.
+   */
+  private async runBufferedObservationCycle(
+    context: ObserveHookContext,
+    run: () => Promise<ObservationRunResult>,
+  ): Promise<ObservationRunResult | undefined> {
+    const hooks = this.composeHooks(undefined, context);
+    hooks?.onObservationStart?.();
+    let runResult: ObservationRunResult | undefined;
+    let runError: Error | undefined;
+    try {
+      runResult = await run();
+      return runResult;
+    } catch (error) {
+      runError = error instanceof Error ? error : new Error(String(error));
+      throw error;
+    } finally {
+      hooks?.onObservationEnd?.({
+        usage: runResult?.usage,
+        error: runError ?? runResult?.error,
+        ...(runResult?.providerMetadata ? { providerMetadata: runResult.providerMetadata } : {}),
+      });
+    }
+  }
+
+  /**
    * Manually trigger observation.
    *
    * When `messages` is provided, those are used directly (filtered for unobserved)
@@ -3389,6 +3509,8 @@ ${formattedMessages}
     resourceId?: string;
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
+    /** Which pipeline path initiated this cycle; defaults to 'manual'. */
+    trigger?: ObserveTrigger;
     agent?: ProcessorContext['agent'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
@@ -3398,8 +3520,9 @@ ${formattedMessages}
     reflected: boolean;
     record: ObservationalMemoryRecord;
   }> {
-    const { threadId, resourceId, messages, hooks, requestContext } = opts;
+    const { threadId, resourceId, messages, requestContext } = opts;
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
+    const hooks = this.composeHooks(opts.hooks, { threadId, resourceId, trigger: opts.trigger ?? 'manual' });
     const reflectionHooks = hooks
       ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
       : undefined;
@@ -3496,6 +3619,12 @@ ${formattedMessages}
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
+    const hooks = this.composeHooks(undefined, { threadId, resourceId, trigger: 'manual' });
+    hooks?.onReflectionStart?.();
+    let reflectionUsage: ObserveHookUsage | undefined;
+    let reflectionProviderMetadata: ProviderMetadata | undefined;
+    let reflectionError: Error | undefined;
+
     try {
       const thread = await this.storage.getThreadById({ threadId });
       const previousOmMetadata = getThreadOMMetadata(thread?.metadata);
@@ -3541,12 +3670,20 @@ ${formattedMessages}
       }
 
       const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+      reflectionUsage = reflectResult.usage;
+      reflectionProviderMetadata = reflectResult.providerMetadata;
       return { reflected: true, record: updatedRecord, usage: reflectResult.usage };
     } catch (error) {
+      reflectionError = error instanceof Error ? error : new Error(String(error));
       omError('[OM] reflect() failed', error);
       const latestRecord = await this.getOrCreateRecord(threadId, resourceId);
       return { reflected: false, record: latestRecord, usage: undefined };
     } finally {
+      hooks?.onReflectionEnd?.({
+        usage: reflectionUsage,
+        error: reflectionError,
+        ...(reflectionProviderMetadata ? { providerMetadata: reflectionProviderMetadata } : {}),
+      });
       await this.storage.setReflectingFlag(record.id, false);
       unregisterOp(record.id, 'reflecting');
     }

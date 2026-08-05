@@ -159,6 +159,17 @@ describe('MemoryThread', () => {
       );
       expect(result).toEqual(mockMessages);
     });
+
+    it('should serialize metadata filters', async () => {
+      mockFetchResponse({ messages: [], uiMessages: [] });
+      const metadata = { category: 'billing', priority: 2, active: true, deletedAt: null };
+
+      await thread.listMessages({ filter: { metadata } });
+
+      const [url] = (global.fetch as any).mock.calls[0];
+      const parsed = new URL(url);
+      expect(JSON.parse(parsed.searchParams.get('filter')!)).toEqual({ metadata });
+    });
   });
 
   describe('deleteMessages', () => {

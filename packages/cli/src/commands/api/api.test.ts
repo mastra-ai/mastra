@@ -587,6 +587,83 @@ describe('api command executor', () => {
     });
   });
 
+  it('queries learning entities and wraps the entities list', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        entities: [{ entityId: 'my-agent', entityType: 'agent', availableSignals: ['goal', 'outcome'] }],
+      }),
+    );
+
+    await executeDescriptor(API_COMMANDS.learningEntities, [], '{"entityType":"agent"}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/learning/entities?entityType=agent', {
+      method: 'GET',
+      headers: {},
+      signal: expect.any(AbortSignal),
+    });
+    expect(JSON.parse(stdout)).toEqual({
+      data: [{ entityId: 'my-agent', entityType: 'agent', availableSignals: ['goal', 'outcome'] }],
+      page: { total: 1, page: 0, perPage: 1, hasMore: false },
+    });
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('sends learning theme requests with entity and theme positionals as path params', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ snapshot: { snapshotId: 'snap' }, theme: { themeId: '42' } }));
+
+    await executeDescriptor(
+      API_COMMANDS.learningThemeGet,
+      ['my-agent', '42'],
+      '{"entityType":"agent","signalName":"goal","snapshotId":"snap"}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/api/learning/entities/my-agent/themes/42?entityType=agent&signalName=goal&snapshotId=snap',
+      { method: 'GET', headers: {}, signal: expect.any(AbortSignal) },
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      data: { snapshot: { snapshotId: 'snap' }, theme: { themeId: '42' } },
+    });
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('returns local schemas for learning commands without fetching a manifest', async () => {
+    const program = new Command();
+    program.exitOverride();
+    registerApiCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'mastra',
+      'api',
+      '--url',
+      'https://example.com',
+      'learning',
+      'snapshots',
+      '--schema',
+    ]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout)).toMatchObject({
+      command: 'mastra api learning snapshots <entityId> <input>',
+      method: 'GET',
+      path: '/learning/entities/:entityId/theme-snapshots',
+      positionals: [{ name: 'entityId', required: true }],
+      input: {
+        required: true,
+        source: 'query',
+        schema: { type: 'object', required: ['entityType', 'signalNames'] },
+      },
+    });
+    expect(stderr).toBe('');
+    expect(process.exitCode).toBeUndefined();
+  });
+
   it('allows schema discovery commands without identity positionals', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({

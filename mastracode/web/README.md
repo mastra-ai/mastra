@@ -1,148 +1,171 @@
-# mastracode-web
+# MastraCode web host
 
-The Mastra Code web surface: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage. (`APP_DATABASE_URL` is honored as a deprecated fallback.)
+`mastracode/web` wires environment-specific storage, authentication, integrations, event bus, and sandboxes into [`@mastra/factory`](../factory/README.md). React code belongs in [`factory-ui`](../factory-ui/README.md).
 
-This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins those deps to the exact versions found in the monorepo (see below).
+This is a separate pnpm project with its own lockfile and `link:` dependencies to monorepo packages.
 
 ## Setup
 
-```bash
-# from the monorepo root
-pnpm install
+From the repository root:
 
-# in mastracode/web
+```shell
 pnpm install
+pnpm --dir mastracode/web install
+pnpm --dir mastracode/web run prebuild
 ```
+
+`prebuild` builds the linked packages required by the host.
 
 ## Development
 
-```bash
-pnpm web:dev
+Local development uses LibSQL and local sandboxes. Onboarding requires sign-in and a GitHub App.
+
+### Configure local onboarding
+
+Create a [GitHub App](https://github.com/settings/apps/new) with URLs matching the mode you will run:
+
+| Setting      | Integrated mode                              | Split UI mode                                |
+| ------------ | -------------------------------------------- | -------------------------------------------- |
+| Homepage URL | `http://localhost:5873`                      | `http://localhost:5173`                      |
+| Callback URL | `http://localhost:5873/auth/github/callback` | `http://localhost:5173/auth/github/callback` |
+| Setup URL    | `http://localhost:5873/auth/github/callback` | `http://localhost:5173/auth/github/callback` |
+
+Do not mix modes. Nothing runs on port `5173` in integrated mode.
+
+Configure the app:
+
+1. Grant **Contents**, **Issues**, and **Pull requests** read/write access and **Metadata** read-only access.
+2. Clear **Webhook → Active** for local development.
+3. Generate a client secret and private key.
+4. Add these values to `mastracode/web/.env`:
+
+```dotenv
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+GITHUB_APP_CLIENT_ID=
+GITHUB_APP_CLIENT_SECRET=
+GITHUB_APP_SLUG=
+GITHUB_APP_WEBHOOK_SECRET=
 ```
 
-- API server (`mastra factory dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
-- Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
+Generate the state-signing secret with `openssl rand -hex 32` and use it for `GITHUB_APP_WEBHOOK_SECRET`. Use escaped `\n` characters in the private key. Restart the server after changing `.env`.
 
-To test the production-like, same-origin setup on port 5173 with one long-running process, build the SPA once and serve it from the Factory API server:
+See [`.env.schema`](./.env.schema) for other environment variables.
 
-```bash
-pnpm web:dev:prod
+### Integrated mode
+
+Use this for backend work and production-like checks:
+
+```shell
+pnpm --dir mastracode/web dev
 ```
 
-This mode does not provide UI HMR. Run `pnpm web:dev` for normal UI development.
+Open `http://localhost:5873`.
 
-Local development works without PostgreSQL: the full web surface uses the SDK's local LibSQL database. To exercise the PostgreSQL backend and distributed-lock path, run `pnpm web:dev:github` (Docker Compose on port 54329).
+### Split UI mode
 
-## Build & deploy
+Use this for UI work. Run these in separate terminals:
 
-```bash
-pnpm web:build
+```shell
+pnpm --dir mastracode/web api
 ```
 
-1. `prebuild` — builds the linked monorepo packages via turbo.
-2. Vite builds the SPA to `src/mastra/public/factory/`.
-3. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` — pins the `link:` deps to the **exact versions found in the monorepo** (read from each linked package's `package.json`), runs the build, then always restores the `link:` specs (also on failure/Ctrl-C). The build calls `build:ui` (step 2) automatically when a Factory entry is detected, bundles the API server to `.mastra/output/`, and copies `public/` (including the SPA) into it automatically.
-4. The server serves the SPA same-origin at `/` (see `src/web/spa-static.ts`).
-
-The deploy output's `package.json` therefore pins the exact monorepo versions of `@mastra/*`, so a production deploy `npm install`s them straight from npm — those versions must be published (CI releases alphas). **Known limitation:** until `@mastra/code-sdk` has a proper npm release (changeset queued), the build's final output-deps install step fails on `@mastra/code-sdk@0.0.0`; the bundle, SPA, and output `package.json` are still produced correctly before that step.
-
-To switch the manifest manually: `pnpm deps:pin` / `pnpm deps:link` (the `link:` state is what's committed).
-
-Run the output with `pnpm web:start` (or `node .mastra/output/index.mjs` after installing output deps).
-
-To deploy to Mastra Cloud:
-
-```bash
-pnpm web:deploy
+```shell
+pnpm --filter ./mastracode/factory-ui web
 ```
 
-This runs `web:build` (pinned versions, as above), validates the output (server entry, deploy manifest, SPA), and then `mastra deploy --skip-build`, which uploads the existing `.mastra/output`. Deploy targets `--env production` by default and auto-selects `.env.production` if present — otherwise it will offer to upload vars from the local `.env`, so double-check what you confirm in the prompt. Requires `mastra auth login` first; pass extra flags via `pnpm web:deploy -- --env staging` etc.
+Open `http://localhost:5173`.
+
+### Slack channels (optional)
+
+Slack sends events to public HTTPS origins only, so a local server needs a
+tunnel. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+(`brew install cloudflared`).
+
+#### 1. Start a tunnel
+
+```shell
+cloudflared tunnel --url http://127.0.0.1:5873
+```
+
+Any HTTPS tunnel can be used. The command above starts a temporary Cloudflare
+Quick Tunnel without an account or config file. Keep it running and copy the
+`trycloudflare.com` hostname it prints; that hostname is valid until you stop
+the command.
+
+If you have a Cloudflare account and a domain, use a named tunnel with a stable
+hostname instead. Then the Slack manifest can keep the same public URL across
+local restarts instead of being updated for every new Quick Tunnel hostname.
+
+#### 2. Create the Slack app
+
+Generate a manifest for the tunnel URL:
+
+```shell
+pnpm --dir mastracode/web slack:manifest \
+  --url https://your-tunnel-hostname \
+  --name "Mastra Factory (dev)" \
+  --copy
+```
+
+At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App →
+From a manifest** and paste the manifest from your clipboard.
+
+Install it to your workspace. Copy the app credentials from **Basic Information → App Credentials** and the bot token from **OAuth & Permissions** into `.env`:
+
+```dotenv
+MASTRACODE_CHANNELS_PUBLIC_URL=https://your-tunnel-hostname
+SLACK_APP_SIGNING_SECRET=
+SLACK_APP_CLIENT_ID=
+SLACK_APP_CLIENT_SECRET=
+SLACK_APP_BOT_TOKEN=
+```
+
+Restart the dev server — varlock reads `.env` at startup.
+
+#### 3. Link your account
+
+DM the bot. It replies with a Connect card; that flow binds your Slack identity
+to your Mastra user, and messages then run as you.
+
+A quick tunnel gets a new hostname each run. When it changes, replace the
+hostname in `MASTRACODE_CHANNELS_PUBLIC_URL` and in the Slack app's **Event
+Subscriptions**, **Interactivity & Shortcuts**, and **OAuth & Permissions** settings.
+
+### Optional local services
+
+To test PostgreSQL and Redis:
+
+```shell
+pnpm --dir mastracode/web db:up
+```
+
+Add these values to `mastracode/web/.env` and restart the server:
+
+```dotenv
+DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
+REDIS_URL=redis://localhost:63799
+```
 
 ## Tests
 
-```bash
-pnpm web:test     # server scenario tests (e2e/web)
-pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
+```shell
+pnpm --dir mastracode/web test
+pnpm --dir mastracode/web check
 ```
 
-## Factories, bindings, and repositories
+UI tests live in `factory-ui`; backend tests live in `factory`.
 
-In the Web UI, a **Factory** is the top-level product entity that a user creates and selects. Each Factory has one binding:
+## Build and run
 
-- **Local folder**: A path on the host machine. Sessions use the `resourceId` resolved by `GET /web/codebase/resolve`.
-- **Server Factory**: A persisted Factory project identified by `factoryProjectId`. It can contain one or more connected repositories. Repository-specific operations use each repository's `projectRepositoryId`.
-
-Factory work items belong to the Factory project. Sandboxes, worktrees, GitHub issue and pull request feeds, and pull request subscriptions belong to a connected repository. Private HTTP routes reflect that split. Work items use `/web/factory/projects/:factoryProjectId/*`, while GitHub provider operations use `/web/github/projects/:projectRepositoryId/*`.
-
-Session continuity with the terminal user interface (TUI) keeps the Software Development Kit (SDK) names `projectPath` and `detectProject`. These names refer to the execution workspace path and codebase detection protocol, not the Factory product entity.
-
-Intake source config is asymmetric by provider. GitHub selections use `repositoryIds`, which contain connected repository UUIDs. Linear selections use `projectIds` because a Linear Project is an external provider concept.
-
-Browser state uses `mastracode-factories`. The active Factory comes from the `/factories/:factoryId/**` URL, and prerelease `mastracode-projects` keys aren't read.
-
-## Work and Review workflows
-
-Server-backed Factories split repository work across two boards:
-
-- **Work** (`/factories/:factoryId/work`): Shows manual work items, GitHub issues, and Linear issues. Its stages are **Intake**, **Triage**, **Planning**, **Building**, **Review**, and **Done**.
-- **Review** (`/factories/:factoryId/review`): Shows GitHub pull requests only. Its stages are **Intake**, **Reviewing**, and **Done**.
-
-Open GitHub issues appear as **Work** intake candidates. Open pull requests appear as **Review** intake candidates. Adding a candidate to a board creates or updates its persisted Factory work item. The source type determines which board owns that item, so a GitHub issue can't appear on **Review** and a pull request can't appear on **Work**.
-
-When a Factory pull request branch matches a related work session branch, the Review item stores the Work item as its parent. The Work card links to the Review session, and the Review card links back to the Work session. The same reciprocal links appear in the session header. Links to a thread are shown only while its referenced worktree still exists; the related board item remains available after worktree deletion.
-
-## Workspace skill invocation
-
-The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. The Web Factory packages workflow skills such as `understand-issue` and `understand-pr` as ordinary, read-only `SKILL.md` files and adds them only to workspaces created by `MastraFactory`; the shared SDK and TUI workspace resolver do not load them. The route resolves every ID through the session workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
-
-## Factory metrics
-
-The **Metrics** page at `/factories/:factoryId/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
-
-Queue age thresholds are server-side Factory project config in seconds. `GET /web/factory/projects/:factoryProjectId/health/thresholds` reads them from the `queue-health` storage domain. The `queue_health_settings` table keys records by `(org_id, factory_project_id)`. Defaults are `[14400, 86400, 259200]` (4h, 24h, and 72h). `saveConfig` rejects empty or non-ascending `thresholdsSeconds` values.
-
-## Factory rules
-
-`MastraFactory` accepts one authoritative `rules` tree for Work and Review stage entry and exit, completed tool results, and normalized GitHub events. Construct it with `defaultFactoryRules()` so every deployment policy has an explicit version:
-
-```ts
-import { MastraFactory } from './src/web/factory-entry.js';
-import { defaultFactoryRules } from './src/web/factory/rules/index.js';
-
-const rules = defaultFactoryRules({
-  version: '2026-07-18.1',
-  overrides: {
-    review: {
-      intake: {
-        pullRequest: {
-          onEnter: context =>
-            context.actor.type === 'github' && !context.actor.trusted
-              ? { type: 'reject', code: 'forbidden', reason: 'A trusted author is required.' }
-              : undefined,
-        },
-      },
-    },
-    tools: {
-      submit_plan: {
-        onResult: () => undefined,
-      },
-    },
-  },
-});
-
-const factory = new MastraFactory({ rules });
+```shell
+pnpm --dir mastracode/web build
+pnpm --dir mastracode/web start
 ```
 
-Overrides replace the exact `onEnter`, `onExit`, `onResult`, or `onEvent` leaf; they never compose implicitly with another handler. The version is configuration identity for persisted evaluations and audits, not an event-deduplication key, and Mastra never hashes function source.
+## Deploy
 
-Rules are trusted deployment code. They receive normalized, bounded context rather than storage handles, credentials, worktree paths, or raw webhook payloads. Each handler returns one bounded `FactoryRuleDecision` or `void`: a typed rejection, transition, linked-item upsert, skill invocation, bound-session message, or notification. Every returned decision is validated and redacted before persistence; external effects are deferred rather than executed inside rule evaluation.
-
-## GitHub pull request notifications
-
-GitHub-backed Factory sessions automatically subscribe the current thread after a successful `gh pr create`. The `github_subscribe_pr` tool is primarily for existing pull requests or recovery when automatic subscription did not occur. Use `github_unsubscribe_pr` only to stop notifications early; closing or merging the pull request retires its subscription automatically.
-
-Configure the GitHub App webhook URL as `https://your-host/web/github/webhook`, set `GITHUB_APP_WEBHOOK_SECRET` to the same secret configured in GitHub, and subscribe the App to pull request, pull request review, pull request review comment, and issue comment events. Comments and reviews are delivered only when their author has write access or is an explicitly authorized bot.
-
-## Environment
-
-See `.env.schema` (package root; varlock validates `.env` against it). Local development needs no variables and runs auth-less with local LibSQL storage; non-local deployments require `DATABASE_URL` (or the deprecated `APP_DATABASE_URL`). WorkOS auth requires both `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`; alternatively set `BETTER_AUTH_SECRET`. GitHub needs the complete `GITHUB_APP_*` group plus auth; Linear needs `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`; Railway sandboxes need `RAILWAY_API_TOKEN`. `MASTRACODE_PUBLIC_URL` controls the WorkOS (`/auth/callback`), GitHub App (`/auth/github/callback`), and Linear callback URLs.
+```shell
+mastra auth login
+pnpm --dir mastracode/web deploy
+```
