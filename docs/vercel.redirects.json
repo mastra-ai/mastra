@@ -1179,6 +1179,11 @@
       "source": "/docs/agent-controller/channels",
       "destination": "/docs/harness/agent-controller",
       "permanent": true
+    },
+    {
+      "source": "/docs/agents/supervisor-agents",
+      "destination": "/docs/capabilities/subagents",
+      "permanent": true
     }
   ]
 }

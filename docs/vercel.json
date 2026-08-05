@@ -1196,6 +1196,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/supervisor-agents",
+      "destination": "/docs/capabilities/subagents",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2033,6 +2038,11 @@
     {
       "source": "/docs/agent-controller/channels/llms.txt",
       "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/supervisor-agents/llms.txt",
+      "destination": "/docs/capabilities/subagents/llms.txt",
       "permanent": true
     }
   ]
