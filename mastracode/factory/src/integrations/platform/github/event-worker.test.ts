@@ -247,7 +247,7 @@ describe('PlatformGithubEventWorker', () => {
     await worker.stop();
   });
 
-  it('gives the dispatch a session-owner lookup, since it never passes the integration itself', async () => {
+  it('hands the dispatch its integration, so a woken session can be attributed to its owner', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
@@ -276,8 +276,11 @@ describe('PlatformGithubEventWorker', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(dispatch).toHaveBeenCalledTimes(1);
-    const { getFactorySession } = dispatch.mock.calls[0]![1];
-    await expect(getFactorySession?.('session-1')).resolves.toEqual({ userId: 'user-1', orgId: 'org-1' });
+    const { github } = dispatch.mock.calls[0]![1];
+    await expect(github?.sourceControlStorage.sessions.getBySessionId('session-1')).resolves.toEqual({
+      userId: 'user-1',
+      orgId: 'org-1',
+    });
     await worker.stop();
   });
 

@@ -3,10 +3,14 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
-import type { GithubIntegration } from './integration.js';
+import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
-import type { GithubSignalSubscriptionRow, GithubWebhookPullRequestTarget } from './subscriptions.js';
+import type {
+  GithubSignalSubscriptionRow,
+  GithubSubscriptionStorage,
+  GithubWebhookPullRequestTarget,
+} from './subscriptions.js';
 
 export type GithubIssueTriageRunInput = GithubIssueTriageInput;
 export type GithubIssueTriageRunResult = GithubIssueTriageResult;
@@ -63,23 +67,39 @@ export interface GithubWebhookNotification {
 /** The Factory session row fields a woken session has to run as. */
 export type FactorySessionOwner = { userId: string; orgId: string };
 
+/**
+ * The integration surface this dispatch uses. Narrow on purpose: the GitHub App
+ * integration and the platform-backed one are unrelated classes, and only this
+ * much is common to both.
+ */
+export interface GithubWebhookDispatchIntegration {
+  readonly integrationStorage: GithubSubscriptionStorage;
+  readonly sourceControlStorage: {
+    sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
+  };
+  getRepositoryCollaboratorPermission(
+    installationId: number,
+    repoFullName: string,
+    username: string,
+    signal?: AbortSignal,
+  ): Promise<GithubRepositoryPermission | undefined>;
+}
+
 export interface GithubWebhookDispatchDependencies {
   controller: MountedMastraCode['controller'];
   /**
    * Integration used by the default sender-authorization check (collaborator
-   * permission lookup). Author-gated notifications fail closed when neither
-   * this nor an `isAuthorizedSender` override is supplied.
+   * permission lookup) and to resolve the owner of a session being recreated.
+   * Author-gated notifications fail closed when neither this nor an
+   * `isAuthorizedSender` override is supplied.
    */
-  github?: GithubIntegration;
+  github?: GithubWebhookDispatchIntegration;
   listSubscriptions?: (
     target: GithubWebhookPullRequestTarget,
     options?: { includeTerminal?: boolean },
   ) => Promise<GithubSignalSubscriptionRow[]>;
   retireSubscription?: (id: string, status: 'open' | 'closed' | 'merged') => Promise<void>;
   isAuthorizedSender?: (notification: GithubWebhookNotification) => Promise<boolean>;
-  /** Owner lookup for sessions this dispatch has to recreate. Defaults to
-   * `github`, which the platform event worker does not supply. */
-  getFactorySession?: (sessionId: string) => Promise<FactorySessionOwner | null>;
   onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
 }
 
@@ -293,7 +313,7 @@ export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhoo
 async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: GithubSignalSubscriptionRow,
-  getFactorySession: (sessionId: string) => Promise<FactorySessionOwner | null>,
+  github?: GithubWebhookDispatchIntegration,
 ) {
   const { sessionId, resourceId, threadId } = subscription;
   if (!sessionId || !resourceId || !threadId) {
@@ -309,7 +329,7 @@ async function resolveSubscriptionSession(
     };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
-    const sessionRow = await getFactorySession(resourceId);
+    const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(resourceId);
     if (!sessionRow) {
       throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${resourceId} to run as.`);
     }
@@ -347,7 +367,7 @@ const AUTHOR_GATED_KINDS = new Set([
 
 async function isAuthorizedGithubSender(
   notification: GithubWebhookNotification,
-  github: GithubIntegration | undefined,
+  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission'> | undefined,
 ): Promise<boolean> {
   if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
   const sender = notification.metadata.sender;
@@ -417,19 +437,13 @@ export async function dispatchGithubWebhook(
       if (!dependencies.github) throw new Error('GitHub integration is required to retire webhook subscriptions.');
       return retirePullRequestSubscription(id, status, dependencies.github.integrationStorage);
     });
-  const getFactorySession =
-    dependencies.getFactorySession ??
-    ((sessionId: string) => {
-      if (!dependencies.github) throw new Error('GitHub integration is required to resolve a Factory session owner.');
-      return dependencies.github.sourceControlStorage.sessions.getBySessionId(sessionId);
-    });
   const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
   let failed = 0;
 
   for (const subscription of subscriptions) {
     try {
-      const session = await resolveSubscriptionSession(dependencies.controller, subscription, getFactorySession);
+      const session = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
       const result = await session.sendNotificationSignal({
         source: 'github',
         kind: notification.kind,

@@ -1,6 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GithubIntegration } from './integration.js';
 import type { GithubSignalSubscriptionRow } from './subscriptions.js';
 
 const getRepositoryCollaboratorPermission = vi.fn<
@@ -11,17 +10,23 @@ const getRepositoryCollaboratorPermission = vi.fn<
     signal?: AbortSignal,
   ) => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>
 >(async () => 'write');
-// Stub integration: dispatch consumes the injected instance for permission checks.
-const githubStub = { getRepositoryCollaboratorPermission } as unknown as GithubIntegration;
 
-function githubWithSessionRow(row: { userId: string; orgId: string } | null) {
+function githubWithSessionRow(row: FactorySessionOwner | null): GithubWebhookDispatchIntegration {
   return {
+    // Every dispatch test overrides listSubscriptions/retireSubscription.
+    integrationStorage: {} as never,
     getRepositoryCollaboratorPermission,
     sourceControlStorage: { sessions: { getBySessionId: async () => row } },
-  } as unknown as GithubIntegration;
+  };
 }
+
+const githubStub = githubWithSessionRow(null);
 import { classifyGithubWebhook, dispatchGithubWebhook } from './webhook.js';
-import type { ParsedGithubWebhook } from './webhook.js';
+import type {
+  FactorySessionOwner,
+  GithubWebhookDispatchIntegration,
+  ParsedGithubWebhook,
+} from './webhook.js';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
   return {
