@@ -703,6 +703,9 @@ describe('GithubSignals', () => {
                 lastObservedContentHash: 'aggregate-hash',
                 lastObservedThreadContentHash: 'thread-hash',
                 lastObservedHeadSha: 'head-sha',
+                lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+                lastObservedCommentAuthor: 'coderabbitai[bot]',
+                lastObservedCommentIsBot: true,
               },
             ],
           },
@@ -730,6 +733,9 @@ describe('GithubSignals', () => {
       lastObservedContentHash: 'aggregate-hash',
       lastObservedThreadContentHash: 'thread-hash',
       lastObservedHeadSha: 'head-sha',
+      lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+      lastObservedCommentAuthor: 'coderabbitai[bot]',
+      lastObservedCommentIsBot: true,
       lastSyncStatus: 'skipped',
     });
   });

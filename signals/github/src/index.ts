@@ -1448,8 +1448,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     resourceId?: string;
   } {
     const memoryContext = args.requestContext?.get('MastraMemory') as
-      | { thread?: { id?: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id?: string }; resourceId?: string } | undefined;
     return { threadId: memoryContext?.thread?.id, resourceId: memoryContext?.resourceId };
   }
 
@@ -2053,6 +2052,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       ...(existing?.lastObservedCiState ? { lastObservedCiState: existing.lastObservedCiState } : {}),
       ...(existing?.lastObservedReviewStateHash
         ? { lastObservedReviewStateHash: existing.lastObservedReviewStateHash }
+        : {}),
+      ...(existing?.lastObservedCommentUrl ? { lastObservedCommentUrl: existing.lastObservedCommentUrl } : {}),
+      ...(existing?.lastObservedCommentAuthor ? { lastObservedCommentAuthor: existing.lastObservedCommentAuthor } : {}),
+      ...(typeof existing?.lastObservedCommentIsBot === 'boolean'
+        ? { lastObservedCommentIsBot: existing.lastObservedCommentIsBot }
         : {}),
     };
 
