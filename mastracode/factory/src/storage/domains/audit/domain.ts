@@ -1,6 +1,6 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
@@ -49,12 +49,20 @@ interface FactorySessionState {
   projectRepositoryId?: string;
 }
 
+export interface AuditActorProfile {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface AuditDomainOptions {
   auth: RouteAuth;
   /** Audit storage domain handle. */
   audit: AuditStorage;
   /** Projects domain handle, used to scope the audit trail route. */
   projects: FactoryProjectsStorage;
+  /** Resolve persisted human actor ids to display names and profile images. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   /** Best-effort fan-out destinations notified after each recorded event. */
   sinks?: AuditSink[];
   /** Resolve the acting tenant for agent-emitted events from the request context. */
@@ -98,13 +106,15 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   readonly #auth: RouteAuth;
   readonly #audit: AuditStorage;
   readonly #projects: FactoryProjectsStorage;
+  readonly #users: AuditDomainOptions['users'];
   readonly #sinks: AuditSink[];
   readonly #agentTenant: AuditDomainOptions['agentTenant'];
 
-  constructor({ auth, audit, projects, sinks = [], agentTenant }: AuditDomainOptions) {
+  constructor({ auth, audit, projects, users, sinks = [], agentTenant }: AuditDomainOptions) {
     this.#auth = auth;
     this.#audit = audit;
     this.#projects = projects;
+    this.#users = users;
     this.#sinks = sinks;
     this.#agentTenant = agentTenant;
 
@@ -206,6 +216,35 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     }
   }
 
+  async #resolveActorProfiles(events: AuditEventRow[]): Promise<Record<string, AuditActorProfile>> {
+    if (!this.#users) return {};
+
+    const actorIds = [...new Set(events.filter(event => event.actorType === 'human').map(event => event.actorId))];
+    if (actorIds.length === 0) return {};
+
+    try {
+      const users = this.#users.getUsers
+        ? await this.#users.getUsers(actorIds)
+        : await Promise.all(actorIds.map(actorId => this.#users?.getUser(actorId) ?? null));
+      const profiles: Record<string, AuditActorProfile> = {};
+      for (const [index, user] of users.entries()) {
+        if (!user) continue;
+        const name = user.name?.trim() || user.email?.trim() || user.id;
+        profiles[actorIds[index] ?? user.id] = {
+          id: user.id,
+          name,
+          ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+        };
+      }
+      return profiles;
+    } catch (err) {
+      console.warn('[Audit] Failed to resolve audit actor profiles', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {};
+    }
+  }
+
   routes(): ApiRoute[] {
     return [
       registerApiRoute('/web/factory/projects/:id/audit', {
@@ -229,7 +268,8 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),
           });
-          return c.json(page);
+          const actors = await this.#resolveActorProfiles(page.events);
+          return c.json({ ...page, actors });
         },
       }),
     ];

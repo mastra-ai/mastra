@@ -160,6 +160,50 @@ describe('AuditDomain', () => {
     ).toBe(404);
   });
 
+  it('enriches audit actors with resolvable user profiles', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Acme project' },
+    });
+    const domain = auditDomain(seed, {
+      users: {
+        getUser: async userId => ({
+          id: userId,
+          name: 'Ada Lovelace',
+          avatarUrl: 'https://avatars.example/ada.png',
+        }),
+      },
+    });
+    await domain.record({
+      orgId: 'org-1',
+      actorId: 'user-1',
+      action: 'factory.work_item.updated',
+      targets: [{ type: 'work_item', id: 'item-1', name: 'Fix login' }],
+      factoryProjectId: project.id,
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, domain.routes());
+
+    const response = await app.request(`/web/factory/projects/${project.id}/audit`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      actors: {
+        'user-1': {
+          id: 'user-1',
+          name: 'Ada Lovelace',
+          avatarUrl: 'https://avatars.example/ada.png',
+        },
+      },
+    });
+  });
+
   it('normalizes project audit filters before listing', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({

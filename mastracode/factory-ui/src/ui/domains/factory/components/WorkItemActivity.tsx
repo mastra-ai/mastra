@@ -1,0 +1,109 @@
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { History } from 'lucide-react';
+
+import { relativeTime } from '../../../../lib/date/relativeTime';
+import type { AuditActorProfile, AuditEvent } from '../services/audit';
+import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
+
+const ACTION_LABELS: Record<string, string> = {
+  'factory.work_item.created': 'Created the item',
+  'factory.work_item.updated': 'Updated the item',
+  'factory.work_item.stage_moved': 'Moved the item',
+  'factory.work_item.deleted': 'Removed the item',
+  'factory.run.started': 'Started a run',
+  'factory.triage.started': 'Started triage',
+};
+
+function actionLabel(action: string): string {
+  return (
+    ACTION_LABELS[action] ??
+    action
+      .replace(/^factory\./, '')
+      .replaceAll('.', ' ')
+      .replaceAll('_', ' ')
+  );
+}
+
+function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile {
+  if (event.actorType === 'agent') return { id: event.actorId, name: 'Factory agent' };
+  return actors[event.actorId] ?? { id: event.actorId, name: event.actorId };
+}
+
+function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<string, AuditActorProfile> }) {
+  const actor = eventActor(event, actors);
+  return (
+    <li className="flex items-start gap-2">
+      <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-ui-xs text-icon5 truncate font-medium">{actor.name}</span>
+        <span className="text-ui-xs text-icon3 flex items-baseline justify-between gap-3">
+          <span className="min-w-0 truncate capitalize">{actionLabel(event.action)}</span>
+          <time className="shrink-0" dateTime={event.occurredAt}>
+            {relativeTime(event.occurredAt)}
+          </time>
+        </span>
+      </div>
+    </li>
+  );
+}
+
+export function WorkItemActivity({
+  activity,
+  actors,
+}: {
+  activity: WorkItemActivityData;
+  actors: Record<string, AuditActorProfile>;
+}) {
+  const worker = activity.lastWorker;
+  const timeline = activity.events.slice(0, 8);
+
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        delay={150}
+        closeDelay={100}
+        render={
+          <button
+            type="button"
+            draggable={false}
+            className="text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative z-20 flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            aria-label={`View activity by ${worker.name}`}
+            onPointerDown={event => event.stopPropagation()}
+          >
+            <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
+            <span className="max-w-32 truncate">{worker.name}</span>
+          </button>
+        }
+      />
+      <HoverCardContent
+        side="right"
+        align="start"
+        sideOffset={8}
+        collisionPadding={8}
+        showArrow={false}
+        className="w-80 max-w-[calc(100vw-2rem)]"
+        aria-label="Work item activity"
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <History size={14} className="text-icon3" aria-hidden />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-ui-sm text-icon6 font-medium">Activity</span>
+              <span className="text-ui-xs text-icon3 truncate">Last worked on by {worker.name}</span>
+            </div>
+          </div>
+          {timeline.length > 0 ? (
+            <ol className="flex flex-col gap-2.5">
+              {timeline.map(event => (
+                <ActivityEvent key={event.id} event={event} actors={actors} />
+              ))}
+            </ol>
+          ) : (
+            <span className="text-ui-xs text-icon3">No recorded activity yet.</span>
+          )}
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}

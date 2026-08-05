@@ -12,6 +12,12 @@ export interface AuditTarget {
   name?: string;
 }
 
+export interface AuditActorProfile {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface AuditEvent {
   id: string;
   orgId: string;
@@ -32,6 +38,7 @@ export interface AuditEvent {
 
 export interface AuditEventPage {
   events: AuditEvent[];
+  actors: Record<string, AuditActorProfile>;
   /** Pass back as `before` to fetch the next (older) page; absent at the end. */
   nextCursor?: string;
 }

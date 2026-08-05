@@ -18,6 +18,12 @@ Open `http://localhost:5173`.
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 
+## Board activity
+
+Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.
+
+Factory resolves names and profile images through the configured authentication provider. When a provider can't resolve an older actor, the card falls back to the stored actor ID and an initial.
+
 ## Tests
 
 Use unit tests for isolated code and MSW tests for pages, routes, hooks, mutations, and React Query behavior.

@@ -6,6 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { useAuditEvents } from '../../hooks/useAuditEvents';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
@@ -100,6 +101,8 @@ function BoardContent({
   });
   const decisions = useBoardDecisions(factoryProjectId);
   const composer = useBoardComposer(factoryProjectId);
+  const activity = useAuditEvents(factoryProjectId, `board-${kind}-activity`, undefined, 200);
+  const activityPage = activity.data?.pages[0];
   const loadingStages = boardLoadingStages({
     stages,
     itemsPending: items.isPending,
@@ -200,6 +203,7 @@ function BoardContent({
                       item={item}
                       columnStage={stage.id}
                       allItems={items.all}
+                      activityPage={activityPage}
                       liveWorktreePaths={runs.liveWorktreePaths}
                       runDisabled={runs.disabled}
                       preparing={runs.preparingFor(item.id)}
