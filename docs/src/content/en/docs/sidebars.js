@@ -267,7 +267,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Sandboxes',
+          label: 'Sandbox',
           items: [
             {
               type: 'doc',
