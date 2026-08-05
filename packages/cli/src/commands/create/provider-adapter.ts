@@ -13,35 +13,30 @@ export interface ManagedProviderConfig {
   primaryModel?: string;
   observationalModel?: string;
   apiKeyEnv: string;
-  apiKeyPrerequisite: string;
 }
 
 export const MANAGED_PROVIDER_CONFIGS: Record<CreateLLMProvider, ManagedProviderConfig> = {
   openai: {
     displayName: 'OpenAI',
     apiKeyEnv: 'OPENAI_API_KEY',
-    apiKeyPrerequisite: 'An OpenAI API key',
   },
   anthropic: {
     displayName: 'Anthropic',
     primaryModel: 'anthropic/claude-sonnet-5',
     observationalModel: 'anthropic/claude-haiku-4-5',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
-    apiKeyPrerequisite: 'An Anthropic API key',
   },
   google: {
     displayName: 'Google Gemini',
     primaryModel: 'google/gemini-3.5-flash',
     observationalModel: 'google/gemini-3.5-flash',
     apiKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    apiKeyPrerequisite: 'A Google Gemini API key',
   },
   xai: {
     displayName: 'xAI',
     primaryModel: 'xai/grok-4.3',
     observationalModel: 'xai/grok-4.3',
     apiKeyEnv: 'XAI_API_KEY',
-    apiKeyPrerequisite: 'An xAI API key',
   },
 };
 
@@ -170,15 +165,12 @@ function adaptReadme(
   packageManager: PackageManager,
 ): TransformResult {
   const hasManagedProviderWording =
-    source.includes(OPENAI_API_KEY) ||
-    /^- .*OpenAI API key.*$/m.test(source) ||
-    /^([ \t]*)npx create-mastra@\S+.*$/m.test(source);
+    source.includes(OPENAI_API_KEY) || /^([ \t]*)npx create-mastra@\S+.*$/m.test(source);
   if (!hasManagedProviderWording) return { applied: false, content: source };
 
   const content = source
     .replace(/^# .+$/m, `# ${projectName}`)
     .replaceAll('npm run dev', `${packageManager} run dev`)
-    .replace(/^- .*OpenAI API key.*$/m, `- ${config.apiKeyPrerequisite}`)
     .replace(/^([ \t]*)npx create-mastra@\S+.*$/m, `$1npx create-mastra@latest <project-name> --llm ${provider}`)
     .replaceAll(OPENAI_API_KEY, config.apiKeyEnv);
   return { applied: true, content };

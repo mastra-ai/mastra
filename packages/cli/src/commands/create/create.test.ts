@@ -182,7 +182,6 @@ beforeEach(async () => {
   vi.mocked(adapter.adaptDefaultTemplate).mockResolvedValue({
     displayName: 'OpenAI',
     apiKeyEnv: 'OPENAI_API_KEY',
-    apiKeyPrerequisite: 'An OpenAI API key',
     apiKeyWritten: false,
     adaptationFailed: false,
   });
@@ -752,7 +751,6 @@ describe('create materialization lifecycle', () => {
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'OpenAI',
       apiKeyEnv: 'OPENAI_API_KEY',
-      apiKeyPrerequisite: 'An OpenAI API key',
       apiKeyWritten: false,
       adaptationFailed: true,
     });
@@ -781,7 +779,6 @@ describe('create materialization lifecycle', () => {
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
-      apiKeyPrerequisite: 'An Anthropic API key',
       apiKeyWritten: false,
       adaptationFailed: true,
     });
@@ -896,7 +893,6 @@ describe('create materialization lifecycle', () => {
       primaryModel: 'anthropic/claude-sonnet-5',
       observationalModel: 'anthropic/claude-haiku-4-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
-      apiKeyPrerequisite: 'An Anthropic API key',
       apiKeyWritten: false,
       adaptationFailed: false,
     });
@@ -920,7 +916,6 @@ describe('create materialization lifecycle', () => {
       primaryModel: 'anthropic/claude-sonnet-5',
       observationalModel: 'anthropic/claude-haiku-4-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
-      apiKeyPrerequisite: 'An Anthropic API key',
       apiKeyWritten: false,
       adaptationFailed: true,
     });
