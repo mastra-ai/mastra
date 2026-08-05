@@ -21,6 +21,20 @@ export {
   type ScheduleRunResultSnapshot,
 } from './types';
 export {
+  defineSchedule,
+  assertValidScheduleDefinition,
+  fsAgentScheduleRowId,
+  parseFsAgentScheduleRowId,
+  FS_AGENT_SCHEDULE_PREFIX,
+  type AgentScheduleDefinition,
+  type AgentSchedulePromptDefinition,
+  type AgentScheduleHandlerDefinition,
+  type AgentScheduleHandler,
+  type AgentScheduleHandlerContext,
+  type AgentScheduleHandlerResult,
+  type DeclaredAgentSchedule,
+} from './define';
+export {
   Schedules,
   toAgentSchedule,
   toWorkflowSchedule,

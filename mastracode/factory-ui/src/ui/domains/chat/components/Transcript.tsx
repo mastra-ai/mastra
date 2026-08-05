@@ -1,19 +1,20 @@
 import type { PlanResume } from '@mastra/client-js';
+import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageFactory } from '@mastra/react';
-import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
+import { MessageFactory } from '@mastra/react/ui';
+import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 import {
   Bell,
-  BookOpen,
   ChevronDown,
   CircleDot,
   CircleX,
@@ -21,6 +22,7 @@ import {
   GitMerge,
   Info,
   Layers,
+  Slack,
   Wrench,
   X,
 } from 'lucide-react';
@@ -84,65 +86,7 @@ function lastSegment(id: string): string {
   return parts[parts.length - 1] ?? id;
 }
 
-interface SkillActivation {
-  name: string;
-  content: string;
-  arguments?: string;
-}
-
-const skillActivationPattern = /^<skill name="([a-z0-9]+(?:-[a-z0-9]+)*)">\n([\s\S]+)\n<\/skill>$/;
-const skillArgumentsMarker = '\n\nARGUMENTS: ';
-
-function parseSkillActivation(text: string): SkillActivation | undefined {
-  const match = skillActivationPattern.exec(text.trim());
-  if (!match) return undefined;
-
-  const content = match[2];
-  const argumentsIndex = content.lastIndexOf(skillArgumentsMarker);
-  return {
-    name: match[1],
-    content,
-    arguments: argumentsIndex >= 0 ? content.slice(argumentsIndex + skillArgumentsMarker.length).trim() : undefined,
-  };
-}
-
-function SkillActivationCard({ activation }: { activation: SkillActivation }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <Collapsible open={expanded} onOpenChange={setExpanded} className="max-w-full min-w-64">
-      <CollapsibleTrigger
-        className="focus-visible:ring-accent1 w-full rounded-md text-left focus-visible:ring-2 focus-visible:outline-none"
-        aria-label={`${expanded ? 'Hide' : 'Show'} ${activation.name} skill contents`}
-      >
-        <span className="flex items-center gap-2">
-          <span className="text-icon3 flex items-center gap-1.5">
-            <BookOpen size={14} aria-hidden="true" />
-            <Txt as="span" variant="ui-xs" className="tracking-wide uppercase">
-              Skill
-            </Txt>
-          </span>
-          <Txt as="span" variant="ui-sm" font="mono" className="text-icon6">
-            {activation.name}
-          </Txt>
-          <ChevronDown
-            size={13}
-            aria-hidden="true"
-            className={`text-icon3 ml-auto shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          />
-        </span>
-        {activation.arguments && (
-          <span className="text-ui-xs text-icon3 mt-1 block truncate">{activation.arguments}</span>
-        )}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 mt-2 max-h-96 overflow-y-auto border-t pt-2">
-        <div className="prose text-ui-sm">
-          <Markdown>{activation.content}</Markdown>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
+import { parseSkillActivation, SkillMessage } from './SkillMessage';
 
 // ---------------------------------------------------------------------------
 // Tool card (collapsible)
@@ -675,9 +619,31 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
   );
 }
 
-/** Collapsible row for state/reminder/reactive signals, mirroring NotificationRow. */
+/** Compact row for state/reminder/reactive signals, collapsible when it has details. */
 function SignalRow({ kind, label, message }: { kind: string; label: string; message: string }) {
   const [expanded, setExpanded] = useState(false);
+  const icon =
+    kind === 'state' ? (
+      <Layers size={13} className="text-purple-400" />
+    ) : kind === 'reminder' ? (
+      <Info size={13} className="text-accent3" />
+    ) : (
+      <Info size={13} className="text-icon3" />
+    );
+
+  if (!message) {
+    return (
+      <div className="max-w-full min-w-0" data-signal-kind={kind} role="group" aria-label={`Signal: ${label}`}>
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
+            {label}
+          </Txt>
+        </span>
+      </div>
+    );
+  }
+
   return (
     <Collapsible
       open={expanded}
@@ -696,15 +662,7 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
               expanded ? 'rotate-0' : '-rotate-90',
             )}
           />
-          <span className="flex shrink-0 items-center">
-            {kind === 'state' ? (
-              <Layers size={13} className="text-purple-400" />
-            ) : kind === 'reminder' ? (
-              <Info size={13} className="text-accent3" />
-            ) : (
-              <Info size={13} className="text-icon3" />
-            )}
-          </span>
+          <span className="flex shrink-0 items-center">{icon}</span>
           <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
             {label}
           </Txt>
@@ -784,39 +742,91 @@ export function TranscriptEntries({
     ),
   );
 
+  const renderEntry = (entry: TimelineEntry): ReactNode => {
+    switch (entry.kind) {
+      case 'message':
+        return (
+          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
+        );
+      case 'notice':
+        return <NoticeCard entry={entry} />;
+      case 'approval':
+        return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
+      case 'notification':
+        return <NotificationCard entry={entry} />;
+      case 'notification_summary':
+        return <NotificationSummaryCard entry={entry} />;
+      case 'suspension':
+        return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
+          <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+        ) : null;
+      case 'subagent':
+        return <SubagentCard entry={entry} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <>
       {entries.map(entry => {
-        switch (entry.kind) {
-          case 'message':
-            return (
-              <MessageBubble
-                key={entry.id}
-                entry={entry}
-                suspensions={suspensions}
-                isSubmitting={isSubmitting}
-                onRespond={onRespond}
-              />
-            );
-          case 'notice':
-            return <NoticeCard key={entry.id} entry={entry} />;
-          case 'approval':
-            return <ApprovalCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
-          case 'notification':
-            return <NotificationCard key={entry.id} entry={entry} />;
-          case 'notification_summary':
-            return <NotificationSummaryCard key={entry.id} entry={entry} />;
-          case 'suspension':
-            return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
-              <SuspensionCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-            ) : null;
-          case 'subagent':
-            return <SubagentCard key={entry.id} entry={entry} />;
-          default:
-            return null;
-        }
+        const rendered = renderEntry(entry);
+        if (!rendered) return null;
+
+        return (
+          <MessageScrollerItem
+            key={entry.id}
+            messageId={entry.id}
+            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
+            // Estimated off-screen heights would make the prepend anchor restore
+            // the wrong offset — measure the real thing.
+            className="[content-visibility:visible]"
+          >
+            {rendered}
+          </MessageScrollerItem>
+        );
       })}
     </>
+  );
+}
+
+const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
+  slack: 'Slack',
+};
+
+/**
+ * Channel provenance for a message that arrived via a channel adapter.
+ * `agent-channels` stamps `content.providerMetadata.mastra.channels.<platform>`
+ * with author facts on inbound messages exactly so UIs can show origin
+ * without unpacking the signal envelope.
+ */
+export function channelOrigin(entry: MessageEntry): { platform: string; authorName?: string } | undefined {
+  const mastra = entry.message.content.providerMetadata?.mastra;
+  const channels = isRecord(mastra) ? mastra.channels : undefined;
+  if (!isRecord(channels)) return undefined;
+  const platform = Object.keys(channels)[0];
+  if (!platform) return undefined;
+  const info = channels[platform];
+  const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
+  const authorName =
+    typeof author?.fullName === 'string'
+      ? author.fullName
+      : typeof author?.userName === 'string'
+        ? author.userName
+        : undefined;
+  return { platform, authorName };
+}
+
+export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
+  const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
+  return (
+    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
+      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
+      <span>
+        via {label}
+        {origin.authorName ? ` · ${origin.authorName}` : ''}
+      </span>
+    </div>
   );
 }
 
@@ -854,6 +864,7 @@ function MessageBubble({
     return undefined;
   })();
 
+  const origin = channelOrigin(entry);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className="my-3 flex w-full flex-col items-end">
@@ -864,6 +875,7 @@ function MessageBubble({
         >
           {children}
         </div>
+        {origin && <ChannelOriginBadge origin={origin} />}
       </div>
     ),
     Assistant: ({ children }) => <div className="max-w-full">{children}</div>,
@@ -876,7 +888,7 @@ function MessageBubble({
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? (
-          <SkillActivationCard activation={activation} />
+          <SkillMessage activation={activation} />
         ) : (
           <div className="prose">
             <Markdown>{part.text}</Markdown>
@@ -884,12 +896,18 @@ function MessageBubble({
         );
       }
 
+      const showCursor = entry.streaming && part === lastTextPart;
       return (
         <div className="prose my-3">
-          <Markdown>{part.text}</Markdown>
-          {entry.streaming && part === lastTextPart && (
-            <span className="bg-accent1 ml-0.5 inline-block h-[1em] w-0.5 animate-pulse align-text-bottom" />
-          )}
+          <Markdown
+            className={
+              showCursor
+                ? "[&>:last-child]:after:bg-accent1 [&>:last-child]:after:ml-0.5 [&>:last-child]:after:inline-block [&>:last-child]:after:h-[1em] [&>:last-child]:after:w-0.5 [&>:last-child]:after:animate-pulse [&>:last-child]:after:align-text-bottom [&>:last-child]:after:content-['']"
+                : undefined
+            }
+          >
+            {part.text}
+          </Markdown>
         </div>
       );
     },
@@ -918,6 +936,13 @@ function MessageBubble({
     },
     File: (part: FilePart) => <FileAttachment part={part} />,
   };
+
+  const skillActivation =
+    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
+      ? parseSkillActivation(parts[0].text)
+      : undefined;
+  if (skillActivation) return <SkillMessage activation={skillActivation} />;
+  if (isSkillNotificationSignal(entry)) return null;
 
   const notifications = notificationMetadata(entry);
   if (notifications.length > 0) {
@@ -1039,9 +1064,16 @@ function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | No
  * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
  * they survive transcript hydration.
  */
+function isSkillNotificationSignal(entry: MessageEntry): boolean {
+  if (entry.message.role !== 'signal') return false;
+  const signal = entry.message.content.metadata?.signal;
+  return isRecord(signal) && signal.type === 'notification' && Boolean(parseSkillActivation(signalPartsText(entry)));
+}
+
 function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
   const signal = entry.message.content.metadata?.signal;
   if (!isRecord(signal) || signal.type !== 'notification') return [];
+  if (isSkillNotificationSignal(entry)) return [];
 
   const text = signalPartsText(entry);
   const attributes = isRecord(signal.attributes) ? signal.attributes : {};
@@ -1079,9 +1111,11 @@ function signalNotifications(entry: MessageEntry): Array<NotificationEntry | Not
 }
 
 function signalPartsText(entry: MessageEntry): string {
-  return (entry.message.content.parts ?? [])
-    .map(part => (part.type === 'text' ? part.text : ''))
-    .filter(Boolean)
+  const { contents } = mastraDBMessageToSignal(entry.message);
+  if (typeof contents === 'string') return contents.trim();
+
+  return contents
+    .flatMap(part => (part.type === 'text' && part.text ? [part.text] : []))
     .join('\n')
     .trim();
 }

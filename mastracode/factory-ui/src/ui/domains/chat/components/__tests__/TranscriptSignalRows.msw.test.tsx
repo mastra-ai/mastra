@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
@@ -63,6 +63,30 @@ function reactiveSignalEntry(id: string, tagName: string, text: string): Timelin
   return { kind: 'message', id, message: signalDBMessage({ id, type: 'reactive', tagName, text }) };
 }
 
+function streamedReactiveSignalEntry(id: string, tagName: string, text: string): TimelineEntry {
+  const signal = {
+    id,
+    type: 'reactive',
+    tagName,
+    contents: text,
+    createdAt: CREATED_AT.toISOString(),
+  };
+  return {
+    kind: 'message',
+    id,
+    message: {
+      id,
+      role: 'signal',
+      createdAt: CREATED_AT,
+      content: {
+        format: 2,
+        parts: [{ type: 'data-signal', data: signal }],
+        metadata: { signal },
+      },
+    },
+  };
+}
+
 function renderEntries(entries: TimelineEntry[]) {
   return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
 }
@@ -119,6 +143,24 @@ describe('TranscriptEntries signal rows', () => {
 
     const row = screen.getByRole('group', { name: 'Signal: System reminder' });
     expect(row).toHaveAttribute('data-signal-kind', 'reminder');
+  });
+
+  it('renders the contents of a live system reminder data part', async () => {
+    renderEntries([
+      streamedReactiveSignalEntry('sig-reminder', 'system-reminder', 'Remember to run the focused tests.'),
+    ]);
+
+    await userEvent.click(screen.getByRole('button', { name: /System reminder/ }));
+
+    expect(screen.getAllByText('Remember to run the focused tests.')).toHaveLength(2);
+  });
+
+  it('renders a content-less system reminder without an empty disclosure', () => {
+    renderEntries([reactiveSignalEntry('sig-reminder', 'system-reminder', '')]);
+
+    const row = screen.getByRole('group', { name: 'Signal: System reminder' });
+    expect(row).toHaveTextContent('System reminder');
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('keeps rendering persisted notification signals as notification rows', () => {

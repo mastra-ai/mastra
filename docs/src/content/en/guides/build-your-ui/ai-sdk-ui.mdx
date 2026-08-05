@@ -36,7 +36,7 @@ You're now ready to follow the integration guides and recipes below!
 
 ## Integration guides
 
-Typically, you'll set up API routes that stream Mastra content in AI SDK-compatible format, and then use those routes in AI SDK UI hooks like `useChat()`. Below you'll find two main approaches to achieve this:
+Typically, you'll set up API routes that stream Mastra content in AI SDK-compatible format, and then use those routes in AI SDK UI hooks like `useChat()`. Choose one of these approaches:
 
 - [Mastra's server](#mastras-server)
 - [Framework-agnostic](#framework-agnostic)
@@ -306,7 +306,7 @@ export default function Page() {
 }
 ```
 
-Below are two approaches to implementing the backend:
+Choose a backend implementation:
 
 <Tabs>
   <TabItem value="mastra-server" label="Mastra Server">
@@ -390,7 +390,7 @@ Below are two approaches to implementing the backend:
 
 ## Custom UI
 
-Custom UI (also known as Generative UI) allows you to render custom React components based on data streamed from Mastra. Instead of displaying raw text or JSON, you can create visual components for tool outputs, workflow progress, agent network execution, and custom events.
+Custom UI (also known as Generative UI) allows you to render custom React components based on data streamed from Mastra. Instead of displaying raw text or JSON, you can create visual components for tool outputs and workflow progress, including agent network execution and custom events.
 
 Use Custom UI when you want to:
 
@@ -1016,7 +1016,7 @@ export function ChatAdditional() {
 }
 ```
 
-Two examples on how to implement the backend portion of it.
+Implement the backend with either of these examples.
 
 <Tabs>
   <TabItem value="mastra-server" label="Mastra Server">
@@ -1583,7 +1583,7 @@ For a complete implementation, see the [workflow-agent-text-stream example](http
 
 ### Multi-stage progress with branching workflows
 
-For workflows with conditional branching (e.g., express vs standard shipping), you can track progress across different branches by including a identifier in your custom events.
+For workflows with conditional branching (e.g., express vs standard delivery), you can track progress across different branches by including an identifier in your custom events.
 
 The UI Dojo example uses a `stage` field in the event data to identify which branch is executing (e.g., `"validation"`, `"standard-processing"`, `"express-processing"`). The frontend groups events by this field to show a pipeline-style progress UI.
 

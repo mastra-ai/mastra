@@ -217,8 +217,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolName,
             args: transformedArgs,
             type,
-            runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
-            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { parentRunId: runId } : {}),
+            // Store the OUTER (resumable) runId so clients can resume after page refresh or
+            // server restart via `resumeStream({ runId, toolCallId })`. For delegated sub-agent /
+            // workflow tools the inner suspended run is preserved separately as `delegatedRunId`
+            // — it is required to resume the delegate's own suspended stream, but it is not a
+            // valid public resume target (resuming with it fails closed). No `parentRunId` is
+            // written: readers that resume `parentRunId ?? runId` (channels) get the outer run
+            // from `runId` directly; legacy entries with `parentRunId` keep working.
+            runId,
+            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { delegatedRunId: suspendedToolRunId } : {}),
             ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
@@ -353,7 +360,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
         const memory = readScoped(scopeCtx, MEMORY_KEY, 'memory');
 
-        if (!saveQueueManager || !threadId) {
+        if (!saveQueueManager || !threadId || memoryConfig?.readOnly) {
           return;
         }
 
@@ -501,6 +508,36 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // On resume, the live `requireToolApproval` policy may be gone: function-form
+        // policies do not survive RequestContext serialization, and decline/approve
+        // helpers typically only pass `{ runId, toolCallId }` — not the original option.
+        // The suspend payload still records that this step waited for approval, so treat
+        // that as authoritative for the resume decision (especially declines).
+        //
+        // Nested sub-agent/workflow approvals also write `requireToolApproval` on the
+        // outer suspend payload, but they additionally set `suspendedToolRunId`. Those
+        // must resume into the nested tool path — not the outer approval short-circuit —
+        // even when a live outer `requireToolApproval` policy is still present.
+        const isDelegatedApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId,
+        );
+        const suspendedForApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
+          !isDelegatedApproval,
+        );
+        const isApprovalResume =
+          resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
+        // Gate the resume branch on either a live policy or a prior outer approval suspend.
+        // Without this, `declineToolCall` falls through to `execute` when the policy was
+        // lost (#20470). Do not key only on `approved` in resumeData — generic tool
+        // resumes can carry that field for unrelated reasons (same guard as durable).
+        const approvalGated =
+          !isDelegatedApproval && (toolRequiresApproval || (suspendedForApproval && isApprovalResume));
+
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
           z.object({
@@ -512,7 +549,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }),
         );
 
-        if (toolRequiresApproval) {
+        if (approvalGated) {
           if (!resumeData) {
             await stopGoalActivity({
               agentId,
@@ -588,8 +625,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         // When an approval-gated tool is approved on resume, tag the resolved output with the
         // approval decision so it round-trips through persistence as `approval: { approved: true }`.
+        // Use `approvalGated` (not only the live policy) so approve-after-policy-loss still tags.
         const approvalGrant =
-          toolRequiresApproval && resumeData && (resumeData as { approved?: boolean }).approved === true
+          approvalGated && resumeData && (resumeData as { approved?: boolean }).approved === true
             ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
             : undefined;
 
@@ -599,7 +637,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const resumeDataToPassToToolOptions =
-          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !isAgentTool &&
+          approvalGated &&
+          resumeData &&
+          Object.keys(resumeData).length === 1 &&
+          'approved' in resumeData
             ? undefined
             : resumeData;
 
@@ -802,7 +844,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 pendingOrSuspendedTools[inputData.toolName] ??
                 Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolName === inputData.toolName);
               if (entry) {
-                suspendedToolRunId = entry.runId;
+                // Prefer the inner delegated run id — that's the run the sub-agent/workflow tool
+                // must resume. `entry.runId` is the outer resumable run; older persisted entries
+                // stored the inner run there, so it remains the fallback.
+                suspendedToolRunId = entry.delegatedRunId ?? entry.runId;
                 break;
               }
             }
@@ -820,7 +865,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   dataToolSuspendedParts.find((part: any) => part.data.toolCallId === inputData.toolCallId) ??
                   dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
                 if (foundTool) {
-                  suspendedToolRunId = (foundTool as any).data.runId;
+                  suspendedToolRunId = (foundTool as any).data.delegatedRunId ?? (foundTool as any).data.runId;
                   break;
                 }
               }
@@ -1103,11 +1148,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     {
                       type: 'tool-invocation',
                       toolInvocation: {
-                        state: 'result',
+                        // A failed background task is recorded as `output-error` with the
+                        // message in `errorText`; a successful one keeps `state: 'result'`.
+                        ...(params.status === 'failed'
+                          ? { state: 'output-error' as const, errorText: result as string }
+                          : { state: 'result' as const, result }),
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         args,
-                        result,
                         // Preserve the approval decision for an approved approval-gated tool that
                         // ran in the background so it round-trips on recall, matching the sync path
                         // and the "started" placeholder above.
