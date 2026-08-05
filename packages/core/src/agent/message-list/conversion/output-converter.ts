@@ -8,7 +8,11 @@ import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
-import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from '../utils/provider-compat';
+import {
+  ensureAnthropicCompatibleMessages,
+  pairOrphanedToolCalls,
+  sanitizeOrphanedToolPairs,
+} from '../utils/provider-compat';
 import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**
@@ -123,7 +127,7 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
  */
 export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
-  filterIncompleteToolCalls = false,
+  mode: ToolCallConversionMode = 'response',
 ): AIV5Type.UIMessage[] {
   // Precompute the index of the last user message. A deferred provider-executed
   // tool call (e.g. Anthropic non-deterministically defers web_search across
@@ -171,16 +175,23 @@ export function sanitizeV5UIMessages(
       // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
       // Filter out incomplete client-side tool calls (input-available without providerExecuted)
       // and input-streaming states.
-      if (filterIncompleteToolCalls) {
+      if (mode !== 'response') {
         // Completed tools (client or provider) — keep them
         if (p.state === 'output-available' || p.state === 'output-error') return true;
-        // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
-        // defers web_search when mixed with client tool calls). Keep these so the provider API sees
-        // the server_tool_use block on the next request — but ONLY on the most recent surviving
-        // assistant message. On any earlier assistant turn an unresolved provider-executed call is
-        // an orphan (provider dropped the result chunk, or the run aborted mid-stream) and must be
-        // dropped to keep the tool-call/tool-result invariant required by provider APIs. See #15668, #14148.
-        if (p.state === 'input-available' && p.providerExecuted && assistantTurnStillOpen) return true;
+        if (p.state === 'input-available') {
+          // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
+          // defers web_search when mixed with client tool calls). Keep these so the provider API sees
+          // the server_tool_use block on the next request — but ONLY on the most recent surviving
+          // assistant message. On any earlier assistant turn an unresolved provider-executed call is
+          // an orphan (provider dropped the result chunk, or the run aborted mid-stream) and must be
+          // dropped to keep the tool-call/tool-result invariant required by provider APIs. See #15668, #14148.
+          // This holds whichever way the caller configured suspended tool calls — the provider decides
+          // when it resumes its own call, not the caller.
+          if (p.providerExecuted) return assistantTurnStillOpen;
+          // Client-side suspended calls are kept only when the caller asked to see them. They are
+          // paired with a pending result downstream so the prompt stays valid.
+          return mode === 'prompt-with-suspended';
+        }
         return false;
       }
 
@@ -441,19 +452,33 @@ function restoreAssistantFileProviderMetadata(
 }
 
 /**
+ * How suspended (result-less) tool calls are handled when converting to model messages.
+ *
+ * - `response`: messages coming FROM the LLM. Suspended calls are kept so they stay in
+ *   message history, and no pairing is enforced — nothing here is sent to a provider.
+ * - `prompt`: messages going TO the LLM. Suspended calls are dropped.
+ * - `prompt-with-suspended`: messages going TO the LLM with suspended calls kept visible to
+ *   the agent. Each is paired with a pending result so the prompt stays valid.
+ *
+ * The last two both submit to a provider, so both enforce tool-call/tool-result pairing.
+ * That requirement belongs to the provider protocol, not to the caller's preference.
+ */
+export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspended';
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
  * @param messages - AIV5 UI messages to convert
  * @param dbMessages - MastraDB messages used to look up tool call args for Anthropic compatibility
- * @param filterIncompleteToolCalls - Whether to filter out incomplete tool calls
+ * @param mode - How to handle suspended tool calls
  */
 export function aiV5UIMessagesToAIV5ModelMessages(
   messages: AIV5Type.UIMessage[],
   dbMessages: MastraDBMessage[],
-  filterIncompleteToolCalls = false,
+  mode: ToolCallConversionMode = 'response',
 ): AIV5Type.ModelMessage[] {
-  const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
+  const sanitized = sanitizeV5UIMessages(messages, mode);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
 
   // Convert per UI message: an assistant turn with a tool call splits into
@@ -491,7 +516,14 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
   const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);
 
-  return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
+  switch (mode) {
+    case 'prompt':
+      return sanitizeOrphanedToolPairs(anthropicCompat);
+    case 'prompt-with-suspended':
+      return pairOrphanedToolCalls(anthropicCompat);
+    default:
+      return anthropicCompat;
+  }
 }
 
 /**

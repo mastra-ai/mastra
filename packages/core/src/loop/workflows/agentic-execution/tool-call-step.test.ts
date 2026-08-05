@@ -424,6 +424,32 @@ describe('createToolCallStep tool approval workflow', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
+  it('should not flush messages before suspending when memory is read-only', async () => {
+    const flushMessages = vi.fn().mockResolvedValue(undefined);
+    const readOnlyStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        memoryConfig: { readOnly: true },
+        threadId: 'read-only-thread',
+        threadExists: true,
+      },
+    } as any);
+
+    suspend.mockResolvedValueOnce('completed');
+    const executePromise = readOnlyStep.execute(makeExecuteParams());
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(suspend).toHaveBeenCalled();
+    expect(flushMessages).not.toHaveBeenCalled();
+    await expect(executePromise).resolves.toBe('completed');
+  });
+
   it('should handle declined tool calls without executing the tool', async () => {
     const inputData = makeInputData();
     const resumeData = { approved: false };

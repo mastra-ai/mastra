@@ -1,5 +1,43 @@
 # @mastra/platform
 
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- `PlatformSandbox.executeCommand` can now dial the sandbox directly over Railway's private network instead of going through the platform's public exec proxy. On paths where the direct route is available, per-exec latency drops from ~400 ms p50 to ~16 ms p50, and the exec stops touching the platform control plane. This flows through to every filesystem call (`SandboxFilesystem.readFile`, `writeFile`, `readdir`, `mkdir`, `stat`, `exists`, `copyFile`, `moveFile`, `deleteFile`), which is where most agent tool time was going. ([#20664](https://github.com/mastra-ai/mastra/pull/20664))
+
+  Direct-path availability is a runtime property, not a configuration knob. When it's not available — no address registry wired up, the workspace-proxy hasn't discovered the sandbox address yet, or a direct dial fails — `executeCommand` transparently falls back to the existing exec-lease path with no behavior change. Timed-out execs are never retried on the fallback path (they're returned to the caller as-is), so this is safe for non-idempotent commands.
+
+  ### Enabling the direct path
+
+  Wire a `SandboxAddressRegistry` into `PlatformSandbox`:
+
+  ```ts
+  import { PlatformSandbox, InProcessSandboxAddressRegistry } from '@mastra/platform-workspace';
+
+  const registry = new InProcessSandboxAddressRegistry();
+
+  const sandbox = new PlatformSandbox({
+    accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN,
+    projectId: process.env.MASTRA_PLATFORM_PROJECT_ID,
+    environmentId: process.env.MASTRA_PLATFORM_ENVIRONMENT_ID,
+    addressRegistry: registry,
+  });
+  ```
+
+  `PlatformSandbox.start()` populates the registry from the workspace-proxy's response; `executeCommand` reads it, tries the direct path first, evicts on transport failure. `destroy()` also evicts. `clone()` shares the same registry — each child sandbox looks up its own id.
+
+  ### New public exports
+  - `SandboxAddressRegistry` — the `{ get, set, delete }` interface `PlatformSandbox` sees. Callers can implement their own (e.g. shared across a worker pool) or use the default.
+  - `InProcessSandboxAddressRegistry` — the default `Map`-backed implementation.
+  - `PlatformSandboxOptions.addressRegistry?` — DI seam. Optional; omitted keeps pre-existing behavior.
+  - `execViaPrivateNetwork`, `PrivateNetExecHttpError`, `PrivateNetExecOptions`, `PrivateNetExecResult`, `PrivateNetFetch` — standalone transport for callers that want to talk to a sandbox directly without going through `PlatformSandbox`.
+
+### Patch Changes
+
+- Updated dependencies [[`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c)]:
+  - @mastra/core@1.57.0-alpha.1
+
 ## 1.0.0
 
 ### Major Changes

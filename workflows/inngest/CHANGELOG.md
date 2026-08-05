@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.8.5-alpha.0
+
+### Patch Changes
+
+- Fixed nested Inngest workflows retaining unused input and step history in parent run state. ([#19217](https://github.com/mastra-ai/mastra/pull/19217))
+
+- Updated dependencies [[`c8002da`](https://github.com/mastra-ai/mastra/commit/c8002da7775c468e2965b6ff5f82045450fa8cb9)]:
+  - @mastra/core@1.56.1-alpha.0
+
 ## 1.8.4
 
 ### Patch Changes
