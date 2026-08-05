@@ -49,80 +49,117 @@ Extends `BaseExporterConfig`, which includes:
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'apiKey',
     type: 'string',
     description:
       'Confident AI API key. Falls back to the CONFIDENT_API_KEY env var. The exporter disables itself when no key is found.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'environment',
     type: 'string',
     description: "Trace environment. Falls back to CONFIDENT_TRACE_ENVIRONMENT, then 'development'.",
-    required: false,
+    isOptional: true,
   },
   {
     name: 'name',
     type: 'string',
     description: 'Trace name applied to every trace. Defaults to the Mastra serviceName.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'tags',
     type: 'string[]',
     description: 'Tags applied to every trace.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'metadata',
     type: 'Record<string, any>',
     description: 'Metadata applied to every trace.',
-    required: false,
+    isOptional: true,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread ID applied to every trace. A threadId in the root span metadata overrides it per request.',
+    isOptional: true,
+  },
+  {
+    name: 'userId',
+    type: 'string',
+    description: 'User ID applied to every trace. A userId in the root span metadata overrides it per request.',
+    isOptional: true,
+  },
+  {
+    name: 'testCaseId',
+    type: 'string',
+    description:
+      'Test case ID applied to every trace. A testCaseId in the root span metadata overrides it per request.',
+    isOptional: true,
+  },
+  {
+    name: 'turnId',
+    type: 'string',
+    description: 'Turn ID applied to every trace. A turnId in the root span metadata overrides it per request.',
+    isOptional: true,
   },
   {
     name: 'metricCollection',
     type: 'string',
     description: 'Trace-level metric collection.',
-    required: false,
+    isOptional: true,
+  },
+  {
+    name: 'traceMetricCollection',
+    type: 'string',
+    description: 'Trace-level metric collection. Takes precedence over metricCollection.',
+    isOptional: true,
   },
   {
     name: 'llmMetricCollection',
     type: 'string',
     description: 'Metric collection applied to LLM spans.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'agentMetricCollection',
     type: 'string',
     description: 'Metric collection applied to agent spans.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'toolMetricCollectionMap',
     type: 'Record<string, string>',
     description: 'Metric collection applied per tool name.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'prompt',
     type: 'Prompt',
     description: 'Confident AI managed prompt linkage attached to LLM spans.',
-    required: false,
+    isOptional: true,
+  },
+  {
+    name: 'debug',
+    type: 'boolean',
+    description: 'Logs exporter configuration and export errors to the console.',
+    isOptional: true,
   },
   {
     name: 'traceCaptureSink',
     type: '(trace: Trace) => void',
     description:
       'Receives completed traces locally instead of posting them to Confident AI. Use for offline evaluation.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
     description: "Logger level (default: 'info')",
-    required: false,
+    isOptional: true,
   },
 ]}
 />
