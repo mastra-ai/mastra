@@ -16,10 +16,12 @@ import type {
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
 const RULE_TIMEOUT_MS = 5_000;
+const FACTORY_TRIAGE_COMMENT_MARKER = '<!-- mastra-factory-triage -->';
 
 async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -54,6 +56,17 @@ function boolean(value: unknown): boolean | undefined {
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
+  if (parsed.event === 'issues' && action === 'edited') {
+    const changes = object(parsed.payload.changes);
+    return object(changes?.title) || object(changes?.body) ? 'issueEdited' : undefined;
+  }
+  if (parsed.event === 'issue_comment') {
+    const issue = object(parsed.payload.issue);
+    if (object(issue?.pull_request)) return undefined;
+    if (action === 'created') return 'issueCommentCreated';
+    if (action === 'edited') return 'issueCommentEdited';
+    if (action === 'deleted') return 'issueCommentDeleted';
+  }
   if (parsed.event === 'pull_request' && action === 'opened') return 'pullRequestOpened';
   if (parsed.event === 'pull_request' && action === 'synchronize') return 'pullRequestUpdated';
   if (parsed.event === 'pull_request' && action === 'closed') {
@@ -113,6 +126,7 @@ function pullRequestProvenance(data: Record<string, unknown> | undefined): Facto
 }
 
 export interface GithubRulesIntegration {
+  readonly slug?: string;
   getRepositoryCollaboratorPermission(
     installationId: number,
     repoFullName: string,
@@ -166,13 +180,15 @@ export class GithubRules {
     repositoryName: string,
     login: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'committed' | 'replayed' | 'missing' }> {
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const factoryProject = await this.options.projects.get({
       orgId: project.orgId,
       id: project.factoryProjectId,
     });
     if (!factoryProject) return { status: 'missing' };
     const issue = object(parsed.payload.issue);
+    const issueComment = object(parsed.payload.comment);
+    const changes = object(parsed.payload.changes);
     const pullRequest = object(parsed.payload.pull_request);
     const issueNumber = number(issue?.number);
     const pullRequestNumber = number(pullRequest?.number);
@@ -199,8 +215,16 @@ export class GithubRules {
       installationId,
       repository: repositoryName,
       login,
-      factoryAuthored: provenance !== null,
+      factoryAuthored: provenance !== null || login === `${this.options.github.slug}[bot]`,
     });
+    if (
+      actor.type === 'github' &&
+      actor.factoryAuthored &&
+      (event === 'issueCommentCreated' || event === 'issueCommentEdited') &&
+      string(issueComment?.body)?.includes(FACTORY_TRIAGE_COMMENT_MARKER)
+    ) {
+      return { status: 'ignored' };
+    }
     const context: FactoryGithubRuleContext = {
       tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
       actor,
@@ -234,6 +258,23 @@ export class GithubRules {
               title: string(issue?.title)!,
               url: string(issue?.html_url)!,
               ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
+              ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
+            },
+          }
+        : {}),
+      ...(event === 'issueEdited'
+        ? { issueChange: { title: Boolean(object(changes?.title)), body: Boolean(object(changes?.body)) } }
+        : {}),
+      ...(number(issueComment?.id)
+        ? {
+            issueComment: {
+              id: number(issueComment?.id)!,
+              ...(string(issueComment?.body) ? { body: string(issueComment?.body) } : {}),
+              ...(string(issueComment?.html_url) ? { url: string(issueComment?.html_url) } : {}),
+              ...(string(object(issueComment?.user)?.login) ? { author: string(object(issueComment?.user)?.login) } : {}),
+              ...(string(object(issueComment?.user)?.type) ? { authorType: string(object(issueComment?.user)?.type) } : {}),
+              ...(string(issueComment?.created_at) ? { createdAt: string(issueComment?.created_at) } : {}),
+              ...(string(issueComment?.updated_at) ? { updatedAt: string(issueComment?.updated_at) } : {}),
             },
           }
         : {}),
@@ -438,6 +479,30 @@ export function reconciledClosedEvent(
 }
 
 /**
+ * The webhook handler retires subscriptions itself; the sweep replays only the
+ * rules ingress, so without this the thread's PR chip and the workspace row
+ * stay `open` forever on a deployment GitHub cannot reach.
+ */
+async function retireReconciledSubscriptions(
+  storage: IntegrationStorageHandle,
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  merged: boolean,
+): Promise<void> {
+  const target = changeRequestTargetKey({
+    installationExternalId: String(repository.installationId),
+    repositoryExternalId: String(repository.id),
+    changeRequestId: String(pullRequestNumber),
+  });
+  const rows = await storage.subscriptions.listByTarget(target);
+  await Promise.all(
+    rows
+      .filter(row => row.status === 'open')
+      .map(row => storage.subscriptions.updateStatus(row.id, merged ? 'merged' : 'closed')),
+  );
+}
+
+/**
  * State-based safety net for merge signals: webhooks and event-log tailing
  * can miss a merge (cursor gaps, downtime, terminally failed decisions), so
  * this sweep compares still-open PR cards against actual GitHub state and
@@ -509,6 +574,7 @@ export function createGithubPullRequestReconciler(
           summary.checked += 1;
           if (!state || state.state !== 'closed') continue;
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
+          await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {
@@ -520,7 +586,10 @@ export function createGithubPullRequestReconciler(
   };
 }
 
-function githubRulesOptions(github: GithubRulesIntegration, context: IntegrationContext): GithubRulesOptions | undefined {
+function githubRulesOptions(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+): GithubRulesOptions | undefined {
   if (!context.rules) return undefined;
   return {
     github,

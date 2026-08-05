@@ -51,11 +51,13 @@ export function SankeyChart({
   const firstColumnId = enabledColumns[0]?.id;
   const lastColumnId = enabledColumns.at(-1)?.id;
   const nodeWeights = getSankeyChartNodeWeights(graph);
-  const total = graph.nodes.reduce(
-    (sum, node) =>
-      node.column.id === firstColumnId ? sum + (node.displayValue ?? nodeWeights.get(node.id) ?? 0) : sum,
-    0,
-  );
+  // Each node's percentage is its share of its own column, so later columns
+  // with more counted traces than the first column never exceed 100%.
+  const columnTotals = new Map<string, number>();
+  for (const node of graph.nodes) {
+    const nodeValue = node.displayValue ?? nodeWeights.get(node.id) ?? 0;
+    columnTotals.set(node.column.id, (columnTotals.get(node.column.id) ?? 0) + nodeValue);
+  }
 
   return (
     <div className={cn('min-w-0', className)}>
@@ -99,7 +101,7 @@ export function SankeyChart({
                     label={node?.label}
                     nodeValue={node?.displayValue}
                     layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
-                    total={total}
+                    columnTotal={node ? (columnTotals.get(node.column.id) ?? 0) : 0}
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
                     isLastColumn={node?.column.id === lastColumnId}
@@ -116,9 +118,16 @@ export function SankeyChart({
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
                 const linkGeometry = link ? fixedGeometry?.links.get(link.id) : undefined;
+                const sourceX = linkGeometry?.sourceX ?? props.sourceX;
+                const targetX = linkGeometry?.targetX ?? props.targetX;
+                const fixedControlX = linkGeometry ? (sourceX + targetX) / 2 : undefined;
                 return (
                   <SankeyLink
                     {...props}
+                    sourceX={sourceX}
+                    targetX={targetX}
+                    sourceControlX={fixedControlX ?? props.sourceControlX}
+                    targetControlX={fixedControlX ?? props.targetControlX}
                     sourceY={linkGeometry?.sourceY ?? props.sourceY}
                     targetY={linkGeometry?.targetY ?? props.targetY}
                     sourceWidth={linkGeometry?.sourceWidth}
@@ -170,7 +179,7 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   label?: string;
   nodeValue?: number;
   layoutValue?: number;
-  total: number;
+  columnTotal: number;
   showColumnLabel: boolean;
   isFirstColumn: boolean;
   isLastColumn: boolean;
@@ -192,7 +201,7 @@ function SankeyNode({
   label,
   nodeValue,
   layoutValue,
-  total,
+  columnTotal,
   showColumnLabel,
   isFirstColumn,
   isLastColumn,
@@ -215,7 +224,7 @@ function SankeyNode({
     maxCharacters: NODE_LABEL_MAX_CHARACTERS,
   });
   const visibleColumnLabel = columnLabel
-    ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: labelWidths.centered })
+    ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: nodeLabelWidth })
     : undefined;
   const tooltipId = useId();
   const [isHovered, setIsHovered] = useState(false);
@@ -227,12 +236,12 @@ function SankeyNode({
   }>();
   const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
-  const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
+  const percentage =
+    columnTotal > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / columnTotal) * 100) : 0;
   const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
   const visibleY = y + (height - visibleHeight) / 2;
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
-  const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
   const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
   const showTooltipAt = (target: SVGGElement) => {
@@ -252,6 +261,20 @@ function SankeyNode({
 
   return (
     <>
+      {/* Rendered outside the interactive group so hovering the header never opens a theme tooltip. */}
+      {showColumnLabel && visibleColumnLabel ? (
+        <text
+          x={labelX}
+          y={18}
+          textAnchor={textAnchor}
+          fill={nodeColor(hue)}
+          fontSize={COLUMN_LABEL_FONT_SIZE}
+          fontWeight={600}
+        >
+          {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
+          {visibleColumnLabel}
+        </text>
+      ) : null}
       <g
         aria-describedby={description ? tooltipId : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
@@ -280,20 +303,8 @@ function SankeyNode({
         style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
       >
-        <title>{displayLabel}</title>
-        {showColumnLabel && visibleColumnLabel ? (
-          <text
-            x={columnLabelX}
-            y={18}
-            textAnchor="middle"
-            fill={nodeColor(hue)}
-            fontSize={COLUMN_LABEL_FONT_SIZE}
-            fontWeight={600}
-          >
-            {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
-            {visibleColumnLabel}
-          </text>
-        ) : null}
+        {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
+        {description ? null : <title>{displayLabel}</title>}
         <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
         <text
           x={labelX}

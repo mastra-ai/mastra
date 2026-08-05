@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'build-with-ai', label: 'Build with AI' },
     { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
@@ -154,7 +155,6 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'client-js/agent-builder', label: 'Agent Builder API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
@@ -252,25 +252,10 @@ const sidebars = {
         { type: 'doc', id: 'editor/blob-store-provider', label: 'BlobStoreProvider' },
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/processor-provider', label: 'ProcessorProvider' },
+        { type: 'doc', id: 'editor/prompt-blocks', label: 'Prompt blocks' },
+        { type: 'doc', id: 'editor/tools', label: 'Tool configuration' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
-        {
-          type: 'category',
-          label: 'Agent Builder',
-          collapsed: true,
-          items: [
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/agent-builder-options',
-              label: 'AgentBuilderOptions',
-            },
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/builder-agent-defaults',
-              label: 'BuilderAgentDefaults',
-            },
-            { type: 'doc', id: 'editor/agent-builder/builder-models', label: 'Models default' },
-          ],
-        },
+        { type: 'doc', id: 'editor/versioning', label: 'Versioning' },
         {
           type: 'category',
           label: 'Browser',
@@ -473,6 +458,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
                   label: 'CloudExporter (deprecated)',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/confident-ai',
+                  label: 'Confident AI',
                 },
                 {
                   type: 'doc',
