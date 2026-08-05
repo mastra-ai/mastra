@@ -32,8 +32,8 @@ import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { SlackIntegration, createGithubSourceControl } from '../web/channels/slack/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -213,13 +213,19 @@ const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectio
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
-// password. Unset → per-process random secret (single-process local dev only).
-const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+// password, then the Slack signing secret so a Slack-only deployment still has
+// a stable signer. Unset → per-process random secret (single-process local dev
+// only).
+const stateSecret =
+  process.env.GITHUB_APP_WEBHOOK_SECRET ||
+  process.env.WORKOS_COOKIE_PASSWORD ||
+  process.env.SLACK_APP_SIGNING_SECRET ||
+  undefined;
 
 // Slack channels + account linking. Optional: the Slack adapter validates the
 // signing secret at construction, so the integration is only built when the
-// Slack app env is configured. Repo-backed Slack threads additionally need the
-// direct GitHub App wiring, hence the source-control slice.
+// Slack app env is configured. Repo-backed Slack threads come from the
+// factory's source-control owner (GitHub) — the integration wires itself.
 const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
 const slack = slackSigningSecret
   ? new SlackIntegration({
@@ -231,7 +237,6 @@ const slack = slackSigningSecret
       // origin rather than the app's own public URL.
       oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
       uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
-      sourceControl: github ? createGithubSourceControl(github) : undefined,
     })
   : undefined;
 

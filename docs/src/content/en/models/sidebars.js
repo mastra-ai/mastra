@@ -41,6 +41,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/neon',
+          label: 'Neon',
+        },
+        {
+          type: 'doc',
           id: 'gateways/netlify',
           label: 'Netlify',
         },
@@ -580,11 +585,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
-        },
-        {
-          type: 'doc',
-          id: 'providers/neon',
-          label: 'Neon',
         },
         {
           type: 'doc',

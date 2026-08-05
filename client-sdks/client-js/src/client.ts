@@ -208,6 +208,7 @@ import type {
   RunScheduleResponse,
 } from './types';
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
+import { createSseJsonTransform } from './utils/stream-transforms';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -2238,39 +2239,7 @@ export class MastraClient extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    return response.body.pipeThrough(
-      new TransformStream({
-        async transform(chunk, controller) {
-          try {
-            // Decode binary data to text
-            const decoded = new TextDecoder().decode(chunk);
-
-            // Split by record separator
-            const chunks = decoded.split('\n\n');
-
-            // Process each chunk
-            for (const chunk of chunks) {
-              if (chunk) {
-                const cleanChunk = chunk.substring('data: '.length);
-                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
-                try {
-                  const parsedChunk = JSON.parse(newChunk);
-                  controller.enqueue(parsedChunk);
-                  failedChunk = undefined;
-                } catch {
-                  failedChunk = newChunk;
-                }
-              }
-            }
-          } catch {
-            // Silently ignore processing errors
-          }
-        },
-      }),
-    );
+    return response.body.pipeThrough(createSseJsonTransform());
   }
 
   /**
