@@ -113,29 +113,39 @@ function DrillFilterBanner({
 }) {
   const bannerColors = selections.map(selection => nodeColor(getSignalHue(selection.signalName)));
   const bannerColor = bannerColors[0] ?? nodeColor(getSignalHue('goal'));
-  const stackedBackgroundStops = bannerColors
-    .map(color => `color-mix(in srgb, ${color} 8%, var(--color-surface1))`)
-    .join(', ');
-  const stackedBorderStops = bannerColors
-    .map(color => `color-mix(in srgb, ${color} 35%, var(--color-surface1))`)
-    .join(', ');
-  const backgroundImage =
-    bannerColors.length > 1
-      ? `linear-gradient(90deg, ${stackedBackgroundStops}), linear-gradient(90deg, ${stackedBorderStops})`
-      : undefined;
+  const stackedBackgroundStops = bannerColors.map(color => `color-mix(in srgb, ${color} 8%, transparent)`).join(', ');
+  const stackedBorderStops = bannerColors.map(color => `color-mix(in srgb, ${color} 35%, transparent)`).join(', ');
+  const backgroundImage = bannerColors.length > 1 ? `linear-gradient(90deg, ${stackedBackgroundStops})` : undefined;
+  const borderBackgroundImage = bannerColors.length > 1 ? `linear-gradient(90deg, ${stackedBorderStops})` : undefined;
 
   return (
     <section
       aria-label="Active drill-down filters"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2"
+      className="relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2"
       style={{
         borderColor: backgroundImage ? 'transparent' : `color-mix(in srgb, ${bannerColor} 35%, transparent)`,
-        backgroundClip: backgroundImage ? 'padding-box, border-box' : undefined,
+        backgroundClip: backgroundImage ? 'padding-box' : undefined,
         backgroundColor: backgroundImage ? undefined : `color-mix(in srgb, ${bannerColor} 8%, transparent)`,
         backgroundImage,
-        backgroundOrigin: backgroundImage ? 'border-box' : undefined,
       }}
     >
+      {borderBackgroundImage ? (
+        <span
+          aria-hidden="true"
+          data-testid="drill-filter-gradient-border"
+          style={{
+            position: 'absolute',
+            inset: '-1px',
+            borderRadius: 'inherit',
+            padding: '1px',
+            pointerEvents: 'none',
+            backgroundImage: borderBackgroundImage,
+            WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            WebkitMaskComposite: 'xor',
+            maskComposite: 'exclude',
+          }}
+        />
+      ) : null}
       {selections.map((selection, index) => {
         const label = selectionLabel(selection);
         const color = bannerColors[index];

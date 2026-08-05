@@ -610,10 +610,11 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(noiseNodes[0]!);
 
       const banner = await screen.findByLabelText('Active drill-down filters');
-      expect(banner.style.backgroundImage.match(/linear-gradient/g)).toHaveLength(2);
-      expect(banner.style.backgroundImage).toContain('8%');
-      expect(banner.style.backgroundImage).toContain('35%');
-      expect(banner.style.backgroundClip).toBe('padding-box, border-box');
+      const border = within(banner).getByTestId('drill-filter-gradient-border');
+      expect(banner.style.backgroundImage.match(/linear-gradient/g)).toHaveLength(1);
+      expect(banner.style.backgroundImage).toContain('8%, transparent');
+      expect(banner.style.backgroundClip).toBe('padding-box');
+      expect(border.style.backgroundImage).toContain('35%, transparent');
     });
 
     it('opens details instead of adding a filter that would leave one column', async () => {
