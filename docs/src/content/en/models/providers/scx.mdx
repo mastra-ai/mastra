@@ -16,22 +16,22 @@ SCX_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from '@mastra/core/agent'
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'scx/MiniMax-M2.7',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "scx/MiniMax-M2.7"
+});
 
 // Generate a response
-const response = await agent.generate('Hello!')
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story')
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
-  console.log(chunk)
+  console.log(chunk);
 }
 ```
 
@@ -46,29 +46,29 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    model: 'scx/gpt-oss-120b',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 131072,
-    maxOutput: 131072,
-    inputCost: 0.17,
-    outputCost: 0.55,
+    "model": "scx/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.17,
+    "outputCost": 0.55
   },
   {
-    model: 'scx/MiniMax-M2.7',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 192000,
-    maxOutput: 64000,
-    inputCost: 0.48,
-    outputCost: 1.79,
-  },
+    "model": "scx/MiniMax-M2.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 192000,
+    "maxOutput": 64000,
+    "inputCost": 0.48,
+    "outputCost": 1.79
+  }
 ]}
 />
 
@@ -78,28 +78,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'custom-agent',
-  name: 'custom-agent',
+  id: "custom-agent",
+  name: "custom-agent",
   model: {
-    url: 'https://api.scx.ai/v1',
-    id: 'scx/MiniMax-M2.7',
+    url: "https://api.scx.ai/v1",
+    id: "scx/MiniMax-M2.7",
     apiKey: process.env.SCX_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
-    },
-  },
-})
+      "X-Custom-Header": "value"
+    }
+  }
+});
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'dynamic-agent',
-  name: 'Dynamic Agent',
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'scx/gpt-oss-120b' : 'scx/MiniMax-M2.7'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "scx/gpt-oss-120b"
+      : "scx/MiniMax-M2.7";
+  }
+});
 ```
+
+
