@@ -240,19 +240,23 @@ test.describe('Contextual sidebar', () => {
     await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root')).then(link => link.click())
     await expect(page).toHaveURL('/docs/agents/overview')
 
-    const backButton = visibleSidebarPane(page, 'contextual').getByRole('button', { name: /Back to/ })
+    const contextualPane = visibleSidebarPane(page, 'contextual')
+    const backButton = contextualPane.getByRole('button', { name: /Back to/ })
     const backArrow = backButton.locator('span').first()
     const backLabel = backButton.locator('span').last()
-    const [buttonBox, arrowBox, labelBox] = await Promise.all([
+    const overviewLabel = contextualPane.getByRole('link', { name: 'Overview', exact: true }).locator('span').first()
+    const [buttonBox, arrowBox, labelBox, overviewLabelBox] = await Promise.all([
       backButton.boundingBox(),
       backArrow.boundingBox(),
       backLabel.boundingBox(),
+      overviewLabel.boundingBox(),
     ])
     expect(buttonBox).not.toBeNull()
     expect(arrowBox).not.toBeNull()
     expect(labelBox).not.toBeNull()
+    expect(overviewLabelBox).not.toBeNull()
     expect(Math.abs(labelBox!.x + labelBox!.width / 2 - (buttonBox!.x + buttonBox!.width / 2))).toBeLessThan(1)
-    expect(Math.abs(arrowBox!.x - buttonBox!.x)).toBeLessThan(1)
+    expect(Math.abs(arrowBox!.x - overviewLabelBox!.x)).toBeLessThan(1)
     await expect(backArrow).toHaveCSS('transform', 'none')
     await backButton.hover()
     await expect(backArrow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -4, 0)')

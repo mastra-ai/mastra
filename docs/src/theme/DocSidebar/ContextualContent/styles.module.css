@@ -24,6 +24,12 @@
   transition: all 150ms ease-in-out;
 }
 
+@media (min-width: 997px) {
+  .backArrow {
+    left: -0.25rem;
+  }
+}
+
 .backButton:hover,
 .backButton:focus-visible {
   color: var(--ifm-menu-color-active);
