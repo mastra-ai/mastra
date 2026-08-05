@@ -283,10 +283,11 @@ export function buildMessagesFromChunks({
         );
 
         if (invocationPart?.type === 'tool-invocation') {
+          const errorMessage = getErrorFromUnknown(p.error, { fallbackMessage: 'Tool execution failed' }).message;
           invocationPart.toolInvocation = {
             ...invocationPart.toolInvocation,
             state: 'output-error',
-            errorText: getErrorFromUnknown(p.error, { fallbackMessage: 'Tool execution failed' }).message,
+            errorText: errorMessage.trim() ? errorMessage : 'Tool execution failed',
           };
         }
         break;
