@@ -56,19 +56,25 @@ class E2BProcessHandle extends ProcessHandle {
       // Some E2B errors also carry stdout/stderr in error.result
       const errorObj = error as {
         exitCode?: number;
-        result?: { exitCode: number; stdout: string; stderr: string };
+        error?: string;
+        stdout?: string;
+        stderr?: string;
+        result?: { exitCode: number; error?: string; stdout: string; stderr: string };
       };
       const exitCode = errorObj.result?.exitCode ?? errorObj.exitCode ?? this.exitCode ?? 1;
-
-      // Emit any output attached to the error (E2B sometimes puts it in .result)
-      if (errorObj.result?.stdout) this.emitStdout(errorObj.result.stdout);
-      if (errorObj.result?.stderr) this.emitStderr(errorObj.result.stderr);
+      // Prefer the retained buffers so maxRetainedBytes still applies. Fall back
+      // to error-attached output when E2B did not invoke the stream callbacks.
+      const stdout = this.stdout || errorObj.result?.stdout || errorObj.stdout || '';
+      const stderr = this.stderr || errorObj.result?.stderr || errorObj.stderr || '';
+      const terminalError =
+        errorObj.result?.error || errorObj.error || (error instanceof Error ? error.message : String(error));
+      const errorDetail = terminalError && !stderr.includes(terminalError) ? `Error: ${terminalError}` : '';
 
       return {
         success: false,
         exitCode,
-        stdout: this.stdout,
-        stderr: this.stderr || (error instanceof Error ? error.message : String(error)),
+        stdout,
+        stderr: [stderr, errorDetail].filter(Boolean).join('\n'),
         executionTimeMs: Date.now() - this._startTime,
       };
     }

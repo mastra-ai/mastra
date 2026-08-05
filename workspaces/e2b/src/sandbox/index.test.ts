@@ -2319,6 +2319,32 @@ describe('E2BSandbox Internal Methods', () => {
       expect(result.exitCode).toBe(127);
       expect(result.stderr).toContain('command not found');
     });
+
+    it('does not duplicate streamed output and preserves the terminal error', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      mockSandbox.commands.run.mockImplementationOnce((_cmd: string, opts?: any) => {
+        const handle = createMockCommandHandle({ exitCode: 0, stdout: '', stderr: '' }, opts);
+        handle.wait.mockImplementation(async () => {
+          opts?.onStdout?.('partial result');
+          opts?.onStderr?.('cleanup warning');
+          throw Object.assign(new Error('Sandbox is probably not running anymore'), {
+            result: { exitCode: 137, stdout: 'partial result', stderr: 'cleanup warning' },
+          });
+        });
+        return Promise.resolve(handle);
+      });
+
+      const result = await sandbox.executeCommand('long-running-command');
+
+      expect(result).toMatchObject({
+        success: false,
+        exitCode: 137,
+        stdout: 'partial result',
+        stderr: 'cleanup warning\nError: Sandbox is probably not running anymore',
+      });
+    });
   });
 
   describe('mount() unsupported type', () => {
