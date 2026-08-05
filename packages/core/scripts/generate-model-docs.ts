@@ -98,6 +98,7 @@ function getRequiredEnvVars(provider: ProviderInfo): string[] {
 }
 
 function getEnvVarPlaceholder(envVar: string): string {
+  if (/_URL$/.test(envVar)) return 'https://your-base-url';
   if (/_API_TOKEN$|_TOKEN$/.test(envVar)) return 'your-api-token';
   if (/_API_KEY$|_KEY$|_PAT$/.test(envVar)) return 'your-api-key';
   if (/_ACCOUNT_ID$|_PROJECT_ID$|_SITE_ID$|_WORKSPACE_ID$|_ORG_ID$|_ORGANIZATION_ID$/.test(envVar)) {
@@ -113,7 +114,7 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
+const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-openai'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
@@ -581,18 +582,38 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 ## Configuration
 
 \`\`\`bash
-# Use gateway API key
 ${(() => {
   const envVar = providers[0]?.apiKeyEnvVar;
-  if (Array.isArray(envVar)) {
-    return envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
+  const authEnvVars = Array.isArray(envVar) ? envVar : [envVar || `${gatewayName.toUpperCase()}_API_KEY`];
+  const authLines = Array.isArray(envVar)
+    ? envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`)
+    : [`${authEnvVars[0]}=your-gateway-key`];
+
+  // A gateway whose base URL is a template needs those env vars too, otherwise
+  // the config shown here cannot build a URL at all.
+  const urlLines = extractEnvVarsFromUrl(providers[0]?.url)
+    .filter(v => !authEnvVars.includes(v))
+    .map(v => `${v}=${getEnvVarPlaceholder(v)}`);
+
+  // Keep the API-key wording when the key is all there is; a gateway that also
+  // needs URL vars gets a heading that covers both.
+  const heading = urlLines.length > 0 ? '# Gateway configuration' : '# Use gateway API key';
+  const gatewayKeySection = [heading, ...urlLines, ...authLines].join('\n');
+
+  // Only gateways that expose the upstream provider in their model ids (e.g.
+  // `openai/gpt-4o`) can be called with that provider's own key. Gateways with
+  // bare model ids authenticate with the gateway credential alone.
+  const exposesUpstreamProviders = allModels.some(m => m.includes('/'));
+  if (!exposesUpstreamProviders) {
+    return gatewayKeySection;
   }
-  return `${envVar || `${gatewayName.toUpperCase()}_API_KEY`}=your-gateway-key`;
-})()}
+
+  return `${gatewayKeySection}
 
 # Or use provider API keys directly
 OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=ant-...
+ANTHROPIC_API_KEY=ant-...`;
+})()}
 \`\`\`
 
 ${modelTable}
