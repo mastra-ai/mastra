@@ -38,7 +38,7 @@ import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findNoiseSelection, findThemeSelection } from './theme-drilldown-data';
-import type { SelectedTheme } from './theme-drilldown-data';
+import type { SelectedTheme, ThemeSelection } from './theme-drilldown-data';
 import { ThemeLifelines } from './theme-lifelines';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
@@ -69,60 +69,73 @@ function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; icon: Rea
   );
 }
 
-/**
- * Active drill-in state banner: a dismissible filter chip in the theme's
- * signal hue plus a plain-language description of the filtered subset, so the
- * chart below clearly reads as "traces flowing through this theme" rather
- * than a full snapshot.
- */
-function ThemeFilterBanner({
-  selection,
+function selectionLabel(selection: ThemeSelection) {
+  return `${formatSignalName(selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
+}
+
+function DrillFilterBanner({
+  selections,
   filteredTraceCount,
   totalTraceCount,
   onViewDetails,
-  onClear,
+  onRemove,
+  onClearAll,
 }: {
-  selection: SelectedTheme;
+  selections: ThemeSelection[];
   filteredTraceCount?: number;
   totalTraceCount: number;
-  onViewDetails: () => void;
-  onClear: () => void;
+  onViewDetails: (selection: ThemeSelection) => void;
+  onRemove: (signalName: TraceSignalName) => void;
+  onClearAll: () => void;
 }) {
-  const color = nodeColor(getSignalHue(selection.signalName));
+  const bannerColor = nodeColor(getSignalHue(selections[0]?.signalName ?? 'goal'));
 
   return (
     <section
-      aria-label="Active theme drill-in"
+      aria-label="Active drill-down filters"
       className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2"
       style={{
-        borderColor: `color-mix(in srgb, ${color} 35%, transparent)`,
-        backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
+        borderColor: `color-mix(in srgb, ${bannerColor} 35%, transparent)`,
+        backgroundColor: `color-mix(in srgb, ${bannerColor} 8%, transparent)`,
       }}
     >
-      <button
-        aria-label="Clear theme filter"
-        className="border-border1 bg-surface2 text-neutral6 hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 text-xs font-medium transition-colors"
-        onClick={onClear}
-        type="button"
-      >
-        <span aria-hidden="true" className="size-2 rounded-[2px]" style={{ backgroundColor: color }} />
-        {formatSignalName(selection.signalName)} · {selection.label}
-        <X aria-hidden="true" className="size-3.5" />
-      </button>
-      <span className="text-neutral4 text-xs">
+      {selections.map(selection => {
+        const label = selectionLabel(selection);
+        const color = nodeColor(getSignalHue(selection.signalName));
+        return (
+          <div className="flex items-center gap-1" key={selection.signalName}>
+            <button
+              aria-label={`Remove ${label} filter`}
+              className="border-border1 bg-surface2 text-neutral6 hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 text-xs font-medium transition-colors"
+              onClick={() => onRemove(selection.signalName)}
+              type="button"
+            >
+              <span aria-hidden="true" className="size-2 rounded-[2px]" style={{ backgroundColor: color }} />
+              {label}
+              <X aria-hidden="true" className="size-3.5" />
+            </button>
+            <Button
+              aria-label={`View details for ${label}`}
+              onClick={() => onViewDetails(selection)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              Details →
+            </Button>
+          </div>
+        );
+      })}
+      <span className="text-neutral4 min-w-fit flex-1 text-xs">
         {filteredTraceCount === undefined
-          ? 'Loading theme traces…'
-          : `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that flow through this theme`}
+          ? 'Loading matching traces…'
+          : `Showing ${filteredTraceCount} of ${totalTraceCount} traces that match all filters`}
       </span>
-      <Button
-        aria-label={`View theme details for ${selection.label}`}
-        onClick={onViewDetails}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        Details →
-      </Button>
+      {selections.length > 1 ? (
+        <Button aria-label="Clear all filters" onClick={onClearAll} size="sm" type="button" variant="ghost">
+          Clear all
+        </Button>
+      ) : null}
     </section>
   );
 }
@@ -156,6 +169,7 @@ function FlowCard({
     >
       <CardContent className="px-0 py-2 sm:py-3">
         <Sankey
+          key={chartColumns.map(column => column.id).join(':')}
           data={records}
           columns={chartColumns}
           columnOrder={chartColumns.map(column => column.id)}
@@ -222,7 +236,7 @@ export function SankeySignals({
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
-  const [drillIn, setDrillIn] = useState<SelectedTheme>();
+  const [drillStack, setDrillStack] = useState<ThemeSelection[]>([]);
   const [detailSelection, setDetailSelection] = useState<SelectedTheme>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
@@ -271,14 +285,14 @@ export function SankeySignals({
     entityType,
     signalNames,
     snapshot?.snapshotId,
-    drillInAvailable ? drillIn?.themeId : undefined,
+    drillInAvailable && drillStack.length > 0,
   );
   const flow = useMemo(() => {
-    if (!stableUnfilteredFlow || !drillIn || !pathsQuery.data) return stableUnfilteredFlow;
+    if (!stableUnfilteredFlow || drillStack.length === 0 || !pathsQuery.data) return stableUnfilteredFlow;
 
-    const drilledFlow = buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, [drillIn]);
+    const drilledFlow = buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, drillStack);
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
-  }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
+  }, [drillStack, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
   const shouldLoadProgress =
@@ -286,8 +300,8 @@ export function SankeySignals({
     !snapshotsQuery.isError &&
     (!snapshot || Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
   const progressQuery = useEntityLearningProgress(entityId, entityType, shouldLoadProgress);
-  const isPlaybackBlockedByDrillIn = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
-  const hasActivePathsError = drillIn !== undefined && pathsQuery.isError;
+  const isPlaybackBlockedByDrillIn = drillStack.length > 0 && (pathsQuery.isFetching || pathsQuery.isError);
+  const hasActivePathsError = drillStack.length > 0 && pathsQuery.isError;
 
   useSnapshotPlayback({
     isPlaying,
@@ -329,7 +343,7 @@ export function SankeySignals({
           }),
         ),
       );
-      if (drillIn && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
+      if (drillStack.length > 0 && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
         await queryClient.fetchQuery({
           queryKey: ['entity-learning', entityType, entityId, 'theme-paths', nextSignalNames, nextSnapshot.snapshotId],
           queryFn: () => fetchThemePaths(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
@@ -359,9 +373,9 @@ export function SankeySignals({
             setIsPlaying(false);
             void snapshotsQuery.refetch();
             void Promise.all(flowQueries.map(query => query.refetch()));
-            if (drillIn && drillInAvailable) void pathsQuery.refetch();
+            if (drillStack.length > 0 && drillInAvailable) void pathsQuery.refetch();
           }}
-          onClear={hasActivePathsError ? () => setDrillIn(undefined) : undefined}
+          onClear={hasActivePathsError ? () => setDrillStack([]) : undefined}
         />
       </>
     );
@@ -413,26 +427,35 @@ export function SankeySignals({
       (distributionPositions.get(left.signalName) ?? stages.length) -
       (distributionPositions.get(right.signalName) ?? stages.length),
   );
-  // Noise nodes open the noise details panel (noise has no themeId, so it
-  // cannot drill in) and stay clickable even when drill-in is unavailable.
   const isNodeClickable = (selection: SankeyChartNodeSelection) =>
     findNoiseSelection(flow, selection.column.id, selection.value) !== undefined ||
     (drillInAvailable && findThemeSelection(flow, selection.column.id, selection.value) !== undefined);
-  const handleNodeClick = (selection: SankeyChartNodeSelection) => {
-    const noiseSelection = findNoiseSelection(flow, selection.column.id, selection.value);
-    if (noiseSelection) {
+  const openSelectionDetails = (selection: ThemeSelection) => {
+    if (selection.kind === 'theme') {
+      setNoiseSignalName(undefined);
+      setDetailSelection(selection);
+    } else {
       setDetailSelection(undefined);
-      setNoiseSignalName(noiseSelection.signalName);
+      setNoiseSignalName(selection.signalName);
+    }
+  };
+  const handleNodeClick = (chartSelection: SankeyChartNodeSelection) => {
+    const selection =
+      findNoiseSelection(flow, chartSelection.column.id, chartSelection.value) ??
+      findThemeSelection(flow, chartSelection.column.id, chartSelection.value);
+    if (!selection) return;
+    if (!drillInAvailable || flow.stages.length <= 2) {
+      openSelectionDetails(selection);
       return;
     }
-    if (!drillInAvailable) return;
-    const nextSelection = findThemeSelection(flow, selection.column.id, selection.value);
-    if (nextSelection) setDrillIn(nextSelection);
+    setDetailSelection(undefined);
+    setNoiseSignalName(undefined);
+    setDrillStack(current => [...current.filter(item => item.signalName !== selection.signalName), selection]);
   };
   const drillInDisabledReason = drillInAvailable
     ? undefined
     : 'Drill-in is unavailable for snapshots with more than 2,000 traces.';
-  const isDrilledEmpty = drillIn !== undefined && pathsQuery.data !== undefined && flow.snapshot.traceCount === 0;
+  const isDrilledEmpty = drillStack.length > 0 && pathsQuery.data !== undefined && flow.snapshot.traceCount === 0;
   const handleSignalOrderChange = (nextSignalNames: TraceSignalName[]) => {
     if (perspectiveMutation.isPending) return;
     setIsPlaying(false);
@@ -489,31 +512,45 @@ export function SankeySignals({
             onSnapshotChange={selectSnapshot}
           />
           <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-            {drillIn ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}` : snapshotSummaryLabel(snapshot, flow)}
+            {drillStack.length > 0
+              ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}`
+              : snapshotSummaryLabel(snapshot, flow)}
           </p>
-          {drillIn ? (
-            <ThemeFilterBanner
-              selection={drillIn}
-              filteredTraceCount={pathsQuery.data ? flow.stages[0]?.traceCount : undefined}
-              totalTraceCount={currentFlow.stages[0]?.traceCount ?? currentFlow.snapshot.traceCount}
-              onViewDetails={() => {
-                setNoiseSignalName(undefined);
-                setDetailSelection(drillIn);
-              }}
-              onClear={() => setDrillIn(undefined)}
+          {drillStack.length > 0 ? (
+            <DrillFilterBanner
+              selections={drillStack}
+              filteredTraceCount={pathsQuery.data ? flow.snapshot.traceCount : undefined}
+              totalTraceCount={currentFlow.snapshot.traceCount}
+              onViewDetails={openSelectionDetails}
+              onRemove={signalName => setDrillStack(current => current.filter(item => item.signalName !== signalName))}
+              onClearAll={() => setDrillStack([])}
             />
           ) : null}
-          {drillIn && !drillInAvailable ? (
+          {drillStack.length > 0 && !drillInAvailable ? (
             <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-              This drill-in is unavailable for snapshots with more than 2,000 traces. Use the clear filter action above
-              or choose another snapshot.
+              These filters are unavailable for snapshots with more than 2,000 traces. Clear the filters above or choose
+              another snapshot.
             </section>
-          ) : drillIn && pathsQuery.isPending ? (
+          ) : drillStack.length > 0 && pathsQuery.isPending ? (
             <SignalsFrameLoadingSkeleton />
           ) : isDrilledEmpty ? (
             <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-              This theme is not present in the selected snapshot. Use the clear filter action above to return to the
-              full flow.
+              These filters have no matching traces in the selected snapshot. Clear a filter above to return to the
+              flow.
+            </section>
+          ) : drillStack.length > 0 && flow.stages.length < 2 ? (
+            <section
+              aria-label="Filtered trace summary"
+              className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm"
+            >
+              <p className="text-neutral5 font-medium">
+                {flow.stages.length} signal {flow.stages.length === 1 ? 'column remains' : 'columns remain'} after
+                applying these filters.
+              </p>
+              <p className="mt-1">
+                {flow.snapshot.traceCount} matching {flow.snapshot.traceCount === 1 ? 'trace' : 'traces'}. Remove a
+                filter to compare flow across more signals.
+              </p>
             </section>
           ) : graphSummary.records.length === 0 ? (
             <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
@@ -531,7 +568,7 @@ export function SankeySignals({
               drillInDisabledReason={drillInDisabledReason}
             />
           )}
-          {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
+          {drillStack.length > 0 && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
             <>
               {perspectiveMutation.isPending ? (
                 <p className="text-neutral3 font-mono text-xs" role="status">

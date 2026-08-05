@@ -28,6 +28,10 @@ export const singleDrilldownThemeSnapshotsResponse = {
   snapshots: [{ ...snapshot, ordinal: 1, total: 1 }],
 } satisfies ThemeSnapshotsResponse;
 
+export const fourSignalThemeSnapshotsResponse = {
+  snapshots: [{ ...snapshot, availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'] }],
+} satisfies ThemeSnapshotsResponse;
+
 export const twoDrilldownThemeSnapshotsResponse = {
   snapshots: [
     {
