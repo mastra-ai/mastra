@@ -360,7 +360,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
         const memory = readScoped(scopeCtx, MEMORY_KEY, 'memory');
 
-        if (!saveQueueManager || !threadId) {
+        if (!saveQueueManager || !threadId || memoryConfig?.readOnly) {
           return;
         }
 
