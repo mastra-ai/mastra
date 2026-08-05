@@ -541,21 +541,9 @@ export class SessionThread {
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
 
-    // Stamp the session's scoping tags onto the thread so listings can be
-    // filtered back to this session's scope (e.g. a `projectPath` per git
-    // worktree). Fall back to a `projectPath` read from state for unscoped
-    // sessions that still carry one in their initial state.
-    const tags = session.getTags();
-    if (Object.keys(tags).length > 0) {
-      for (const [key, value] of Object.entries(tags)) {
-        if (!isReservedThreadMetadataKey(key)) metadata[key] = value;
-      }
-    } else {
-      const projectPath = (session.state.get() as any).projectPath;
-      if (projectPath) {
-        metadata.projectPath = projectPath;
-      }
-    }
+    // Stamp the session's scope so thread selection can filter listings back to
+    // it (e.g. a `projectPath` per git worktree).
+    Object.assign(metadata, session.getThreadScope().tags);
 
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
@@ -2692,6 +2680,20 @@ export class Session<TState = unknown> {
    */
   getTags(): Record<string, string> {
     return { ...this.#tags };
+  }
+
+  /**
+   * The scope this session's threads carry: what `thread.create()` stamps and
+   * what thread selection filters on. Both must read it here — computing it on
+   * each side is what let selection drift off the controller-global state while
+   * creation stamped the session's own. `explicit` distinguishes caller-provided
+   * tags, which filter strictly, from a scope inferred from state, which does not.
+   */
+  getThreadScope(): { tags: Record<string, string>; explicit: boolean } {
+    const tags = Object.fromEntries(Object.entries(this.#tags).filter(([key]) => !isReservedThreadMetadataKey(key)));
+    if (Object.keys(tags).length > 0) return { tags, explicit: true };
+    const { projectPath } = this.state.get() as { projectPath?: string };
+    return { tags: projectPath ? { projectPath } : {}, explicit: false };
   }
 
   /**

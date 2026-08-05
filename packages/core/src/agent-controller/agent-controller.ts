@@ -557,30 +557,20 @@ export class AgentController<TState = {}> {
         await session.thread.create({ id: overrides.threadId });
       }
     } else {
-      // Bring the session online with a current thread. Selection is tag-aware so
-      // worktrees sharing a resourceId each resume their own thread without
-      // claiming threads owned by another scope. A thread is a candidate only when
-      // its metadata matches every provided tag; with no tags every thread
-      // qualifies. Tags default to the controller-global state when omitted.
-      const selectionTags: Record<string, string> = {};
-      if (tags && Object.keys(tags).length > 0) {
-        Object.assign(selectionTags, tags);
-      } else {
-        const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
-        if (projectPath) selectionTags.projectPath = projectPath;
-      }
-      const tagEntries = Object.entries(selectionTags);
+      // Same scope `thread.create()` stamps. An inferred scope is a guess, so a
+      // thread carrying no value for the key is claimed by nobody and stays
+      // resumable; caller tags are a claim, so they filter strictly.
+      const { tags: scopeTags, explicit } = session.getThreadScope();
+      const scopeEntries = Object.entries(scopeTags);
 
       const threads = await session.thread.list();
-      const candidates =
-        tagEntries.length > 0
-          ? threads.filter(t => {
-              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-              return tagEntries.every(([key, value]) => metadata[key] === value);
-            })
-          : threads;
+      const candidates = threads.filter(t => {
+        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+        return scopeEntries.every(
+          ([key, value]) => metadata[key] === value || (!explicit && metadata[key] === undefined),
+        );
+      });
 
-      // Resume the most recent same-resource candidate, or create a new thread.
       if (candidates.length === 0) {
         await session.thread.create();
       } else {
