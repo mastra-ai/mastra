@@ -82,6 +82,17 @@ export function isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { create
   return false;
 }
 
+type MessagePart = NonNullable<MastraDBMessage['content']['parts']>[number];
+
+/**
+ * Return the toolCallId of a tool-invocation part in the given state, or undefined.
+ */
+function getToolInvocationId(part: MessagePart, state: 'call' | 'result'): string | undefined {
+  if (part?.type !== 'tool-invocation') return undefined;
+  if (part.toolInvocation.state !== state) return undefined;
+  return part.toolInvocation.toolCallId || undefined;
+}
+
 function collectPendingToolResultIds(allMessages: MastraDBMessage[], observedIds?: Set<string>): Set<string> {
   const pendingToolResultIds = new Set<string>();
 
@@ -89,17 +100,12 @@ function collectPendingToolResultIds(allMessages: MastraDBMessage[], observedIds
     if (!msg?.id) continue;
     if (observedIds?.has(msg.id)) continue;
 
-    const parts = (msg.content as any)?.parts;
-    if (!Array.isArray(parts)) continue;
+    const parts = msg.content?.parts;
+    if (!parts || !Array.isArray(parts)) continue;
 
     for (const part of parts) {
-      if (
-        (part as any)?.type === 'tool-invocation' &&
-        (part as any)?.toolInvocation?.state === 'result'
-      ) {
-        const id = (part as any)?.toolInvocation?.toolCallId;
-        if (id) pendingToolResultIds.add(id);
-      }
+      const id = getToolInvocationId(part, 'result');
+      if (id) pendingToolResultIds.add(id);
     }
   }
 
@@ -109,15 +115,13 @@ function collectPendingToolResultIds(allMessages: MastraDBMessage[], observedIds
 function hasPendingToolResultPair(message: MastraDBMessage, pendingToolResultIds: Set<string>): boolean {
   if (pendingToolResultIds.size === 0) return false;
 
-  const parts = (message.content as any)?.parts;
-  if (!Array.isArray(parts)) return false;
+  const parts = message.content?.parts;
+  if (!parts || !Array.isArray(parts)) return false;
 
-  return parts.some(
-    (part: any) =>
-      part?.type === 'tool-invocation' &&
-      part?.toolInvocation?.state === 'call' &&
-      pendingToolResultIds.has(part?.toolInvocation?.toolCallId),
-  );
+  return parts.some(part => {
+    const id = getToolInvocationId(part, 'call');
+    return id !== undefined && pendingToolResultIds.has(id);
+  });
 }
 
 function collectPendingToolResultIdsAfterMarker(
@@ -155,25 +159,18 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
   const unobservedResultIds = new Set<string>();
 
   for (const part of unobservedParts) {
-    if (
-      (part as any)?.type === 'tool-invocation' &&
-      (part as any)?.toolInvocation?.state === 'result'
-    ) {
-      const id = (part as any)?.toolInvocation?.toolCallId;
-      if (id) unobservedResultIds.add(id);
-    }
+    const id = getToolInvocationId(part, 'result');
+    if (id) unobservedResultIds.add(id);
   }
 
   if (unobservedResultIds.size === 0) {
     return unobservedParts;
   }
 
-  const preservedCalls = parts.slice(0, endMarkerIndex).filter(
-    (part: any) =>
-      part?.type === 'tool-invocation' &&
-      part?.toolInvocation?.state === 'call' &&
-      unobservedResultIds.has(part?.toolInvocation?.toolCallId),
-  );
+  const preservedCalls = parts.slice(0, endMarkerIndex).filter(part => {
+    const id = getToolInvocationId(part, 'call');
+    return id !== undefined && unobservedResultIds.has(id);
+  });
 
   return preservedCalls.length > 0 ? [...preservedCalls, ...unobservedParts] : unobservedParts;
 }
