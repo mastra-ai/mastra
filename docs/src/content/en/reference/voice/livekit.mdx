@@ -9,7 +9,7 @@ packages:
 
 The `@mastra/livekit` package connects Mastra agents to the LiveKit Agents framework. LiveKit runs the audio pipeline (voice activity detection, speech-to-text, turn detection, text-to-speech, barge-in) and the package bridges reply generation to a Mastra agent's `stream()` call.
 
-See [Realtime voice](/docs/voice/realtime-voice) for setup and concepts.
+See [Realtime voice](/guides/voice/realtime-voice) for setup and concepts.
 
 The package has three entry points:
 
@@ -328,7 +328,7 @@ Returns: `VoiceTurnMessage[]`, where each entry is `{ role: 'system' | 'user' | 
 
 ## `MastraLLM`
 
-A standard LiveKit LLM plugin (`llm.LLM`) backed by a Mastra agent. Use it when you build the `voice.AgentSession` yourself and want Mastra in the `llm` slot. [`createLiveKitWorker()`](#createlivekitworker) is the managed alternative. See [Use Mastra as the LLM component](/docs/voice/realtime-voice#use-mastra-as-the-llm-component) for how to choose.
+A standard LiveKit LLM plugin (`llm.LLM`) backed by a Mastra agent. Use it when you build the `voice.AgentSession` yourself and want Mastra in the `llm` slot. [`createLiveKitWorker()`](#createlivekitworker) is the managed alternative. See [Use Mastra as the LLM component](/guides/voice/realtime-voice#use-mastra-as-the-llm-component) for how to choose.
 
 With `remote`, the plugin streams each turn from your Mastra server over HTTP using Server-Sent Events (SSE). The agent loop, tools, and memory run server-side, and interrupting the agent aborts the server-side generation.
 
@@ -912,5 +912,5 @@ The metadata travels as a JSON string. `liveKitConnectionRoute()` and `dispatchV
 
 ## Related
 
-- [Realtime voice](/docs/voice/realtime-voice)
+- [Realtime voice](/guides/voice/realtime-voice)
 - [LiveKit Agents docs](https://docs.livekit.io/agents/)
