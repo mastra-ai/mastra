@@ -1,8 +1,10 @@
+import type { UserConfig } from 'tsdown';
+
 export const sharedConfig = {
-  format: 'esm' as const,
+  format: 'esm',
   fixedExtension: false,
-  nodeProtocol: 'strip' as const,
-  target: 'node22' as const,
+  nodeProtocol: 'strip',
+  target: 'node22',
   dts: false,
   treeshake: true,
   sourcemap: true,
@@ -10,4 +12,4 @@ export const sharedConfig = {
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
   },
-};
+} satisfies UserConfig;
