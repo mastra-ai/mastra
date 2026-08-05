@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ExperimentInComparisonInfo } from '../experiment-in-comparison-info';
-import { namedExperiment, unnamedExperiment } from './fixtures/experiments';
+import { blankNameExperiment, namedExperiment, unnamedExperiment } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 
 function renderCard(ui: ReactElement) {
@@ -39,6 +39,16 @@ describe('ExperimentInComparisonInfo', () => {
 
       expect(screen.getByRole('link', { name: 'c0ffee00' })).toBeDefined();
       expect(screen.queryByText(unnamedExperiment.id)).toBeNull();
+    });
+  });
+
+  describe('when the experiment name is an empty string', () => {
+    it('falls back to the shortened id rather than rendering an empty link', () => {
+      renderCard(
+        <ExperimentInComparisonInfo datasetId="dataset-1" experiment={blankNameExperiment} type="contender" />,
+      );
+
+      expect(screen.getByRole('link', { name: 'b1a11c00' })).toBeDefined();
     });
   });
 });

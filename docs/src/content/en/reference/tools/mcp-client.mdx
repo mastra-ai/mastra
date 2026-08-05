@@ -227,7 +227,7 @@ const mcp = new MCPClient({
 })
 ```
 
-Per the MCP specification, **clients MUST consider tool annotations to be untrusted unless they come from trusted servers**. Annotations are advisory hints, not a security boundary — a malicious or buggy server can claim a tool is read-only when it isn't. Only use annotations to relax approval requirements for servers you trust.
+Per the MCP specification: **clients MUST consider tool annotations to be untrusted unless they come from trusted servers**. Annotations are advisory hints and provide no security boundary. A malicious or buggy server can claim a tool is read-only when it isn't. Only use annotations to relax approval requirements for servers you trust.
 
 The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
 
@@ -286,7 +286,7 @@ console.log(errors)
 ### `listToolsets()`
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
-Intended to be passed dynamically into the generate or stream method.
+Intended to be passed at runtime into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
@@ -331,9 +331,9 @@ getServerAuthState(serverName: string): 'needs-auth' | 'authorized' | undefined
 
 ### `cancelAuthentication()`
 
-Cancels an in-progress `authenticate()` flow for a server, so an abandoned browser authorization does not leave the client waiting indefinitely. It aborts the flow (including its setup phase, before the callback server binds), closes the local callback server if one is listening, and the pending `authenticate()` call rejects. Returns `true` if a flow was cancelled, or `false` when no flow was in progress.
+Cancels an in-progress `authenticate()` flow for a server, so an abandoned browser authorization doesn't leave the client waiting indefinitely. It aborts the flow (including its setup phase, before the callback server binds), closes the local callback server if one is listening, and the pending `authenticate()` call rejects. Returns `true` if a flow was cancelled, or `false` when no flow was in progress.
 
-The resulting `getServerAuthState()` depends on how far the flow had progressed: a flow cancelled after the server rejected the connection with `401` stays at `'needs-auth'` and can be retried immediately, while a flow cancelled during the setup phase — before any connection was attempted — leaves the state unchanged (typically `undefined`).
+The resulting `getServerAuthState()` depends on how far the flow progressed. A flow cancelled after a `401` rejection stays at `'needs-auth'` and can be retried immediately. Cancellation during setup leaves the state unchanged (typically `undefined`) if no connection was attempted.
 
 ```typescript prettier:false
 async cancelAuthentication(serverName: string): Promise<boolean>
@@ -428,7 +428,7 @@ for (const serverName in templatesByServer) {
 
 #### `resources.read(serverName: string, uri: string)`
 
-Reads the content of a specific resource from a named server.
+Reads the content of a specific resource from a server.
 
 ```typescript prettier:false
 async read(serverName: string, uri: string): Promise<ReadResourceResult>
@@ -446,7 +446,7 @@ console.log('Current weather:', content.contents[0].text)
 
 #### `resources.subscribe(serverName: string, uri: string)`
 
-Subscribes to updates for a specific resource on a named server.
+Subscribes to updates for a specific resource on a server.
 
 ```typescript prettier:false
 async subscribe(serverName: string, uri: string): Promise<object>
@@ -460,7 +460,7 @@ await mcpClient.resources.subscribe('myWeatherServer', 'weather://current')
 
 #### `resources.unsubscribe(serverName: string, uri: string)`
 
-Unsubscribes from updates for a specific resource on a named server.
+Unsubscribes from updates for a specific resource on a server.
 
 ```typescript prettier:false
 async unsubscribe(serverName: string, uri: string): Promise<object>
@@ -492,7 +492,7 @@ mcpClient.resources.onUpdated('myWeatherServer', params => {
 
 #### `resources.onListChanged(serverName: string, handler: () => void)`
 
-Sets a notification handler that will be called when the overall list of available resources changes on a specific server.
+Sets a notification handler that will be called when the list of available resources changes on a specific server.
 
 ```typescript prettier:false
 async onListChanged(serverName: string, handler: () => void): Promise<void>
@@ -950,7 +950,7 @@ Give each server its own `MCPOAuthClientProvider` instance. A provider holds per
 
 ### Interactive browser authentication
 
-When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` then completes the flow end to end: it starts a one-shot callback server on the provider's loopback redirect URL (falling back to the next sequential ports when it is in use), lets the SDK run discovery and dynamic client registration, delivers the authorization URL through `onRedirectToAuthorization` — open it in the user's browser — and finishes the token exchange once the browser returns the authorization code:
+When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and client registration at runtime. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
@@ -987,9 +987,9 @@ try {
 }
 ```
 
-Concurrent `authenticate()` calls for the same server join the pending flow; different servers authenticate independently. With valid stored tokens the call simply reconnects without opening a browser.
+Concurrent `authenticate()` calls for the same server join the pending flow. Different servers authenticate independently. With valid stored tokens the call reconnects without opening a browser.
 
-Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code. It creates a plain HTTP server, so it is only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
+Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code. It creates a plain HTTP server, so it's only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
 
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'
@@ -1242,9 +1242,9 @@ MCPClient handles server connections gracefully:
 1. Graceful server shutdown to prevent error messages during development
 1. Proper cleanup of resources when disconnecting
 
-## Using custom fetch for dynamic authentication
+## Using custom fetch for runtime-defined authentication
 
-For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
+For HTTP servers, you can provide a custom `fetch` function to handle runtime-defined authentication or request interception. It can also handle other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
 The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
 

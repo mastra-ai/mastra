@@ -8,12 +8,23 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { createAgentControllerClient } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { githubNumberForItem } from '../../factory/boardItems';
+import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
 import type { FactoryUserSession } from '../services/github';
+import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionPreviewDetails } from './SessionPreviewCard';
+
+function workspaceStatus(row: FactoryWorkspaceRow): 'running' | 'attention' | undefined {
+  if (row.running) return 'running';
+  if (row.attention) return 'attention';
+  return undefined;
+}
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -49,11 +60,23 @@ export function WorkspacesSection() {
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
     allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const),
+      Object.values(item.sessions ?? {}).map(
+        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
+      ),
     ),
   );
   const rows = workspaceRows.flatMap(workspace => {
-    const item = workItemByPath.get(workspace.sessionId);
+    const workItemSession = workItemByPath.get(workspace.sessionId);
+    const item = workItemSession?.item;
+    const pullRequest =
+      item?.source === 'github-pr'
+        ? item
+        : item
+          ? [...relatedWorkItems(item, allWorkItems).filter(candidate => candidate.source === 'github-pr')].sort(
+              (a, b) => b.updatedAt.localeCompare(a.updatedAt),
+            )[0]
+          : undefined;
+    const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
     const factorySession = !workspace.branch.startsWith('user/');
@@ -66,8 +89,13 @@ export function WorkspacesSection() {
         active,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
-        review: item?.source === 'github-pr' || (!item && workspace.branch.startsWith('factory/pr-')),
+        review: getFactorySessionKind(workspace, item) === 'review',
+        itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
+        itemTitle: item?.title,
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
+        threadId: workItemSession?.threadId,
+        pullRequestNumber,
+        knownMerged: pullRequest?.metadata.merged === true,
       },
     ];
   });
@@ -86,10 +114,29 @@ export function WorkspacesSection() {
       }
       if (replaceIndex >= 0) visible[replaceIndex] = pinned;
     }
-    return visible.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return { visible: visible.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), all: sorted };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
+  const pullRequestTargets = [...workRows.visible, ...reviewRows.visible].flatMap(row =>
+    row.threadId && row.pullRequestNumber !== undefined
+      ? [
+          {
+            sessionId: row.workspace.sessionId,
+            threadId: row.threadId,
+            projectPath: row.workspace.sessionId,
+            pullRequestNumber: row.pullRequestNumber,
+            knownMerged: row.knownMerged,
+          },
+        ]
+      : [],
+  );
+  const mergedByPath = useWorkspacePullRequestMerges({
+    baseUrl,
+    resourceId,
+    targets: pullRequestTargets,
+    enabled: sessionEnabled && Boolean(sessionId) && Boolean(resourceId),
+  });
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
@@ -109,24 +156,32 @@ export function WorkspacesSection() {
     deleteWorkspace.mutate(confirmDelete, { onSuccess: () => setConfirmDelete(null) });
   };
 
-  if (workRows.length === 0 && reviewRows.length === 0) return null;
+  if (workRows.all.length === 0 && reviewRows.all.length === 0) return null;
 
   return (
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
-      {workRows.length > 0 && (
+      {workRows.all.length > 0 && (
         <WorkspaceGroup
+          key="work"
           title="Work Sessions"
-          rows={workRows}
+          rows={workRows.visible}
+          allRows={workRows.all}
+          kind="Work session"
           pending={pending}
+          mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
       )}
-      {reviewRows.length > 0 && (
+      {reviewRows.all.length > 0 && (
         <WorkspaceGroup
+          key="review"
           title="Review Sessions"
-          rows={reviewRows}
+          rows={reviewRows.visible}
+          allRows={reviewRows.all}
+          kind="Review session"
           pending={pending}
+          mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -172,22 +227,36 @@ interface FactoryWorkspaceRow {
   running: boolean;
   attention: boolean;
   review: boolean;
+  itemLabel?: string;
+  itemTitle?: string;
   updatedAt: string;
+  threadId?: string;
+  pullRequestNumber?: number;
+  knownMerged: boolean;
 }
 
 function WorkspaceGroup({
   title,
   rows,
+  allRows,
+  kind,
   pending,
+  mergedByPath,
   onSelect,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
+  allRows: FactoryWorkspaceRow[];
+  kind: SessionPreviewDetails['kind'];
   pending: boolean;
+  mergedByPath: Record<string, boolean>;
   onSelect: (workspace: FactoryUserSession) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleRows = expanded ? allRows : rows;
+  const hiddenCount = allRows.length - rows.length;
   return (
     <section className="flex flex-col gap-2" aria-label={title}>
       <div className="flex items-center px-1">
@@ -196,20 +265,41 @@ function WorkspaceGroup({
         </Txt>
       </div>
       <MainSidebar.NavList>
-        {rows.map(row => (
+        {visibleRows.map(row => (
           <SessionNavRow
             key={row.workspace.sessionId}
-            name={row.label ?? row.workspace.branch}
-            title={row.workspace.branch}
+            name={
+              row.label ??
+              (row.workspace.branch.startsWith('slack/') ? row.itemTitle : undefined) ??
+              row.workspace.branch
+            }
             url={row.url}
             active={row.active}
             disabled={pending}
-            status={row.running ? 'running' : row.attention ? 'attention' : undefined}
+            merged={mergedByPath[row.workspace.sessionId] === true}
+            status={workspaceStatus(row)}
+            preview={{
+              kind,
+              itemLabel: row.itemLabel,
+              itemTitle: row.itemTitle,
+              branch: row.workspace.branch,
+              baseBranch: row.workspace.baseBranch,
+              updatedAt: row.updatedAt,
+            }}
             onSelect={() => onSelect(row.workspace)}
             onDelete={() => onDelete(row.workspace)}
           />
         ))}
       </MainSidebar.NavList>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          className="text-icon3 hover:text-icon5 px-1 text-left text-xs"
+          onClick={() => setExpanded(value => !value)}
+        >
+          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+        </button>
+      )}
     </section>
   );
 }

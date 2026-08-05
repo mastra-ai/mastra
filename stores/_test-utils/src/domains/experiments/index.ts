@@ -389,6 +389,56 @@ export function createExperimentsTests({
         ).rejects.toThrow();
       });
 
+      it('updateExperimentResult persists status, tags, and comment and reads them back', async () => {
+        const created = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-review',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'world' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+
+        const updated = await experimentsStorage.updateExperimentResult({
+          id: created.id,
+          experimentId: exp.id,
+          status: 'needs-review',
+          tags: ['hallucination'],
+          comment: 'The agent ignored the second question',
+        });
+        expect(updated.status).toBe('needs-review');
+        expect(updated.tags).toEqual(['hallucination']);
+        expect(updated.comment).toBe('The agent ignored the second question');
+
+        const found = await experimentsStorage.getExperimentResultById({ id: created.id });
+        expect(found!.comment).toBe('The agent ignored the second question');
+
+        // Updating only the comment leaves status/tags untouched
+        const commentOnly = await experimentsStorage.updateExperimentResult({
+          id: created.id,
+          experimentId: exp.id,
+          comment: 'revised note',
+        });
+        expect(commentOnly.comment).toBe('revised note');
+        expect(commentOnly.status).toBe('needs-review');
+        expect(commentOnly.tags).toEqual(['hallucination']);
+
+        // Comment can be cleared with null
+        const cleared = await experimentsStorage.updateExperimentResult({
+          id: created.id,
+          experimentId: exp.id,
+          comment: null,
+        });
+        expect(cleared.comment).toBeNull();
+
+        const clearedRefetched = await experimentsStorage.getExperimentResultById({ id: created.id });
+        expect(clearedRefetched!.comment).toBeNull();
+      });
+
       it('getExperimentResultById returns result or null', async () => {
         const result = await experimentsStorage.addExperimentResult({
           experimentId: exp.id,

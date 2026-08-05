@@ -21,7 +21,7 @@ import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-t
 import type { DiffEntry } from '@mastra/code-sdk/utils/plan-diff';
 import { generatePlanDiff } from '@mastra/code-sdk/utils/plan-diff';
 import chalk from 'chalk';
-import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
+import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, getThemeGeneration, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface PlanApprovalInlineOptions {
@@ -37,12 +37,27 @@ export interface PlanApprovalInlineOptions {
   onReject: () => void;
 }
 
-class PlanContentBox implements Component {
+/** Exported for tests. */
+export class PlanContentBox implements Component {
+  private cachedLines?: string[];
+  private cachedWidth?: number;
+  private cachedThemeGeneration?: number;
+
   constructor(private plan: string) {}
 
-  invalidate(): void {}
+  invalidate(): void {
+    this.cachedLines = undefined;
+    this.cachedWidth = undefined;
+    this.cachedThemeGeneration = undefined;
+  }
 
   render(width: number): string[] {
+    // Rendering a large plan lexes markdown and grapheme-wraps every line —
+    // expensive enough to dominate a frame. Cache by (width, theme) since the
+    // plan text is fixed after construction.
+    if (this.cachedLines && this.cachedWidth === width && this.cachedThemeGeneration === getThemeGeneration()) {
+      return this.cachedLines;
+    }
     const availableWidth = Math.max(24, width - BOX_INDENT);
     const innerWidth = Math.max(20, availableWidth - 4);
     const markdown = new Markdown(this.plan, 0, 0, getMarkdownTheme(), {
@@ -64,7 +79,10 @@ class PlanContentBox implements Component {
         body.push(`${border('│')} ${chunk}${padding} ${border('│')}`);
       }
     }
-    return [top, ...body, bottom];
+    this.cachedLines = [top, ...body, bottom];
+    this.cachedWidth = width;
+    this.cachedThemeGeneration = getThemeGeneration();
+    return this.cachedLines;
   }
 }
 
@@ -72,16 +90,28 @@ class PlanContentBox implements Component {
  * Renders a unified diff between two plan texts inside a bordered box.
  * Long lines are wrapped (not truncated) so the full plan text is visible.
  */
-class PlanDiffBox implements Component {
+export class PlanDiffBox implements Component {
   private diffEntries: DiffEntry[];
+  private cachedLines?: string[];
+  private cachedWidth?: number;
+  private cachedThemeGeneration?: number;
 
   constructor(oldPlan: string, newPlan: string) {
     this.diffEntries = generatePlanDiff(oldPlan, newPlan);
   }
 
-  invalidate(): void {}
+  invalidate(): void {
+    this.cachedLines = undefined;
+    this.cachedWidth = undefined;
+    this.cachedThemeGeneration = undefined;
+  }
 
   render(width: number): string[] {
+    // Same cache rationale as PlanContentBox: diff entries are fixed after
+    // construction, so output only varies with width and theme.
+    if (this.cachedLines && this.cachedWidth === width && this.cachedThemeGeneration === getThemeGeneration()) {
+      return this.cachedLines;
+    }
     const availableWidth = Math.max(24, width - BOX_INDENT);
     const innerWidth = Math.max(20, availableWidth - 4);
     const border = (text: string) => chalk.hex(mastra.purple)(text);
@@ -114,7 +144,10 @@ class PlanDiffBox implements Component {
         body.push(`${border('│')} ${content}${padding} ${border('│')}`);
       }
     }
-    return [top, ...body, bottom];
+    this.cachedLines = [top, ...body, bottom];
+    this.cachedWidth = width;
+    this.cachedThemeGeneration = getThemeGeneration();
+    return this.cachedLines;
   }
 }
 

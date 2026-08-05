@@ -413,7 +413,7 @@ describe('transcript reducer message entries', () => {
   });
 });
 
-describe('transcript reducer prependOlder', () => {
+describe('transcript reducer mergeWindow', () => {
   it('prepends only messages older than the oldest entry already on screen', () => {
     // On screen: newest window (msg-3, msg-4). Grown fetch returns an older
     // window that overlaps at msg-3 (the anchor).
@@ -431,7 +431,7 @@ describe('transcript reducer prependOlder', () => {
       dbMessage('msg-4', 'assistant', [{ type: 'text', text: 'fourth' }]),
     ];
 
-    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: grown });
 
     expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3', 'msg-4']);
   });
@@ -446,7 +446,7 @@ describe('transcript reducer prependOlder', () => {
       dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
     ];
 
-    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: grown });
     const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
 
     expect(ids).toEqual(['msg-1', 'msg-2']);
@@ -471,7 +471,7 @@ describe('transcript reducer prependOlder', () => {
       dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }]),
     ];
 
-    const next = transcriptReducer(state, { type: 'prependOlder', messages: grown });
+    const next = transcriptReducer(state, { type: 'mergeWindow', messages: grown });
     const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
 
     // Older history joins the front; the live message stays at the tail.
@@ -482,8 +482,72 @@ describe('transcript reducer prependOlder', () => {
     const onScreen = createInitialTranscript({
       messages: [dbMessage('msg-1', 'user', [{ type: 'text', text: 'only' }])],
     });
-    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: [] });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: [] });
     expect(next).toBe(onScreen);
+  });
+
+  it('is a no-op when the window is already fully on screen', () => {
+    const messages = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+    ];
+    const onScreen = createInitialTranscript({ messages });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages });
+    expect(next).toBe(onScreen);
+  });
+
+  it('appends messages the run produced while the transcript was unmounted', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('kickoff', 'user', [{ type: 'text', text: 'review this PR' }])],
+    });
+
+    const refreshed = [
+      dbMessage('kickoff', 'user', [{ type: 'text', text: 'review this PR' }]),
+      dbMessage('reply-1', 'assistant', [{ type: 'text', text: 'reading the diff' }]),
+      dbMessage('reply-2', 'assistant', [{ type: 'text', text: 'here is the review' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: refreshed });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['kickoff', 'reply-1', 'reply-2']);
+  });
+
+  it('fills a gap between two on-screen messages', () => {
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+        dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+      ],
+    });
+
+    const refreshed = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+      dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: refreshed });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3']);
+  });
+
+  it('keeps the streaming entry for a message the window also carries', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'partial' }]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'persisted prefix' }])],
+    });
+
+    expect(next.entries[0]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
+    expect(messageParts(next.entries[0])).toEqual([{ type: 'text', text: 'partial' }]);
   });
 });
 
@@ -511,5 +575,127 @@ describe('transcript reducer error notices', () => {
 
   it('falls back to a generic hint when the payload is empty', () => {
     expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
+  });
+});
+
+describe('live user-signal events render the same as their persisted copy', () => {
+  /**
+   * `agent-channels` stamps this on every inbound channel message, and
+   * `toDataPart` carries it onto the live event — it is what marks the signal
+   * as Slack-origin rather than composer-origin.
+   */
+  const slackProviderOptions = {
+    mastra: { channels: { slack: { author: { userId: 'U123', userName: 'caleb' } } } },
+  };
+
+  const payload = {
+    id: 'sig-1',
+    type: 'user',
+    tagName: 'user',
+    contents: 'hello from slack',
+    createdAt: '2026-07-27T16:00:00.000Z',
+    providerOptions: slackProviderOptions,
+  };
+
+  /** The live event shape: signal payload as one data part, text inside `data.contents`. */
+  function liveUserSignal(): MastraDBMessage {
+    return {
+      id: 'sig-1',
+      role: 'signal',
+      createdAt: new Date(payload.createdAt),
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: payload }] as unknown as MastraMessagePart[],
+        metadata: { signal: payload },
+      },
+    };
+  }
+
+  /** The same live shape for a message typed into the web composer: no channel provenance. */
+  function liveComposerSignal(): MastraDBMessage {
+    const composerPayload = {
+      id: 'sig-web',
+      type: 'user',
+      tagName: 'user',
+      contents: 'hello from the composer',
+      createdAt: '2026-07-27T16:00:00.000Z',
+    };
+    return {
+      id: 'sig-web',
+      role: 'signal',
+      createdAt: new Date(composerPayload.createdAt),
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: composerPayload }] as unknown as MastraMessagePart[],
+        metadata: { signal: composerPayload },
+      },
+    };
+  }
+
+  function firstEntryParts(state: ReturnType<typeof createInitialTranscript>) {
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-1');
+    return messageParts(entry);
+  }
+
+  it('gives the live data-user-message event a drawable text part', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: liveUserSignal() } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+
+    expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
+  });
+
+  it('does not blank the row when the live event replaces an already-rendered one', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+
+    // Persisted-shaped copy first, then the live data-part copy with the same id.
+    const persisted = signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'hello from slack' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+
+    expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
+  });
+
+  it('leaves a persisted user signal untouched', () => {
+    const persisted = signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'hello from slack' });
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
+
+    expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
+  });
+
+  /**
+   * Regression: the composer already renders an optimistic local echo under a
+   * `local-…` id. The streamed signal event carries the signal's own id, so the
+   * two cannot dedupe — drawing both showed the message twice. Only channel
+   * messages get the drawable-text projection.
+   */
+  it('leaves a composer-origin live event undrawable so the local echo stays the only bubble', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'hello from the composer' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveComposerSignal() },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveComposerSignal() } });
+
+    const drawable = state.entries.filter(
+      entry =>
+        entry.kind === 'message' &&
+        (entry.message.content.parts ?? []).some(
+          part => part.type === 'text' && part.text.includes('hello from the composer'),
+        ),
+    );
+    expect(drawable).toHaveLength(1);
+    expect(drawable[0] && 'id' in drawable[0] ? drawable[0].id : '').toMatch(/^local-/);
+  });
+
+  it('keeps non-user signals alone', () => {
+    const reminder = signalMessage({ id: 'sig-2', type: 'system-reminder', tagName: 'reminder', text: 'stay on task' });
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: reminder } });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-2');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'stay on task' }]);
   });
 });
