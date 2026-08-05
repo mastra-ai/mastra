@@ -572,6 +572,31 @@ async function claimInterruptedTaskResume({
   return claim;
 }
 
+async function waitForClaimedResume({
+  taskStore,
+  agentId,
+  taskId,
+}: {
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+}): Promise<Task> {
+  let snapshot = taskStore.loadWithVersion({ agentId, taskId });
+  if (!snapshot) {
+    throw MastraA2AError.taskNotFound(taskId);
+  }
+
+  while (snapshot.task.status.state === 'working') {
+    snapshot = await taskStore.waitForNextUpdate({
+      agentId,
+      taskId,
+      afterVersion: snapshot.version,
+    });
+  }
+
+  return snapshot.task;
+}
+
 function resolvePushNotificationPair({
   pushNotificationStore,
   pushNotificationSender,
@@ -1020,11 +1045,21 @@ export async function handleMessageSend({
     return createSuccessResponse(requestId, existingTask);
   }
 
+  if (existingTask?.status.state === 'working' && getSuspendedRunId(existingTask)) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    return createSuccessResponse(requestId, task);
+  }
+
   // A follow-up message for an interrupted task resumes the suspended agent
   // run instead of starting a fresh generation (A2A HITL continuation).
   // The claim transitions the task to `working` synchronously so concurrent
   // follow-ups cannot double-resume the same run.
+  const wasInterrupted = isInterruptedTaskState(existingTask?.status.state);
   const resume = await claimInterruptedTaskResume({ taskStore, agentId, taskId });
+  if (wasInterrupted && !resume) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    return createSuccessResponse(requestId, task);
+  }
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,

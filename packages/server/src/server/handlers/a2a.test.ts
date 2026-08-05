@@ -2635,9 +2635,16 @@ describe('A2A Handler', () => {
           requestContext: new RequestContext(),
         });
 
-      await Promise.all([sendFollowUp('race-message-1'), sendFollowUp('race-message-2')]);
+      const results = await Promise.all([sendFollowUp('race-message-1'), sendFollowUp('race-message-2')]);
 
       expect(resumeGenerate).toHaveBeenCalledTimes(1);
+      expect(generate).not.toHaveBeenCalled();
+      expect(results.map(result => result.result?.status.state)).toEqual(['completed', 'completed']);
+
+      const task = await mockTaskStore.load({ agentId, taskId: 'task-hitl-race' });
+      expect(task?.status.state).toBe('completed');
+      expect(task?.history).toHaveLength(1);
+      expect(['race-message-1', 'race-message-2']).toContain(task?.history?.[0]?.messageId);
     });
   });
 
