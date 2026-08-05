@@ -22,10 +22,11 @@ By default the suite builds the CLI, publishes snapshot packages to a temporary 
 - `MASTRA_E2E_REGISTRY_STORAGE`
 - `MASTRA_E2E_REGISTRY_CONFIG`
 - `MASTRA_E2E_REGISTRY_TAG`
+- `MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST`
 - `MASTRA_E2E_REGISTRY_PORT`
 - `MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY=1`
 
-Published mode verifies required packages and the registry digest before installing fixtures. `MASTRA_EXPERIMENT_E2E_REPORT_DIR` preserves JSON, Markdown, build logs, and NDJSON transcripts outside the temporary run root.
+Published mode verifies required packages and the publisher's canonical registry digest before installing fixtures; copied or downloaded storage that differs is rejected. `MASTRA_EXPERIMENT_E2E_REPORT_DIR` preserves JSON, Markdown, build logs, and NDJSON transcripts outside the temporary run root. PR/full tiers write one JSON and Markdown report per required scenario plus `summary.json`, and fail if a required scenario or assertion is missing, skipped, or failed.
 
 ## CI tiers
 

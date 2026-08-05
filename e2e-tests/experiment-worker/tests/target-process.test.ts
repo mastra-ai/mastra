@@ -2,6 +2,7 @@ import { access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
 import { installPnpmProject } from '../helpers/install-project.js';
@@ -115,6 +116,12 @@ describe('experiment worker target and fresh-process behavior', () => {
 
       const recovered = await runProtocol(artifactRoot, manifest, mockedRequest);
       expect(recovered.result.exitCode).toBe(0);
+      await recordAssertionEvidence(mockedToolAgentScenario, {
+        'mocked-tool-success': mocked.events.at(-1)?.payload,
+        'deny-unmocked': denied.events.at(-1)?.payload,
+        'live-side-effect-absent': !(await pathExists(join(artifactRoot, 'live-tool-ran.txt'))),
+        'failure-then-success': { deniedExit: denied.result.exitCode, recoveredExit: recovered.result.exitCode },
+      });
     },
     mockedToolAgentScenario.timeoutMs,
   );
@@ -144,6 +151,11 @@ describe('experiment worker target and fresh-process behavior', () => {
       expect(JSON.stringify(completed)).toContain('sync-score');
       expect(JSON.stringify(completed)).toContain('async-score');
       expect(result.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
+      await recordAssertionEvidence(resumableWorkflowScenario, {
+        'workflow-resumed': completed,
+        'sync-scorer': JSON.stringify(completed).includes('sync-score'),
+        'async-scorer': JSON.stringify(completed).includes('async-score'),
+      });
     },
     resumableWorkflowScenario.timeoutMs,
   );
@@ -168,6 +180,11 @@ describe('experiment worker target and fresh-process behavior', () => {
       const recovered = await runProtocol(artifactRoot, manifest);
       expect(recovered.result.exitCode).toBe(0);
       expect(recovered.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
+      await recordAssertionEvidence(processCancellationScenario, {
+        'terminal-cancelled': terminal?.payload,
+        'exit-code-agreement': cancelled.exitCode,
+        'success-after-cancel': recovered.events.at(-1)?.payload,
+      });
     },
     processCancellationScenario.timeoutMs,
   );
@@ -189,6 +206,12 @@ describe('experiment worker target and fresh-process behavior', () => {
 
       const recovered = await runProtocol(artifactRoot, manifest);
       expect(recovered.result.exitCode).toBe(0);
+      await recordAssertionEvidence(truncatedInputScenario, {
+        'protocol-exit-code': truncated.exitCode,
+        'stdout-empty': truncated.stdout,
+        'stderr-diagnostic': truncated.stderr,
+        'success-after-protocol-failure': recovered.result.exitCode,
+      });
     },
     truncatedInputScenario.timeoutMs,
   );

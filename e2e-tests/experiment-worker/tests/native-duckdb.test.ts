@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
 import { installPnpmProject } from '../helpers/install-project.js';
@@ -71,6 +72,12 @@ describe('experiment worker native transitive dependency behavior', () => {
       expect(completed).toContain('vec-native-a');
       expect(completed).toContain('"matchCount":1');
       expect(run.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
+      await recordAssertionEvidence(nativeDuckdbScenario, {
+        'native-external-declared': dependencyNames,
+        'strict-pnpm-install': workspaceConfig,
+        'native-runtime-success': completed,
+        'relocation-safe': artifactRoot,
+      });
     },
     nativeDuckdbScenario.timeoutMs,
   );

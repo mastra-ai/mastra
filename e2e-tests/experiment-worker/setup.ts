@@ -55,6 +55,9 @@ export default async function setup(project: TestProject) {
       const registryRoot = dirname(process.env.MASTRA_E2E_REGISTRY_STORAGE!);
       const registryArtifactDigest = await computeRegistryArtifactDigest(registryRoot);
       const expectedDigest = process.env.MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST;
+      if (process.env.MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY === '1' && !expectedDigest) {
+        throw new Error('Strict published-registry mode requires MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST');
+      }
 
       if (expectedDigest && registryArtifactDigest !== expectedDigest) {
         throw new Error(

@@ -13,6 +13,11 @@ if (!scenario) {
 
 const result = spawnSync('pnpm', ['exec', 'vitest', 'run', 'tests', '--testNamePattern', scenario, ...args], {
   stdio: 'inherit',
+  env: {
+    ...process.env,
+    MASTRA_EXPERIMENT_E2E_TIER: process.env.MASTRA_EXPERIMENT_E2E_TIER ?? 'full',
+    MASTRA_EXPERIMENT_E2E_SCENARIO: scenario,
+  },
 });
 
 process.exit(result.status ?? 1);

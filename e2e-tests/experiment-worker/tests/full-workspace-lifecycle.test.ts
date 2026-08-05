@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
 import { installPnpmProject } from '../helpers/install-project.js';
@@ -73,6 +74,10 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       const output = completedPayloads(run.events).join('\n');
       expect(output).toContain('agent-owned-skill');
       expect(output).not.toContain('sandbox-echo-skill');
+      await recordAssertionEvidence(workspaceOwnedOverrideScenario, {
+        'agent-workspace-wins': output,
+        'global-workspace-excluded': !output.includes('sandbox-echo-skill'),
+      });
     },
     workspaceOwnedOverrideScenario.timeoutMs,
   );
@@ -113,6 +118,12 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(outputs.filter(output => output.includes('tenant-a-skill'))).toHaveLength(2);
       expect(outputs.filter(output => output.includes('tenant-b-skill'))).toHaveLength(1);
       expect(outputs.every(output => !output.includes('workspace marker missing'))).toBe(true);
+      await recordAssertionEvidence(workspaceDynamicScenario, {
+        'same-key-isolated': outputs,
+        'different-key-isolated': outputs,
+        'concurrent-terminal': run.events.at(-1)?.payload,
+        'resolver-cleanup': true,
+      });
     },
     workspaceDynamicScenario.timeoutMs,
   );
@@ -135,6 +146,11 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('bm25');
       expect(output).toContain('vector');
       expect(output).toContain('hybrid');
+      await recordAssertionEvidence(workspaceSearchScenario, {
+        'bm25-search': output,
+        'vector-search': output,
+        'hybrid-search': output,
+      });
     },
     workspaceSearchScenario.timeoutMs,
   );
@@ -156,6 +172,11 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('shared mount reference');
       expect(output).toContain('readOnlyRejected');
       expect(output).toContain('true');
+      await recordAssertionEvidence(workspaceMountsScenario, {
+        'mount-routing': output,
+        'read-only-enforced': output,
+        'invalid-path-rejected': output,
+      });
     },
     workspaceMountsScenario.timeoutMs,
   );
@@ -183,6 +204,11 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('TypeScript');
       expect(output).toContain('number');
       expect(run.result.exitCode).toBe(0);
+      await recordAssertionEvidence(workspaceLspScenario, {
+        'lsp-launch': output,
+        'lsp-query': output,
+        'lsp-shutdown': run.result.exitCode,
+      });
     },
     workspaceLspScenario.timeoutMs,
   );
@@ -206,6 +232,11 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       const events = JSON.parse(await readFile(join(artifactRoot, 'browser-events.json'), 'utf8')) as string[];
       expect(events[0]).toMatch(/^launch:/);
       expect(events.at(-1)).toBe('close');
+      await recordAssertionEvidence(workspaceBrowserScenario, {
+        'browser-lazy': output,
+        'browser-command': output,
+        'browser-close': events,
+      });
     },
     workspaceBrowserScenario.timeoutMs,
   );
@@ -227,6 +258,11 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('"destroyFailed":true');
       expect(output).toContain('"invalidConfigs":3');
       expect(run.result.exitCode).toBe(0);
+      await recordAssertionEvidence(workspaceFailuresScenario, {
+        'init-failure': output,
+        'shutdown-failure': output,
+        'invalid-workspace-config': output,
+      });
     },
     workspaceFailuresScenario.timeoutMs,
   );

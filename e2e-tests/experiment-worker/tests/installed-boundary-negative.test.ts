@@ -2,11 +2,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { runCommand } from '../helpers/command.js';
 import { installPnpmProject } from '../helpers/install-project.js';
 import { materializeProject } from '../helpers/materialize-project.js';
 import { OwnedResources } from '../helpers/process-cleanup.js';
+import { importFailureScenario, malformedApprovalsScenario, missingMastraScenario } from '../scenarios/index.js';
 
 const suiteRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const resources = new OwnedResources();
@@ -55,6 +57,9 @@ describe('experiment worker installed-boundary diagnostics', () => {
     );
     try {
       await expectBuildFailure('malformed-approvals', /Invalid pnpm allowBuilds entries: esbuild/);
+      await recordAssertionEvidence(malformedApprovalsScenario, {
+        'invalid-approval-diagnostic': 'Invalid pnpm allowBuilds entries: esbuild',
+      });
     } finally {
       await writeFile(join(projectRoot, 'pnpm-workspace.yaml'), workspaceSource);
     }
@@ -64,6 +69,9 @@ describe('experiment worker installed-boundary diagnostics', () => {
     await writeFile(join(projectRoot, 'src', 'mastra', 'index.ts'), '');
     try {
       await expectStartupFailure('missing-mastra', /does not provide an export named 'mastra'|mastra/i);
+      await recordAssertionEvidence(missingMastraScenario, {
+        'missing-mastra-diagnostic': 'missing #mastra export',
+      });
     } finally {
       await writeFile(join(projectRoot, 'src', 'mastra', 'index.ts'), mastraSource);
     }
@@ -76,6 +84,9 @@ describe('experiment worker installed-boundary diagnostics', () => {
     );
     try {
       await expectStartupFailure('import-failure', /fixture constructor import failure/);
+      await recordAssertionEvidence(importFailureScenario, {
+        'import-failure-diagnostic': 'fixture constructor import failure',
+      });
     } finally {
       await writeFile(join(projectRoot, 'src', 'mastra', 'index.ts'), mastraSource);
     }

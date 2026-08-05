@@ -57,7 +57,8 @@ jobs:
         id: digest
         shell: bash
         run: |
-          digest=$(find "${{ runner.temp }}/experiment-worker-registry" -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')
+          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "${{ runner.temp }}/experiment-worker-registry")"
+          printf '%s\n' "$digest" > "${{ runner.temp }}/experiment-worker-registry/handoff-digest.txt"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Upload registry artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -94,6 +95,7 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
@@ -128,15 +130,17 @@ jobs:
         run: |
           mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
           set -o pipefail
-          if [ -n "${{ inputs.scenario }}" ]; then
-            pnpm test:scenario -- "${{ inputs.scenario }}" 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
+          if [ -n "$SELECTED_SCENARIO" ]; then
+            pnpm test:scenario -- "$SELECTED_SCENARIO" 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
           else
             pnpm test:full:strict 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
           fi
         env:
+          SELECTED_SCENARIO: ${{ inputs.scenario }}
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
@@ -176,6 +180,7 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports

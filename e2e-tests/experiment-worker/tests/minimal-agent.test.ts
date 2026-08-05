@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
 import { installPnpmProject } from '../helpers/install-project.js';
@@ -10,7 +11,7 @@ import { materializeProject } from '../helpers/materialize-project.js';
 import { OwnedResources } from '../helpers/process-cleanup.js';
 import { writeScenarioReport, type ScenarioReport } from '../helpers/report.js';
 import { runProtocol } from '../helpers/run-protocol.js';
-import { minimalAgentScenario } from '../scenarios/index.js';
+import { copiedArtifactScenario, minimalAgentScenario } from '../scenarios/index.js';
 
 const suiteRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -90,6 +91,15 @@ describe('experiment worker installed artifact', () => {
         cleanup,
       };
       const reportPaths = await writeScenarioReport(reportRoot, report);
+      const assertionEvidence = Object.fromEntries(
+        report.assertions.map(assertion => [assertion.id, assertion.evidence]),
+      );
+      await recordAssertionEvidence(minimalAgentScenario, assertionEvidence);
+      await recordAssertionEvidence(copiedArtifactScenario, {
+        'artifact-relocated': assertionEvidence['artifact-relocated'],
+        'source-independent': assertionEvidence['source-independent'],
+        'protocol-success': assertionEvidence['protocol-success'],
+      });
       expect(JSON.parse(await readFile(reportPaths.jsonPath, 'utf8'))).toMatchObject({
         scenarioId: minimalAgentScenario.id,
         status: 'passed',

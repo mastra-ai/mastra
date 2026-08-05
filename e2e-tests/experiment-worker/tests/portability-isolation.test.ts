@@ -4,6 +4,7 @@ import { lstat, readFile, readlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { killProcessGroup } from '../helpers/command.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
@@ -18,6 +19,8 @@ const suiteRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const resources = new OwnedResources();
 let artifactRoot = '';
 let manifest: ExperimentWorkerManifest;
+let repeatabilityEvidence: Record<string, unknown>;
+let concurrencyEvidence: Record<string, unknown>;
 
 function normalize(value: string, roots: string[], buildIds: string[]) {
   return [...roots, ...buildIds].reduce((result, token) => result.split(token).join('<volatile>'), value);
@@ -103,9 +106,13 @@ beforeAll(async () => {
     files: undefined,
     artifact: { ...second.artifact, contentDigest: undefined },
   });
-  expect(await stableFiles(firstBuild.artifactRoot, first, [projectRoot, firstBuildRoot])).toEqual(
-    await stableFiles(secondBuild.artifactRoot, second, [projectRoot, secondBuildRoot]),
-  );
+  const firstStableFiles = await stableFiles(firstBuild.artifactRoot, first, [projectRoot, firstBuildRoot]);
+  const secondStableFiles = await stableFiles(secondBuild.artifactRoot, second, [projectRoot, secondBuildRoot]);
+  expect(firstStableFiles).toEqual(secondStableFiles);
+  repeatabilityEvidence = {
+    'repeat-build-stable': firstStableFiles,
+    'repeat-build-volatile': { first: first.build, second: second.build },
+  };
 
   artifactRoot = resources.trackPath(
     await copyArtifact({
@@ -132,6 +139,10 @@ describe('experiment worker portability and process isolation', () => {
     expect(first.request.experimentId).not.toBe(second.request.experimentId);
     expect(first.result.exitCode).toBe(0);
     expect(second.result.exitCode).toBe(0);
+    concurrencyEvidence = {
+      'concurrent-workers': [first.request.experimentId, second.request.experimentId],
+      'immutable-artifact': manifest.artifact.contentDigest,
+    };
   });
 
   test('portability-isolation recovers in a fresh process after abrupt termination', async () => {
@@ -143,5 +154,11 @@ describe('experiment worker portability and process isolation', () => {
     await terminateInFlightWorker(slowRequest);
     const recovered = await runProtocol(artifactRoot, manifest);
     expect(recovered.result.exitCode).toBe(0);
+    await recordAssertionEvidence(portabilityIsolationScenario, {
+      ...repeatabilityEvidence,
+      ...concurrencyEvidence,
+      'abrupt-termination': 'SIGKILL',
+      'fresh-process-recovery': recovered.events.at(-1)?.payload,
+    });
   });
 });

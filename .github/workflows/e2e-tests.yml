@@ -25,6 +25,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      digest: ${{ steps.registry_digest.outputs.digest }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -59,6 +61,14 @@ jobs:
           MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/mastra-e2e-registry
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+
+      - name: Compute registry artifact digest
+        id: registry_digest
+        shell: bash
+        run: |
+          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "${{ runner.temp }}/mastra-e2e-registry")"
+          printf '%s\n' "$digest" > "${{ runner.temp }}/mastra-e2e-registry/handoff-digest.txt"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Upload E2E registry artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -106,6 +116,7 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-e2e-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports

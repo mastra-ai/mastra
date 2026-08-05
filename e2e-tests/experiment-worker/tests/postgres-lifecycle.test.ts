@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { runCommand } from '../helpers/command.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
@@ -150,7 +151,15 @@ describe('experiment worker Postgres lifecycle', () => {
         expect(Number(count)).toBe(0);
       }
 
-      expect(await docker(['exec', containerName, 'psql', '-U', 'postgres', '-tAc', 'SELECT 1'])).toBe('1');
+      const connectionReuse = await docker(['exec', containerName, 'psql', '-U', 'postgres', '-tAc', 'SELECT 1']);
+      expect(connectionReuse).toBe('1');
+      await recordAssertionEvidence(postgresScenario, {
+        'postgres-stateful': { threads: Number(threads) },
+        'experiment-persistence-disabled': { tables },
+        'score-persistence-disabled': { tables },
+        'shutdown-bounded': true,
+        'connection-reuse': connectionReuse,
+      });
     },
     postgresScenario.timeoutMs,
   );

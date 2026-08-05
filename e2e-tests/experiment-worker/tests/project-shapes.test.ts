@@ -2,6 +2,7 @@ import { access, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
 import { installNpmProject, installPnpmProject, installYarnProject } from '../helpers/install-project.js';
@@ -79,6 +80,12 @@ describe('experiment worker installed project shapes', () => {
 
         const cleanup = await resources.cleanup();
         expect(cleanup.remainingPaths).toEqual([]);
+        await recordAssertionEvidence(shape.scenario, {
+          'package-manager-install': shape.packageManager,
+          'worker-build': build.result.exitCode,
+          'artifact-relocated': artifactRoot,
+          'protocol-success': run.events.at(-1)?.payload,
+        });
       },
       shape.scenario.timeoutMs,
     );

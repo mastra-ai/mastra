@@ -1,0 +1,28 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, test } from 'vitest';
+import { computeRegistryArtifactDigest } from '../helpers/registry-digest.js';
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
+
+describe('registry artifact digest', () => {
+  test('survives handoff metadata and rejects registry mutation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'experiment-registry-digest-'));
+    roots.push(root);
+    await mkdir(join(root, 'storage', 'package'), { recursive: true });
+    await writeFile(join(root, 'verdaccio.yaml'), 'storage: ./storage\n');
+    await writeFile(join(root, 'storage', 'package', 'metadata.json'), '{"version":1}\n');
+
+    const publishedDigest = await computeRegistryArtifactDigest(root);
+    await writeFile(join(root, 'handoff-digest.txt'), `${publishedDigest}\n`);
+    expect(await computeRegistryArtifactDigest(root)).toBe(publishedDigest);
+
+    await writeFile(join(root, 'storage', 'package', 'metadata.json'), '{"version":2}\n');
+    expect(await computeRegistryArtifactDigest(root)).not.toBe(publishedDigest);
+  });
+});

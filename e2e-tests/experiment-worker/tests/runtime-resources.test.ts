@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@libsql/client';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
+import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { copyArtifact } from '../helpers/copy-artifact.js';
 import { installPnpmProject } from '../helpers/install-project.js';
@@ -83,6 +84,10 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       const completed = run.events.find(event => event.type === 'item-completed');
       expect(JSON.stringify(completed)).toContain('skills:visible');
       expect(run.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
+      await recordAssertionEvidence(workspaceSkillAgentScenario, {
+        'workspace-inherited': completed,
+        'skill-visible': completed,
+      });
     },
     workspaceSkillAgentScenario.timeoutMs,
   );
@@ -102,6 +107,11 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       expect(completed).toContain('sandbox-echo-skill');
       expect(completed).toContain('"exitCode":0');
       expect(run.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
+      await recordAssertionEvidence(workspaceSandboxScenario, {
+        'filesystem-write': completed,
+        'sandbox-read': completed,
+        'skill-discovery': completed,
+      });
     },
     workspaceSandboxScenario.timeoutMs,
   );
@@ -142,6 +152,11 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
         }),
       );
       expect(recovered.result.exitCode).toBe(0);
+      await recordAssertionEvidence(sandboxCancellationScenario, {
+        'sandbox-cancelled': cancelled.events.at(-1)?.payload,
+        'descendant-terminated': !isProcessAlive(pid),
+        'fresh-process-recovery': recovered.result.exitCode,
+      });
     },
     sandboxCancellationScenario.timeoutMs,
   );
@@ -173,6 +188,12 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       expect(JSON.stringify(workflow.events)).toContain('kitchen sink workflow');
       expect(agent.result.exitCode).toBe(0);
       expect(workflow.result.exitCode).toBe(0);
+      await recordAssertionEvidence(kitchenSinkScenario, {
+        'import-heavy-build': manifest.artifact.contentDigest,
+        'agent-runtime': agent.events.at(-1)?.payload,
+        'workflow-runtime': workflow.events.at(-1)?.payload,
+        'no-studio-required': true,
+      });
     },
     kitchenSinkScenario.timeoutMs,
   );
@@ -212,7 +233,14 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       } finally {
         client.close();
       }
-      expect(await pathExists(join(artifactRoot, 'vector-store.db'))).toBe(true);
+      const vectorStoreExists = await pathExists(join(artifactRoot, 'vector-store.db'));
+      expect(vectorStoreExists).toBe(true);
+      await recordAssertionEvidence(persistenceIsolationScenario, {
+        'application-storage-write': completed,
+        'vector-runtime': vectorStoreExists,
+        'experiment-persistence-empty': true,
+        'score-persistence-empty': true,
+      });
     },
     persistenceIsolationScenario.timeoutMs,
   );
