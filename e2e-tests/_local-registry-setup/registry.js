@@ -53,6 +53,11 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
     cwd: location,
   });
 
+  if (process.env.MASTRA_E2E_REGISTRY_PID_FILE) {
+    await mkdir(dirname(process.env.MASTRA_E2E_REGISTRY_PID_FILE), { recursive: true });
+    await writeFile(process.env.MASTRA_E2E_REGISTRY_PID_FILE, `${registry.pid}\n`);
+  }
+
   // Set a dummy auth token for npm/pnpm (required by npm even if registry doesn't validate it)
   execSync(`npm config set //localhost:${port}/:_authToken dummy-token`);
   execSync(`pnpm config set //localhost:${port}/:_authToken dummy-token`);
