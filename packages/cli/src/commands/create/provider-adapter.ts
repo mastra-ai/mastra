@@ -49,22 +49,9 @@ const OPENAI_API_KEY = 'OPENAI_API_KEY';
 const PRIMARY_OPENAI_MODEL = /(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])(?=\s*,?\s*\n\s*defaultOptions\s*:)/g;
 const OBSERVATIONAL_OPENAI_MODEL = /(observationalMemory\s*:\s*\{[^{}]*?\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g;
 
-type ManagedTemplateAdjustment =
-  | 'agent models'
-  | 'package manifest'
-  | '.env.example'
-  | '.env API key'
-  | 'README'
-  | 'pnpm workspace';
-
-interface SkippedManagedTemplateAdjustment {
-  label: ManagedTemplateAdjustment;
-  reasons: string[];
-}
-
 interface ManagedTemplateAdaptationResult extends ManagedProviderConfig {
   apiKeyWritten: boolean;
-  skippedAdjustments: SkippedManagedTemplateAdjustment[];
+  adaptationFailed: boolean;
 }
 
 interface TransformResult {
@@ -197,20 +184,18 @@ function adaptReadme(
   return { applied: true, content };
 }
 
-async function writeSecureEnv(envPath: string, content: string): Promise<{ written: boolean; cleanupPath?: string }> {
+async function writeSecureEnv(envPath: string, content: string): Promise<boolean> {
   const tempPath = path.join(path.dirname(envPath), `.env.mastra-create-${process.pid}-${randomUUID()}.tmp`);
   try {
     await fs.writeFile(tempPath, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     if (process.platform !== 'win32') await fs.chmod(tempPath, 0o600);
     await fs.rename(tempPath, envPath);
-    return { written: true };
+    return true;
   } catch {
     try {
       await fs.rm(tempPath, { force: true });
-      return { written: false };
-    } catch {
-      return { written: false, cleanupPath: path.basename(tempPath) };
-    }
+    } catch {}
+    return false;
   }
 }
 
@@ -230,18 +215,13 @@ export async function adaptDefaultTemplate({
   versionTag: string;
 }): Promise<ManagedTemplateAdaptationResult> {
   const config = MANAGED_PROVIDER_CONFIGS[provider];
-  const skipped = new Map<ManagedTemplateAdjustment, Set<string>>();
-  const skip = (label: ManagedTemplateAdjustment, reason: string) => {
-    const reasons = skipped.get(label) ?? new Set<string>();
-    reasons.add(reason);
-    skipped.set(label, reasons);
-  };
-  const write = async (filePath: string, content: string, label: ManagedTemplateAdjustment) => {
+  let adaptationFailed = false;
+  const write = async (filePath: string, content: string) => {
     try {
       await fs.writeFile(filePath, content, 'utf8');
       return true;
     } catch {
-      skip(label, 'could not write the adjusted file');
+      adaptationFailed = true;
       return false;
     }
   };
@@ -251,10 +231,10 @@ export async function adaptDefaultTemplate({
     try {
       const source = await fs.readFile(agentPath, 'utf8');
       const result = adaptAgentSource(source, provider, config);
-      if (!result.applied) skip('agent models', 'expected model assignments were missing or ambiguous');
-      else await write(agentPath, result.content, 'agent models');
+      if (!result.applied) adaptationFailed = true;
+      else await write(agentPath, result.content);
     } catch {
-      skip('agent models', 'agent source was missing or unreadable');
+      adaptationFailed = true;
     }
   }
 
@@ -269,10 +249,10 @@ export async function adaptDefaultTemplate({
       );
     }
     const result = normalizeManagedManifest(source, resolvedVersions, versionTag);
-    if (!result.applied) skip('package manifest', 'package.json was malformed or had invalid dependency maps');
-    else await write(packageJsonPath, result.content, 'package manifest');
+    if (!result.applied) adaptationFailed = true;
+    else await write(packageJsonPath, result.content);
   } catch {
-    skip('package manifest', 'package.json was missing or unreadable');
+    adaptationFailed = true;
   }
 
   const envExamplePath = path.join(projectPath, '.env.example');
@@ -282,38 +262,30 @@ export async function adaptDefaultTemplate({
     const source = await fs.readFile(envExamplePath, 'utf8');
     const result = replaceEnvKey(source, config.apiKeyEnv);
     if (!result.applied) {
-      skip('.env.example', 'expected API key assignment was missing or ambiguous');
-    } else if (await write(envExamplePath, result.content, '.env.example')) {
+      adaptationFailed = true;
+    } else if (await write(envExamplePath, result.content)) {
       adaptedEnvExample = result.content;
     }
   } catch {
-    skip('.env.example', '.env.example was missing or unreadable');
+    adaptationFailed = true;
   }
 
   let apiKeyWritten = false;
   if (adaptedEnvExample === undefined) {
-    if (apiKey) skip('.env API key', 'API key was not written because .env.example was not adapted');
+    if (apiKey) adaptationFailed = true;
   } else if (apiKey) {
     const result = setEnvValue(adaptedEnvExample, config.apiKeyEnv, apiKey);
     if (!result.applied) {
-      skip('.env API key', 'expected API key assignment was missing or ambiguous');
+      adaptationFailed = true;
     } else {
-      const envResult = await writeSecureEnv(envPath, result.content);
-      apiKeyWritten = envResult.written;
-      if (!envResult.written) {
-        skip(
-          '.env API key',
-          envResult.cleanupPath
-            ? `remove ${envResult.cleanupPath} from the generated project directory`
-            : 'API key could not be written securely',
-        );
-      }
+      apiKeyWritten = await writeSecureEnv(envPath, result.content);
+      if (!apiKeyWritten) adaptationFailed = true;
     }
   } else {
     try {
       await fs.rm(envPath, { force: true });
     } catch {
-      skip('.env API key', 'existing .env could not be removed');
+      adaptationFailed = true;
     }
   }
 
@@ -321,19 +293,19 @@ export async function adaptDefaultTemplate({
   try {
     const source = await fs.readFile(readmePath, 'utf8');
     const result = adaptReadme(source, provider, config, projectName, packageManager);
-    if (!result.applied) skip('README', 'expected starter wording was not found');
-    else await write(readmePath, result.content, 'README');
+    if (!result.applied) adaptationFailed = true;
+    else await write(readmePath, result.content);
   } catch {
-    skip('README', 'README was missing or unreadable');
+    adaptationFailed = true;
   }
 
   if (packageManager === 'pnpm') {
-    await write(path.join(projectPath, 'pnpm-workspace.yaml'), PNPM_WORKSPACE, 'pnpm workspace');
+    await write(path.join(projectPath, 'pnpm-workspace.yaml'), PNPM_WORKSPACE);
   }
 
   return {
     ...config,
     apiKeyWritten,
-    skippedAdjustments: [...skipped].map(([label, reasons]) => ({ label, reasons: [...reasons] })),
+    adaptationFailed,
   };
 }

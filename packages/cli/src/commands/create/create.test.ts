@@ -184,7 +184,7 @@ beforeEach(async () => {
     apiKeyEnv: 'OPENAI_API_KEY',
     apiKeyPrerequisite: 'An OpenAI API key',
     apiKeyWritten: false,
-    skippedAdjustments: [],
+    adaptationFailed: false,
   });
 });
 
@@ -754,10 +754,7 @@ describe('create materialization lifecycle', () => {
       apiKeyEnv: 'OPENAI_API_KEY',
       apiKeyPrerequisite: 'An OpenAI API key',
       apiKeyWritten: false,
-      skippedAdjustments: [
-        { label: 'agent models', reasons: ['expected model assignments were missing or ambiguous'] },
-        { label: 'README', reasons: ['README was missing or unreadable'] },
-      ],
+      adaptationFailed: true,
     });
 
     await create({
@@ -768,7 +765,7 @@ describe('create materialization lifecycle', () => {
 
     expect(prompts.log.warn).toHaveBeenCalledTimes(1);
     expect(prompts.log.warn).toHaveBeenCalledWith(
-      'Some provider setup could not be applied: agent models, README. Review these items before running the project.',
+      'Some provider setup could not be applied. Review the generated project before running it.',
     );
     expect(installDependencies).toHaveBeenCalledBefore(vi.mocked(publishStagedProject));
     expect(publishStagedProject).toHaveBeenCalled();
@@ -776,7 +773,7 @@ describe('create materialization lifecycle', () => {
     expect(cleanupOwnedStagingDirectory).toHaveBeenCalledWith('/tmp/.my-project.mastra-create-test');
   });
 
-  it('keeps secure temp cleanup guidance actionable after publication', async () => {
+  it('does not include secure temp filenames in the partial-adaptation warning', async () => {
     const { create } = await import('./create');
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     const { publishStagedProject } = await import('./utils');
@@ -786,12 +783,7 @@ describe('create materialization lifecycle', () => {
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyPrerequisite: 'An Anthropic API key',
       apiKeyWritten: false,
-      skippedAdjustments: [
-        {
-          label: '.env API key',
-          reasons: ['remove .env.mastra-create-test.tmp from the generated project directory'],
-        },
-      ],
+      adaptationFailed: true,
     });
 
     await create({
@@ -803,9 +795,9 @@ describe('create materialization lifecycle', () => {
 
     expect(publishStagedProject).toHaveBeenCalled();
     expect(prompts.log.warn).toHaveBeenCalledWith(
-      'Some provider setup could not be applied: .env API key. Review these items before running the project. remove .env.mastra-create-test.tmp from the generated project directory',
+      'Some provider setup could not be applied. Review the generated project before running it.',
     );
-    expect(prompts.log.warn).not.toHaveBeenCalledWith(expect.stringContaining('/tmp/.my-project.mastra-create-test'));
+    expect(prompts.log.warn).not.toHaveBeenCalledWith(expect.stringContaining('.env.mastra-create-test.tmp'));
     expect(prompts.note).toHaveBeenCalledWith(
       expect.stringContaining('Set ANTHROPIC_API_KEY in .env before starting.'),
     );
@@ -906,7 +898,7 @@ describe('create materialization lifecycle', () => {
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyPrerequisite: 'An Anthropic API key',
       apiKeyWritten: false,
-      skippedAdjustments: [],
+      adaptationFailed: false,
     });
 
     await create({
@@ -930,7 +922,7 @@ describe('create materialization lifecycle', () => {
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyPrerequisite: 'An Anthropic API key',
       apiKeyWritten: false,
-      skippedAdjustments: [{ label: '.env API key', reasons: ['API key could not be written securely'] }],
+      adaptationFailed: true,
     });
 
     await create({

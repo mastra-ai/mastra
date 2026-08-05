@@ -41,10 +41,6 @@ function adaptFixture(
   });
 }
 
-function skippedLabels(result: Awaited<ReturnType<typeof adaptDefaultTemplate>>) {
-  return result.skippedAdjustments.map(adjustment => adjustment.label);
-}
-
 function expectNoSecret(result: Awaited<ReturnType<typeof adaptDefaultTemplate>>) {
   expect(JSON.stringify(result)).not.toContain(TEST_API_KEY);
 }
@@ -130,7 +126,7 @@ describe('adaptDefaultTemplate', () => {
       expect(manifest.dependencies.zod).toBe(originalManifest.dependencies.zod);
       expect(envExample).toContain(`${config.apiKeyEnv}=\n`);
       expect(env).toContain(`${config.apiKeyEnv}=${TEST_API_KEY}\n`);
-      expect(result).toMatchObject({ ...config, apiKeyWritten: true, skippedAdjustments: [] });
+      expect(result).toMatchObject({ ...config, apiKeyWritten: true, adaptationFailed: false });
       if (process.platform !== 'win32') {
         expect((await fs.stat(path.join(projectPath, '.env'))).mode & 0o777).toBe(0o600);
       }
@@ -150,7 +146,7 @@ describe('adaptDefaultTemplate', () => {
     });
 
     expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
-    expect(result.skippedAdjustments).toEqual([]);
+    expect(result.adaptationFailed).toBe(false);
   });
 
   it('preserves template-owned OpenAI models, built-in tools, and unrelated environment variables', async () => {
@@ -172,7 +168,7 @@ describe('adaptDefaultTemplate', () => {
     expect(await fs.readFile(envExamplePath, 'utf8')).toBe(
       '# Keep this comment\nOPENAI_API_KEY=\nTURSO_DATABASE_URL=\n',
     );
-    expect(result.skippedAdjustments).toEqual([]);
+    expect(result.adaptationFailed).toBe(false);
   });
 
   it('preserves extra environment entries when adapting to another provider', async () => {
@@ -222,7 +218,7 @@ describe('adaptDefaultTemplate', () => {
       'GOOGLE_GENERATIVE_AI_API_KEY=\n',
     );
     expect((await fs.readFile(path.join(projectPath, 'README.md'), 'utf8')).startsWith('# my-agent\n')).toBe(true);
-    expect(skippedLabels(result)).toContain('agent models');
+    expect(result.adaptationFailed).toBe(true);
   });
 
   it('does not mistake an unrelated model for a missing managed model site', async () => {
@@ -235,7 +231,7 @@ describe('adaptDefaultTemplate', () => {
     const result = await adaptFixture({ projectPath, provider: 'anthropic', versionTag: 'latest' });
 
     expect(await fs.readFile(agentPath, 'utf8')).toBe(drifted);
-    expect(skippedLabels(result)).toContain('agent models');
+    expect(result.adaptationFailed).toBe(true);
   });
 
   it.each(['absent', 'ambiguous'] as const)(
@@ -259,7 +255,7 @@ describe('adaptDefaultTemplate', () => {
       expect(await fs.readFile(envExamplePath, 'utf8')).toBe(drifted);
       expect(await fs.readFile(envPath, 'utf8')).toBe(originalEnv);
       expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
-      expect(skippedLabels(result)).toEqual(expect.arrayContaining(['.env.example', '.env API key']));
+      expect(result.adaptationFailed).toBe(true);
       expect(result.apiKeyWritten).toBe(false);
       expectNoSecret(result);
     },
@@ -270,14 +266,14 @@ describe('adaptDefaultTemplate', () => {
     ['package manifest', 'package.json', 'openai'],
     ['.env.example', '.env.example', 'openai'],
     ['README', 'README.md', 'openai'],
-  ] as const)('continues when %s source is missing', async (label, relativePath, provider) => {
+  ] as const)('continues when %s source is missing', async (_label, relativePath, provider) => {
     const projectPath = await createFixture();
     await fs.rm(path.join(projectPath, relativePath));
 
     const result = await adaptFixture({ projectPath, provider, versionTag: 'latest' });
 
-    expect(skippedLabels(result)).toContain(label);
-    if (label !== 'README')
+    expect(result.adaptationFailed).toBe(true);
+    if (_label !== 'README')
       expect((await fs.readFile(path.join(projectPath, 'README.md'), 'utf8')).startsWith('# my-agent\n')).toBe(true);
   });
 
@@ -290,7 +286,7 @@ describe('adaptDefaultTemplate', () => {
     const result = await adaptFixture({ projectPath, provider: 'xai', versionTag: 'latest' });
 
     expect(await fs.readFile(readmePath, 'utf8')).toBe(customReadme);
-    expect(skippedLabels(result)).toContain('README');
+    expect(result.adaptationFailed).toBe(true);
     expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toContain('XAI_API_KEY=\n');
   });
 
@@ -299,7 +295,7 @@ describe('adaptDefaultTemplate', () => {
     ['package manifest', 'package.json', 'openai'],
     ['.env.example', '.env.example', 'openai'],
     ['README', 'README.md', 'openai'],
-  ] as const)('continues when %s source is unreadable', async (label, relativePath, provider) => {
+  ] as const)('continues when %s source is unreadable', async (_label, relativePath, provider) => {
     const projectPath = await createFixture();
     const blockedPath = path.join(projectPath, relativePath);
     const originalReadFile = fs.readFile.bind(fs);
@@ -315,7 +311,7 @@ describe('adaptDefaultTemplate', () => {
       versionTag: 'latest',
     });
 
-    expect(skippedLabels(result)).toContain(label);
+    expect(result.adaptationFailed).toBe(true);
     expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
   });
 
@@ -333,7 +329,7 @@ describe('adaptDefaultTemplate', () => {
 
     expect(await fs.readFile(manifestPath, 'utf8')).toBe('{ not json');
     expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
-    expect(skippedLabels(result)).toContain('package manifest');
+    expect(result.adaptationFailed).toBe(true);
   });
 
   it('continues later writes after an individual manifest write failure', async () => {
@@ -354,7 +350,7 @@ describe('adaptDefaultTemplate', () => {
 
     expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toContain('ANTHROPIC_API_KEY=\n');
     expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
-    expect(skippedLabels(result)).toContain('package manifest');
+    expect(result.adaptationFailed).toBe(true);
   });
 
   it('does not publish .env when the .env.example write fails', async () => {
@@ -377,7 +373,7 @@ describe('adaptDefaultTemplate', () => {
 
     expect(await fs.readFile(envPath, 'utf8')).toBe(originalEnv);
     expect(result.apiKeyWritten).toBe(false);
-    expect(skippedLabels(result)).toEqual(expect.arrayContaining(['.env.example', '.env API key']));
+    expect(result.adaptationFailed).toBe(true);
     expectNoSecret(result);
   });
 
@@ -415,12 +411,12 @@ describe('adaptDefaultTemplate', () => {
 
     expect(await fs.readFile(envPath, 'utf8')).toBe(originalEnv);
     expect(result.apiKeyWritten).toBe(false);
-    expect(skippedLabels(result)).toContain('.env API key');
+    expect(result.adaptationFailed).toBe(true);
     expect((await fs.readdir(projectPath)).filter(file => file.includes('.env.mastra-create-'))).toEqual([]);
     expectNoSecret(result);
   });
 
-  it('reports a secure temp cleanup failure without leaking the API key', async () => {
+  it('does not report the secure temp filename when cleanup fails', async () => {
     const projectPath = await createFixture();
     const envPath = path.join(projectPath, '.env');
     const originalEnv = await fs.readFile(envPath, 'utf8');
@@ -448,10 +444,8 @@ describe('adaptDefaultTemplate', () => {
     if (process.platform !== 'win32') {
       expect((await fs.stat(path.join(projectPath, tempFile!))).mode & 0o777).toBe(0o600);
     }
-    expect(result.apiKeyWritten).toBe(false);
-    expect(result.skippedAdjustments.find(adjustment => adjustment.label === '.env API key')?.reasons).toEqual([
-      `remove ${tempFile} from the generated project directory`,
-    ]);
+    expect(result).toMatchObject({ apiKeyWritten: false, adaptationFailed: true });
+    expect(JSON.stringify(result)).not.toContain(tempFile);
     expect(JSON.stringify(result)).not.toContain(projectPath);
     expectNoSecret(result);
   });
@@ -466,7 +460,7 @@ describe('adaptDefaultTemplate', () => {
     const result = await adaptFixture({ projectPath, provider: 'openai', versionTag: 'latest' });
 
     expect(await fs.readFile(agentPath, 'utf8')).toBe(drifted);
-    expect(result.skippedAdjustments).toEqual([]);
+    expect(result.adaptationFailed).toBe(false);
   });
 
   it('resolves each Mastra dependency to its independently exact version on success', async () => {

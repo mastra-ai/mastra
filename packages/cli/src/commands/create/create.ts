@@ -368,14 +368,8 @@ export const create = async (args: CreateOptions): Promise<void> => {
         });
         selectedApiKeyEnv = providerConfig.apiKeyEnv;
         selectedApiKeyWritten = providerConfig.apiKeyWritten;
-        if (providerConfig.skippedAdjustments.length > 0) {
-          const labels = providerConfig.skippedAdjustments.map(adjustment => adjustment.label).join(', ');
-          const cleanupInstructions = providerConfig.skippedAdjustments
-            .flatMap(adjustment => adjustment.reasons)
-            .filter(reason => reason.startsWith('remove ') && reason.endsWith(' from the generated project directory'));
-          p.log.warn(
-            `Some provider setup could not be applied: ${labels}. Review these items before running the project.${cleanupInstructions.length > 0 ? ` ${cleanupInstructions.join(' ')}` : ''}`,
-          );
+        if (providerConfig.adaptationFailed) {
+          p.log.warn('Some provider setup could not be applied. Review the generated project before running it.');
         }
         materializationController.signal.throwIfAborted();
       }
