@@ -103,9 +103,9 @@ A `.md` schedule uses frontmatter for the cron and the document body as the prom
 
 ```markdown title="src/mastra/agents/support/schedules/cleanup.md"
 ---
-cron: "0 3 * * *"
-timezone: "UTC"
-name: "nightly cleanup"
+cron: '0 3 * * *'
+timezone: 'UTC'
+name: 'nightly cleanup'
 ---
 
 Review tickets untouched for 30 days.
@@ -121,106 +121,105 @@ Frontmatter accepts every option below except `handler`, which needs a function 
 
 <PropertiesTable
   content={[
-    {
-      name: 'cron',
-      type: 'string',
-      description:
-        'Standard five-field cron expression. Required. The scheduler evaluates schedules on a tick loop, so the effective granularity is one minute. Sub-minute fields are not supported.',
-    },
-    {
-      name: 'prompt',
-      type: 'string',
-      description: 'Message the agent runs on each fire. Set this or `handler`, not both.',
-      isOptional: true,
-    },
-    {
-      name: 'handler',
-      type: '(ctx) => ScheduleOverrides | null | undefined',
-      description:
-        'Computes the fire at trigger time. Return overrides to apply, `null` to skip this fire, or nothing to use the declared defaults. Set this or `prompt`, not both.',
-      isOptional: true,
-    },
-    {
-      name: 'timezone',
-      type: 'string',
-      description:
-        'IANA timezone the cron is evaluated in (e.g. `America/New_York`). Defaults to the host process timezone, which varies by deployment, so set this explicitly for anything time-of-day sensitive. DST transitions are handled by the timezone rules, so `0 9 * * *` stays 9am local across the shift.',
-      isOptional: true,
-    },
-    {
-      name: 'name',
-      type: 'string',
-      description: 'Free-form label shown in Studio and filterable via `mastra.schedules.list({ name })`.',
-      isOptional: true,
-    },
-    {
-      name: 'threadId',
-      type: 'string',
-      description:
-        'Sends the fire as a signal into an existing thread instead of starting a fresh run. Requires `resourceId`.',
-      isOptional: true,
-    },
-    {
-      name: 'resourceId',
-      type: 'string',
-      description: 'Owner of the target thread. Required when `threadId` is set.',
-      isOptional: true,
-    },
-    {
-      name: 'signalType',
-      type: "'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'",
-      description: 'Signal category for the fire. Threaded schedules only.',
-      isOptional: true,
-      defaultValue: "'notification'",
-    },
-    {
-      name: 'tagName',
-      type: 'string',
-      description: 'XML tag the signal renders as, so a fire reaches the agent as `<schedule>…</schedule>`.',
-      isOptional: true,
-      defaultValue: "'schedule'",
-    },
-    {
-      name: 'attributes',
-      type: 'Record<string, string | number | boolean | null>',
-      description: 'Attributes rendered onto the signal XML tag.',
-      isOptional: true,
-    },
-    {
-      name: 'providerOptions',
-      type: 'Record<string, unknown>',
-      description: 'Provider options merged into the schedule signal payload on every fire. Must be JSON-safe.',
-      isOptional: true,
-    },
-    {
-      name: 'ifActive',
-      type: 'ScheduleIfActive',
-      description:
-        'What to do when the target thread is already streaming: `deliver`, `persist`, or `discard`. Threaded schedules only.',
-      isOptional: true,
-    },
-    {
-      name: 'ifIdle',
-      type: 'ScheduleIfIdle',
-      description:
-        'What to do when the target thread is idle: `wake`, `persist`, or `discard`. Threaded schedules only.',
-      isOptional: true,
-    },
-    {
-      name: 'status',
-      type: "'active' | 'paused'",
-      description:
-        'Status the row is created with. Applies on first create only, because the sync never patches `status` so that pausing through the API survives a redeploy. Changing this value in code later has no effect on an existing schedule.',
-      isOptional: true,
-      defaultValue: "'active'",
-    },
-    {
-      name: 'metadata',
-      type: 'Record<string, unknown>',
-      description: 'Arbitrary JSON-safe data stored alongside the schedule row.',
-      isOptional: true,
-    },
-  ]}
+  {
+    name: 'cron',
+    type: 'string',
+    description:
+      'Standard five-field cron expression. Required. The scheduler evaluates schedules on a tick loop, so the effective granularity is one minute. Sub-minute fields are not supported.',
+  },
+  {
+    name: 'prompt',
+    type: 'string',
+    description: 'Message the agent runs on each fire. Set this or `handler`, not both.',
+    isOptional: true,
+  },
+  {
+    name: 'handler',
+    type: '(ctx) => ScheduleOverrides | null | undefined',
+    description:
+      'Computes the fire at trigger time. Return overrides to apply, `null` to skip this fire, or nothing to use the declared defaults. Set this or `prompt`, not both.',
+    isOptional: true,
+  },
+  {
+    name: 'timezone',
+    type: 'string',
+    description:
+      'IANA timezone the cron is evaluated in (e.g. `America/New_York`). Defaults to the host process timezone, which varies by deployment, so set this explicitly for anything time-of-day sensitive. DST transitions are handled by the timezone rules, so `0 9 * * *` stays 9am local across the shift.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Free-form label shown in Studio and filterable via `mastra.schedules.list({ name })`.',
+    isOptional: true,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description:
+      'Sends the fire as a signal into an existing thread instead of starting a fresh run. Requires `resourceId`.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Owner of the target thread. Required when `threadId` is set.',
+    isOptional: true,
+  },
+  {
+    name: 'signalType',
+    type: "'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'",
+    description: 'Signal category for the fire. Threaded schedules only.',
+    isOptional: true,
+    defaultValue: "'notification'",
+  },
+  {
+    name: 'tagName',
+    type: 'string',
+    description: 'XML tag the signal renders as, so a fire reaches the agent as `<schedule>…</schedule>`.',
+    isOptional: true,
+    defaultValue: "'schedule'",
+  },
+  {
+    name: 'attributes',
+    type: 'Record<string, string | number | boolean | null>',
+    description: 'Attributes rendered onto the signal XML tag.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'Record<string, unknown>',
+    description: 'Provider options merged into the schedule signal payload on every fire. Must be JSON-safe.',
+    isOptional: true,
+  },
+  {
+    name: 'ifActive',
+    type: 'ScheduleIfActive',
+    description:
+      'What to do when the target thread is already streaming: `deliver`, `persist`, or `discard`. Threaded schedules only.',
+    isOptional: true,
+  },
+  {
+    name: 'ifIdle',
+    type: 'ScheduleIfIdle',
+    description: 'What to do when the target thread is idle: `wake`, `persist`, or `discard`. Threaded schedules only.',
+    isOptional: true,
+  },
+  {
+    name: 'status',
+    type: "'active' | 'paused'",
+    description:
+      'Status the row is created with. Applies on first create only, because the sync never patches `status` so that pausing through the API survives a redeploy. Changing this value in code later has no effect on an existing schedule.',
+    isOptional: true,
+    defaultValue: "'active'",
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Arbitrary JSON-safe data stored alongside the schedule row.',
+    isOptional: true,
+  },
+]}
 />
 
 ## Testing a schedule in development
@@ -289,8 +288,8 @@ export default agentConfig({
 
 ```markdown title="src/mastra/agents/support/schedules/weekly-digest.md"
 ---
-cron: "0 9 * * 1"
-timezone: "America/New_York"
+cron: '0 9 * * 1'
+timezone: 'America/New_York'
 ---
 
 Summarize the past week's tickets and post the digest to the team channel.

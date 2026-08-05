@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateFsAgentsModule } from './codegen';
 import { discoverFsAgents } from './discover';
@@ -16,10 +16,19 @@ import { discoverFsAgents } from './discover';
  * specifiers like `@mastra/core/agent` resolve through the workspace the same
  * way they do in a real project.
  */
+
+/**
+ * Resolved from this file, not from `process.cwd()`. The root runner invokes
+ * vitest from the repo root, where `@mastra/core` is not resolvable, so a
+ * cwd-relative fixture dir passes under `--filter ./packages/deployer` and
+ * fails in CI.
+ */
+const PACKAGE_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
 let dir: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(process.cwd(), '.tmp-fs-exec-'));
+  dir = await mkdtemp(join(PACKAGE_ROOT, '.tmp-fs-exec-'));
 });
 
 afterEach(async () => {

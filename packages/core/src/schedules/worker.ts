@@ -8,7 +8,6 @@ import type { WorkerTransport } from '../worker/transport/transport';
 import { MastraWorker } from '../worker/worker';
 import type { WorkerDeps } from '../worker/worker';
 import { parseFsAgentScheduleRowId } from './define';
-import type { AgentScheduleHandler } from './define';
 import type {
   ScheduleEffective,
   ScheduleHooks,
@@ -299,11 +298,7 @@ export async function executeAgentSchedule(
   // so they can't live on the JSON schedule row; Mastra resolves them
   // in-process by row id. The Mastra-level `prepare` hook runs after, giving it
   // the last word.
-  const fsHandler = (
-    mastra as unknown as {
-      __getFsAgentScheduleHandler?: (id: string) => AgentScheduleHandler<Mastra> | undefined;
-    }
-  ).__getFsAgentScheduleHandler?.(scheduleId);
+  const fsHandler = mastra.__getFsAgentScheduleHandler?.(scheduleId);
 
   const prepareStages: Array<() => Promise<SchedulePrepareResult | null | undefined | void>> = [];
   if (fsHandler) {
@@ -365,9 +360,9 @@ export async function executeAgentSchedule(
     effective = mergeEffective(effective, result ?? undefined);
   }
 
-  // Handler-mode rows persist an empty prompt because the handler supplies it.
-  // If nothing filled it in, firing would send the agent an empty message, so
-  // fail loud with a reason that names the cause instead.
+  // 2. Handler-mode rows persist an empty prompt because the handler supplies
+  // it. If nothing filled it in, firing would send the agent an empty message,
+  // so fail loud with a reason that names the cause instead.
   //
   // Scoped to handler-mode fires on purpose: rows from other sources always
   // carry a prompt, and widening this would silently change how pre-existing

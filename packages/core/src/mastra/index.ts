@@ -48,8 +48,8 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
-import { FS_AGENT_SCHEDULE_PREFIX, fsAgentScheduleRowId, parseFsAgentScheduleRowId } from '../schedules/define';
-import type { AgentScheduleDefinition, AgentScheduleHandler, DeclaredAgentSchedule } from '../schedules/define';
+import type { AgentScheduleHandler } from '../schedules/define';
+import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
@@ -84,6 +84,12 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/stored';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
+import {
+  declaredSchedulesOf,
+  findFsAgentScheduleHandler,
+  hasFsAgentSchedule,
+  syncFsAgentSchedules,
+} from './fs-agent-schedules';
 import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
@@ -119,19 +125,6 @@ function createUndefinedPrimitiveError(
     text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
     details: { status: 400, ...(key && { key }) },
   });
-}
-
-/**
- * Stable JSON-shape comparison for two `Schedule.target` values. Uses
- * JSON.stringify because targets are plain JSON-serializable objects (the
- * storage layer round-trips them through the same encoding). Covers the
- * `inputData` / `initialState` / `requestContext` payload fields that we
- * want to detect changes on across redeploys.
- */
-function targetsEqual(a: Schedule['target'] | undefined, b: Schedule['target']): boolean {
-  if (a === b) return true;
-  if (!a) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**
@@ -201,37 +194,6 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/** See {@link targetsEqual}. Same approach for free-form metadata. */
-function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | undefined): boolean {
-  const aNorm = a ?? undefined;
-  const bNorm = b ?? undefined;
-  if (aNorm === bNorm) return true;
-  if (!aNorm || !bNorm) return false;
-  return JSON.stringify(aNorm) === JSON.stringify(bNorm);
-}
-
-/**
- * Reads the file-based schedules declared on a registered agent.
- *
- * Durable agents are registered as a wrapper around an inner `Agent`. Some
- * wrappers forward property access to the inner agent (proxy-based ones) while
- * others are real subclasses with their own empty schedule list, so fall
- * through to the inner agent when the wrapper reports none.
- */
-function declaredSchedulesOf(agent: unknown): DeclaredAgentSchedule[] {
-  const candidate = agent as { getDeclaredSchedules?: () => DeclaredAgentSchedule[]; agent?: unknown } | null;
-  if (!candidate) return [];
-
-  const own = candidate.getDeclaredSchedules?.() ?? [];
-  if (own.length > 0) return own;
-
-  const inner = candidate.agent as { getDeclaredSchedules?: () => DeclaredAgentSchedule[] } | undefined;
-  // A standalone durable `Agent` exposes a self-referential `.agent` getter;
-  // guard against recursing into itself.
-  if (!inner || inner === candidate) return own;
-  return inner.getDeclaredSchedules?.() ?? [];
 }
 
 /**
@@ -1859,52 +1821,6 @@ export class Mastra<
   }
 
   /**
-   * Returns the flat list of schedules declared by file-based agents'
-   * `schedules/` directories. Keyed by `fsa_<encoded(agentId)>__<encoded(key)>`
-   * so the prefix uniquely identifies "all rows owned by this agent's
-   * schedules/ directory" even when ids contain delimiter-like characters.
-   */
-  #collectFsAgentSchedules(): Array<{
-    scheduleId: string;
-    agentId: string;
-    key: string;
-    definition: AgentScheduleDefinition;
-  }> {
-    const out: Array<{ scheduleId: string; agentId: string; key: string; definition: AgentScheduleDefinition }> = [];
-    const seen = new Set<string>();
-    const agents = this.#agents as Record<string, Agent<any>>;
-    for (const agent of Object.values(agents ?? {})) {
-      // `agent.id` (not the registration key) is what `getAgentById` matches on,
-      // and that's how the schedule worker resolves the target at fire time.
-      for (const { key, definition } of declaredSchedulesOf(agent)) {
-        const scheduleId = fsAgentScheduleRowId(agent.id, key);
-        // Two agents registered under different keys can still share an `id`.
-        // They would map onto one row and silently overwrite each other, so
-        // keep the first and say so rather than letting the row flip-flop.
-        if (seen.has(scheduleId)) {
-          this.#logger?.warn(
-            `Duplicate schedule "${key}" for agent id "${agent.id}": two registered agents share that id. Keeping the first and ignoring the rest.`,
-          );
-          continue;
-        }
-        seen.add(scheduleId);
-        out.push({ scheduleId, agentId: agent.id, key, definition });
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Returns true when any registered agent declares schedules on disk. Drives
-   * scheduler auto-enablement the same way `#hasScheduledWorkflow` does for
-   * declarative workflow schedules.
-   */
-  #hasFsAgentSchedule(): boolean {
-    const agents = this.#agents as Record<string, Agent<any>>;
-    return Object.values(agents ?? {}).some(agent => declaredSchedulesOf(agent).length > 0);
-  }
-
-  /**
    * Resolve the handler for a handler-mode file-based schedule. Handlers are
    * functions and therefore cannot be persisted on the JSON schedule row, so
    * the agent-schedule worker looks them up in-process by row id at fire time.
@@ -1912,12 +1828,7 @@ export class Mastra<
    * @internal — public so the agent-schedule worker can call it.
    */
   __getFsAgentScheduleHandler(scheduleId: string): AgentScheduleHandler<Mastra> | undefined {
-    for (const { scheduleId: id, definition } of this.#collectFsAgentSchedules()) {
-      if (id === scheduleId && typeof definition.handler === 'function') {
-        return definition.handler as AgentScheduleHandler<Mastra>;
-      }
-    }
-    return undefined;
+    return findFsAgentScheduleHandler<Mastra>(this.#agents as Record<string, Agent<any>>, scheduleId);
   }
 
   #shouldEnableScheduler(): boolean {
@@ -1929,7 +1840,11 @@ export class Mastra<
     if (this.#workersDisabled) return false;
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
-    return this.#hasScheduledWorkflow || this.#schedulerRequested || this.#hasFsAgentSchedule();
+    return (
+      this.#hasScheduledWorkflow ||
+      this.#schedulerRequested ||
+      hasFsAgentSchedule(this.#agents as Record<string, Agent<any>>)
+    );
   }
 
   /**
@@ -2059,112 +1974,18 @@ export class Mastra<
    * schedule storage. Runs as part of {@link registerDeclarativeSchedules}, so
    * it happens on scheduler init and on late agent registration.
    *
-   * Mirrors the declarative workflow sync: upsert declared rows, diff the
-   * config fields and patch what changed, leave `status` alone so an
-   * out-of-band pause survives a redeploy, and delete orphaned `fsa_` rows that
-   * code no longer declares. Rows created imperatively through
-   * `mastra.schedules.create(...)` use the `agent_` prefix and are never
-   * touched here.
+   * The sync itself lives in `mastra/fs-agent-schedules.ts` — it needs only the
+   * agent map, the store and a logger, so keeping it out of this file keeps the
+   * upsert/diff/sweep policy readable on its own. Row equality goes through the
+   * same `schedules/row-diff` comparators as the workflow sync above.
    */
   async #registerFsAgentSchedules(schedulesStore: SchedulesStorage, knownRows?: Schedule[]): Promise<void> {
-    const declared = this.#collectFsAgentSchedules();
-    const declaredIds = new Set(declared.map(d => d.scheduleId));
-
-    // One read for both the upsert diff and the orphan sweep, instead of a
-    // `getSchedule` round-trip per declared schedule on every boot.
-    const allRows = knownRows ?? (await schedulesStore.listSchedules());
-    const rowsById = new Map(allRows.map(row => [row.id, row]));
-
-    for (const { scheduleId, agentId, key, definition } of declared) {
-      try {
-        const now = Date.now();
-        // Handler-mode schedules carry no stored prompt: the handler computes
-        // the fire's parameters in-process at trigger time. Undefined fields
-        // drop out on serialization, so they need no conditional spreads.
-        const target: Schedule['target'] = {
-          type: 'agent',
-          agentId,
-          prompt: definition.prompt ?? '',
-          name: definition.name,
-          threadId: definition.threadId,
-          resourceId: definition.resourceId,
-          signalType: definition.signalType,
-          tagName: definition.tagName,
-          attributes: definition.attributes,
-          providerOptions: definition.providerOptions,
-          ifActive: definition.ifActive,
-          ifIdle: definition.ifIdle,
-        };
-
-        const existing = rowsById.get(scheduleId);
-
-        if (!existing) {
-          await schedulesStore.createSchedule({
-            id: scheduleId,
-            target,
-            cron: definition.cron,
-            timezone: definition.timezone,
-            status: definition.status ?? 'active',
-            nextFireAt: computeNextFireAt(definition.cron, { timezone: definition.timezone, after: now }),
-            createdAt: now,
-            updatedAt: now,
-            metadata: definition.metadata,
-            ownerType: 'agent',
-            ownerId: agentId,
-          });
-          continue;
-        }
-
-        const patch: ScheduleUpdate = {};
-        const cronChanged = existing.cron !== definition.cron;
-        const timezoneChanged = (existing.timezone ?? undefined) !== (definition.timezone ?? undefined);
-
-        if (cronChanged) patch.cron = definition.cron;
-        if (timezoneChanged) patch.timezone = definition.timezone;
-        if (!targetsEqual(existing.target, target)) patch.target = target;
-        if (!metadataEqual(existing.metadata, definition.metadata)) patch.metadata = definition.metadata;
-
-        // Cron or timezone change invalidates the stored nextFireAt — recompute
-        // from now so we don't fire on the old schedule.
-        if (cronChanged || timezoneChanged) {
-          patch.nextFireAt = computeNextFireAt(definition.cron, { timezone: definition.timezone, after: now });
-        }
-
-        if (Object.keys(patch).length > 0) {
-          await schedulesStore.updateSchedule(scheduleId, patch);
-        }
-      } catch (error) {
-        this.#logger?.error('Failed to register file-based agent schedule', { scheduleId, agentId, key, error });
-      }
-    }
-
-    // Orphan deletion: drop `fsa_` rows whose owning agent is registered here
-    // but no longer declares that schedule — a file deleted or renamed.
-    //
-    // Scoped to agents registered in THIS process on purpose. A process holding
-    // only a subset of the agents (a standalone worker, a partial registry after
-    // a failed import) must not delete another agent's schedules. Rows whose
-    // agent is gone from the project entirely are already self-healing: the
-    // agent-schedule worker deletes a row when it can't resolve the target
-    // (`agent-missing` → `selfClean`), so nothing is left firing forever.
-    const registeredAgentIds = new Set(
-      Object.values((this.#agents ?? {}) as Record<string, Agent<any>>).map(a => a.id),
-    );
-    for (const row of allRows) {
-      if (declaredIds.has(row.id)) continue;
-      if (!row.id.startsWith(FS_AGENT_SCHEDULE_PREFIX)) continue;
-      const ownerAgentId = parseFsAgentScheduleRowId(row.id)?.agentId;
-      if (!ownerAgentId || !registeredAgentIds.has(ownerAgentId)) continue;
-      try {
-        await schedulesStore.deleteSchedule(row.id);
-      } catch (error) {
-        this.#logger?.error('Failed to delete orphaned file-based agent schedule', {
-          scheduleId: row.id,
-          agentId: ownerAgentId,
-          error,
-        });
-      }
-    }
+    await syncFsAgentSchedules({
+      agents: this.#agents as Record<string, Agent<any>>,
+      store: schedulesStore,
+      logger: this.#logger as IMastraLogger | undefined,
+      knownRows,
+    });
   }
 
   /**
@@ -2827,7 +2648,6 @@ export class Mastra<
       // Yield first so agents registered in the same synchronous batch are all
       // present before the sweep computes what is declared.
       await Promise.resolve();
-      this.#fsScheduleSyncPending = false;
       try {
         const schedulesStore = await this.#storage?.getStore('schedules');
         if (!schedulesStore) return;
@@ -2837,6 +2657,12 @@ export class Mastra<
           agentId: agent.id,
           error,
         });
+      } finally {
+        // Cleared only once the sweep has finished. Clearing it before the
+        // await would let an agent registered mid-sync start a second
+        // concurrent sync, which races the first on `createSchedule` for the
+        // same row.
+        this.#fsScheduleSyncPending = false;
       }
     })();
   }

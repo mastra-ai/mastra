@@ -123,6 +123,11 @@ export type MarkdownScheduleDefinition = AgentSchedulePromptDefinition;
  * onto the definition. Anything outside this list fails the build rather than
  * being silently dropped — a schedule that quietly ignores half its config is
  * worse than one that refuses to build.
+ *
+ * The `satisfies` binds this list to core's definition type, so renaming or
+ * removing a field there breaks the build here instead of silently rejecting
+ * frontmatter that used to be valid. (`prompt` is excluded because the document
+ * body supplies it, `handler` because markdown can't carry a function.)
  */
 const MARKDOWN_SCHEDULE_KEYS = [
   'cron',
@@ -138,7 +143,7 @@ const MARKDOWN_SCHEDULE_KEYS = [
   'ifIdle',
   'status',
   'metadata',
-] as const;
+] as const satisfies readonly (keyof Omit<AgentSchedulePromptDefinition, 'prompt' | 'handler'>)[];
 
 const CONFIG_BASENAMES = ['config.ts', 'config.js'];
 const WORKSPACE_BASENAMES = ['workspace.ts', 'workspace.js'];

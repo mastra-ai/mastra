@@ -4,6 +4,7 @@ import type { FsAgentScheduleEntry } from '../agent/fs-routing';
 import { fsAgentScheduleRowId } from '../schedules/define';
 import type { Schedule } from '../storage/domains/schedules/base';
 import { MockStore } from '../storage/mock';
+import { collectFsAgentSchedules, findFsAgentScheduleHandler } from './fs-agent-schedules';
 import { Mastra } from './index';
 
 const withoutNotificationDispatch = { notifications: { dispatch: { enabled: false } } } as const;
@@ -289,8 +290,9 @@ describe('Mastra — file-based agent schedules', () => {
   });
 
   it('finds schedules on an agent wrapped for durable execution', async () => {
-    // A durable wrapper is a distinct instance around the inner agent, so it
-    // carries its own empty schedule list. Registration has to look through it.
+    // A durable wrapper is a distinct instance around the inner agent, with its
+    // own private schedule field. `DurableAgent.getDeclaredSchedules` delegates
+    // to the wrapped agent so registration sees the inner list.
     const support = assembleAgentFromFsEntry({
       name: 'support',
       config: { model: 'openai/gpt-4o', durable: true },
@@ -414,4 +416,53 @@ describe('Mastra — file-based agent schedules', () => {
 
     await mastra.shutdown();
   }, 20000);
+});
+
+/**
+ * The collector and the handler lookup are plain functions of the agent map, so
+ * they're exercised directly here rather than through a booted Mastra.
+ */
+describe('collectFsAgentSchedules / findFsAgentScheduleHandler', () => {
+  it('reports duplicate agent ids instead of logging them', () => {
+    // Two registration keys, one shared agent id: both map onto the same row.
+    const first = makeFsAgent('support', [{ key: 'heartbeat', schedule: { cron: '0 3 * * *', prompt: 'first' } }]);
+    const second = makeFsAgent('support', [{ key: 'heartbeat', schedule: { cron: '0 4 * * *', prompt: 'second' } }]);
+
+    const { schedules, duplicates } = collectFsAgentSchedules({ a: first, b: second } as any);
+
+    expect(schedules).toHaveLength(1);
+    expect(schedules[0]!.definition.prompt).toBe('first');
+    expect(duplicates).toEqual([{ agentId: 'support', key: 'heartbeat' }]);
+  });
+
+  it('resolves a handler by row id without scanning unrelated agents', () => {
+    const handler = vi.fn();
+    const support = makeFsAgent('support', [{ key: 'billing/sweep', schedule: { cron: '0 3 * * *', handler } }]);
+    const other = makeFsAgent('other', [{ key: 'heartbeat', schedule: { cron: '0 3 * * *', prompt: 'hi' } }]);
+    const agents = { support, other } as any;
+
+    expect(findFsAgentScheduleHandler(agents, fsAgentScheduleRowId('support', 'billing/sweep'))).toBe(handler);
+    // Prompt mode has no handler, and an unknown row id resolves to nothing.
+    expect(findFsAgentScheduleHandler(agents, fsAgentScheduleRowId('other', 'heartbeat'))).toBeUndefined();
+    expect(findFsAgentScheduleHandler(agents, fsAgentScheduleRowId('support', 'nope'))).toBeUndefined();
+    expect(findFsAgentScheduleHandler(agents, 'agent_someImperativeRow')).toBeUndefined();
+  });
+
+  it('does not warn on repeated handler lookups when agent ids collide', () => {
+    // A lookup runs on every fire. Warning from there would re-log forever, so
+    // the lookup must stay free of the collector's duplicate reporting.
+    const handler = vi.fn();
+    const first = makeFsAgent('support', [{ key: 'sweep', schedule: { cron: '0 3 * * *', handler } }]);
+    const second = makeFsAgent('support', [{ key: 'sweep', schedule: { cron: '0 4 * * *', handler } }]);
+    const agents = { a: first, b: second } as any;
+    const rowId = fsAgentScheduleRowId('support', 'sweep');
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (let i = 0; i < 5; i++) expect(findFsAgentScheduleHandler(agents, rowId)).toBe(handler);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
