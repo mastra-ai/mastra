@@ -28,6 +28,7 @@ import type {
   ToolPayloadTransformTarget,
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
+import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
@@ -543,6 +544,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Owning base agent for processor execution. */
+  agent?: Agent<any, any, any, any>;
   /**
    * Marks a minimal cross-process placeholder entry (e.g. seeded by
    * @mastra/inngest resume() to carry an abort controller). Placeholder

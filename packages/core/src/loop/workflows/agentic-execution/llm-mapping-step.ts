@@ -15,7 +15,7 @@ import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows/workflow';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
-import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
+import { AGENT_KEY, DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -46,6 +46,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           inputProcessors: [],
           outputProcessors: rest.outputProcessors,
           logger: rest.logger,
+          agent: readScoped(scopeCtx, AGENT_KEY, 'agent'),
           agentName: 'LLMMappingStep',
           processorStates: rest.processorStates,
         })

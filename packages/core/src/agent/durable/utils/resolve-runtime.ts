@@ -14,6 +14,7 @@ import { RequestContext } from '../../../request-context';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
+import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import { globalRunRegistry } from '../run-registry';
@@ -43,6 +44,8 @@ export interface ResolvedRuntimeDependencies {
   modelList?: RegistryModelListEntry[];
   /** Deserialized MessageList */
   messageList: MessageList;
+  /** Owning base agent reconstructed from the registry or Mastra instance. */
+  agent?: Agent<any, any, any, any>;
   /** Memory instance (if available) */
   memory?: MastraMemory;
   /** SaveQueueManager for message persistence */
@@ -168,6 +171,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let tools: Record<string, CoreTool> = globalEntry?.tools ?? {};
   let model: MastraLanguageModel = globalEntry?.model as MastraLanguageModel;
   let modelList: RegistryModelListEntry[] | undefined = globalEntry?.modelList;
+  let agent: Agent<any, any, any, any> | undefined = globalEntry?.agent;
   let workspace: Workspace | undefined = globalEntry?.workspace;
   let memory: MastraMemory | undefined = globalEntry?.memory;
   let inputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.inputProcessors;
@@ -184,7 +188,9 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
   } else if (mastra) {
     try {
-      const agent = mastra.getAgentById(agentId);
+      const registeredAgent = mastra.getAgentById(agentId) as Agent<any, any, any, any>;
+      const rehydratedAgent: Agent<any, any, any, any> = (registeredAgent as any).agent ?? registeredAgent;
+      agent = rehydratedAgent;
 
       // Restore the caller's request context from the JSON-safe snapshot on
       // the workflow input (mirrors durable-agent.ts resume handling), so
@@ -192,7 +198,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // the same configuration as the original call site.
       const resolveRequestContext = restoreRequestContext(input.requestContextEntries);
 
-      tools = await agent.getToolsForExecution({
+      tools = await rehydratedAgent.getToolsForExecution({
         runId,
         threadId: input.state.threadId,
         resourceId: input.state.resourceId,
@@ -202,10 +208,10 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       });
 
       model =
-        (await (agent as any).getModel?.({ requestContext: resolveRequestContext })) ??
+        (await (rehydratedAgent as any).getModel?.({ requestContext: resolveRequestContext })) ??
         resolveModel(input.modelConfig, mastra);
 
-      const rawModelList = await (agent as any).getModelList?.(resolveRequestContext);
+      const rawModelList = await (rehydratedAgent as any).getModelList?.(resolveRequestContext);
       if (rawModelList && Array.isArray(rawModelList)) {
         modelList = rawModelList.map((entry: any) => ({
           id: entry.id,
@@ -216,8 +222,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         }));
       }
 
-      memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
-      workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
+      memory = await (rehydratedAgent as any).getMemory?.({ requestContext: resolveRequestContext });
+      workspace = await (rehydratedAgent as any).getWorkspace?.({ requestContext: resolveRequestContext });
 
       // Rebuild the per-request processor pipeline. `listInputProcessors` /
       // `listOutputProcessors` already inject the SkillsProcessor and
@@ -225,10 +231,10 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // restores the missing available-skills list + workspace instructions in
       // the cross-process system prompt. Mirrors preparation.ts.
       try {
-        inputProcessors = await (agent as any).listInputProcessors?.(resolveRequestContext);
-        llmRequestInputProcessors = await (agent as any).__listLLMRequestProcessors?.(resolveRequestContext);
-        outputProcessors = await (agent as any).listOutputProcessors?.(resolveRequestContext);
-        errorProcessors = await (agent as any).listErrorProcessors?.(resolveRequestContext);
+        inputProcessors = await (rehydratedAgent as any).listInputProcessors?.(resolveRequestContext);
+        llmRequestInputProcessors = await (rehydratedAgent as any).__listLLMRequestProcessors?.(resolveRequestContext);
+        outputProcessors = await (rehydratedAgent as any).listOutputProcessors?.(resolveRequestContext);
+        errorProcessors = await (rehydratedAgent as any).listErrorProcessors?.(resolveRequestContext);
         // A fresh processor-state map is correct here: on a cross-process worker
         // there is no prior state to carry, and processors are re-run per step.
         processorStates = globalEntry?.processorStates ?? new Map<string, ProcessorState>();
@@ -268,6 +274,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       tools,
       model,
       modelList,
+      agent,
       workspace,
       memory,
       inputProcessors,
@@ -300,6 +307,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     model,
     modelList,
     messageList,
+    agent,
     memory,
     saveQueueManager,
     workspace,
@@ -316,9 +324,12 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
  */
 export interface RebuiltRunTools {
   tools: Record<string, CoreTool>;
+  agent?: Agent<any, any, any, any>;
   workspace?: Workspace;
   memory?: MastraMemory;
   saveQueueManager?: SaveQueueManager;
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  processorStates?: Map<string, ProcessorState>;
 }
 
 /**
@@ -356,7 +367,8 @@ export async function rebuildRunToolsFromMastra(options: {
   if (!mastra) return undefined;
 
   try {
-    const agent = mastra.getAgentById(agentId);
+    const registeredAgent = mastra.getAgentById(agentId) as Agent<any, any, any, any>;
+    const agent: Agent<any, any, any, any> = (registeredAgent as any).agent ?? registeredAgent;
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries);
@@ -372,22 +384,35 @@ export async function rebuildRunToolsFromMastra(options: {
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
+    const outputProcessors = await (agent as any).listOutputProcessors?.(resolveRequestContext);
+    const processorStates = globalRunRegistry.get(runId)?.processorStates ?? new Map<string, ProcessorState>();
     const saveQueueManager = makeSaveQueueManager(memory, mastra);
 
     // Write back so sibling steps in this process reuse the rebuilt tools.
     const existing = globalRunRegistry.get(runId);
-    const patch: Partial<RunRegistryEntry> = { tools, workspace, memory, saveQueueManager };
+    const patch: Partial<RunRegistryEntry> = {
+      tools,
+      agent,
+      workspace,
+      memory,
+      saveQueueManager,
+      outputProcessors,
+      processorStates,
+    };
     if (existing) {
       // Only fill fields the entry is missing — never clobber a populated entry.
       if (Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
+      existing.agent ??= agent;
       existing.workspace ??= workspace;
       existing.memory ??= memory;
       existing.saveQueueManager ??= saveQueueManager;
+      existing.outputProcessors ??= outputProcessors;
+      existing.processorStates ??= processorStates;
     } else {
       globalRunRegistry.set(runId, patch as RunRegistryEntry);
     }
 
-    return { tools, workspace, memory, saveQueueManager };
+    return { tools, agent, workspace, memory, saveQueueManager, outputProcessors, processorStates };
   } catch (error) {
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;

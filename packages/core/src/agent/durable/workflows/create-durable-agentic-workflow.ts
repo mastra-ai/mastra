@@ -635,6 +635,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 outputProcessors: registryEntry.outputProcessors,
                 errorProcessors: registryEntry.errorProcessors ?? [],
                 logger: logger as any,
+                agent: registryEntry.agent,
                 agentName: initData.agentName ?? initData.agentId,
                 processorStates: registryEntry.processorStates,
               });

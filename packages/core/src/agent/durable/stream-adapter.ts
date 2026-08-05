@@ -12,6 +12,7 @@ import type {
   MastraStreamTransformOptions,
   LanguageModelUsage,
 } from '../../stream/types';
+import type { Agent } from '../agent';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
@@ -118,6 +119,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Experimental transforms applied whenever the returned full stream is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** Owning base agent exposed to output processors. */
+  agent?: Agent<any, any, any, any>;
   /**
    * Optional external MessageList to use instead of creating a fresh empty one.
    * When provided (e.g. the registry's live MessageList), MastraModelOutput can
@@ -171,6 +174,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     structuredOutput,
     outputProcessors,
     experimentalTransform,
+    agent,
     messageList: externalMessageList,
   } = options;
 
@@ -609,6 +613,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       resolveFinalPromises: true,
       outputProcessors,
       experimentalTransform,
+      agent,
     },
   });
 
