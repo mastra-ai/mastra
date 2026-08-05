@@ -348,10 +348,10 @@ After completing all tests, provide a summary:
 
 ## Notes
 
-- The `-e` flag includes example agents, making smoke testing meaningful
+- The managed default template scaffolds an agent, tools, and storage, which is what makes smoke testing meaningful; use `--empty` or `--template <template>` only when a different starting point is required
 - If the user doesn't specify an LLM provider, default to OpenAI as it's most common
 - Take screenshots at each major step for documentation/debugging
 - Keep the dev server running in the background during testing
-- Always use explicit flags (`-c`, `-l`, `-e`) to ensure non-interactive execution
+- Pass explicit flags (`--llm`, `--no-git`, `--timeout`) so creation stays non-interactive; confirm the supported set with `<pm> create mastra@<tag> --help` instead of assuming legacy flags
 - Browser agent testing validates the new browser automation features
 - Observability traces appear automatically after running agents or workflows

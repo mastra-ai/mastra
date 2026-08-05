@@ -22,18 +22,20 @@ If the main project includes native stores such as DuckDB, also build a minimal 
 
 ### 2. Inspect protocol identity
 
-Read the launch command, protocol version, and build ID from the generated manifest:
+The manifest is the source of truth for how the worker is launched and which protocol it speaks. Read it instead of assuming defaults:
 
 ```bash
 MANIFEST=.mastra/experiment-worker/experiment-worker-manifest.json
 jq '{launch, protocol, buildId: .build.buildId}' "$MANIFEST"
 ```
 
-The default launch command is `cd .mastra/experiment-worker && node index.mjs`. Use the protocol version from `.protocol.versions` and copy `.build.buildId` to `packet.artifacts.buildId`. A deliberately incorrect build ID should fail with protocol exit code `70` before loading the experiment.
+At the time of writing the manifest reports `launch.executable: "node"`, `launch.arguments: ["index.mjs"]`, `launch.workingDirectory: "."`, `protocol.framing: "ndjson"`, `protocol.versions: ["1"]`, and `protocol.datasetCanonicalizationVersion: "1"`. Record the actual values. If any differ from those defaults, use the manifest values in the steps below and report the difference — the commands here assume the defaults and the next step asserts them before running.
+
+`packet.artifacts.buildId` always comes from `.build.buildId`. A deliberately incorrect build ID should fail with protocol exit code `70` before loading the experiment.
 
 ### 3. Run one correctly attested request
 
-From the project root, replace `YOUR_WORKFLOW_REGISTRY_KEY` below with a registered workflow key. This script creates one dataset item, canonicalizes it by recursively sorting object keys while preserving array order, computes the SHA-256 attestation, and writes a complete protocol-v1 NDJSON request:
+From the project root, replace `YOUR_WORKFLOW_REGISTRY_KEY` below with a registered workflow key. This script asserts the manifest's launch and protocol values, then creates one dataset item, canonicalizes it by recursively sorting object keys while preserving array order, computes the SHA-256 attestation, and writes a complete NDJSON request using the manifest's protocol and canonicalization versions:
 
 ```bash
 node --input-type=module > .mastra/experiment-request.ndjson <<'EOF'
@@ -50,31 +52,49 @@ const canonicalize = value =>
           .map(key => `${JSON.stringify(key)}:${canonicalize(value[key])}`)
           .join(',')}}`;
 
-const items = [{ id: 'item-1', input: { value: 21 }, toolMocks: [] }];
-const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
 const manifest = JSON.parse(
   readFileSync('.mastra/experiment-worker/experiment-worker-manifest.json', 'utf8'),
 );
+
+const assert = (actual, expected, what) => {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(
+      `manifest ${what} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)} — ` +
+        `update the launch command and request below to match the manifest, and report the change`,
+    );
+  }
+};
+
+assert(manifest.launch.executable, 'node', 'launch.executable');
+assert(manifest.launch.arguments, ['index.mjs'], 'launch.arguments');
+assert(manifest.launch.workingDirectory, '.', 'launch.workingDirectory');
+assert(manifest.protocol.framing, 'ndjson', 'protocol.framing');
+
+const protocolVersion = manifest.protocol.versions.at(-1);
+const canonicalizationVersion = manifest.protocol.datasetCanonicalizationVersion;
+
+const items = [{ id: 'item-1', input: { value: 21 }, toolMocks: [] }];
+const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
 const experimentId = 'smoke-experiment-1';
 
 console.log(JSON.stringify({
   type: 'run',
-  protocolVersion: '1',
-  supportedProtocolVersions: ['1'],
+  protocolVersion,
+  supportedProtocolVersions: manifest.protocol.versions,
   experimentId,
   jobId: 'smoke-job-1',
   attempt: 1,
   idempotencyKey: 'smoke-attempt-1',
   deadlineAt: new Date(Date.now() + 30_000).toISOString(),
-  datasetAttestation: { itemCount: items.length, digest, canonicalizationVersion: '1' },
+  datasetAttestation: { itemCount: items.length, digest, canonicalizationVersion },
   packet: {
-    protocolVersion: '1',
+    protocolVersion,
     experimentId,
     tenant: {},
     environment: {},
     artifacts: { buildId: manifest.build.buildId },
     target: { type: 'workflow', id: 'YOUR_WORKFLOW_REGISTRY_KEY' },
-    dataset: { itemCount: items.length, digest, canonicalizationVersion: '1', items },
+    dataset: { itemCount: items.length, digest, canonicalizationVersion, items },
     scorers: [],
     limits: { concurrency: 1, timeoutMs: 5000 },
     policies: { allowedToolIds: [], allowedNetworkHosts: [] },
@@ -83,6 +103,7 @@ console.log(JSON.stringify({
 }));
 EOF
 
+# Launch matches manifest.launch (executable + arguments, run from workingDirectory)
 (cd .mastra/experiment-worker && node index.mjs) \
   < .mastra/experiment-request.ndjson \
   > .mastra/experiment-stdout.ndjson \
