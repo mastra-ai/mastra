@@ -348,6 +348,13 @@ describe('MemoryPG error propagation (no empty-on-error)', () => {
       /LIST_MESSAGES_BY_RESOURCE_ID.*FAILED/,
     );
   });
+
+  it('listMessagesById re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(
+      createFailingDomain().listMessagesById({ messageIds: ['msg-err'] }),
+      /LIST_MESSAGES_BY_ID.*FAILED/,
+    );
+  });
 });
 
 // Pool integration tests

@@ -460,4 +460,11 @@ describe('MemoryMSSQL error propagation (no empty-on-error)', () => {
   it('listMessages re-throws backend failures instead of returning empty', async () => {
     await expectOutage(createFailingDomain().listMessages({ threadId: 'thread-err' }), /LIST_MESSAGES.*FAILED/);
   });
+
+  it('listMessagesById re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(
+      createFailingDomain().listMessagesById({ messageIds: ['msg-err'] }),
+      /LIST_MESSAGES_BY_ID.*FAILED/,
+    );
+  });
 });

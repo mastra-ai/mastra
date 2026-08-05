@@ -597,7 +597,7 @@ export class MemoryDSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return { messages: [] };
+      throw mastraError;
     }
   }
 
