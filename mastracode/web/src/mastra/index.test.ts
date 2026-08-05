@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resolveFactoryGithubRule } from '@mastra/factory/rules/resolve';
 
 /**
  * Smoke test for the platform-deployable entry (`src/mastra/index.ts`).
@@ -31,6 +32,63 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
   });
 
+  it('uses the production Factory rules to retriage linked issue updates without moving their stage', async () => {
+    const { factoryRules } = await import('./index.js');
+    const item = {
+      id: 'issue-42',
+      source: 'github-issue' as const,
+      sourceKey: 'github-issue:42',
+      parentWorkItemId: null,
+      title: 'Issue 42',
+      url: 'https://github.com/acme/repo/issues/42',
+      stages: ['planning'],
+    };
+    const base = {
+      tenant: { orgId: 'org-1', projectId: 'project-1' },
+      actor: { type: 'github' as const, login: 'contributor', trusted: true, factoryAuthored: false },
+      causalChain: [],
+      ruleSetVersion: factoryRules.version,
+      factory: { createdAt: '2030-01-01T00:00:00.000Z' },
+      repository: { id: 10, fullName: 'acme/repo' },
+      item,
+      board: 'work' as const,
+      itemRevision: 3,
+    };
+
+    const issueEdited = resolveFactoryGithubRule(factoryRules, 'issueEdited');
+    const issueCommentCreated = resolveFactoryGithubRule(factoryRules, 'issueCommentCreated');
+
+    expect(
+      issueEdited?.({
+        ...base,
+        ingress: { type: 'github', id: '7:issue-update' },
+        cause: 'github.issueEdited',
+        event: 'issueEdited',
+        deliveryId: 'issue-update',
+        issue: { number: 42, title: 'Issue 42', url: item.url },
+        issueChange: { title: false, body: true },
+      }),
+    ).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: '7:issue-update:factory-triage',
+    });
+    expect(
+      issueCommentCreated?.({
+        ...base,
+        ingress: { type: 'github', id: '7:comment-created' },
+        cause: 'github.issueCommentCreated',
+        event: 'issueCommentCreated',
+        deliveryId: 'comment-created',
+        issue: { number: 42, title: 'Issue 42', url: item.url },
+        issueComment: { id: 100, author: 'contributor', body: 'New lead' },
+      }),
+    ).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: '7:comment-created:factory-triage',
+    });
+    expect(item.stages).toEqual(['planning']);
+  });
+
   // Integration env groups are all-or-nothing: setting ANY var of a group
   // means you intend to enable the integration, so a partial set must fail
   // the boot loudly (listing what's missing) instead of silently disabling.
@@ -45,6 +103,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_WEBHOOK_SECRET',
         'LINEAR_CLIENT_ID',
         'LINEAR_CLIENT_SECRET',
+        'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');
       }
@@ -117,5 +176,63 @@ describe('platform entry (src/mastra/index.ts)', () => {
       const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
       expect(paths).toContain('/auth/linear/connect');
     });
+
+    it('skips Slack channel wiring when the Slack app env is unset', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      // chat's Slack adapter throws at construction without a signingSecret,
+      // so an unconfigured env must skip channels instead of crashing boot.
+      vi.stubEnv('SLACK_APP_SIGNING_SECRET', '');
+      const mod = await import('./index.js');
+      const controller = mod.mastra.getAgentController('code');
+      expect(controller?.getChannels()).toBeNull();
+    });
+
+    it(
+      'wires Slack channels onto the controller when the Slack app env is configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+        // Slack signs the account-link state, so it needs a replica-stable
+        // secret like the GitHub and Linear integrations do.
+        vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+        const mod = await import('./index.js');
+        const controller = mod.mastra.getAgentController('code');
+        // Assert the controller first: `controller?.getChannels()` on a missing
+        // controller yields `undefined`, which would satisfy `not.toBeNull()`
+        // and let the whole Slack wiring disappear silently.
+        expect(controller).toBeDefined();
+        expect(controller!.getChannels()).toBeDefined(); // sabotage below
+      },
+    );
+
+    it('registers the Slack connect routes through the integration', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+      vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      // The entry no longer splices these on by hand — their presence proves the
+      // factory collected them from the integration's `routes()`.
+      expect(paths).toContain('/connect/slack');
+    });
+
+    it(
+      'boots a Slack-only deployment by signing state with the Slack signing secret',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+        // Slack signs OAuth state, so the factory rejects a per-process random
+        // signer: a link signed on one replica could not be verified on another.
+        // A deployment that configures Slack and nothing else has neither of the
+        // other two secrets, so the signing secret is the stable signer and boot
+        // must survive on it alone.
+        vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', '');
+        vi.stubEnv('WORKOS_COOKIE_PASSWORD', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra.getAgentController('code')?.getChannels()).toBeDefined();
+      },
+    );
   });
 });

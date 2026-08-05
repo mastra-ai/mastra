@@ -8,7 +8,8 @@
     "grok-build-0.1",
     "grok-imagine-image",
     "grok-imagine-image-quality",
-    "grok-imagine-video"
+    "grok-imagine-video",
+    "grok-imagine-video-1.5"
   ],
   "temperature": [
     "grok-4.20-0309-non-reasoning",

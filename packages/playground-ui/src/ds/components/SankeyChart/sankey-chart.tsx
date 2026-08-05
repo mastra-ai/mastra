@@ -6,13 +6,20 @@ import {
   getSankeyChartCurveSelection,
   getSankeyChartNodeSelection,
   getSankeyChartNodeWeights,
+  SANKEY_NODE_WIDTH,
+  truncateSankeyLabel,
 } from './sankey-chart-utils';
-import type { SankeyChartCurveSelection, SankeyChartNodeSelection } from './sankey-chart-utils';
+import type { SankeyChartCurveSelection, SankeyChartNodeSelection, SankeyLabelWidths } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
+
+const NODE_LABEL_FONT_SIZE = 11;
+const COLUMN_LABEL_FONT_SIZE = 12;
+// pre-measurement cap, kept so wide charts read unchanged
+const NODE_LABEL_MAX_CHARACTERS = 23;
 
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
@@ -32,7 +39,7 @@ export function SankeyChart({
   isNodeClickable,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
-  const { chartContainerRef, fixedGeometry } = useSankeyChartMeasurements({
+  const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
     graph,
     height,
     margin,
@@ -44,17 +51,19 @@ export function SankeyChart({
   const firstColumnId = enabledColumns[0]?.id;
   const lastColumnId = enabledColumns.at(-1)?.id;
   const nodeWeights = getSankeyChartNodeWeights(graph);
-  const total = graph.nodes.reduce(
-    (sum, node) =>
-      node.column.id === firstColumnId ? sum + (node.displayValue ?? nodeWeights.get(node.id) ?? 0) : sum,
-    0,
-  );
+  // Each node's percentage is its share of its own column, so later columns
+  // with more counted traces than the first column never exceed 100%.
+  const columnTotals = new Map<string, number>();
+  for (const node of graph.nodes) {
+    const nodeValue = node.displayValue ?? nodeWeights.get(node.id) ?? 0;
+    columnTotals.set(node.column.id, (columnTotals.get(node.column.id) ?? 0) + nodeValue);
+  }
 
   return (
     <div className={cn('min-w-0', className)}>
       {graph.links.length === 0 ? (
         <div
-          className="flex items-center justify-center rounded-md border border-border1 text-ui-sm text-neutral3"
+          className="border-border1 text-ui-sm text-neutral3 flex items-center justify-center rounded-md border"
           style={{ height }}
         >
           Select at least two columns with data to display a flow
@@ -68,7 +77,7 @@ export function SankeyChart({
           >
             <RechartsSankey
               data={graph}
-              nodeWidth={7}
+              nodeWidth={SANKEY_NODE_WIDTH}
               nodePadding={56}
               margin={margin}
               node={(props: SankeyNodeRendererProps) => {
@@ -92,10 +101,11 @@ export function SankeyChart({
                     label={node?.label}
                     nodeValue={node?.displayValue}
                     layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
-                    total={total}
+                    columnTotal={node ? (columnTotals.get(node.column.id) ?? 0) : 0}
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
                     isLastColumn={node?.column.id === lastColumnId}
+                    labelWidths={labelWidths}
                     onFocusChange={setFocusedSourceName}
                     onHoverChange={setHoveredSourceName}
                     clickable={clickable}
@@ -108,9 +118,16 @@ export function SankeyChart({
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
                 const linkGeometry = link ? fixedGeometry?.links.get(link.id) : undefined;
+                const sourceX = linkGeometry?.sourceX ?? props.sourceX;
+                const targetX = linkGeometry?.targetX ?? props.targetX;
+                const fixedControlX = linkGeometry ? (sourceX + targetX) / 2 : undefined;
                 return (
                   <SankeyLink
                     {...props}
+                    sourceX={sourceX}
+                    targetX={targetX}
+                    sourceControlX={fixedControlX ?? props.sourceControlX}
+                    targetControlX={fixedControlX ?? props.targetControlX}
                     sourceY={linkGeometry?.sourceY ?? props.sourceY}
                     targetY={linkGeometry?.targetY ?? props.targetY}
                     sourceWidth={linkGeometry?.sourceWidth}
@@ -162,10 +179,11 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   label?: string;
   nodeValue?: number;
   layoutValue?: number;
-  total: number;
+  columnTotal: number;
   showColumnLabel: boolean;
   isFirstColumn: boolean;
   isLastColumn: boolean;
+  labelWidths: SankeyLabelWidths;
   clickable: boolean;
   onFocusChange: (sourceName: string | undefined) => void;
   onHoverChange: (sourceName: string | undefined) => void;
@@ -183,10 +201,11 @@ function SankeyNode({
   label,
   nodeValue,
   layoutValue,
-  total,
+  columnTotal,
   showColumnLabel,
   isFirstColumn,
   isLastColumn,
+  labelWidths,
   clickable,
   onFocusChange,
   onHoverChange,
@@ -198,7 +217,15 @@ function SankeyNode({
   const visibleDisplayLabel = descriptionIndex >= 0 ? displayLabel.slice(0, descriptionIndex) : displayLabel;
   const description = descriptionIndex >= 0 ? displayLabel.slice(descriptionIndex + 1) : undefined;
   const accessibleLabel = displayLabel.replaceAll('\n', '. ');
-  const visibleLabel = truncateNodeLabel(visibleDisplayLabel);
+  const nodeLabelWidth = isFirstColumn || isLastColumn ? labelWidths.edge : labelWidths.centered;
+  const visibleLabel = truncateSankeyLabel(visibleDisplayLabel, {
+    fontSize: NODE_LABEL_FONT_SIZE,
+    maxWidth: nodeLabelWidth,
+    maxCharacters: NODE_LABEL_MAX_CHARACTERS,
+  });
+  const visibleColumnLabel = columnLabel
+    ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: nodeLabelWidth })
+    : undefined;
   const tooltipId = useId();
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -209,12 +236,12 @@ function SankeyNode({
   }>();
   const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
-  const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
+  const percentage =
+    columnTotal > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / columnTotal) * 100) : 0;
   const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
   const visibleY = y + (height - visibleHeight) / 2;
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
-  const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
   const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
   const showTooltipAt = (target: SVGGElement) => {
@@ -234,10 +261,24 @@ function SankeyNode({
 
   return (
     <>
+      {/* Rendered outside the interactive group so hovering the header never opens a theme tooltip. */}
+      {showColumnLabel && visibleColumnLabel ? (
+        <text
+          x={labelX}
+          y={18}
+          textAnchor={textAnchor}
+          fill={nodeColor(hue)}
+          fontSize={COLUMN_LABEL_FONT_SIZE}
+          fontWeight={600}
+        >
+          {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
+          {visibleColumnLabel}
+        </text>
+      ) : null}
       <g
         aria-describedby={description ? tooltipId : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
-        className="outline-hidden focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
+        className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
         onClick={clickable ? onSelect : undefined}
         onKeyDown={clickable ? handleKeyDown : undefined}
         role={clickable ? 'button' : undefined}
@@ -262,19 +303,15 @@ function SankeyNode({
         style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
       >
-        <title>{displayLabel}</title>
-        {showColumnLabel && columnLabel ? (
-          <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
-            {columnLabel}
-          </text>
-        ) : null}
+        {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
+        {description ? null : <title>{displayLabel}</title>}
         <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
         <text
           x={labelX}
           y={y - 24}
           textAnchor={textAnchor}
           fill={Colors.neutral5}
-          fontSize={11}
+          fontSize={NODE_LABEL_FONT_SIZE}
           fontFamily="var(--font-mono)"
         >
           {visibleLabel}
@@ -287,7 +324,7 @@ function SankeyNode({
         ? createPortal(
             <div
               aria-label={`${visibleDisplayLabel}: ${description}`}
-              className="pointer-events-none fixed z-50 rounded-md border border-border1 bg-surface5 p-2 text-xs leading-4 text-neutral6 shadow-elevated"
+              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
               id={tooltipId}
               role="tooltip"
               style={{
@@ -299,7 +336,7 @@ function SankeyNode({
               }}
             >
               <div className="font-medium">{visibleDisplayLabel}</div>
-              <div className="whitespace-pre-wrap text-neutral4">{description}</div>
+              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
             </div>,
             document.body,
           )
@@ -311,12 +348,6 @@ function SankeyNode({
 function scaleSankeyDimension(size: number, displayValue: number | undefined, layoutValue: number | undefined) {
   if (displayValue === undefined || layoutValue === undefined || layoutValue <= 0) return size;
   return size * Math.min(Math.max(displayValue / layoutValue, 0), 1);
-}
-
-function truncateNodeLabel(label: string) {
-  const maximumLength = 23;
-  if (label.length <= maximumLength) return label;
-  return `${label.slice(0, maximumLength - 1).trimEnd()}…`;
 }
 
 type SankeyLinkProps = SankeyLinkRendererProps & {

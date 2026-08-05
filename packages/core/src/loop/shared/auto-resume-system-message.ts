@@ -29,7 +29,8 @@ export function extractSuspendedToolsFromMessages(
   const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
   const suspendedToolsMessage = assistantMessages.find(message => {
     const metadata = message.content.metadata as
-      { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> } | undefined;
+      | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
+      | undefined;
     if (
       (metadata?.suspendedTools && Object.keys(metadata.suspendedTools).length > 0) ||
       (metadata?.pendingToolApprovals && Object.keys(metadata.pendingToolApprovals).length > 0)
@@ -47,7 +48,8 @@ export function extractSuspendedToolsFromMessages(
   if (!suspendedToolsMessage) return [];
 
   const metadata = suspendedToolsMessage.content.metadata as
-    { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> } | undefined;
+    | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
+    | undefined;
   // Merge both metadata buckets — the same assistant turn can declare both
   // a suspended tool and a pending approval, and we should not lose one when
   // the other exists.
@@ -74,7 +76,17 @@ export function extractSuspendedToolsFromMessages(
       );
   }
 
-  return suspendedToolObj ? (Object.values(suspendedToolObj) as Array<Record<string, unknown>>) : [];
+  if (!suspendedToolObj) return [];
+
+  // The auto-resume directive tells the model to pass the entry's `runId` back
+  // as `suspendedToolRunId`, which the resume leg uses to resume the suspended
+  // (inner) run. Persisted metadata stores the OUTER resumable runId with the
+  // inner run as `delegatedRunId`, so surface the inner run under `runId` here.
+  return Object.values(suspendedToolObj).map(entry => {
+    if (!entry || typeof entry !== 'object') return entry as Record<string, unknown>;
+    const { delegatedRunId, ...rest } = entry as Record<string, unknown>;
+    return typeof delegatedRunId === 'string' ? { ...rest, runId: delegatedRunId } : rest;
+  });
 }
 
 /**

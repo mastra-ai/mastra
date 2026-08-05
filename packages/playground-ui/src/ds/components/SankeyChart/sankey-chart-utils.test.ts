@@ -6,7 +6,10 @@ import {
   getSankeyChartCurveSelection,
   getSankeyChartNodeWeights,
   getSankeyChartValue,
+  getSankeyLabelWidths,
   reorderSankeyChartColumns,
+  SANKEY_NODE_WIDTH,
+  truncateSankeyLabel,
 } from './sankey-chart-utils';
 
 const columns = [
@@ -242,6 +245,51 @@ describe('SankeyChart utilities', () => {
     });
   });
 
+  describe('when the graph is disconnected across fixed columns', () => {
+    it('anchors each ribbon to its own nodes instead of the depth-based edges', () => {
+      const fourColumns = [
+        { id: 'goal', label: 'Goal' },
+        { id: 'outcome', label: 'Outcome' },
+        { id: 'behavior', label: 'Behavior' },
+        { id: 'sentiment', label: 'Sentiment' },
+      ];
+      // links exist only for goal->outcome and behavior->sentiment: outcome and
+      // sentiment have no outgoing links, so depth-based layouts push them to
+      // the last column while the fixed columns stay evenly spaced.
+      const graph = buildSankeyChartGraph(
+        [
+          { goal: 'A', outcome: 'B', count: 2, layoutCount: 2 },
+          { behavior: 'C', sentiment: 'D', count: 14, layoutCount: 14 },
+        ],
+        fourColumns,
+        record => Number(record.count),
+        undefined,
+        undefined,
+        undefined,
+        record => Number(record.layoutCount),
+      );
+
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 400,
+        nodePadding: 20,
+      });
+      const aToB = geometry.links.get(
+        graph.links.find(link => link.sourceNode.value === 'A' && link.targetNode.value === 'B')?.id ?? '',
+      );
+      const cToD = geometry.links.get(
+        graph.links.find(link => link.sourceNode.value === 'C' && link.targetNode.value === 'D')?.id ?? '',
+      );
+
+      expect(aToB?.sourceX).toBe(100 + SANKEY_NODE_WIDTH);
+      expect(aToB?.targetX).toBe(200);
+      expect(cToD?.sourceX).toBe(300 + SANKEY_NODE_WIDTH);
+      expect(cToD?.targetX).toBe(400);
+    });
+  });
+
   describe('when only one optional node accessor is provided', () => {
     it('keeps record values as labels when only identity is customized', () => {
       const graph = buildSankeyChartGraph(
@@ -300,6 +348,101 @@ describe('SankeyChart utilities', () => {
 
       expect(reordered.map(column => column.id)).toEqual(['model', 'status', 'source']);
       expect(columns.map(column => column.id)).toEqual(['source', 'model', 'status']);
+    });
+  });
+
+  describe('when budgeting horizontal space for labels', () => {
+    const nodeWidth = 7;
+    const layout = { chartWidth: 800, columnCount: 4, marginLeft: 32, marginRight: 32 };
+    const columnPitch = (layout.chartWidth - layout.marginLeft - layout.marginRight - nodeWidth) / 3;
+
+    it('keeps two centered neighbours apart', () => {
+      const { centered } = getSankeyLabelWidths(layout);
+
+      expect(centered / 2 + centered / 2).toBeLessThan(columnPitch);
+    });
+
+    it('keeps an edge label clear of its centered neighbour', () => {
+      const { centered, edge } = getSankeyLabelWidths(layout);
+
+      expect(edge + centered / 2).toBeLessThan(columnPitch + nodeWidth / 2);
+    });
+
+    it('shrinks the budget as the chart narrows', () => {
+      const wide = getSankeyLabelWidths(layout);
+      const narrow = getSankeyLabelWidths({ ...layout, chartWidth: 400 });
+
+      expect(narrow.centered).toBeLessThan(wide.centered);
+      expect(narrow.edge).toBeLessThan(wide.edge);
+    });
+
+    it('never budgets negative space', () => {
+      const { centered, edge } = getSankeyLabelWidths({ ...layout, chartWidth: 40 });
+
+      expect(centered).toBe(0);
+      expect(edge).toBe(0);
+    });
+
+    it('leaves labels unbounded before the chart is measured', () => {
+      expect(getSankeyLabelWidths({ ...layout, chartWidth: 0 })).toEqual({
+        centered: Number.POSITIVE_INFINITY,
+        edge: Number.POSITIVE_INFINITY,
+      });
+    });
+
+    it('leaves labels unbounded when a single column has no neighbour', () => {
+      expect(getSankeyLabelWidths({ ...layout, columnCount: 1 })).toEqual({
+        centered: Number.POSITIVE_INFINITY,
+        edge: Number.POSITIVE_INFINITY,
+      });
+    });
+  });
+
+  describe('when a label fits its budget', () => {
+    it('leaves it untouched', () => {
+      expect(truncateSankeyLabel('Success', { fontSize: 11, maxWidth: 220 })).toBe('Success');
+    });
+
+    it('leaves it untouched when the width is unbounded', () => {
+      const label = 'Repeated command calls without confirmation';
+
+      expect(truncateSankeyLabel(label, { fontSize: 11, maxWidth: Number.POSITIVE_INFINITY })).toBe(label);
+    });
+  });
+
+  describe('when a label overflows its budget', () => {
+    it('clips it to an ellipsis that fits', () => {
+      const label = 'Repeated command calls without confirmation';
+      const truncated = truncateSankeyLabel(label, { fontSize: 11, maxWidth: 80 });
+
+      expect(truncated.endsWith('…')).toBe(true);
+      expect(truncated.length).toBeLessThan(label.length);
+    });
+
+    it('drops the trailing space before the ellipsis', () => {
+      expect(truncateSankeyLabel('Repeated command calls', { fontSize: 11, maxWidth: 70 })).toBe('Repeated…');
+    });
+
+    it('collapses to a lone ellipsis when there is no room at all', () => {
+      expect(truncateSankeyLabel('Anything', { fontSize: 11, maxWidth: 0 })).toBe('…');
+    });
+  });
+
+  describe('when a character cap is set alongside the width budget', () => {
+    it('applies the cap on an unbounded width', () => {
+      const truncated = truncateSankeyLabel('a'.repeat(40), {
+        fontSize: 11,
+        maxWidth: Number.POSITIVE_INFINITY,
+        maxCharacters: 23,
+      });
+
+      expect(truncated).toBe(`${'a'.repeat(22)}…`);
+    });
+
+    it('applies the width budget when it is tighter than the cap', () => {
+      const truncated = truncateSankeyLabel('a'.repeat(40), { fontSize: 11, maxWidth: 80, maxCharacters: 23 });
+
+      expect(truncated.length).toBeLessThan(23);
     });
   });
 });

@@ -9,7 +9,7 @@ This starter provides you with a general-purpose Mastra agent that can research 
 - A project-level `workspace/` for files and command execution
 - Approval gates for file changes, deletions, and shell commands
 - Conversation memory, generated thread titles, and task tracking
-- OpenAI web search and direct web page fetching
+- Built-in web search and direct web page fetching
 - Recurring schedules that persist across restarts
 - Local libSQL storage and DuckDB observability, with optional Turso storage
 - A bundled Mastra skill that helps coding agents use current Mastra APIs
@@ -45,7 +45,7 @@ Recurring schedules continue to use model tokens until you pause them. Ask the a
 ## Making it yours
 
 - Edit `src/mastra/agents/agent.ts` to change the model, instructions, memory, workspace, or approval policy.
-- Edit `src/mastra/tools/` to customize web fetching and scheduling.
+- Edit `src/mastra/tools/` to customize scheduling.
 - Edit `src/mastra/index.ts` to change storage and observability.
 - Add files or reusable skills under `workspace/` for the agent to use.
 

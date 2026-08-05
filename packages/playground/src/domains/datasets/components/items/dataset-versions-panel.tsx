@@ -77,7 +77,7 @@ export function DatasetVersionsPanel({
   return (
     <Column withLeftSeparator={true} className="w-56">
       {isSelectionActive ? (
-        <Column.Toolbar className="grid justify-stretch gap-3 w-full">
+        <Column.Toolbar className="grid w-full justify-stretch gap-3">
           <ButtonsGroup>
             <Button onClick={handleCancelSelection}>Cancel</Button>
             <Button
@@ -153,7 +153,7 @@ export function DatasetVersionsPanel({
                 })}
               </ItemList.Items>
               {hasNextPage && (
-                <Button size="md" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="w-full mt-2">
+                <Button size="md" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="mt-2 w-full">
                   {isFetchingNextPage ? 'Loading...' : 'Load More'}
                 </Button>
               )}

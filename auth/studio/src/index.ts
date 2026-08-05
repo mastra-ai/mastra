@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type {
   IOrganizationsProvider,
   ISSOProvider,
@@ -57,6 +59,20 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
 const COOKIE_NAME = 'wos-session';
 
 /**
+ * Upper bound for shared-API verification fetches. Matches the platform API
+ * client's request budget: a slow shared API must fail a single request in
+ * bounded time instead of hanging every authenticated endpoint behind it.
+ */
+const VERIFY_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * How long a successful credential verification may be reused without
+ * re-contacting the shared API. Bounds revocation lag: a signed-out or
+ * revoked session can be honored for at most this long.
+ */
+const VERIFY_CACHE_TTL_MS = 30_000;
+
+/**
  * Auth provider for Mastra Studio deployed instances.
  *
  * Proxies all authentication through the shared API, keeping the
@@ -86,6 +102,16 @@ export class MastraAuthStudio
    */
   private userSessionCookies = new Map<string, string>();
   private readonly maxCachedSessions = 1000;
+
+  /**
+   * Short-TTL cache of SUCCESSFUL credential verifications, keyed by a
+   * sha256 of the credential (never the raw cookie/token). Every protected
+   * request re-verifies against the shared API otherwise — one network
+   * round trip per request. Failures are never cached, so a rejected
+   * credential is always re-checked. Bounded + insert-order evicted.
+   */
+  private verifiedCredentials = new Map<string, { user: StudioUser; expiresAt: number }>();
+  private readonly maxCachedVerifications = 1000;
 
   /**
    * In-flight `ensureOrganization` promises keyed by userId. Concurrent calls
@@ -553,6 +579,30 @@ export class MastraAuthStudio
     }
   }
 
+  /** Cache key for a verified credential — hash, never the raw secret. */
+  private verificationKey(kind: 'cookie' | 'bearer', credential: string): string {
+    return createHash('sha256').update(`${kind}:${credential}`).digest('hex');
+  }
+
+  private getCachedVerification(key: string): StudioUser | null {
+    const entry = this.verifiedCredentials.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= Date.now()) {
+      this.verifiedCredentials.delete(key);
+      return null;
+    }
+    return entry.user;
+  }
+
+  private cacheVerification(key: string, user: StudioUser): void {
+    this.verifiedCredentials.delete(key);
+    this.verifiedCredentials.set(key, { user, expiresAt: Date.now() + VERIFY_CACHE_TTL_MS });
+    if (this.verifiedCredentials.size > this.maxCachedVerifications) {
+      const oldest = this.verifiedCredentials.keys().next().value;
+      if (oldest !== undefined) this.verifiedCredentials.delete(oldest);
+    }
+  }
+
   /**
    * Fetch the shared API's `/auth/me` and return the raw response body, or
    * `null` on any non-OK / network error. Split out so `ensureOrganization`
@@ -567,6 +617,7 @@ export class MastraAuthStudio
     try {
       const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
         headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
       if (!res.ok) return null;
       return (await res.json()) as {
@@ -585,11 +636,20 @@ export class MastraAuthStudio
    * to validate it and get user info.
    */
   private async verifySessionCookie(sessionCookie: string): Promise<StudioUser | null> {
+    const cacheKey = this.verificationKey('cookie', sessionCookie);
+    const cached = this.getCachedVerification(cacheKey);
+    if (cached) {
+      // Keep the userId → cookie mapping warm for IOrganizationsProvider.
+      this.rememberUserSession(cached.id, sessionCookie);
+      return cached;
+    }
+
     try {
       const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
         headers: {
           Cookie: `${COOKIE_NAME}=${sessionCookie}`,
         },
+        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
 
       if (!res.ok) {
@@ -619,7 +679,7 @@ export class MastraAuthStudio
       // methods (invoked with only a userId) can act on the user's behalf.
       this.rememberUserSession(data.user.id, sessionCookie);
 
-      return {
+      const user: StudioUser = {
         id: data.user.id,
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
@@ -629,6 +689,10 @@ export class MastraAuthStudio
         permissions: data.permissions,
         memberOrgIds: data.memberOrgIds,
       };
+      // Don't pin brand-new users in the no-org state: org bootstrap runs on
+      // the next request, which must re-read /auth/me to see the new org.
+      if (user.organizationId) this.cacheVerification(cacheKey, user);
+      return user;
     } catch (error) {
       this.logger.error('verifySessionCookie: fetch to shared API failed', {
         url: `${this.sharedApiUrl}/auth/me`,
@@ -643,11 +707,16 @@ export class MastraAuthStudio
    * to validate it and get user info (used for CLI tokens).
    */
   private async verifyBearerToken(token: string): Promise<StudioUser | null> {
+    const cacheKey = this.verificationKey('bearer', token);
+    const cached = this.getCachedVerification(cacheKey);
+    if (cached) return cached;
+
     try {
       const res = await fetch(`${this.sharedApiUrl}/auth/verify`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
 
       if (!res.ok) {
@@ -670,7 +739,7 @@ export class MastraAuthStudio
         memberOrgIds?: string[];
       };
 
-      return {
+      const user: StudioUser = {
         id: data.user.id,
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
@@ -678,6 +747,10 @@ export class MastraAuthStudio
         role: data.role,
         memberOrgIds: data.memberOrgIds,
       };
+      // Same no-org guard as verifySessionCookie: cache only after the user's
+      // organization bootstrap has completed.
+      if (user.organizationId) this.cacheVerification(cacheKey, user);
+      return user;
     } catch (error) {
       this.logger.error('verifyBearerToken: fetch to shared API failed', {
         url: `${this.sharedApiUrl}/auth/verify`,

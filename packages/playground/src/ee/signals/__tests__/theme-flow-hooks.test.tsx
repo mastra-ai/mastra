@@ -11,9 +11,9 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 
-function TestQueryProvider({ children }: { children: ReactNode }) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+function TestQueryProvider({ children, queryClient }: { children: ReactNode; queryClient?: QueryClient }) {
+  const client = queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
 describe('Agent Learning theme flow hooks', () => {
@@ -26,7 +26,8 @@ describe('Agent Learning theme flow hooks', () => {
           expect(request.headers.get('X-Mastra-Project-Id')).toBeNull();
           expect(url.searchParams.get('entityType')).toBe('agent');
           expect(url.searchParams.get('signalNames')).toBe('goal,outcome');
-          expect(url.searchParams.get('limit')).toBe('50');
+          expect(url.searchParams.get('presentation')).toBe('landmarks');
+          expect(url.searchParams.get('limit')).toBe('24');
           return HttpResponse.json(themeSnapshotsResponse);
         }),
       );
@@ -36,6 +37,43 @@ describe('Agent Learning theme flow hooks', () => {
       });
 
       await waitFor(() => expect(result.current.data).toEqual(themeSnapshotsResponse));
+    });
+
+    it('normalizes snapshot range dates into the request and query key', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const dateFrom = new Date('2026-07-01T00:00:00.000Z');
+      const dateTo = new Date('2026-07-08T12:30:00.000Z');
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get('from')).toBe('2026-07-01T00:00:00.000Z');
+          expect(url.searchParams.get('to')).toBe('2026-07-08T12:30:00.000Z');
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+      );
+
+      const { result } = renderHook(
+        () => useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome'], dateFrom, dateTo),
+        {
+          wrapper: ({ children }) => <TestQueryProvider queryClient={queryClient}>{children}</TestQueryProvider>,
+        },
+      );
+
+      await waitFor(() => expect(result.current.data).toEqual(themeSnapshotsResponse));
+      expect(
+        queryClient
+          .getQueryCache()
+          .getAll()
+          .map(query => query.queryKey),
+      ).toContainEqual([
+        'entity-learning',
+        'agent',
+        'support-agent',
+        'theme-snapshots',
+        ['goal', 'outcome'],
+        '2026-07-01T00:00:00.000Z',
+        '2026-07-08T12:30:00.000Z',
+      ]);
     });
 
     it('loads the weighted flow for a snapshot', async () => {

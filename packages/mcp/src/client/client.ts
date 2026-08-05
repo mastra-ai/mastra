@@ -647,6 +647,8 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private isConnected: Promise<boolean> | null = null;
+  private reconnectPromise: Promise<void> | null = null;
+  private lifecycleGeneration = 0;
 
   /**
    * Connects to the MCP server using the configured transport.
@@ -792,6 +794,17 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   async disconnect() {
+    // Invalidate tool calls that started before this explicit teardown. Their
+    // recovery path must not establish a replacement connection afterwards.
+    this.lifecycleGeneration++;
+
+    // A reconnect that started first may publish a replacement transport.
+    // Wait for it, then tear down whichever transport is current.
+    const reconnectPromise = this.reconnectPromise;
+    if (reconnectPromise) {
+      await reconnectPromise.catch(() => {});
+    }
+
     // Release any transport left pending from an unfinished authorization flow,
     // even when there is no live transport to tear down.
     this.closePendingAuthTransport();
@@ -847,36 +860,83 @@ export class InternalMastraMCPClient extends MastraBase {
    * @internal
    */
   async forceReconnect(): Promise<void> {
-    this.log('debug', 'Forcing reconnection to MCP server...');
-
-    // Release any transport left pending from an unfinished authorization flow
-    // before rebuilding the connection.
-    this.closePendingAuthTransport();
-
-    // Disconnect current connection (ignore errors as connection may already be broken)
-    const disconnectedTransport = this.transport;
-    try {
-      if (disconnectedTransport) {
-        await disconnectedTransport.close();
-      }
-    } catch (e) {
-      this.log('debug', 'Error during force disconnect (ignored)', {
-        error: e instanceof Error ? e.message : String(e),
-      });
-    } finally {
-      if (disconnectedTransport) {
-        this.severClientTransportLink(disconnectedTransport);
-      }
+    if (this.reconnectPromise) {
+      this.log('debug', 'Reconnection already in progress; waiting for it to complete');
+      return await this.reconnectPromise;
     }
 
-    // Reset connection state
-    this.transport = undefined;
-    this.isConnected = null;
-    this.serverInstructions = undefined;
+    const reconnectPromise = (async () => {
+      this.log('debug', 'Forcing reconnection to MCP server...');
 
-    // Reconnect
-    await this.connect();
-    this.log('debug', 'Successfully reconnected to MCP server');
+      // Release any transport left pending from an unfinished authorization flow
+      // before rebuilding the connection.
+      this.closePendingAuthTransport();
+
+      // Disconnect current connection (ignore errors as connection may already be broken)
+      const disconnectedTransport = this.transport;
+      try {
+        if (disconnectedTransport) {
+          await disconnectedTransport.close();
+        }
+      } catch (e) {
+        this.log('debug', 'Error during force disconnect (ignored)', {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      } finally {
+        if (disconnectedTransport) {
+          this.severClientTransportLink(disconnectedTransport);
+        }
+      }
+
+      // Reset connection state only when it still belongs to the transport that
+      // this reconnect attempt disconnected. A close callback may have already
+      // cleared it, but must not let us erase a replacement transport.
+      if (!disconnectedTransport || this.transport === disconnectedTransport) {
+        this.transport = undefined;
+        this.isConnected = null;
+        this.serverInstructions = undefined;
+      }
+
+      await this.connect();
+      this.log('debug', 'Successfully reconnected to MCP server');
+    })();
+    this.reconnectPromise = reconnectPromise;
+
+    try {
+      await reconnectPromise;
+    } finally {
+      if (this.reconnectPromise === reconnectPromise) {
+        this.reconnectPromise = null;
+      }
+    }
+  }
+
+  private async reconnectAfterTransportFailure(failedTransport: Transport | undefined, lifecycleGeneration: number) {
+    while (true) {
+      if (this.lifecycleGeneration !== lifecycleGeneration) {
+        throw new Error('MCP client was disconnected while recovering the failed transport');
+      }
+
+      const reconnectPromise = this.reconnectPromise;
+      if (reconnectPromise) {
+        await reconnectPromise;
+        // Re-evaluate after the owner clears the settled promise. The transport
+        // that failed may itself be the replacement created by that reconnect.
+        continue;
+      }
+
+      if (failedTransport && this.transport && this.transport !== failedTransport) {
+        this.log('debug', 'Connection was already replaced after the failed operation; skipping reconnect');
+        return;
+      }
+
+      await this.forceReconnect();
+
+      if (this.lifecycleGeneration !== lifecycleGeneration) {
+        throw new Error('MCP client was disconnected while recovering the failed transport');
+      }
+      return;
+    }
   }
 
   async listResources(): Promise<ListResourcesResult> {
@@ -1157,6 +1217,8 @@ export class InternalMastraMCPClient extends MastraBase {
                 return res;
               };
 
+              const failedTransport = this.transport;
+              const lifecycleGeneration = this.lifecycleGeneration;
               try {
                 return await executeToolCall();
               } catch (e) {
@@ -1168,7 +1230,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
                   try {
                     // Force reconnection
-                    await this.forceReconnect();
+                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
 
                     // Retry the tool call with fresh connection
                     this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
