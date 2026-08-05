@@ -15,7 +15,7 @@ Full platform setup lives in the [CopilotKit Channels documentation](https://doc
 
 ## How it fits together
 
-Your Mastra agent stays where it is, exposed over AG-UI through `registerCopilotKit()` (see [CopilotKit overview](/guides/build-your-ui/copilotkit/overview)). A channel is a separate long-running process built with `@copilotkit/channels`: you attach one or more platform adapters and point the channel at your agent. `createChannel` takes an array of adapters, so a single process can serve several platforms at once.
+Your Mastra agent stays where it's deployed, exposed over AG-UI through `registerCopilotKit()` (see [CopilotKit overview](/guides/build-your-ui/copilotkit/overview)). A channel is a separate long-running process built with `@copilotkit/channels`: you attach one or more platform adapters and point the channel at your agent. `createChannel` takes an array of adapters, so a single process can serve several platforms at once.
 
 Install the SDK (batteries-included, every adapter):
 
@@ -59,16 +59,16 @@ Set the Slack credentials in your environment:
 
 ## Other platforms
 
-The Channels SDK is not limited to Slack. Other platforms like Microsoft Teams run through the same `@copilotkit/channels` API: add the matching adapter to the `adapters` array and the rest of your agent code stays the same. See the [CopilotKit Channels documentation](https://docs.copilotkit.ai/slack/mastra) for the current platform list and per-platform setup.
+The Channels SDK isn't limited to Slack. Other platforms like Microsoft Teams run through the same `@copilotkit/channels` API: add the matching adapter to the `adapters` array and the rest of your agent code stays the same. See the [CopilotKit Channels documentation](https://docs.copilotkit.ai/slack/mastra) for the current platform list and per-platform setup.
 
 ## Message pipeline and architecture
 
-Managed channels keep a deliberate credential split, which matters when your Mastra agent holds its own model keys and tools:
+Managed channels keep a deliberate credential split, which matters when your Mastra agent uses separate model keys and tools:
 
 - **You keep** the agent logic, model credentials, tools, and the channel process.
 - **CopilotKit Intelligence holds** the platform credentials, message delivery, registration, health, and reconnects.
 
-A turn flows through five stages: a user messages the app, Intelligence receives the platform event, the gateway delivers the turn to your running channel process, your Mastra agent runs and renders a reply, and Intelligence returns it as native platform content. Platform credentials never enter the agent process, and enterprise Intelligence can be self-hosted for data residency.
+A turn begins when a user messages the app. Intelligence receives the platform event, and the gateway delivers the turn to your running channel process. Your Mastra agent runs and renders a reply. Intelligence then returns the reply as native platform content. Platform credentials never enter the agent process, and enterprise Intelligence can be self-hosted for data residency.
 
 :::note
 
