@@ -1,4 +1,7 @@
-import { Button, Spinner, Textarea, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
@@ -9,6 +12,7 @@ import { useBuilderModelPolicy, useBuilderSettings } from '../../hooks/use-build
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 export const AgentBuilderStarter = () => {
@@ -17,6 +21,7 @@ export const AgentBuilderStarter = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createStoredAgent } = useStoredAgentMutations(undefined);
   const defaultVisibility = useDefaultVisibility();
+  const { data: authCapabilities } = useAuthCapabilities();
   const { models: allowedModels } = useAgentBuilderAllowedModels();
   const modelPolicy = useBuilderModelPolicy();
   // While builder settings are still loading, useBuilderModelPolicy falls back
@@ -45,7 +50,7 @@ export const AgentBuilderStarter = () => {
         skills: {},
         visibility: defaultVisibility,
         model: resolveStarterModel(allowedModels, modelPolicy),
-        requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA,
+        ...(authCapabilities?.enabled ? { requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } : {}),
       });
 
       void navigate(`/agent-builder/agents/${id}/edit`, {
@@ -73,10 +78,10 @@ export const AgentBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-surface1 px-6 py-24">
+    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-6 py-24">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-12">
         <h1
-          className="starter-heading text-center font-serif text-neutral6"
+          className="starter-heading text-neutral6 text-center font-serif"
           style={{ fontSize: 'clamp(1.875rem, 3.5vw, 2.5rem)', lineHeight: 1.1, letterSpacing: '-0.015em' }}
         >
           What should we build today?
@@ -84,7 +89,7 @@ export const AgentBuilderStarter = () => {
 
         <form
           onSubmit={handleSubmit}
-          className="starter-prompt rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3"
+          className="starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
@@ -97,7 +102,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="min-h-[112px] resize-none px-5 py-4 text-ui-md outline-none placeholder:text-neutral3 focus:outline-none focus-visible:outline-none"
+            className="text-ui-md placeholder:text-neutral3 min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
             rows={3}
           />
 

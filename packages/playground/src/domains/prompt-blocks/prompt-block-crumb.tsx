@@ -1,4 +1,4 @@
-import { Skeleton } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useParams } from 'react-router';
 import { useStoredPromptBlock } from './hooks/use-stored-prompt-blocks';
 

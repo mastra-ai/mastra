@@ -179,6 +179,8 @@ export type RecordTypes = {
   mastra_channel_installations: Record<string, any>;
   mastra_channel_config: Record<string, any>;
   [TABLE_NOTIFICATIONS]: Record<string, any>;
+  mastra_thread_state: Record<string, any>;
+  mastra_workflow_definitions: Record<string, any>;
 };
 
 export type ListOptions = {

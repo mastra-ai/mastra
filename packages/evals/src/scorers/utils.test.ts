@@ -178,6 +178,59 @@ describe('Scorer Utils', () => {
       expect(getUserMessageFromRunInput(input)).toBe('What is the capital of France?');
     });
 
+    it('should extract user text from a signal-role message (subscription / sendMessage path)', () => {
+      // Messages sent through agent.subscribeToThread + agent.sendMessage are persisted
+      // with role 'signal' and carry their user role on type / metadata.signal, with the
+      // text living only in content.parts (no flat content.content).
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          {
+            id: 'signal-msg-1',
+            role: 'signal',
+            type: 'user',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'What is the capital of France?' }],
+              metadata: {
+                signal: { id: 'signal-msg-1', type: 'user', tagName: 'user' },
+              },
+            },
+          },
+        ] as unknown as ScorerRunInputForAgent['inputMessages'],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBe('What is the capital of France?');
+    });
+
+    it('should not treat a non-user signal message as the user message', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          {
+            id: 'signal-reminder-1',
+            role: 'signal',
+            type: 'system-reminder',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'A reminder, not a user message' }],
+              metadata: {
+                signal: { id: 'signal-reminder-1', type: 'system-reminder', tagName: 'system-reminder' },
+              },
+            },
+          },
+        ] as unknown as ScorerRunInputForAgent['inputMessages'],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBeUndefined();
+    });
+
     it('should extract user text from workflow-style input', () => {
       expect(getUserMessageFromRunInput({ prompt: 'Workflow question' })).toBe('Workflow question');
       expect(getUserMessageFromRunInput('String question')).toBe('String question');

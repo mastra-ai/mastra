@@ -102,6 +102,17 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     this.vectorIndexes = this.isMemoryDb ? Promise.resolve(new Set<string>()) : this.discoverVectorIndexes();
   }
 
+  /**
+   * Closes the underlying libsql client, releasing this vector store's OS file handles.
+   *
+   * Safe to call more than once; subsequent calls are no-ops.
+   */
+  async close(): Promise<void> {
+    if (!this.turso.closed) {
+      this.turso.close();
+    }
+  }
+
   private async discoverVectorIndexes(): Promise<Set<string>> {
     try {
       const result = await this.turso.execute({

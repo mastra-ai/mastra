@@ -1,24 +1,20 @@
-// @vitest-environment jsdom
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderLibraryPage from '..';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
+vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
 
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -78,6 +74,13 @@ const baseAgent = {
 };
 
 describe('AgentBuilderLibraryPage', () => {
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
+    );
+  });
+
   afterEach(() => {
     cleanup();
   });

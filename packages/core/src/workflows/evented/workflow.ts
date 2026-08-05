@@ -45,7 +45,7 @@ import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
-import type { ChunkType, LanguageModelUsage } from '../../stream/types';
+import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { Tool } from '../../tools/tool';
 import type { ToolExecutionContext } from '../../tools/types';
@@ -60,10 +60,13 @@ import type {
   WorkflowStreamEvent,
   WorkflowEngineType,
   WorkflowRunStatus,
+  WorkflowRunState,
   StepParams,
   ToolStep,
   DefaultEngineType,
   StepMetadata,
+  CreateWorkflowParams,
+  InferSchemaOutput,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { validateCron } from '../scheduler/cron';
@@ -178,6 +181,7 @@ function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
       typeof (obj as any).processOutputStep === 'function' ||
+      typeof (obj as any).processToolResult === 'function' ||
       typeof (obj as any).computeStateSignal === 'function')
   );
 }
@@ -284,6 +288,7 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
     | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { processToolResult: Function })
     | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
@@ -669,6 +674,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       workflowId,
       state,
       setState,
+      abortSignal,
       ...obsFields
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
@@ -682,6 +688,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
         mastra,
         requestContext,
         ...observabilityContext,
+        abortSignal,
         workflow: {
           runId,
           workflowId,
@@ -722,6 +729,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return EntityType.OUTPUT_PROCESSOR;
       case 'outputStep':
         return EntityType.OUTPUT_STEP_PROCESSOR;
+      case 'toolResult':
+        return EntityType.TOOL_RESULT_PROCESSOR;
       default:
         return EntityType.OUTPUT_PROCESSOR;
     }
@@ -740,6 +749,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return 'output processor';
       case 'outputStep':
         return 'output step processor';
+      case 'toolResult':
+        return 'tool result processor';
       default:
         return 'processor';
     }
@@ -758,6 +769,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return !!processor.processOutputResult;
       case 'outputStep':
         return !!processor.processOutputStep;
+      case 'toolResult':
+        return !!processor.processToolResult;
       default:
         return false;
     }
@@ -794,6 +807,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         state,
         result: outputResult,
         finishReason,
+        providerMetadata,
         toolCalls,
         text,
         retryCount,
@@ -809,6 +823,12 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId,
         rotateResponseMessageId,
+        // toolResult phase fields
+        toolName,
+        toolCallId,
+        args: toolCallArgs,
+        toolResultValue,
+        providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
@@ -877,6 +897,14 @@ function createStepFromProcessor<TProcessorId extends string>(
               ...(finishReason !== undefined ? { finishReason } : {}),
               ...(text !== undefined ? { text } : {}),
               ...(toolCalls !== undefined ? { toolCalls } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          case 'toolResult':
+            return {
+              ...(stepNumber !== undefined ? { stepNumber } : {}),
+              ...(toolName !== undefined ? { toolName } : {}),
+              ...(toolCallId !== undefined ? { toolCallId } : {}),
+              ...(providerExecuted !== undefined ? { providerExecuted } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
             };
           default:
@@ -959,6 +987,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           }
           case 'outputResult':
           case 'outputStep':
+          case 'toolResult':
             return {
               ...(Array.isArray(payload.messages) &&
               !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
@@ -986,10 +1015,10 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
-      // - For inputStep/outputStep: find MODEL_STEP (processor runs per LLM call)
+      // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       const parentSpan =
-        phase === 'inputStep' || phase === 'outputStep'
+        phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || currentSpan
           : currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan;
 
@@ -1083,6 +1112,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         result: outputResult,
         finishReason,
+        providerMetadata,
         toolCalls,
         text,
         retryCount,
@@ -1098,6 +1128,12 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        // toolResult phase fields — passed through so chained processor steps can read them
+        toolName,
+        toolCallId,
+        args: toolCallArgs,
+        toolResultValue,
+        providerExecuted,
       };
 
       // Helper to execute phase with proper span lifecycle management
@@ -1241,7 +1277,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (validatedResult.systemMessages) {
-                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+                passThrough.messageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1250,7 +1286,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
-                systemMessages: passThrough.messageList!.getSystemMessages(),
+                systemMessages: passThrough.messageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1426,6 +1462,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messageList: passThrough.messageList,
                 stepNumber: stepNumber ?? 0,
                 finishReason,
+                providerMetadata: providerMetadata as ProviderMetadata | undefined,
                 toolCalls: toolCalls as any,
                 text,
                 usage: (usage as LanguageModelUsage) ?? defaultUsage,
@@ -1480,6 +1517,78 @@ function createStepFromProcessor<TProcessorId extends string>(
             return { ...passThrough, messages };
           }
 
+          case 'toolResult': {
+            if (processor.processToolResult) {
+              if (!passThrough.messageList) {
+                throw new MastraError({
+                  category: ErrorCategory.USER,
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  id: 'PROCESSOR_MISSING_MESSAGE_LIST',
+                  text: `Processor ${processor.id} requires messageList or messages for processToolResult phase`,
+                });
+              }
+
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
+              const result = await processor.processToolResult({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
+                stepNumber: stepNumber ?? 0,
+                toolName: toolName ?? '',
+                toolCallId: toolCallId ?? '',
+                args: toolCallArgs,
+                result: toolResultValue,
+                providerExecuted,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+                steps: steps ?? [],
+              });
+
+              if (result instanceof MessageList) {
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
+                ProcessorRunner.applyMessagesToMessageList(
+                  result as MastraDBMessage[],
+                  passThrough.messageList,
+                  idsBeforeProcessing,
+                  check,
+                  'response',
+                );
+                return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                ProcessorRunner.applyMessagesToMessageList(
+                  typedResult.messages,
+                  passThrough.messageList,
+                  idsBeforeProcessing,
+                  check,
+                  'response',
+                );
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                return {
+                  ...passThrough,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
+                };
+              }
+              return { ...passThrough, messages };
+            }
+            return { ...passThrough, messages };
+          }
+
           default:
             return { ...passThrough, messages };
         }
@@ -1499,9 +1608,9 @@ function createStepFromProcessor<TProcessorId extends string>(
 
 export function createWorkflow<
   TWorkflowId extends string = string,
-  TState = unknown,
-  TInput = unknown,
-  TOutput = unknown,
+  TInputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TStateSchema extends PublicSchema<any> | undefined = undefined,
   TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<
     string,
     any,
@@ -1511,7 +1620,8 @@ export function createWorkflow<
     any,
     EventedEngineType
   >[],
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+>(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
   if (params.schedule) {
     const schedules = Array.isArray(params.schedule) ? params.schedule : [params.schedule];
     if (Array.isArray(params.schedule)) {
@@ -1539,13 +1649,22 @@ export function createWorkflow<
     options: {
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
+      pruneSnapshot: params.options?.pruneSnapshot,
       tracingPolicy: params.options?.tracingPolicy,
       onFinish: params.options?.onFinish,
       onError: params.options?.onError,
     },
   });
-  return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
-    ...params,
+  return new EventedWorkflow<
+    EventedEngineType,
+    TSteps,
+    TWorkflowId,
+    InferSchemaOutput<TStateSchema>,
+    InferPublicSchema<TInputSchema>,
+    InferPublicSchema<TOutputSchema>,
+    InferPublicSchema<TInputSchema>
+  >({
+    ...(params as any),
     executionEngine,
   });
 }
@@ -1647,9 +1766,13 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const existingRun = await this.getWorkflowRunById(runIdToUse, {
-      withNestedWorkflows: false,
-    });
+    // A freshly-minted run for a workflow that never persists a snapshot cannot have
+    // a stored row, so this existence read would be a guaranteed miss. Skipping it
+    // avoids a storage round trip on every createRun for transient workflows (#19015).
+    const existingRun =
+      shouldPersistSnapshot || options?.runId
+        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+        : undefined;
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
@@ -1660,25 +1783,28 @@ export class EventedWorkflow<
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
+      const initialSnapshot: WorkflowRunState = {
+        runId: runIdToUse,
+        status: 'pending',
+        value: {},
+        context: {} as WorkflowRunState['context'],
+        activePaths: [],
+        serializedStepGraph: this.serializedStepGraph,
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        result: undefined,
+        error: undefined,
+        timestamp: Date.now(),
+      };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
-        snapshot: {
-          runId: runIdToUse,
-          status: 'pending',
-          value: {},
-          context: {},
-          activePaths: [],
-          serializedStepGraph: this.serializedStepGraph,
-          activeStepsPath: {},
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          result: undefined,
-          error: undefined,
-          timestamp: Date.now(),
-        },
+        snapshot: this.options?.pruneSnapshot
+          ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+          : initialSnapshot,
       });
     }
 
@@ -1776,24 +1902,27 @@ export class EventedRun<
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
+    const initialRunSnapshot: WorkflowRunState = {
+      runId: this.runId,
+      serializedStepGraph: this.serializedStepGraph,
+      status: 'running',
+      value: {},
+      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+      requestContext: requestContext.toJSON(),
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
-      snapshot: {
-        runId: this.runId,
-        serializedStepGraph: this.serializedStepGraph,
-        status: 'running',
-        value: {},
-        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-        requestContext: requestContext.toJSON(),
-        activePaths: [],
-        activeStepsPath: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        timestamp: Date.now(),
-      },
+      snapshot: this.executionEngine.options?.pruneSnapshot
+        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+        : initialRunSnapshot,
     });
 
     if (!this.mastra?.pubsub) {
@@ -1895,24 +2024,27 @@ export class EventedRun<
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
+    const initialRunSnapshot: WorkflowRunState = {
+      runId: this.runId,
+      serializedStepGraph: this.serializedStepGraph,
+      status: 'running',
+      value: {},
+      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+      requestContext: requestContext.toJSON(),
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
-      snapshot: {
-        runId: this.runId,
-        serializedStepGraph: this.serializedStepGraph,
-        status: 'running',
-        value: {},
-        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-        requestContext: requestContext.toJSON(),
-        activePaths: [],
-        activeStepsPath: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        timestamp: Date.now(),
-      },
+      snapshot: this.executionEngine.options?.pruneSnapshot
+        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+        : initialRunSnapshot,
     });
 
     if (!this.mastra?.pubsub) {

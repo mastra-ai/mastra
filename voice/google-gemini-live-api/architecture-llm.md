@@ -478,7 +478,7 @@ OAuth tokens cached for 50 minutes to avoid expensive requests.
 ```json
 {
   "realtime_input": {
-    "media_chunks": [{ "mime_type": "audio/pcm", "data": "base64..." }]
+    "audio": { "mime_type": "audio/pcm", "data": "base64..." }
   }
 }
 ```

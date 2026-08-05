@@ -1,4 +1,6 @@
-import { Button, StatusBadge, Txt } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -32,11 +34,11 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
   return (
     <>
       <div
-        className="border border-1 p-3 rounded-xl flex items-center gap-3"
+        className="flex items-center gap-3 rounded-xl border border-1 p-3"
         data-testid={`agent-builder-chat-connect-channel-${platformId}`}
       >
         <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-        <Txt variant="ui-md" className="flex-1 text-neutral4" as="div">
+        <Txt variant="ui-md" className="text-neutral4 flex-1" as="div">
           {platform.name}
         </Txt>
         {!platform.isConfigured ? (

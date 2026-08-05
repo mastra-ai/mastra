@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Run the same-run tool suspension resume e2e.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_same_run_resume_env",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Which environment should the same-run resume test use?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_same_run_resume_env",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Same-run resume complete for Preview."
+      }
+    }
+  ]
+}

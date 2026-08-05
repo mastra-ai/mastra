@@ -1,5 +1,7 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -70,7 +72,7 @@ export function ExperimentResultsList({
                 <DataList.Cell height="compact">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center w-10 relative bg-transparent h-full">
+                      <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
                         <div
                           role="img"
                           aria-label={hasError ? 'Error' : 'Success'}
@@ -88,7 +90,7 @@ export function ExperimentResultsList({
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} height="compact" className="font-mono text-neutral3 text-ui-smd">
+                    <DataList.Cell key={scorerId} height="compact" className="text-neutral3 text-ui-smd font-mono">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );

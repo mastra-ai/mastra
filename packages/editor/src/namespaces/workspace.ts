@@ -1,6 +1,5 @@
 import { Workspace, CompositeFilesystem } from '@mastra/core/workspace';
-import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource } from '@mastra/core/workspace';
-import type { WorkspaceConfig } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource, WorkspaceConfig } from '@mastra/core/workspace';
 import type {
   StorageCreateWorkspaceInput,
   StorageUpdateWorkspaceInput,
@@ -238,6 +237,24 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
       );
     }
     return await provider.createSandbox(sandboxConfig.config);
+  }
+
+  /**
+   * Resolve a stored workspace provider config to a complete runtime Workspace instance.
+   * Looks up the provider by ID in the editor's workspace provider registry.
+   */
+  async resolveWorkspaceProvider(
+    providerId: string,
+    config: Record<string, unknown>,
+  ): Promise<Workspace<any, any, any>> {
+    const provider = this.editor.__workspaces.get(providerId);
+    if (!provider) {
+      throw new Error(
+        `Workspace provider "${providerId}" is not registered. ` +
+          `Register it via new MastraEditor({ workspaces: { '${providerId}': yourProvider } })`,
+      );
+    }
+    return await provider.createWorkspace(config);
   }
 
   protected async getStorageAdapter(): Promise<

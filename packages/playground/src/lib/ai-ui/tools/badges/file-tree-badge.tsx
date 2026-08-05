@@ -1,8 +1,12 @@
-import { useAuiState } from '@assistant-ui/react';
-import { Badge, Button, CodeEditor, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -43,6 +47,7 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   result: any;
   metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 export const FileTreeBadge = ({
@@ -53,10 +58,11 @@ export const FileTreeBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts,
 }: FileTreeBadgeProps) => {
   // Expand by default when approval is required (so buttons are visible)
   const [isCollapsed, setIsCollapsed] = useState(!toolApprovalMetadata);
-  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
 
   // Sync collapsed state when toolApprovalMetadata changes (like BadgeWrapper does)
   useEffect(() => {
@@ -109,13 +115,11 @@ export const FileTreeBadge = ({
   const toolCalled = toolCalledProp ?? hasResult;
 
   // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
-  const message = useAuiState(s => s.message);
   const workspaceMetadata = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.find(
+    return (dataParts ?? []).find(
       part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
     );
-  }, [message.content, toolCallId]);
+  }, [dataParts, toolCallId]);
 
   const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 
@@ -127,15 +131,15 @@ export const FileTreeBadge = ({
   return (
     <div className="mb-4" data-testid="file-tree-badge">
       {/* Header row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2 min-w-0" type="button">
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => setIsCollapsed(s => !s)} className="flex min-w-0 items-center gap-2" type="button">
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
           <Badge icon={<FolderTree className="text-accent6" size={16} />}>
-            List Files <span className="text-neutral6 font-normal ml-1">{path}</span>
+            List Files <span className="text-neutral6 ml-1 font-normal">{path}</span>
             {argsDisplay.length > 0 && (
-              <span className="text-neutral4 font-normal ml-1">({argsDisplay.join(', ')})</span>
+              <span className="text-neutral4 ml-1 font-normal">({argsDisplay.join(', ')})</span>
             )}
           </Badge>
         </button>
@@ -144,7 +148,7 @@ export const FileTreeBadge = ({
         {wsMeta?.filesystem && (
           <Link
             href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
+            className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-xs transition-colors"
           >
             <HardDrive className="size-3" />
             <span>{wsMeta.name || wsMeta.filesystem.name}</span>
@@ -160,9 +164,9 @@ export const FileTreeBadge = ({
         <div className="pt-2">
           {/* Approval UI - styled like ToolBadge/BadgeWrapper when awaiting approval */}
           {toolApprovalMetadata && !toolCalled && (
-            <div className="p-4 rounded-lg bg-surface2 flex flex-col gap-4">
+            <div className="bg-surface2 flex flex-col gap-4 rounded-lg p-4">
               <div>
-                <p className="font-medium pb-2">Tool arguments</p>
+                <p className="pb-2 font-medium">Tool arguments</p>
                 <CodeEditor data={parsedArgs as Record<string, unknown>} data-testid="tool-args" />
               </div>
               <ToolApprovalButtons
@@ -177,9 +181,9 @@ export const FileTreeBadge = ({
 
           {/* Tree output panel - custom UI after tool has been called */}
           {toolCalled && treeOutput && (
-            <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
+            <div className="border-border1 bg-surface2 overflow-hidden rounded-md border">
               {/* Panel header with summary and copy button */}
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
+              <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-3 py-1.5">
                 {summary && <span className="text-neutral6 text-xs">{summary}</span>}
                 <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
@@ -200,7 +204,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="p-3 text-xs font-mono text-mastra-el-6 overflow-x-auto whitespace-pre max-h-dropdown-max-height overflow-y-auto">
+              <pre className="text-mastra-el-6 max-h-dropdown-max-height overflow-x-auto overflow-y-auto p-3 font-mono text-xs whitespace-pre">
                 {treeOutput}
               </pre>
             </div>
@@ -208,8 +212,8 @@ export const FileTreeBadge = ({
 
           {/* Loading state */}
           {toolCalled && !hasResult && (
-            <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
-              <span className="text-xs text-neutral6">Loading...</span>
+            <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
+              <span className="text-neutral6 text-xs">Loading...</span>
             </div>
           )}
         </div>

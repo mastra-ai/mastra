@@ -4,6 +4,7 @@ import type { JSONSchema7 } from 'json-schema';
 import z3 from 'zod/v3';
 import type { ZodType } from 'zod/v3';
 import type { PublicSchema } from '../schema.types';
+import { patchRecordSchemas } from '../zod-to-json';
 import { toStandardSchema as toStandardSchemaAiSdk } from './adapters/ai-sdk';
 import { toStandardSchema as toStandardSchemaJsonSchema } from './adapters/json-schema';
 import { toStandardSchema as toStandardSchemaZodV3 } from './adapters/zod-v3';
@@ -128,6 +129,17 @@ function isZodV3(schema: unknown): schema is ZodType {
 }
 
 export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
+  // Work around a Zod v4 (< 4.4.0) bug where single-arg `z.record(valueSchema)`
+  // puts the value in `def.keyType` and leaves `def.valueType` undefined, which
+  // crashes `toJSONSchema`'s recordProcessor. This must run BEFORE the
+  // StandardSchemaWithJSON short-circuit below: Zod >= 4.2 natively exposes
+  // `~standard.jsonSchema`, so those schemas are returned as-is and never go
+  // through our Zod v4 adapter. Patching mutates the defs in place, so Zod's
+  // native converter picks up the fix too. Idempotent — safe to call repeatedly.
+  if (isZodV4(schema)) {
+    patchRecordSchemas(schema);
+  }
+
   // First check: if already StandardSchemaWithJSON, return as-is
   // This handles ArkType, Zod v4 (when it has jsonSchema), and pre-wrapped schemas
   if (isStandardSchemaWithJSON(schema)) {

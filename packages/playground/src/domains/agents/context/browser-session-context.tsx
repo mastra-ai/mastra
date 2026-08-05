@@ -3,7 +3,7 @@ import type { StreamStatus } from '../hooks/use-browser-stream';
 import type { BrowserFrameStore } from './browser-frame-store';
 
 /** View modes for the browser UI */
-export type BrowserViewMode = 'collapsed' | 'expanded' | 'modal' | 'sidebar';
+export type BrowserViewMode = 'collapsed' | 'expanded' | 'modal';
 
 export interface BrowserSessionContextValue {
   /** Whether the browser session has an active stream (for showing thumbnail) */
@@ -12,8 +12,6 @@ export interface BrowserSessionContextValue {
   viewMode: BrowserViewMode;
   /** Whether the browser panel modal is expanded (viewMode === 'modal') */
   isPanelOpen: boolean;
-  /** Whether browser is shown in sidebar (viewMode === 'sidebar') */
-  isInSidebar: boolean;
   /** @deprecated Use hasSession instead */
   isActive: boolean;
   status: StreamStatus;

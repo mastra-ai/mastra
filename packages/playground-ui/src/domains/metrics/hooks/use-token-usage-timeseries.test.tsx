@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+
 import { EntityType } from '@mastra/core/observability';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -6,7 +7,7 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { emptyTokenSeries, inputTokenSeries, outputTokenSeries } from './__tests__/fixtures/token-usage-timeseries';
 import { MetricsProvider } from './use-metrics';
@@ -169,7 +170,9 @@ describe('useTokenUsageTimeSeries', () => {
       expect(onTimeseries).toHaveBeenCalledTimes(2);
     });
 
-    const [inputRequest] = onTimeseries.mock.calls[0]!;
+    const firstCall = onTimeseries.mock.calls[0];
+    assert(firstCall, 'Expected first timeseries request');
+    const [inputRequest] = firstCall;
     expect(inputRequest.name).toEqual(['mastra_model_total_input_tokens']);
     expect(inputRequest.aggregation).toBe('sum');
     expect(inputRequest.filters?.timestamp?.start).toBeDefined();

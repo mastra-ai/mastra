@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "tencent-token-plan/hy3-preview"
+  model: "tencent-token-plan/hy3"
 });
 
 // Generate a response
@@ -46,7 +46,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "tencent-token-plan/hy3-preview",
+    "model": "tencent-token-plan/hy3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -70,7 +70,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.lkeap.cloud.tencent.com/plan/v3",
-    id: "tencent-token-plan/hy3-preview",
+    id: "tencent-token-plan/hy3",
     apiKey: process.env.TENCENT_TOKEN_PLAN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -88,8 +88,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "tencent-token-plan/hy3-preview"
-      : "tencent-token-plan/hy3-preview";
+      ? "tencent-token-plan/hy3"
+      : "tencent-token-plan/hy3";
   }
 });
 ```

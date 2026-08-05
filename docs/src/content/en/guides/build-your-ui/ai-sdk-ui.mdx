@@ -36,7 +36,7 @@ You're now ready to follow the integration guides and recipes below!
 
 ## Integration guides
 
-Typically, you'll set up API routes that stream Mastra content in AI SDK-compatible format, and then use those routes in AI SDK UI hooks like `useChat()`. Below you'll find two main approaches to achieve this:
+Typically, you'll set up API routes that stream Mastra content in AI SDK-compatible format, and then use those routes in AI SDK UI hooks like `useChat()`. Choose one of these approaches:
 
 - [Mastra's server](#mastras-server)
 - [Framework-agnostic](#framework-agnostic)
@@ -103,7 +103,7 @@ You can use [`chatRoute()`](/reference/ai-sdk/chat-route), [`workflowRoute()`](/
 
     When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-    See [Workflow Streaming](/docs/streaming/workflow-streaming) for more details.
+    See [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads) for more details.
 
     :::
   </TabItem>
@@ -306,7 +306,7 @@ export default function Page() {
 }
 ```
 
-Below are two approaches to implementing the backend:
+Choose a backend implementation:
 
 <Tabs>
   <TabItem value="mastra-server" label="Mastra Server">
@@ -390,7 +390,7 @@ Below are two approaches to implementing the backend:
 
 ## Custom UI
 
-Custom UI (also known as Generative UI) allows you to render custom React components based on data streamed from Mastra. Instead of displaying raw text or JSON, you can create visual components for tool outputs, workflow progress, agent network execution, and custom events.
+Custom UI (also known as Generative UI) allows you to render custom React components based on data streamed from Mastra. Instead of displaying raw text or JSON, you can create visual components for tool outputs and workflow progress, including agent network execution and custom events.
 
 Use Custom UI when you want to:
 
@@ -696,7 +696,7 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   </TabItem>
 </Tabs>
 
-For more details on workflow streaming, see [Workflow Streaming](/docs/streaming/workflow-streaming).
+For more details on workflow streaming, see [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads).
 
 ### Rendering network data
 
@@ -934,7 +934,7 @@ You must `await` the `writer.custom()` call, otherwise you may encounter a `Writ
 
 ### Tool streaming
 
-Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/streaming/tool-streaming).
+Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/agents/using-tools#streaming).
 
 ### Examples
 
@@ -1016,7 +1016,7 @@ export function ChatAdditional() {
 }
 ```
 
-Two examples on how to implement the backend portion of it.
+Implement the backend with either of these examples.
 
 <Tabs>
   <TabItem value="mastra-server" label="Mastra Server">
@@ -1166,6 +1166,7 @@ The workflow uses:
     export const mastra = new Mastra({
       workflows: { approvalWorkflow },
       storage: new LibSQLStore({
+        id: 'mastra-storage',
         url: 'file:../mastra.db',
       }),
       server: {
@@ -1582,7 +1583,7 @@ For a complete implementation, see the [workflow-agent-text-stream example](http
 
 ### Multi-stage progress with branching workflows
 
-For workflows with conditional branching (e.g., express vs standard shipping), you can track progress across different branches by including a identifier in your custom events.
+For workflows with conditional branching (e.g., express vs standard delivery), you can track progress across different branches by including an identifier in your custom events.
 
 The UI Dojo example uses a `stage` field in the event data to identify which branch is executing (e.g., `"validation"`, `"standard-processing"`, `"express-processing"`). The frontend groups events by this field to show a pipeline-style progress UI.
 

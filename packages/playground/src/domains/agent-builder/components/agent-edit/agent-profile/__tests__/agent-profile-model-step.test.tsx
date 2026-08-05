@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -8,12 +7,12 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { server } from '@/test/msw-server';
-import { StreamRunningContext } from '../../../../contexts/stream-chat-context';
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
+import { StreamRunningContext } from '../../../../contexts/stream-chat-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { AgentProfileModelStep } from '../agent-profile-model-step';
 import { makeBuilderSettings, openaiBuilderModels } from './fixtures/agent-profile-tabs';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

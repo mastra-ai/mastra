@@ -1,6 +1,6 @@
-import type { User, IUserProvider } from '@mastra/core/auth';
-import { MastraAuthProvider } from '@mastra/core/server';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import type { User, IUserProvider } from '@internal/auth';
+import { MastraAuthProvider } from '@internal/auth/provider';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 
 import jwt from 'jsonwebtoken';
 

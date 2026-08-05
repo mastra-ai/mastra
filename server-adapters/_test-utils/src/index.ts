@@ -10,5 +10,12 @@ export { createMCPRouteTestSuite } from './mcp-route-test-suite';
 export { createMCPTransportTestSuite, type MCPTransportTestConfig } from './mcp-transport-test-suite';
 export { createMultipartTestSuite, type MultipartTestSuiteConfig } from './multipart-test-suite';
 export { createHttpLoggingTestSuite, type HttpLoggingTestSuiteConfig } from './http-logging-test-suite';
+export { createBodyLimitTestSuite, type BodyLimitTestSuiteConfig } from './body-limit-test-suite';
 
-export { createDefaultTestContext, createStreamWithSensitiveData, consumeSSEStream } from './test-helpers';
+export {
+  createDefaultTestContext,
+  createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
+  consumeSSEStream,
+} from './test-helpers';

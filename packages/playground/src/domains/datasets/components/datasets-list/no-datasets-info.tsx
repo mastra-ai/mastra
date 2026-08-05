@@ -1,4 +1,5 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
 
 export interface NoDatasetsInfoProps {
@@ -27,7 +28,7 @@ export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/evals/datasets/overview"
+            href="https://mastra.ai/en/docs/datasets/overview"
             target="_blank"
             rel="noopener noreferrer"
           >

@@ -1,21 +1,15 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
-import {
-  codeLanguages,
-  Notice,
-  Badge,
-  useCodemirrorTheme,
-  Skeleton,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  AgentIcon,
-  ProcessorIcon,
-  SkillIcon,
-  ToolsIcon,
-  WorkflowIcon,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { codeLanguages, useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';
@@ -97,7 +91,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
     <AgentMetadataWrapper>
       {agent?.description && (
         <AgentMetadataSection title="Description">
-          <p className="text-sm text-neutral6">{agent.description}</p>
+          <p className="text-neutral6 text-sm">{agent.description}</p>
         </AgentMetadataSection>
       )}
       {agent.modelList && (
@@ -193,7 +187,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">
         <CodeMirror
-          className="border border-border1 rounded-md"
+          className="border-border1 rounded-md border"
           value={extractPrompt(agent.instructions)}
           editable={false}
           extensions={[markdown({ base: markdownLanguage, codeLanguages }), EditorView.lineWrapping]}
@@ -357,7 +351,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                       {badge}
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Active</TooltipContent>
+                  <TooltipContent className="bg-surface3 text-neutral6 border-border1 border">Active</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (
@@ -397,7 +391,7 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
-          <Badge icon={<Folder className="h-3 w-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
+          <Badge icon={<Folder className="text-accent1 h-3 w-3" />}>{formatWorkspaceToolName(tool)}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

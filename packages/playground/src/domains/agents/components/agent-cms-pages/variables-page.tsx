@@ -1,5 +1,7 @@
-import { JSONSchemaForm, jsonSchemaToFields, ScrollArea } from '@mastra/playground-ui';
-import type { JsonSchema, SchemaField } from '@mastra/playground-ui';
+import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
+import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { Plus, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -16,10 +18,10 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className="py-2 ">
+    <div className="py-2">
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
-          <div className="flex flex-row gap-4 items-center">
+          <div className="flex flex-row items-center gap-4">
             <JSONSchemaForm.FieldName placeholder="Variable name" className="w-64" />
             <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
@@ -40,7 +42,7 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
-            <PlusIcon className="w-3 h-3 mr-1" />
+            <PlusIcon className="mr-1 h-3 w-3" />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>

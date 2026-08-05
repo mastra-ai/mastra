@@ -1,0 +1,38 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create a deterministic commit to verify attribution guidance.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_commit_attribution_git_commit",
+            "name": "execute_command",
+            "arguments": {
+              "command": "printf 'commit attribution e2e\\n' > commit-attribution-e2e.txt && git add commit-attribution-e2e.txt && git commit -m 'test: commit attribution e2e' -m 'Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>'",
+              "timeout": 10,
+              "cwd": null,
+              "tail": 40,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "hasToolResult": true,
+        "toolCallId": "call_commit_attribution_git_commit"
+      },
+      "response": {
+        "content": "Commit attribution git history e2e complete."
+      }
+    }
+  ]
+}

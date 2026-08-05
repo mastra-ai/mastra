@@ -173,7 +173,7 @@ describe('EE telemetry', () => {
     expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('user2@test.com');
   });
 
-  it('emits FGA feature usage for system actor bypasses', async () => {
+  it('emits FGA feature usage for trusted actor bypasses', async () => {
     const fgaProvider = createMockFGAProvider();
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'org-1');
@@ -184,7 +184,7 @@ describe('EE telemetry', () => {
       resource: { type: 'workflow', id: 'nightly-workflow' },
       permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
       requestContext,
-      systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+      actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
     });
 
     expect(fgaProvider.require).not.toHaveBeenCalled();
@@ -204,7 +204,7 @@ describe('EE telemetry', () => {
     );
   });
 
-  it('uses metadata sourceWorkflow when a system actor omits one', async () => {
+  it('uses metadata sourceWorkflow when a trusted actor omits one', async () => {
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'org-1');
 
@@ -214,7 +214,7 @@ describe('EE telemetry', () => {
       resource: { type: 'workflow', id: 'nightly-workflow' },
       permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
       requestContext,
-      systemActor: { actorKind: 'system' },
+      actor: { actorKind: 'system' },
       context: {
         metadata: {
           sourceWorkflow: 'metadata-workflow',

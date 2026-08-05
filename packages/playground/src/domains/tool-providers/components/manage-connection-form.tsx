@@ -1,4 +1,11 @@
-import { AlertDialog, Button, DialogBody, Icon, Input, Spinner, Txt, toast } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ChevronLeft, Link2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -58,7 +65,7 @@ export const ManageConnectionForm = ({
             onClick={onBack}
             aria-label="Back to connections"
             data-testid={`${testIdPrefix}-back`}
-            className="-mt-1 -ml-1.5 w-fit text-neutral3"
+            className="text-neutral3 -mt-1 -ml-1.5 w-fit"
           >
             <Icon>
               <ChevronLeft />
@@ -67,7 +74,7 @@ export const ManageConnectionForm = ({
           </Button>
         )}
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="grid size-14 place-items-center overflow-hidden rounded-xl bg-surface4" aria-hidden>
+          <div className="bg-surface4 grid size-14 place-items-center overflow-hidden rounded-xl" aria-hidden>
             {iconUrl ? (
               <img src={iconUrl} alt="" className="size-8 object-contain" />
             ) : (

@@ -1,6 +1,6 @@
-export { VercelSandbox, type VercelSandboxOptions } from './sandbox';
-export { vercelSandboxProvider } from './provider';
+export { VercelServerlessSandbox, type VercelServerlessSandboxOptions } from './serverless';
+export { vercelServerlessSandboxProvider } from './serverless-provider';
 
-export { VercelMicroVMSandbox, type VercelMicroVMSandboxOptions, type VercelMicroVMRuntime } from './microvm';
-export { VercelMicroVMProcessManager } from './microvm/process-manager';
-export { vercelMicroVMSandboxProvider } from './microvm-provider';
+export { VercelSandbox, type VercelSandboxOptions, type VercelSandboxRuntime } from './microvm';
+export { VercelSandboxProcessManager } from './microvm/process-manager';
+export { vercelSandboxProvider } from './microvm-provider';

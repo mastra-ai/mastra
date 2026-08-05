@@ -122,7 +122,7 @@ describe('Switch', () => {
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
     expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
     expect(switchEl.className).toContain('border-0');
-    expect(switchEl.className).toContain('overflow-hidden');
+    expect(switchEl.className).not.toContain('overflow-hidden');
     expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
     expect(switchEl.className).not.toContain('active:scale');
     expect(switchEl.className).not.toContain('hover:scale');

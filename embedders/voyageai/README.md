@@ -86,6 +86,7 @@ const model = voyageEmbedding({
   outputDimension: 512, // 256 | 512 | 1024 | 2048
   outputDtype: 'float', // 'float' | 'int8' | 'uint8' | 'binary' | 'ubinary'
   truncation: true, // Handle long inputs
+  baseUrl: 'https://ai.mongodb.com/v1', // Optional: custom endpoint (e.g. MongoDB-hosted Voyage)
 });
 ```
 
@@ -203,9 +204,10 @@ console.log(grouped.embeddingsByDocument); // [[[...], [...]], [[...]]]
 
 ### Contextualized Models
 
-| Model              | Use Case                     |
-| ------------------ | ---------------------------- |
-| `voyage-context-3` | Chunks with document context |
+| Model              | Use Case                                             |
+| ------------------ | ---------------------------------------------------- |
+| `voyage-context-4` | Chunks with document context, best quality (preview) |
+| `voyage-context-3` | Chunks with document context                         |
 
 ### Reranker Models
 
@@ -339,19 +341,14 @@ type VoyageTextModel =
 
 type VoyageMultimodalModel = 'voyage-multimodal-3' | 'voyage-multimodal-3.5';
 
-type VoyageContextModel = 'voyage-context-3';
+type VoyageContextModel = 'voyage-context-3' | 'voyage-context-4';
 
 type VoyageInputType = 'query' | 'document' | null;
 type VoyageOutputDimension = 256 | 512 | 1024 | 2048;
 type VoyageOutputDtype = 'float' | 'int8' | 'uint8' | 'binary' | 'ubinary';
 
 type VoyageRerankerModel =
-  | 'rerank-2.5'
-  | 'rerank-2.5-lite'
-  | 'rerank-2'
-  | 'rerank-2-lite'
-  | 'rerank-1'
-  | 'rerank-lite-1';
+  'rerank-2.5' | 'rerank-2.5-lite' | 'rerank-2' | 'rerank-2-lite' | 'rerank-1' | 'rerank-lite-1';
 
 interface VoyageRerankerConfig {
   model: VoyageRerankerModel;

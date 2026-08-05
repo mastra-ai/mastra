@@ -1,5 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataList, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DataList } from '@mastra/playground-ui/components/DataList';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Plus, Upload, FileJson } from 'lucide-react';
 
@@ -149,7 +152,7 @@ export function DatasetItemsList({
                   )}
                 </DataList.Cell>
                 <DataList.Cell height="compact" className="min-w-0">
-                  <span className="block text-ui-smd text-neutral2 truncate">{formatDate(createdAtDate)}</span>
+                  <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
             );
@@ -196,7 +199,7 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
-        iconSlot={<Plus className="w-8 h-8 text-neutral3" />}
+        iconSlot={<Plus className="text-neutral3 h-8 w-8" />}
         titleSlot="No items yet"
         descriptionSlot="Add items to this dataset to use them in experiment runs."
         actionSlot={

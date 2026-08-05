@@ -18,7 +18,14 @@ describe('DropdownMenu', () => {
       render(
         <DropdownMenu defaultOpen>
           <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
-          <DropdownMenu.Content>
+          <DropdownMenu.Content
+            alignOffset={4}
+            collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
+            collisionBoundary={document.body}
+            collisionPadding={8}
+            positionMethod="fixed"
+            sticky
+          >
             <DropdownMenu.Label>Top-level label</DropdownMenu.Label>
             <DropdownMenu.Separator />
             <DropdownMenu.Group>
@@ -36,7 +43,13 @@ describe('DropdownMenu', () => {
             <DropdownMenu.Separator />
             <DropdownMenu.Sub>
               <DropdownMenu.SubTrigger>Submenu</DropdownMenu.SubTrigger>
-              <DropdownMenu.SubContent>
+              <DropdownMenu.SubContent
+                alignOffset={-2}
+                arrowPadding={6}
+                collisionBoundary={document.body}
+                disableAnchorTracking
+                positionMethod="fixed"
+              >
                 <DropdownMenu.Item>Sub item</DropdownMenu.Item>
               </DropdownMenu.SubContent>
             </DropdownMenu.Sub>
@@ -48,6 +61,27 @@ describe('DropdownMenu', () => {
         </DropdownMenu>,
       ),
     ).not.toThrow();
+  });
+
+  it('accepts Base UI positioning props on menu content', () => {
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content
+          anchor={document.body}
+          arrowPadding={6}
+          collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
+          collisionBoundary={document.body}
+          collisionPadding={8}
+          positionMethod="fixed"
+          sticky
+        >
+          <DropdownMenu.Item>Positioned action</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    expect(screen.getByRole('menuitem', { name: 'Positioned action' })).toBeTruthy();
   });
 
   it('fires the onSelect handler when an item is clicked', () => {

@@ -65,11 +65,19 @@ export function formatSkillActivation(skill: Skill): string {
  * Resolve a skill identifier (name or path) to a Skill.
  * The `skills.get()` method handles both name-based lookup (with tie-breaking)
  * and path-based lookup (escape hatch for disambiguation).
+ *
+ * Calls `maybeRefresh()` first so edits on disk are picked up between tool
+ * invocations without restarting the server. Refresh is gated by an internal
+ * staleness check + cooldown, so the cost is a small directory `stat` rather
+ * than a full re-walk. File-level reloads (SKILL.md content edits) only
+ * trigger when the workspace is configured with `checkSkillFileMtime: true`.
  */
 async function resolveSkill(
   skills: WorkspaceSkills,
   identifier: string,
 ): Promise<{ skill: Skill } | { notFound: string }> {
+  await skills.maybeRefresh();
+
   const skill = await skills.get(identifier);
   if (skill) return { skill };
 
@@ -137,6 +145,7 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       });
 
       try {
+        await skills.maybeRefresh();
         const results = await skills.search(query, { topK, skillNames });
 
         if (results.length === 0) {
@@ -227,8 +236,25 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         content = textContent;
 
         const result = extractLines(content, startLine, endLine);
+
+        // An empty range is indistinguishable from a failed read, so the model keeps paginating
+        if (result.lines.start === 0 && result.lines.end === 0) {
+          const reason =
+            (startLine ?? 1) > result.totalLines
+              ? `Requested startLine ${startLine} is past the end of the file. The file has been fully read; stop paginating.`
+              : `Requested range ${startLine}-${endLine} is empty because startLine is greater than endLine.`;
+          span.end({ success: true }, { bytesTransferred: 0 });
+          return `File "${path}" has ${result.totalLines} lines (valid range 1-${result.totalLines}). ${reason}`;
+        }
+
+        // Header ranged reads so the model sees EOF coming instead of overshooting to find it
+        const output =
+          startLine !== undefined || endLine !== undefined
+            ? `${path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines})\n${result.content}`
+            : result.content;
+
         span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
-        return result.content;
+        return output;
       } catch (err) {
         span.error(err);
         throw err;

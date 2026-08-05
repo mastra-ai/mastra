@@ -844,6 +844,28 @@ export function pgTests() {
           'CREATE INDEX IF NOT EXISTS "my_schema_idx_om_lookup_key" ON "my_schema"."mastra_observational_memory" ("lookupKey")',
         );
       });
+
+      it('should apply the full exported schema as a single multi-statement query', async () => {
+        const pool = new Pool({ connectionString });
+
+        try {
+          await pool.query('DROP SCHEMA IF EXISTS export_apply CASCADE');
+          // Fails with a syntax error if any statement boundary is missing a semicolon
+          await pool.query(exportSchemas('export_apply'));
+
+          const result = await pool.query(
+            `SELECT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = 'export_apply'
+              AND table_name = 'mastra_favorites'
+            )`,
+          );
+          expect(result.rows[0]?.exists).toBe(true);
+        } finally {
+          await pool.query('DROP SCHEMA IF EXISTS export_apply CASCADE');
+          await pool.end();
+        }
+      });
     });
 
     // PG-specific: Unicode escape sequence handling in workflow snapshots
@@ -1238,6 +1260,90 @@ export function pgTests() {
         expect(result.versions.length).toBe(1);
         expect(result.versions[0].id).toBe(versionId);
         expect(result.versions[0].filesystem).toBe('filesystem-as-scalar-string');
+      });
+    });
+
+    describe('ScorerDefinitionsPG tenancy', () => {
+      let tenancyStore: PostgresStore;
+
+      const baseSnapshot = {
+        name: 'Tenant Scorer',
+        type: 'llm-judge' as const,
+        model: { provider: 'openai', name: 'gpt-4' },
+        instructions: 'Evaluate accuracy',
+      };
+
+      beforeAll(async () => {
+        tenancyStore = new PostgresStore({ ...TEST_CONFIG, id: 'scorer-definitions-tenancy-test' });
+        await tenancyStore.init();
+      });
+
+      afterAll(async () => {
+        try {
+          await tenancyStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        await tenancyStore.db.none(`DELETE FROM mastra_scorer_definition_versions`);
+        await tenancyStore.db.none(`DELETE FROM mastra_scorer_definitions`);
+      });
+
+      it('persists organizationId/projectId on create and getById', async () => {
+        const store: any = await tenancyStore.getStore('scorerDefinitions');
+        const created = await store.create({
+          scorerDefinition: { id: 'tenant-1', organizationId: 'org-a', projectId: 'proj-1', ...baseSnapshot },
+        });
+        expect(created.organizationId).toBe('org-a');
+        expect(created.projectId).toBe('proj-1');
+
+        const fetched = await store.getById('tenant-1');
+        expect(fetched.organizationId).toBe('org-a');
+        expect(fetched.projectId).toBe('proj-1');
+      });
+
+      it('filters list by organizationId, projectId, and both together', async () => {
+        const store: any = await tenancyStore.getStore('scorerDefinitions');
+        await store.create({
+          scorerDefinition: { id: 'a1', organizationId: 'org-a', projectId: 'proj-1', ...baseSnapshot },
+        });
+        await store.create({
+          scorerDefinition: { id: 'a2', organizationId: 'org-a', projectId: 'proj-2', ...baseSnapshot },
+        });
+        await store.create({
+          scorerDefinition: { id: 'b1', organizationId: 'org-b', projectId: 'proj-1', ...baseSnapshot },
+        });
+
+        const byOrg = await store.list({ status: 'draft', organizationId: 'org-a' });
+        expect(byOrg.total).toBe(2);
+        expect(byOrg.scorerDefinitions.every((s: any) => s.organizationId === 'org-a')).toBe(true);
+
+        const byProject = await store.list({ status: 'draft', projectId: 'proj-1' });
+        expect(byProject.total).toBe(2);
+        expect(byProject.scorerDefinitions.every((s: any) => s.projectId === 'proj-1')).toBe(true);
+
+        const byBoth = await store.list({ status: 'draft', organizationId: 'org-a', projectId: 'proj-1' });
+        expect(byBoth.total).toBe(1);
+        expect(byBoth.scorerDefinitions[0].id).toBe('a1');
+
+        const noMatch = await store.list({ status: 'draft', organizationId: 'org-c' });
+        expect(noMatch.total).toBe(0);
+      });
+
+      it('propagates tenancy filters through listResolved', async () => {
+        const store: any = await tenancyStore.getStore('scorerDefinitions');
+        await store.create({
+          scorerDefinition: { id: 'a1', organizationId: 'org-a', projectId: 'proj-1', ...baseSnapshot },
+        });
+        await store.create({
+          scorerDefinition: { id: 'a2', organizationId: 'org-a', projectId: 'proj-2', ...baseSnapshot },
+        });
+
+        const resolved = await store.listResolved({ status: 'draft', organizationId: 'org-a', projectId: 'proj-2' });
+        expect(resolved.total).toBe(1);
+        expect(resolved.scorerDefinitions[0].id).toBe('a2');
+        expect(resolved.scorerDefinitions[0].organizationId).toBe('org-a');
+        expect(resolved.scorerDefinitions[0].name).toBe('Tenant Scorer');
       });
     });
   });

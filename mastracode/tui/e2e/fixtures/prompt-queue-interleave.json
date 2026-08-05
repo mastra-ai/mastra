@@ -1,0 +1,42 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Trigger queued interactive prompts in parallel.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_prompt_queue_question",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Answer the first queued prompt?"
+            }
+          },
+          {
+            "id": "call_prompt_queue_access",
+            "name": "request_access",
+            "arguments": {
+              "path": "/tmp/mastracode-prompt-queue-e2e",
+              "reason": "Verify queued access prompts activate after ask_user is answered."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_prompt_queue_access",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Prompt queue interleave e2e complete."
+      }
+    }
+  ]
+}

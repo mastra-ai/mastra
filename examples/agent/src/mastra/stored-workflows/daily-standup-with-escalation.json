@@ -1,0 +1,58 @@
+{
+  "id": "daily-standup-with-escalation",
+  "description": "Sub-workflow: produce a team standup digest AND a tech-lead escalation message. Invoked by `daily-standup-digest` when the standup contains blockers.",
+  "metadata": {
+    "seededFrom": "examples/agent/src/mastra/stored-workflows/daily-standup-with-escalation.json",
+    "role": "sub-workflow of daily-standup-digest (truthy branch)"
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "teamName": { "type": "string" },
+      "normalizedNotesJson": { "type": "string" }
+    },
+    "required": ["teamName", "normalizedNotesJson"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "markdown": { "type": "string" }
+    },
+    "required": ["markdown"]
+  },
+  "graph": [
+    {
+      "type": "mapping",
+      "id": "assemble-digest-prompt",
+      "mapConfig": "{\"prompt\":{\"template\":\"Team: ${initData.teamName}\\n\\nNormalized notes (JSON):\\n${initData.normalizedNotesJson}\"}}"
+    },
+    {
+      "type": "agent",
+      "id": "standup-digest",
+      "agentId": "standup-digest",
+      "description": "Writes the team-wide markdown digest from normalized notes."
+    },
+    {
+      "type": "mapping",
+      "id": "assemble-escalation-prompt",
+      "mapConfig": "{\"prompt\":{\"template\":\"Team: ${initData.teamName}\\n\\nToday's digest:\\n${stepResults.standup-digest.text}\"}}"
+    },
+    {
+      "type": "agent",
+      "id": "standup-escalation",
+      "agentId": "standup-escalation",
+      "description": "Drafts a Slack-style escalation message for the tech lead."
+    },
+    {
+      "type": "mapping",
+      "id": "prep-format-with-escalation",
+      "mapConfig": "{\"teamName\":{\"template\":\"${initData.teamName}\"},\"digest\":{\"template\":\"${stepResults.standup-digest.text}\"},\"escalation\":{\"template\":\"${stepResults.standup-escalation.text}\"}}"
+    },
+    {
+      "type": "tool",
+      "id": "format-standup-digest-with-escalation",
+      "toolId": "format-standup-digest-with-escalation",
+      "description": "Wraps the digest + escalation into one dated markdown document."
+    }
+  ]
+}

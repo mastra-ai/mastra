@@ -1,8 +1,10 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
-import type { MastraScorer } from '../../evals/base';
+import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
-import type { TargetType, ExperimentStatus } from '../../storage/types';
+import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
+import type { ExperimentEventObserver } from './events';
+import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
 /**
  * A single data item for inline experiment data.
@@ -19,6 +21,12 @@ export interface DataItem<I = unknown, E = unknown> {
   metadata?: Record<string, unknown>;
   /** Per-item request context merged over the global request context (item takes precedence) */
   requestContext?: Record<string, unknown>;
+  /**
+   * Scorer IDs that override dataset-attached scorers for this item when run-level
+   * `config.scorers` is absent. Run-level scorers, including an empty configuration,
+   * take precedence. An empty array explicitly disables scoring for the item.
+   */
+  scorerIds?: string[];
   /**
    * Resume data for suspended workflow steps, keyed by step ID.
    * When a workflow suspends during experiment execution, the executor
@@ -41,6 +49,37 @@ export interface DataItem<I = unknown, E = unknown> {
    * ```
    */
   resumeData?: unknown;
+  /**
+   * Item-level static tool mocks (agent targets only).
+   * When provided, the agent serves the mocked output in place of executing the
+   * real tool; calling a mocked tool with non-matching args fails the item.
+   */
+  toolMocks?: ItemToolMock[];
+  /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
+}
+
+/**
+ * Per-domain persistence selection for a single experiment run.
+ *
+ * - `default` — write through the `Mastra` instance's configured storage (current behavior).
+ * - `none` — perform no writes for that domain for this run. Execution, scoring, and the
+ *   returned {@link ExperimentSummary} are unaffected; only the storage writes are skipped.
+ *
+ * The two domains are independent: selecting `none` for one does not change the other.
+ *
+ * This policy governs *experiment bookkeeping* only. It does not disable unrelated
+ * application storage the target itself may use — agent memory, vectors, working memory,
+ * observability traces, or arbitrary code the target runs. It is not a sandbox.
+ */
+export interface ExperimentPersistencePolicy {
+  /**
+   * Experiment records, progress updates, and per-item results
+   * (`mastra_experiments` / `mastra_experiment_results`). Default: `default`.
+   */
+  experiments?: 'default' | 'none';
+  /** Scores emitted by experiment scorers. Default: `default`. */
+  scores?: 'default' | 'none';
 }
 
 /**
@@ -84,10 +123,39 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /**
+   * Awaited observer for versioned, JSON-safe semantic lifecycle events.
+   * Delivery is serialized and applies run-wide backpressure. A rejected
+   * observer aborts the run and rejects `runExperiment` with a typed error.
+   * The terminal event is delivered before terminal status is persisted, so
+   * consumers must not treat it as a read-after-write signal for storage.
+   */
+  onEvent?: ExperimentEventObserver;
   /** Per-item execution timeout in milliseconds */
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
+  /**
+   * Per-run, per-domain persistence policy. Omitted or partially specified fields
+   * default to `default`, so omitting this preserves existing behavior exactly.
+   *
+   * Selecting `none` lets a caller own persistence itself — for example a run
+   * executing inside a sandbox whose results are recorded by the host rather than
+   * through the bundled `Mastra` instance's storage.
+   *
+   * @example
+   * ```ts
+   * await runExperiment(mastra, {
+   *   data: items,
+   *   targetType: 'agent',
+   *   targetId: 'my-agent',
+   *   persistence: { experiments: 'none', scores: 'none' },
+   * });
+   * ```
+   */
+  persistence?: ExperimentPersistencePolicy;
+  /** Default handling for agent tool calls not declared in an item's `toolMocks` (default: `allow`). */
+  unmockedToolPolicy?: UnmockedToolPolicy;
   /** Pre-created experiment ID (for async trigger — skips experiment creation). */
   experimentId?: string;
   /** Experiment name (used for display / grouping) */
@@ -102,6 +170,14 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   agentVersion?: string;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
+  /**
+   * Tenancy read-scope for the parent dataset. When set, the storage-backed
+   * dataset load is scoped to this tenant — a cross-tenant `datasetId` fails
+   * NOT_FOUND rather than leaking the dataset contents. Ignored for the inline
+   * `data` path (no dataset lookup happens). Not exposed on
+   * {@link StartExperimentConfig}; injected by the {@link Dataset} handle.
+   */
+  filters?: DatasetTenancyFilters;
 }
 
 /**
@@ -110,7 +186,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
  */
 export type StartExperimentConfig<I = unknown, O = unknown, E = unknown> = Omit<
   ExperimentConfig<I, O, E>,
-  'datasetId' | 'data' | 'experimentId'
+  'datasetId' | 'data' | 'experimentId' | 'filters'
 >;
 
 /**
@@ -135,6 +211,22 @@ export interface ItemResult {
   completedAt: Date;
   /** Number of retry attempts */
   retryCount: number;
+  /**
+   * Structured error if persisting this result to storage failed.
+   * Present and non-null means the target run outcome (success or failure)
+   * is reflected on this in-memory item but the row was never written to
+   * `mastra_experiment_results`. Callers can use this to detect silent data
+   * loss and decide whether to retry or alert. Absent or null on the happy
+   * path; optional so external mocks / wrappers don't need to hand-construct it.
+   *
+   * Only the error `message` is exposed here — the raw stack is logged
+   * internally via the Mastra logger and intentionally omitted from the
+   * returned object to avoid leaking internal file paths across trust
+   * boundaries.
+   */
+  persistenceError?: { message: string } | null;
+  /** Diagnostic receipt for item-level tool mocks (agent targets only) */
+  toolMockReport?: ToolMockReport;
 }
 
 /**
@@ -145,12 +237,16 @@ export interface ScorerResult {
   scorerId: string;
   /** Display name of the scorer */
   scorerName: string;
-  /** Computed score (null if scorer failed) */
+  /** Computed score, or null when no score was produced */
   score: number | null;
-  /** Reason/explanation for the score */
+  /** Reason/explanation for the score, or null when no reason was produced */
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /** Scorer stage that failed, when the scorer exposes stage context */
+  failedStep?: ScorerStepName;
+  /** Scorer stages that completed before the failure */
+  completedSteps?: ScorerStepName[];
   /**
    * Scope this score targets. Mirrors the canonical `ScorerTargetScope`
    * taxonomy from observability so consumers can differentiate span-level
@@ -192,6 +288,16 @@ export interface ExperimentSummary {
   failedCount: number;
   /** Number of items skipped (e.g. due to abort) */
   skippedCount: number;
+  /**
+   * Number of item results whose target run completed but which failed to
+   * persist to `mastra_experiment_results`. These items are still counted in
+   * `succeededCount` / `failedCount` because those reflect target-run
+   * outcomes, but their rows are missing from storage. Non-zero means the
+   * DB is out of sync with the returned summary — inspect each item's
+   * `persistenceError` to see which ones dropped. Optional so external
+   * mocks / wrappers don't need to hand-construct it; the runner always sets it.
+   */
+  persistenceFailures?: number;
   /** True if run completed but some items failed */
   completedWithErrors: boolean;
   /** When the experiment started */

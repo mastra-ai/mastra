@@ -1,3 +1,4 @@
+export * from './agent-learning';
 export * from './client';
 export * from './types';
 export * from './tools';
@@ -15,6 +16,35 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
+export { agentControllerMessageText } from './resources/agent-controller';
+export type {
+  AgentControllerInfo,
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  AgentControllerEvent,
+  KnownAgentControllerEvent,
+  OtherAgentControllerEvent,
+  CreateAgentControllerSessionResponse,
+  AgentControllerRequestOptions,
+  SubscribeAgentControllerSessionOptions,
+  AgentControllerSubscription,
+  AgentControllerSessionState,
+  AgentControllerSessionSettings,
+  AgentControllerOMProgress,
+  AgentControllerModeInfo,
+  AgentControllerThreadInfo,
+  AgentControllerTaskSnapshot,
+  AgentControllerAvailableModel,
+  AgentControllerWorkspaceStatus,
+  AgentControllerGoalRecord,
+  SendNotificationInput,
+  SendNotificationResult,
+  PlanResume,
+  PermissionPolicy,
+  PermissionRules,
+  ToolCategory,
+} from './resources/agent-controller';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most
 // users interact via `observe` on the tool execution context.

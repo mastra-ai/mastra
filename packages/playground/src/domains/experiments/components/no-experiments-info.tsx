@@ -1,4 +1,5 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const NoExperimentsInfo = () => (
@@ -17,7 +18,7 @@ export const NoExperimentsInfo = () => (
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/evals/datasets/running-experiments"
+            href="https://mastra.ai/en/docs/datasets/running-experiments"
             target="_blank"
             rel="noopener noreferrer"
           >

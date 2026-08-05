@@ -5,6 +5,10 @@ import type {
   WorkflowRuns,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -19,8 +23,17 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { createExecuteWriteOperationWithRetry, safeStringify } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
+import { runPrune, resolveTargets } from '../../retention';
 
 export class WorkflowsLibSQL extends WorkflowsStorage {
+  /**
+   * Workflow run snapshots accumulate as runs execute. Anchored on `updatedAt`
+   * (last activity) so suspended/long-running runs are not pruned by start age.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
   private readonly executeWithRetry: <T>(operationFn: () => Promise<T>, operationDescription: string) => Promise<T>;
@@ -82,6 +95,16 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  /** Delete workflow snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: WorkflowsLibSQL.retentionTables,
+      order: ['workflowSnapshot'],
+    });
+    return runPrune({ db: this.#db, domain: 'workflows', targets, options, logger: this.logger });
   }
 
   private async setupPragmaSettings() {
@@ -262,20 +285,28 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     updatedAt?: Date;
   }) {
     const now = new Date();
-    const data = {
-      workflow_name: workflowName,
-      run_id: runId,
-      resourceId,
-      snapshot,
-      createdAt: createdAt ?? now,
-      updatedAt: updatedAt ?? now,
-    };
+    const createdAtValue = (createdAt ?? now).toISOString();
+    const updatedAtValue = (updatedAt ?? now).toISOString();
 
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
-    await this.#db.insert({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      record: data,
-    });
+    this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
+
+    // Upsert keyed on (workflow_name, run_id) so re-persisting an existing run preserves the
+    // original createdAt and only advances updatedAt. The generic INSERT OR REPLACE helper
+    // would rewrite the whole row, resetting createdAt on every step persist. This mirrors
+    // updateWorkflowResults above and the pg/mysql/mongodb stores.
+    await this.executeWithRetry(
+      () =>
+        withClientWriteLock(this.#client, () =>
+          this.#client.execute({
+            sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
+                VALUES (?, ?, ?, jsonb(?), ?, ?)
+                ON CONFLICT(workflow_name, run_id)
+                DO UPDATE SET resourceId = excluded.resourceId, snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
+            args: [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue],
+          }),
+        ),
+      'persistWorkflowSnapshot',
+    );
   }
 
   async loadWorkflowSnapshot({

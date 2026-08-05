@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useCallback } from 'react';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { formValuesToSaveParams } from '../services/form-values-to-save-params';
@@ -41,6 +41,7 @@ export function useSaveAgent({
 
       try {
         const updated = await updateStoredAgent.mutateAsync({
+          autoPublish: true,
           name: params.name,
           description: params.description,
           instructions: params.instructions,

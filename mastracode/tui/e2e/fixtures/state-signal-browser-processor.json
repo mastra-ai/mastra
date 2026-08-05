@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Active tab URL: https://example.test/browser-snapshot",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Browser processor snapshot captured."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "user changed active tab URL to https://example.test/browser-delta",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Browser processor delta captured."
+      }
+    }
+  ]
+}

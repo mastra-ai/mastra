@@ -1,6 +1,7 @@
-import { Txt, cn } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check } from 'lucide-react';
-import { type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
 
 export interface AgentSelectableCardProps {
@@ -74,11 +75,11 @@ export const AgentSelectableCard = ({
       >
         {icon}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Txt variant="ui-md" className="truncate font-medium text-neutral6">
+          <Txt variant="ui-md" className="text-neutral6 truncate font-medium">
             {title}
           </Txt>
           {subtitle && (
-            <Txt variant="ui-sm" className="truncate text-neutral3">
+            <Txt variant="ui-sm" className="text-neutral3 truncate">
               {subtitle}
             </Txt>
           )}

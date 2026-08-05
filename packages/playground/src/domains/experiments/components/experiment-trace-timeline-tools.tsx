@@ -1,5 +1,8 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
-import { Button, ButtonsGroup, SearchFieldBlock, Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { useThrottledCallback } from 'use-debounce';
@@ -52,7 +55,7 @@ export function ExperimentTraceTimelineTools({
   }, 1000);
 
   return (
-    <div className="flex gap-3 items-center justify-between">
+    <div className="flex items-center justify-between gap-3">
       <div className="flex">
         <SearchFieldBlock
           name="search-spans"

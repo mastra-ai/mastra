@@ -1,10 +1,7 @@
-import {
-  PermissionDenied,
-  SessionExpired,
-  Spinner,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundEvaluate } from '@/domains/agents/components/agent-playground/agent-playground-evaluate';
@@ -26,7 +23,7 @@ function AgentEvaluate() {
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 
@@ -99,7 +96,7 @@ function AgentEvaluate() {
   }
 
   if (!codeAgent) {
-    return <div className="text-center py-4">Agent not found</div>;
+    return <div className="py-4 text-center">Agent not found</div>;
   }
 
   return (

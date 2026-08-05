@@ -225,7 +225,7 @@ export function asOmChunk(chunk: AgentChunkType<any>): OmChunk | null {
 
 /**
  * Token formatter: `8200 → "8.2k"`, `12000 → "12k"`. Matches
- * `mastracode/src/tui/components/om-marker.ts` so OM lines render the same
+ * `mastracode/tui/src/tui/components/om-marker.ts` so OM lines render the same
  * way across surfaces.
  */
 export function formatTokens(tokens: number): string {

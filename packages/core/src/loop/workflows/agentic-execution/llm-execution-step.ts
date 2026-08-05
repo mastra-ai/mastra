@@ -2,12 +2,11 @@ import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
-import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
-import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
@@ -16,12 +15,24 @@ import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
-import type { AnySpan, ModelInferenceContext, TracingContext } from '../../../observability';
+import type {
+  AnySpan,
+  IModelSpanTracker,
+  ModelInferenceContext,
+  ObservabilityContext,
+  TracingContext,
+} from '../../../observability';
 import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
-import type { CachedLLMStepResponse, InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
+import type {
+  CachedLLMStepResponse,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorStreamWriter,
+} from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
+import type { ProcessorState } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -44,16 +55,55 @@ import {
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
-import { makeCoreTool } from '../../../utils';
+import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import {
+  AGENT_BACKGROUND_CONFIG_KEY,
+  BACKGROUND_TASK_MANAGER_KEY,
+  DRAIN_PENDING_SIGNALS_KEY,
+  GENERATE_ID_KEY,
+  INITIAL_SIGNAL_ECHOES_KEY,
+  MEMORY_KEY,
+  RESOURCE_ID_KEY,
+  STEP_ACTIVE_TOOLS_KEY,
+  STEP_TOOLS_KEY,
+  STEP_WORKSPACE_KEY,
+  THREAD_ID_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+  TRANSPORT_REF_KEY,
+} from '../../run-scope-keys';
+import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
+import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
+import { composeStepInput } from '../../shared/compose-step-input';
+import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
+import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import type { PendingProviderToolCall } from './provider-tool-spans';
+import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
+
+/**
+ * Finish reasons that terminate the agentic loop. The loop must NOT continue on
+ * any of these, otherwise it re-sends the same request and spins until maxSteps
+ * (or forever when maxSteps is unset).
+ *
+ * - `stop`: the model finished normally.
+ * - `error`: the model stream failed.
+ * - `length`: the model hit max_tokens; retrying reproduces the truncation
+ *   (issue #15717).
+ * - `content-filter`: a classifier block / model refusal (e.g. `claude-fable-5`
+ *   surfaced by the AI SDK as `content-filter`). Retrying re-triggers the same
+ *   refusal, so the run would hang indefinitely.
+ */
+const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
 
 function getRequestInputProcessors({
   inputProcessors,
@@ -84,6 +134,7 @@ function getRequestInputProcessors({
 
 type ProcessOutputStreamResult = {
   collectedChunks: CollectedChunk[];
+  toolResultTripwire: TripWire | null;
 };
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
@@ -104,6 +155,18 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
+  // processToolResult plumbing — let the streaming case 'tool-result' handler
+  // invoke output processors after tool.execute() returns and before the result
+  // chunk is forwarded to streaming clients.
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  processorStates?: Map<string, ProcessorState>;
+  agentId?: string;
+  processorRetryCount?: number;
+  outputWriter?: (chunk: ChunkType, options?: { messageId?: string }) => Promise<void> | void;
+  requestContext?: RequestContext;
+  toolResultObservability?: Partial<ObservabilityContext>;
+  toolResultStepNumber?: number;
+  toolResultSteps?: Array<unknown>;
   toolPayloadTransform?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
   /**
    * Mastra instance reference. Used to look up the client tool
@@ -114,7 +177,36 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   mastra?: Mastra;
   /** Active tracing context. Parent of any CLIENT_TOOL_CALL spans we create. */
   tracingContext?: TracingContext;
+  /** Closure-scoped map for provider tool calls awaiting a result, which may arrive in a later iteration. */
+  pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
+  /** Live step tracker, consulted at tool-result time to parent PROVIDER_TOOL_CALL spans. */
+  modelSpanTracker?: IModelSpanTracker;
 };
+
+/**
+ * Walk messageList backwards looking for a tool-invocation part with the given
+ * toolCallId in result state. Returns the result value if found, undefined otherwise.
+ *
+ * Used to read the post-processToolResult value back from the message list so we can
+ * sync any processor mutations into the downstream tool-result stream chunk.
+ */
+function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
+  const messages = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (
+        part?.type === 'tool-invocation' &&
+        part.toolInvocation?.toolCallId === toolCallId &&
+        part.toolInvocation?.state === 'result'
+      ) {
+        return part.toolInvocation.result;
+      }
+    }
+  }
+  return undefined;
+}
 
 type ToolResolvers = {
   resolveTool: (toolName: string) => ToolSet[string] | undefined;
@@ -397,12 +489,42 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
+  outputProcessors,
+  processorStates,
+  agentId,
+  processorRetryCount,
+  outputWriter,
+  requestContext,
+  toolResultObservability,
+  toolResultStepNumber,
+  toolResultSteps,
   toolPayloadTransform,
   mastra,
   tracingContext,
+  pendingProviderToolCallsByToolCallId,
+  modelSpanTracker,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
+  let toolResultTripwire: TripWire | null = null;
+  let toolResultProcessorRunner: ProcessorRunner | null = null;
+  const getToolResultProcessorRunner = (): ProcessorRunner => {
+    if (toolResultProcessorRunner) return toolResultProcessorRunner;
+    toolResultProcessorRunner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: outputProcessors ?? [],
+      logger: logger || new ConsoleLogger({ level: 'error' }),
+      agentName: agentId || 'unknown',
+      processorStates,
+    });
+    return toolResultProcessorRunner;
+  };
+  const toolResultWriter: ProcessorStreamWriter | undefined = outputWriter
+    ? {
+        custom: async (data: { type: string }, customOptions?: { messageId?: string }) =>
+          outputWriter(data as ChunkType, { ...customOptions, messageId: outputStream.messageId }),
+      }
+    : undefined;
   const { resolveTool, resolveDirectOrProviderTool, resolveDirectOrIdTool } = createToolResolvers(tools);
   const clientToolArgsTextByToolCallId = new Map<string, string[]>();
   const clientToolObservabilityByToolCallId = new Map<
@@ -480,6 +602,9 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     try {
+      // Unlike PROVIDER_TOOL_CALL, this span must exist at call time so proxy.inject
+      // can place its trace carrier into the outgoing tool-call payload, and the tool
+      // runs outside the step lifecycle — so it anchors to AGENT_RUN, not the step.
       const parentSpan =
         tracingContext.currentSpan.type === SpanType.AGENT_RUN
           ? tracingContext.currentSpan
@@ -513,6 +638,52 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     return { toolDef, inferredProviderExecuted };
+  };
+
+  const recordProviderToolCall = ({
+    toolCallId,
+    toolName,
+    args,
+    providerExecuted,
+  }: {
+    toolCallId: string;
+    toolName: string;
+    args?: unknown;
+    providerExecuted?: boolean;
+  }) => {
+    if (!pendingProviderToolCallsByToolCallId || !tracingContext?.currentSpan) {
+      return;
+    }
+
+    const toolDef = resolveDirectOrProviderTool(toolName);
+    const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
+
+    if (!inferredProviderExecuted) {
+      return;
+    }
+
+    const existingEntry = pendingProviderToolCallsByToolCallId.get(toolCallId);
+    if (existingEntry) {
+      // If args arrive after the call was first recorded (e.g. from
+      // tool-call-input-streaming-start), fill them in.
+      if (args !== undefined && existingEntry.args === undefined) {
+        existingEntry.args = args;
+      }
+      return;
+    }
+
+    const fallbackParentSpan =
+      tracingContext.currentSpan.type === SpanType.AGENT_RUN
+        ? tracingContext.currentSpan
+        : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+
+    pendingProviderToolCallsByToolCallId.set(toolCallId, {
+      toolName,
+      args,
+      startTime: new Date(),
+      toolDescription: (toolDef as { description?: string } | undefined)?.description,
+      fallbackParentSpan,
+    });
   };
 
   for await (let chunk of outputStream._getBaseStream()) {
@@ -555,6 +726,11 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       }));
+      recordProviderToolCall({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        providerExecuted: chunk.payload.providerExecuted,
+      });
     } else if (chunk.type === 'tool-call-delta') {
       const toolCallId = chunk.payload.toolCallId;
       if (toolCallId && chunk.payload.argsTextDelta) {
@@ -574,6 +750,12 @@ async function processOutputStream<OUTPUT = undefined>({
         args: chunk.payload.args,
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
+      });
+      recordProviderToolCall({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: chunk.payload.args,
+        providerExecuted: chunk.payload.providerExecuted,
       });
     }
 
@@ -644,7 +826,7 @@ async function processOutputStream<OUTPUT = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error', 'length'].includes(chunk.payload.stepResult.reason),
+            isContinued: !TERMINAL_FINISH_REASONS.includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -684,8 +866,72 @@ async function processOutputStream<OUTPUT = undefined>({
         // so the messageList is up-to-date as early as possible.
         // For same-stream results (call + result in one step), no matching part exists yet
         // so updateToolInvocation returns false — buildMessagesFromChunks handles the merge.
-        if (chunk.payload.result != null) {
+        // Use a presence check so a tool that legitimately returns `null` still triggers
+        // processToolResult (governance integrations may need to inspect/redact null).
+        if ('result' in chunk.payload) {
           const resultToolDef = resolveDirectOrProviderTool(chunk.payload.toolName);
+          const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef);
+
+          // Run processToolResult BEFORE the raw result is persisted to messageList.
+          // This honors the "scan before history / next LLM call" guarantee — if a
+          // processor aborts via TripWire, the raw value never makes it into the
+          // assembled messageList. A processor that wants to redact can still call
+          // messageList.updateToolInvocation itself; the runtime then reads the
+          // post-processor result back and uses that for the deferred outer write.
+          //
+          // This case path covers provider-executed deferred tools (e.g. Anthropic
+          // web_search) whose results arrive in a later LLM stream. Client-executed
+          // tools take a different path through llm-mapping-step.ts, which has its
+          // own processToolResult invocation site.
+          if (outputProcessors && outputProcessors.length > 0) {
+            try {
+              await getToolResultProcessorRunner().runProcessToolResult({
+                steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
+                messages: messageList.get.all.db(),
+                messageList,
+                stepNumber: toolResultStepNumber ?? 0,
+                toolName: chunk.payload.toolName,
+                toolCallId: chunk.payload.toolCallId,
+                toolArgs: chunk.payload.args,
+                result: chunk.payload.result,
+                providerExecuted: inferredProviderExecuted,
+                ...(toolResultObservability ?? {}),
+                requestContext,
+                retryCount: processorRetryCount ?? 0,
+                writer: toolResultWriter,
+                abortSignal: options?.abortSignal,
+              });
+
+              // Sync any processor mutation back into the chunk so streaming clients
+              // see the post-processor value, not the raw tool return.
+              const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
+              if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
+                (chunk.payload as { result: unknown }).result = postProcessorResult;
+              }
+            } catch (error) {
+              if (error instanceof TripWire) {
+                toolResultTripwire = error;
+                logger?.warn('Tool result processor tripwire triggered', {
+                  reason: error.message,
+                  processorId: error.processorId,
+                  retry: error.options?.retry,
+                });
+                // Stop processing further chunks; the outer LLM execution step
+                // joins this tripwire with the existing processOutputStep tripwire path.
+                // The raw tool result was never persisted to messageList — the abort
+                // honors the "scan before history" guarantee.
+                runState.setState({ hasErrored: true });
+                break;
+              }
+              logger?.error('Error in processToolResult processors:', error);
+              throw error;
+            }
+          }
+
+          // Patch the deferred tool-call to state:'result' with the (possibly
+          // post-processor-mutated) value. For same-stream results no matching
+          // part exists yet — updateToolInvocation returns false and
+          // buildMessagesFromChunks handles the merge.
           messageList.updateToolInvocation({
             type: 'tool-invocation',
             toolInvocation: {
@@ -696,8 +942,26 @@ async function processOutputStream<OUTPUT = undefined>({
               result: chunk.payload.result,
             },
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
-            providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+            providerExecuted: inferredProviderExecuted,
           });
+        }
+        // The result determines which MODEL_STEP owns the provider tool call, so the
+        // PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
+        if (pendingProviderToolCallsByToolCallId) {
+          const pending = pendingProviderToolCallsByToolCallId.get(chunk.payload.toolCallId);
+          if (pending) {
+            // Re-fetch the live step context so the span parents under whichever
+            // MODEL_STEP is open right now (mirrors the durable path); a live
+            // lookup never returns a closed step.
+            endPendingProviderToolSpan({
+              toolCallId: chunk.payload.toolCallId,
+              pending,
+              parentSpan: modelSpanTracker?.getTracingContext()?.currentSpan ?? pending.fallbackParentSpan,
+              result: { output: chunk.payload.result, isError: chunk.payload.isError },
+              logger,
+            });
+            pendingProviderToolCallsByToolCallId.delete(chunk.payload.toolCallId);
+          }
         }
         safeEnqueue(controller, chunk);
         break;
@@ -744,7 +1008,7 @@ async function processOutputStream<OUTPUT = undefined>({
   }
   clientToolArgsTextByToolCallId.clear();
 
-  return { collectedChunks };
+  return { collectedChunks, toolResultTripwire };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -828,11 +1092,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   workspace,
   outputWriter,
   mastra,
+  rotateResponseMessageId: rotateLoopResponseMessageId,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
+  const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+
+  const cleanupProviderToolSpans = (terminal: boolean) => {
+    if (!terminal) {
+      return;
+    }
+    for (const [toolCallId, pending] of pendingProviderToolCallsByToolCallId.entries()) {
+      endPendingProviderToolSpan({ toolCallId, pending, parentSpan: pending.fallbackParentSpan, logger });
+    }
+    pendingProviderToolCallsByToolCallId.clear();
+  };
 
   return createStep({
     id: 'llm-execution' as const,
@@ -840,6 +1116,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
+      // Resolve run-scoped state from either the Mastra-managed RunScope or
+      // the legacy `_internal` bag (back-compat for tests).
+      const scopeCtx: RunScopeContext = { mastra, runId, _internal };
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -862,392 +1141,256 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
-      const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
-        await executeStreamWithFallbackModels<{
-          outputStream: MastraModelOutput<OUTPUT>;
-          runState: AgenticRunState;
-          callBail?: boolean;
-          stepTools?: TOOLS;
-          stepWorkspace?: Workspace;
-          processAPIErrorRetry?: { retry: boolean };
-        }>(
-          models,
-          logger,
-          activeFallbackModelIndex,
-        )(async (modelConfig, isLastModel) => {
-          activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
-          const model = modelConfig.model;
-          const modelHeaders = modelConfig.headers;
+      const {
+        outputStream,
+        callBail,
+        runState,
+        stepTools,
+        stepWorkspace,
+        processAPIErrorRetry,
+        toolResultTripwire: toolResultTripwireFromStreamOuter,
+      } = await executeStreamWithFallbackModels<{
+        outputStream: MastraModelOutput<OUTPUT>;
+        runState: AgenticRunState;
+        callBail?: boolean;
+        stepTools?: TOOLS;
+        stepWorkspace?: Workspace;
+        processAPIErrorRetry?: { retry: boolean };
+        toolResultTripwire?: TripWire | null;
+      }>(
+        models,
+        logger,
+        activeFallbackModelIndex,
+      )(async (modelConfig, isLastModel) => {
+        activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
+        const model = modelConfig.model;
+        const modelHeaders = modelConfig.headers;
 
-          // Re-stamp MODEL_GENERATION span with the fallback model so that downstream
-          // exporters (Langfuse, etc.) attribute usage and cost to the model that
-          // actually served the request instead of the first model in the list.
-          if (modelSpanTracker && activeFallbackModelIndex > 0) {
-            modelSpanTracker.updateGeneration({
-              name: `llm: '${model.modelId}'`,
-              attributes: {
-                model: model.modelId,
-                provider: model.provider,
-              },
-            });
-          }
-          // Reset the mutable untagged bucket before each step execution. Tagged
-          // processor-owned buckets remain on messageList and are assembled later.
-          if (initialUntaggedSystemMessages) {
-            messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
-          }
-
-          if (inputData.processorRetryFeedback) {
-            messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
-          }
-
-          const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
-          for (const initialSignal of initialSignalEchoes) {
-            safeEnqueue(controller, initialSignal.toDataPart());
-          }
-
-          const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
-          if (shouldDrainBeforeFirstModelRequest) {
-            // Pre-run signals were queued before this run made its first model
-            // request — fold them into it. Signals sent to an already-active run
-            // use the default scope and are drained later by `signalDrainStep`
-            // so each becomes its own turn.
-            const preRunSignals = _internal?.drainPendingSignals?.(runId, 'pre-run') ?? [];
-            if (preRunSignals.length > 0) {
-              currentMessageId = _internal?.generateId?.() ?? generateId();
-            }
-            for (const preRunSignal of preRunSignals) {
-              const signalForTranscript = messageList.addSignal(preRunSignal);
-              safeEnqueue(controller, signalForTranscript.toDataPart());
-            }
-          }
-
-          const currentStep: {
-            messageId: string;
-            model: MastraLanguageModel;
-            tools?: TOOLS | undefined;
-            toolChoice?: ToolChoice<TOOLS> | undefined;
-            activeTools?: (keyof TOOLS)[] | undefined;
-            providerOptions?: SharedProviderOptions | undefined;
-            modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
-            structuredOutput?: StructuredOutputOptions<OUTPUT>;
-            workspace?: Workspace;
-          } = {
-            messageId: currentMessageId,
-            model,
-            tools,
-            toolChoice,
-            activeTools,
-            providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
-            modelSettings,
-            structuredOutput,
-            workspace,
-          };
-          const rotateResponseMessageId = () => {
-            currentMessageId = _internal?.generateId?.() ?? generateId();
-            currentStep.messageId = currentMessageId;
-            return currentMessageId;
-          };
-
-          const inputStepProcessors = [
-            ...(inputProcessors || []),
-            ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
-          ];
-          if (inputStepProcessors && inputStepProcessors.length > 0) {
-            const processorRunner = new ProcessorRunner({
-              inputProcessors: inputStepProcessors,
-              outputProcessors: [],
-              logger: logger || new ConsoleLogger({ level: 'error' }),
-              agentName: agentId || 'unknown',
-              processorStates,
-            });
-
-            try {
-              // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
-              const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
-
-              // Create a ProcessorStreamWriter from outputWriter if available.
-              // Forward any processor-supplied options (e.g. a future `transient`
-              // flag) and override messageId so the step always owns the
-              // response id for persisted data-* chunks.
-              const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
-                ? {
-                    custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                      outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
-                  }
-                : undefined;
-
-              const processInputStepResult = await processorRunner.runProcessInputStep({
-                messageList,
-                stepNumber: inputData.output?.steps?.length || 0,
-                ...createObservabilityContext(stepTracingContext),
-                requestContext,
-                memory: _internal?.memory,
-                resourceId: _internal?.resourceId,
-                threadId: _internal?.threadId,
-                model,
-                steps: inputData.output?.steps || [],
-                messageId: currentStep.messageId,
-                rotateResponseMessageId,
-                tools,
-                toolChoice,
-                activeTools: activeTools as string[] | undefined,
-                providerOptions: currentStep.providerOptions,
-                modelSettings: currentStep.modelSettings,
-                structuredOutput: currentStep.structuredOutput,
-                retryCount: inputData.processorRetryCount || 0,
-                writer: inputStepWriter,
-                abortSignal: options?.abortSignal,
-              });
-              Object.assign(currentStep, processInputStepResult);
-              executedStepModel =
-                currentStep.model.provider && currentStep.model.modelId
-                  ? `${currentStep.model.provider}/${currentStep.model.modelId}`
-                  : undefined;
-
-              // Update MODEL_GENERATION span if processor actually changed model or modelSettings
-              const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
-              const modelSettingsChanged =
-                processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
-              if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
-                modelSpanTracker.updateGeneration({
-                  ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
-                  attributes: {
-                    ...(modelChanged
-                      ? {
-                          model: currentStep.model.modelId,
-                          provider: currentStep.model.provider,
-                        }
-                      : {}),
-                    ...(modelSettingsChanged ? { parameters: currentStep.modelSettings } : {}),
-                  },
-                });
-              }
-
-              // Update AGENT_RUN span if processor actually changed available tools
-              const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
-              const activeToolsChanged =
-                processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
-              if (toolsChanged || activeToolsChanged) {
-                const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
-                if (agentSpan) {
-                  const toolNames = activeToolsChanged
-                    ? (processInputStepResult.activeTools as string[])
-                    : currentStep.tools
-                      ? Object.keys(currentStep.tools)
-                      : undefined;
-                  if (toolNames !== undefined) {
-                    agentSpan.update({
-                      attributes: {
-                        availableTools: toolNames,
-                      },
-                    });
-                  }
-                }
-              }
-
-              // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
-              // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
-              if (processInputStepResult.tools && currentStep.tools) {
-                const convertedTools: Record<string, unknown> = {};
-                for (const [name, tool] of Object.entries(currentStep.tools)) {
-                  if (isMastraTool(tool)) {
-                    convertedTools[name] = makeCoreTool(
-                      tool as unknown as ToolToConvert,
-                      {
-                        name,
-                        runId,
-                        threadId: _internal?.threadId,
-                        resourceId: _internal?.resourceId,
-                        logger,
-                        agentName: agentId,
-                        requestContext: requestContext || new RequestContext(),
-                        outputWriter,
-                        workspace: currentStep.workspace,
-                        requireApproval: (tool as any).requireApproval,
-                        backgroundConfig: (tool as any).background,
-                      },
-                      undefined,
-                      autoResumeSuspendedTools,
-                    );
-                  } else {
-                    convertedTools[name] = tool;
-                  }
-                }
-                currentStep.tools = convertedTools as TOOLS;
-              }
-            } catch (error) {
-              // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
-              if (error instanceof TripWire) {
-                logger?.warn('Streaming input processor tripwire triggered', {
-                  reason: error.message,
-                  processorId: error.processorId,
-                  retry: error.options?.retry,
-                });
-                return buildTripWireBailResponse({
-                  error,
-                  controller,
-                  runId,
-                  model,
-                  messageList,
-                  messageId: currentStep.messageId,
-                  stepTools: tools,
-                  _internal: _internal!,
-                });
-              }
-              logger?.error('Error in processInputStep processors:', error);
-              throw error;
-            }
-          }
-
-          // Store activeTools on _internal so toolCallStep can enforce them
-          if (_internal) {
-            _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
-          }
-
-          if (toolCallForeachOptions) {
-            updateToolCallForeachConcurrency(toolCallForeachOptions, {
-              requireToolApproval,
-              tools: currentStep.tools,
-              activeTools: currentStep.activeTools as string[] | undefined,
-              configuredConcurrency: configuredToolCallConcurrency,
-            });
-          }
-
-          const runState = new AgenticRunState({
-            _internal: _internal!,
-            model: currentStep.model,
+        // Re-stamp MODEL_GENERATION span with the fallback model so that downstream
+        // exporters (Langfuse, etc.) attribute usage and cost to the model that
+        // actually served the request instead of the first model in the list.
+        if (modelSpanTracker && activeFallbackModelIndex > 0) {
+          modelSpanTracker.updateGeneration({
+            name: `llm: '${model.modelId}'`,
+            attributes: {
+              model: model.modelId,
+              provider: model.provider,
+            },
           });
+        }
+        // Reset the mutable untagged bucket before each step execution. Tagged
+        // processor-owned buckets remain on messageList and are assembled later.
+        if (initialUntaggedSystemMessages) {
+          messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
+        }
 
-          // Resolve supportedUrls - it may be a Promise (e.g., from ModelRouterLanguageModel)
-          // This allows providers like Mistral to expose their native URL support for PDFs
-          // See: https://github.com/mastra-ai/mastra/issues/12152
-          let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
-          const modelSupportedUrls = currentStep.model?.supportedUrls;
-          if (modelSupportedUrls) {
-            if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
-              resolvedSupportedUrls = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
-            } else {
-              resolvedSupportedUrls = modelSupportedUrls as Record<string, RegExp[]>;
-            }
+        if (inputData.processorRetryFeedback) {
+          messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
+        }
+
+        const initialSignalEchoes =
+          readScoped(scopeCtx, INITIAL_SIGNAL_ECHOES_KEY, 'initialSignalEchoes')?.splice(0) ?? [];
+        for (const initialSignal of initialSignalEchoes) {
+          safeEnqueue(controller, initialSignal.toDataPart());
+        }
+
+        const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
+        if (shouldDrainBeforeFirstModelRequest) {
+          // Pre-run signals were queued before this run made its first model
+          // request — fold them into it. Signals sent to an already-active run
+          // use the default scope and are drained later by `signalDrainStep`
+          // so each becomes its own turn.
+          const preRunSignals =
+            readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId, 'pre-run') ?? [];
+          if (preRunSignals.length > 0) {
+            currentMessageId = rotateLoopResponseMessageId();
           }
-
-          const messageListPromptArgs = {
-            downloadRetries,
-            downloadConcurrency,
-            supportedUrls: resolvedSupportedUrls,
-          };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-
-          if (autoResumeSuspendedTools) {
-            const messages = messageList.get.all.db();
-            const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-            const suspendedToolsMessage = assistantMessages.find(message => {
-              const pendingOrSuspendedTools =
-                message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals;
-              if (pendingOrSuspendedTools) {
-                return true;
-              }
-              const dataToolSuspendedParts = message.content.parts?.filter(
-                part =>
-                  (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                  !(part.data as any).resumed,
-              );
-              if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-                return true;
-              }
-              return false;
-            });
-
-            if (suspendedToolsMessage) {
-              const metadata = suspendedToolsMessage.content.metadata;
-              let suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
-                string,
-                any
-              >;
-              if (!suspendedToolObj) {
-                suspendedToolObj = suspendedToolsMessage.content.parts
-                  ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
-                  ?.reduce(
-                    (acc, part) => {
-                      if (
-                        (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                        !(part.data as any).resumed
-                      ) {
-                        acc[(part.data as any).toolName] = part.data;
-                      }
-                      return acc;
-                    },
-                    {} as Record<string, any>,
-                  );
-              }
-              const suspendedTools = Object.values(suspendedToolObj);
-              if (suspendedTools.length > 0) {
-                inputMessages = inputMessages.map((message, index) => {
-                  if (message.role === 'system' && index === 0) {
-                    message.content =
-                      message.content +
-                      `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
-                      resumeData can not be an empty object nor null/undefined.
-                      When you find that and call that tool, add the resumeData to the tool call arguments/input.
-                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
-                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
-
-                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
-                      `;
-                  }
-
-                  return message;
-                });
-              }
-            }
+          for (const preRunSignal of preRunSignals) {
+            const signalForTranscript = messageList.addSignal(preRunSignal);
+            safeEnqueue(controller, signalForTranscript.toDataPart());
           }
+        }
 
-          if (_internal?.backgroundTaskManager && currentStep.tools) {
-            const bgPrompt = generateBackgroundTaskSystemPrompt(currentStep.tools, _internal?.agentBackgroundConfig);
-            inputMessages = inputMessages.map((message, index) => {
-              if (message.role === 'system' && index === 0) {
-                message.content = message.content + `\n\n${bgPrompt}`;
-              }
-              return message;
-            });
-          }
+        const currentStep: {
+          messageId: string;
+          model: MastraLanguageModel;
+          tools?: TOOLS | undefined;
+          toolChoice?: ToolChoice<TOOLS> | undefined;
+          activeTools?: (keyof TOOLS)[] | undefined;
+          providerOptions?: SharedProviderOptions | undefined;
+          modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
+          workspace?: Workspace;
+        } = {
+          messageId: currentMessageId,
+          model,
+          tools,
+          toolChoice,
+          activeTools,
+          providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
+          modelSettings,
+          structuredOutput,
+          workspace,
+        };
+        const rotateResponseMessageId = () => {
+          currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+          currentStep.messageId = currentMessageId;
+          return currentMessageId;
+        };
 
-          // Run `processLLMRequest` for any input processors that implement it.
-          // This hook lets processors rewrite the outbound prompt transiently
-          // without persisting changes back to the message list, or short-circuit
-          // the call entirely by returning a cached response.
-          const requestStepRunner = new ProcessorRunner({
-            inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
+        const inputStepProcessors = [
+          ...(inputProcessors || []),
+          ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
+        ];
+        if (inputStepProcessors && inputStepProcessors.length > 0) {
+          const processorRunner = new ProcessorRunner({
+            inputProcessors: inputStepProcessors,
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
             processorStates,
           });
-          const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
-            ? {
-                custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                  outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
-              }
-            : undefined;
-          let cachedResponse: CachedLLMStepResponse | undefined;
+
           try {
-            const requestStepResult = await requestStepRunner.runProcessLLMRequest({
-              prompt: inputMessages,
-              model: currentStep.model,
+            // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+            const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+            // Create a ProcessorStreamWriter from outputWriter if available.
+            // Forward any processor-supplied options (e.g. a future `transient`
+            // flag) and override messageId so the step always owns the
+            // response id for persisted data-* chunks.
+            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? {
+                  custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                    outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
+                }
+              : undefined;
+
+            const processInputStepResult = await processorRunner.runProcessInputStep({
+              messageList,
               stepNumber: inputData.output?.steps?.length || 0,
-              steps: inputData.output?.steps || [],
-              retryCount: inputData.processorRetryCount || 0,
+              ...createObservabilityContext(stepTracingContext),
               requestContext,
-              tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-              writer: requestStepWriter,
+              memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
+              resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+              threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+              model,
+              steps: inputData.output?.steps || [],
+              messageId: currentStep.messageId,
+              rotateResponseMessageId,
+              tools,
+              toolChoice,
+              activeTools: activeTools as string[] | undefined,
+              providerOptions: currentStep.providerOptions,
+              modelSettings: currentStep.modelSettings,
+              structuredOutput: currentStep.structuredOutput,
+              retryCount: inputData.processorRetryCount || 0,
+              writer: inputStepWriter,
               abortSignal: options?.abortSignal,
             });
-            inputMessages = requestStepResult.prompt;
-            cachedResponse = requestStepResult.response;
+            const mergedStepInput = composeStepInput(
+              {
+                messageId: currentStep.messageId,
+                model: currentStep.model,
+                tools: currentStep.tools,
+                toolChoice: currentStep.toolChoice,
+                activeTools: currentStep.activeTools as string[] | undefined,
+                providerOptions: currentStep.providerOptions,
+                modelSettings: currentStep.modelSettings,
+                structuredOutput: currentStep.structuredOutput,
+                workspace: currentStep.workspace,
+              },
+              processInputStepResult,
+            );
+            // Object.assign mirrors the legacy behavior: every property the
+            // processor returned (including extras like `workspace`) lands on
+            // `currentStep`. This is the contract the regular path relied on
+            // before composeStepInput was extracted.
+            Object.assign(currentStep, mergedStepInput);
+            executedStepModel =
+              currentStep.model.provider && currentStep.model.modelId
+                ? `${currentStep.model.provider}/${currentStep.model.modelId}`
+                : undefined;
+
+            // Update MODEL_GENERATION span if processor actually changed model or modelSettings
+            const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
+            const modelSettingsChanged =
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+            if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
+              modelSpanTracker.updateGeneration({
+                ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
+                attributes: {
+                  ...(modelChanged
+                    ? {
+                        model: currentStep.model.modelId,
+                        provider: currentStep.model.provider,
+                      }
+                    : {}),
+                  ...(modelSettingsChanged ? { parameters: currentStep.modelSettings } : {}),
+                },
+              });
+            }
+
+            // Update AGENT_RUN span if processor actually changed available tools
+            const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
+            const activeToolsChanged =
+              processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+            if (toolsChanged || activeToolsChanged) {
+              const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
+              if (agentSpan) {
+                const toolNames = activeToolsChanged
+                  ? (processInputStepResult.activeTools as string[])
+                  : currentStep.tools
+                    ? Object.keys(currentStep.tools)
+                    : undefined;
+                if (toolNames !== undefined) {
+                  agentSpan.update({
+                    attributes: {
+                      availableTools: toolNames,
+                    },
+                  });
+                }
+              }
+            }
+
+            // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
+            // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
+            if (processInputStepResult.tools && currentStep.tools) {
+              const convertedTools: Record<string, unknown> = {};
+              for (const [name, tool] of Object.entries(currentStep.tools)) {
+                if (isMastraTool(tool)) {
+                  convertedTools[name] = makeCoreTool(
+                    tool as unknown as ToolToConvert,
+                    {
+                      name,
+                      runId,
+                      threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+                      resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+                      logger,
+                      mastra: mastra
+                        ? createMastraProxy({ mastra, logger: logger || new ConsoleLogger({ level: 'error' }) })
+                        : undefined,
+                      memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
+                      agentName: agentId,
+                      requestContext: requestContext || new RequestContext(),
+                      outputWriter,
+                      workspace: currentStep.workspace,
+                      requireApproval: (tool as any).requireApproval,
+                      backgroundConfig: (tool as any).background,
+                    },
+                    undefined,
+                    autoResumeSuspendedTools,
+                  );
+                } else {
+                  convertedTools[name] = tool;
+                }
+              }
+              currentStep.tools = convertedTools as TOOLS;
+            }
           } catch (error) {
+            // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
-              logger?.warn('Streaming request processor tripwire triggered', {
+              logger?.warn('Streaming input processor tripwire triggered', {
                 reason: error.message,
                 processorId: error.processorId,
                 retry: error.options?.retry,
@@ -1256,394 +1399,406 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 error,
                 controller,
                 runId,
-                model: currentStep.model,
+                model,
                 messageList,
                 messageId: currentStep.messageId,
-                stepTools: currentStep.tools,
-                _internal: _internal!,
+                stepTools: tools,
+                _internal: _internal,
               });
             }
-            logger?.error('Error in processLLMRequest processors:', error);
+            logger?.error('Error in processInputStep processors:', error);
             throw error;
           }
+        }
 
-          if (cachedResponse) {
-            // Short-circuit: replay cached chunks instead of calling the model.
-            // Output processors are skipped on cache hit because the cached
-            // chunks already reflect their effects from the original call.
-            warnings = cachedResponse.warnings ?? [];
-            request = cachedResponse.request ?? {};
-            rawResponse = cachedResponse.rawResponse;
-            modelSpanTracker?.updateStep?.({
-              request: request || {},
-              inputMessages,
-              warnings: warnings || [],
-              messageId: currentStep.messageId,
+        // Publish activeTools to the run scope so toolCallStep can enforce them.
+        writeScoped(
+          scopeCtx,
+          STEP_ACTIVE_TOOLS_KEY,
+          'stepActiveTools',
+          currentStep.activeTools as string[] | undefined,
+        );
+
+        if (toolCallForeachOptions) {
+          updateToolCallForeachConcurrency(toolCallForeachOptions, {
+            requireToolApproval,
+            tools: currentStep.tools,
+            activeTools: currentStep.activeTools as string[] | undefined,
+            configuredConcurrency: configuredToolCallConcurrency,
+          });
+        }
+
+        const runState = new AgenticRunState({
+          _internal: _internal,
+          model: currentStep.model,
+        });
+
+        const messageListPromptArgs = await buildLlmPromptArgs({
+          model: currentStep.model,
+          downloadRetries,
+          downloadConcurrency,
+        });
+        const llmPromptForModel =
+          currentStep.model?.specificationVersion === 'v4'
+            ? messageList.get.all.aiV7.llmPrompt
+            : currentStep.model?.specificationVersion === 'v3'
+              ? messageList.get.all.aiV6.llmPrompt
+              : messageList.get.all.aiV5.llmPrompt;
+        let inputMessages = await llmPromptForModel(messageListPromptArgs);
+
+        inputMessages = applyAutoResumeSystemMessage({
+          autoResume: autoResumeSuspendedTools,
+          inputMessages,
+          messages: messageList.get.all.db(),
+        });
+
+        inputMessages = injectBackgroundTaskPrompt({
+          inputMessages,
+          backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
+          tools: currentStep.tools,
+          agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
+        });
+
+        // Run `processLLMRequest` for any input processors that implement it.
+        // This hook lets processors rewrite the outbound prompt transiently
+        // without persisting changes back to the message list, or short-circuit
+        // the call entirely by returning a cached response.
+        const requestStepRunner = new ProcessorRunner({
+          inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
+          outputProcessors: [],
+          logger: logger || new ConsoleLogger({ level: 'error' }),
+          agentName: agentId || 'unknown',
+          processorStates,
+        });
+        const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
+          ? {
+              custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
+            }
+          : undefined;
+        let cachedResponse: CachedLLMStepResponse | undefined;
+        try {
+          const requestStepResult = await requestStepRunner.runProcessLLMRequest({
+            prompt: inputMessages,
+            model: currentStep.model,
+            stepNumber: inputData.output?.steps?.length || 0,
+            steps: inputData.output?.steps || [],
+            retryCount: inputData.processorRetryCount || 0,
+            requestContext,
+            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+            writer: requestStepWriter,
+            abortSignal: options?.abortSignal,
+          });
+          inputMessages = requestStepResult.prompt;
+          cachedResponse = requestStepResult.response;
+        } catch (error) {
+          if (error instanceof TripWire) {
+            logger?.warn('Streaming request processor tripwire triggered', {
+              reason: error.message,
+              processorId: error.processorId,
+              retry: error.options?.retry,
             });
-            const replayChunks = cachedResponse.chunks;
-            modelResult = new ReadableStream({
-              start(controller) {
-                for (const chunk of replayChunks) {
-                  // Reattach per-run metadata that was stripped at cache time.
-                  controller.enqueue({
-                    ...chunk,
+            return buildTripWireBailResponse({
+              error,
+              controller,
+              runId,
+              model: currentStep.model,
+              messageList,
+              messageId: currentStep.messageId,
+              stepTools: currentStep.tools,
+              _internal: _internal,
+            });
+          }
+          logger?.error('Error in processLLMRequest processors:', error);
+          throw error;
+        }
+
+        if (cachedResponse) {
+          // Short-circuit: replay cached chunks instead of calling the model.
+          // Output processors are skipped on cache hit because the cached
+          // chunks already reflect their effects from the original call.
+          warnings = cachedResponse.warnings ?? [];
+          request = cachedResponse.request ?? {};
+          rawResponse = cachedResponse.rawResponse;
+          modelSpanTracker?.updateStep?.({
+            request: request || {},
+            inputMessages,
+            warnings: warnings || [],
+            messageId: currentStep.messageId,
+          });
+          const replayChunks = cachedResponse.chunks;
+          modelResult = new ReadableStream({
+            start(controller) {
+              for (const chunk of replayChunks) {
+                // Reattach per-run metadata that was stripped at cache time.
+                controller.enqueue({
+                  ...chunk,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                });
+              }
+              controller.close();
+            },
+          }) as unknown as ReturnType<typeof execute>;
+        } else if (isSupportedLanguageModel(currentStep.model)) {
+          // Apply request-side context to MODEL_INFERENCE using the post-processor
+          // tool set + per-step settings, then open the inference span. Doing this
+          // immediately before execute() ensures the span's startTime excludes
+          // input processor / prepareStep / processLLMRequest work, and that
+          // availableTools / toolChoice reflect any per-step mutations.
+          modelSpanTracker?.setInferenceContext?.({
+            parameters: {
+              ...currentStep.modelSettings,
+              ...modelConfig.modelSettings,
+            } as Record<string, unknown> | undefined,
+            providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
+            availableTools: getStepAvailableToolNames(
+              currentStep.tools as Record<string, unknown> | undefined,
+              currentStep.activeTools as readonly string[] | undefined,
+            ),
+            toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
+            responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
+          });
+          modelSpanTracker?.startInference?.();
+
+          modelResult = executeWithContextSync({
+            span: modelSpanTracker?.getTracingContext()?.currentSpan,
+            fn: () =>
+              execute({
+                runId,
+                model: currentStep.model,
+                providerOptions: currentStep.providerOptions,
+                inputMessages,
+                tools: currentStep.tools,
+                toolChoice: currentStep.toolChoice,
+                activeTools: currentStep.activeTools as string[] | undefined,
+                options,
+                // Per-model modelSettings shallow-merge on top of call-time modelSettings.
+                // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
+                modelSettings: {
+                  ...currentStep.modelSettings,
+                  ...modelConfig.modelSettings,
+                  maxRetries: modelConfig.maxRetries,
+                },
+                includeRawChunks,
+                structuredOutput: currentStep.structuredOutput,
+                headers: mergeLlmCallHeaders({
+                  memoryHeaders: buildMemoryHeaders({
+                    threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+                    resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+                  }),
+                  modelConfigHeaders: modelHeaders,
+                  callTimeHeaders: currentStep.modelSettings?.headers as Record<string, string> | undefined,
+                }),
+                methodType,
+                generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
+                onResult: ({
+                  warnings: warningsFromStream,
+                  request: requestFromStream,
+                  rawResponse: rawResponseFromStream,
+                }) => {
+                  warnings = warningsFromStream;
+                  request = requestFromStream || {};
+                  rawResponse = rawResponseFromStream;
+
+                  modelSpanTracker?.updateStep?.({
+                    request: request || {},
+                    inputMessages,
+                    warnings: warnings || [],
+                    messageId: currentStep.messageId,
+                  });
+
+                  return {
                     runId,
                     from: ChunkFrom.AGENT,
-                  });
-                }
-                controller.close();
-              },
-            }) as unknown as ReturnType<typeof execute>;
-          } else if (isSupportedLanguageModel(currentStep.model)) {
-            // Apply request-side context to MODEL_INFERENCE using the post-processor
-            // tool set + per-step settings, then open the inference span. Doing this
-            // immediately before execute() ensures the span's startTime excludes
-            // input processor / prepareStep / processLLMRequest work, and that
-            // availableTools / toolChoice reflect any per-step mutations.
-            modelSpanTracker?.setInferenceContext?.({
-              parameters: {
-                ...currentStep.modelSettings,
-                ...modelConfig.modelSettings,
-              } as Record<string, unknown> | undefined,
-              providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
-              availableTools: getStepAvailableToolNames(
-                currentStep.tools as Record<string, unknown> | undefined,
-                currentStep.activeTools as readonly string[] | undefined,
-              ),
-              toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
-              responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
-            });
-            modelSpanTracker?.startInference?.();
-
-            modelResult = executeWithContextSync({
-              span: modelSpanTracker?.getTracingContext()?.currentSpan,
-              fn: () =>
-                execute({
-                  runId,
-                  model: currentStep.model,
-                  providerOptions: currentStep.providerOptions,
-                  inputMessages,
-                  tools: currentStep.tools,
-                  toolChoice: currentStep.toolChoice,
-                  activeTools: currentStep.activeTools as string[] | undefined,
-                  options,
-                  // Per-model modelSettings shallow-merge on top of call-time modelSettings.
-                  // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
-                  modelSettings: {
-                    ...currentStep.modelSettings,
-                    ...modelConfig.modelSettings,
-                    maxRetries: modelConfig.maxRetries,
-                  },
-                  includeRawChunks,
-                  structuredOutput: currentStep.structuredOutput,
-                  // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
-                  // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
-                  headers: (() => {
-                    const memoryHeaders: Record<string, string> = {};
-                    if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
-                    if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
-                    const merged = {
-                      ...memoryHeaders,
-                      ...modelHeaders,
-                      ...currentStep.modelSettings?.headers,
-                    };
-                    return Object.keys(merged).length > 0 ? merged : undefined;
-                  })(),
-                  methodType,
-                  generateId: _internal?.generateId,
-                  onResult: ({
-                    warnings: warningsFromStream,
-                    request: requestFromStream,
-                    rawResponse: rawResponseFromStream,
-                  }) => {
-                    warnings = warningsFromStream;
-                    request = requestFromStream || {};
-                    rawResponse = rawResponseFromStream;
-
-                    modelSpanTracker?.updateStep?.({
+                    type: 'step-start',
+                    payload: {
                       request: request || {},
-                      inputMessages,
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
-                    });
-
-                    return {
-                      runId,
-                      from: ChunkFrom.AGENT,
-                      type: 'step-start',
-                      payload: {
-                        request: request || {},
-                        warnings: warnings || [],
-                        messageId: currentStep.messageId,
-                      },
-                    };
-                  },
-                  shouldThrowError: !isLastModel,
-                }),
-            });
-          } else {
-            throw new Error(
-              `Unsupported model version: ${(currentStep.model as { specificationVersion?: string }).specificationVersion}. Supported versions: ${supportedLanguageModelSpecifications.join(', ')}`,
-            );
-          }
-
-          const outputStream = new MastraModelOutput<OUTPUT>({
-            model: {
-              modelId: currentStep.model.modelId,
-              provider: currentStep.model.provider,
-              version: currentStep.model.specificationVersion,
-            },
-            stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
-            messageList,
-            messageId: currentStep.messageId,
-            options: {
-              runId,
-              toolCallStreaming,
-              includeRawChunks,
-              structuredOutput: currentStep.structuredOutput,
-              // Cached chunks were already shaped by output processors in the
-              // original call. Re-running them on replay would double up.
-              outputProcessors: cachedResponse ? [] : outputProcessors,
-              isLLMExecutionStep: true,
-              tracingContext,
-              processorStates,
-              requestContext,
-            },
+                    },
+                  };
+                },
+                shouldThrowError: !isLastModel,
+              }),
           });
+        } else {
+          throw new Error(
+            `Unsupported model version: ${(currentStep.model as { specificationVersion?: string }).specificationVersion}. Supported versions: ${supportedLanguageModelSpecifications.join(', ')}`,
+          );
+        }
 
-          let transportResolver: (() => StreamTransport | undefined) | undefined;
-          if (currentStep.model instanceof ModelRouterLanguageModel) {
-            const routerModel = currentStep.model;
-            transportResolver = () => readModelStreamTransport(modelResult) ?? routerModel._getStreamTransport();
+        const outputStream = new MastraModelOutput<OUTPUT>({
+          model: {
+            modelId: currentStep.model.modelId,
+            provider: currentStep.model.provider,
+            version: currentStep.model.specificationVersion,
+          },
+          stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
+          messageList,
+          messageId: currentStep.messageId,
+          options: {
+            runId,
+            toolCallStreaming,
+            includeRawChunks,
+            structuredOutput: currentStep.structuredOutput,
+            // Cached chunks were already shaped by output processors in the
+            // original call. Re-running them on replay would double up.
+            outputProcessors: cachedResponse ? [] : outputProcessors,
+            isLLMExecutionStep: true,
+            tracingContext,
+            processorStates,
+            requestContext,
+          },
+        });
+
+        let transportResolver: (() => StreamTransport | undefined) | undefined;
+        if (currentStep.model instanceof ModelRouterLanguageModel) {
+          const routerModel = currentStep.model;
+          transportResolver = () => readModelStreamTransport(modelResult) ?? routerModel._getStreamTransport();
+        }
+
+        let toolResultTripwireFromStream: TripWire | null = null;
+        try {
+          const { collectedChunks, toolResultTripwire: streamToolResultTripwire } = await processOutputStream({
+            outputStream,
+            includeRawChunks,
+            tools: currentStep.tools,
+            runId,
+            messageId: currentStep.messageId,
+            messageList,
+            runState,
+            options,
+            controller,
+            responseFromModel: {
+              warnings,
+              request,
+              rawResponse,
+            },
+            logger,
+            transportRef: readScoped(scopeCtx, TRANSPORT_REF_KEY, 'transportRef'),
+            transportResolver,
+            outputProcessors,
+            processorStates,
+            agentId,
+            processorRetryCount: inputData.processorRetryCount,
+            outputWriter,
+            requestContext,
+            toolResultObservability: createObservabilityContext(
+              modelSpanTracker?.getTracingContext() ?? tracingContext,
+            ),
+            toolResultStepNumber: inputData.output?.steps?.length ?? 0,
+            toolResultSteps: inputData.output?.steps ?? [],
+            toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
+            mastra,
+            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+            pendingProviderToolCallsByToolCallId,
+            modelSpanTracker,
+          });
+          toolResultTripwireFromStream = streamToolResultTripwire;
+
+          if (toolResultTripwireFromStream) {
+            return buildTripWireBailResponse({
+              error: toolResultTripwireFromStream,
+              controller,
+              runId,
+              model: currentStep.model,
+              messageList,
+              messageId: currentStep.messageId,
+              stepTools: currentStep.tools,
+              _internal: _internal!,
+            });
           }
 
-          try {
-            const { collectedChunks } = await processOutputStream({
-              outputStream,
-              includeRawChunks,
-              tools: currentStep.tools,
-              runId,
-              messageId: currentStep.messageId,
-              messageList,
-              runState,
-              options,
-              controller,
-              responseFromModel: {
+          // Build messages from the full chunk sequence and add to messageList.
+          // This replaces the old inline flush approach — all parts are built in
+          // correct stream order with proper providerMetadata attribution.
+          const builtMessages = buildMessagesFromChunks({
+            chunks: collectedChunks,
+            messageId: currentStep.messageId,
+            responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
+            tools: currentStep.tools,
+          });
+          for (const msg of builtMessages) {
+            messageList.add(msg, 'response');
+          }
+
+          // Apply structuredOutput metadata to the assistant message.
+          // MastraModelOutput's finish handler runs during the stream before messages
+          // are added to messageList, so it can't find the message. We apply it here.
+          const bufferedObject = outputStream._getImmediateObject();
+          if (bufferedObject !== undefined) {
+            const responseMessages = messageList.get.response.db();
+            const lastAssistant = [...responseMessages].reverse().find(m => m.role === 'assistant');
+            if (lastAssistant) {
+              if (!lastAssistant.content.metadata) {
+                lastAssistant.content.metadata = {};
+              }
+              lastAssistant.content.metadata.structuredOutput = bufferedObject;
+            }
+          }
+
+          // Run `processLLMResponse` for any input processors that implement
+          // it. Pairs with `processLLMRequest`: lets a processor write the
+          // response to a cache (or sink) using state stashed in the
+          // request hook. Skipped on cache hit — that response did not come
+          // from the model, so writing it back would just rewrite the same
+          // value to the same key.
+          if (!cachedResponse) {
+            try {
+              await requestStepRunner.runProcessLLMResponse({
+                chunks: collectedChunks,
+                model: currentStep.model,
+                stepNumber: inputData.output?.steps?.length || 0,
+                steps: inputData.output?.steps || [],
                 warnings,
                 request,
                 rawResponse,
-              },
-              logger,
-              transportRef: _internal?.transportRef,
-              transportResolver,
-              toolPayloadTransform: _internal?.toolPayloadTransform,
-              mastra,
-              tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-            });
-
-            // Build messages from the full chunk sequence and add to messageList.
-            // This replaces the old inline flush approach — all parts are built in
-            // correct stream order with proper providerMetadata attribution.
-            const builtMessages = buildMessagesFromChunks({
-              chunks: collectedChunks,
-              messageId: currentStep.messageId,
-              responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
-              tools: currentStep.tools,
-            });
-            for (const msg of builtMessages) {
-              messageList.add(msg, 'response');
-            }
-
-            // Apply structuredOutput metadata to the assistant message.
-            // MastraModelOutput's finish handler runs during the stream before messages
-            // are added to messageList, so it can't find the message. We apply it here.
-            const bufferedObject = outputStream._getImmediateObject();
-            if (bufferedObject !== undefined) {
-              const responseMessages = messageList.get.response.db();
-              const lastAssistant = [...responseMessages].reverse().find(m => m.role === 'assistant');
-              if (lastAssistant) {
-                if (!lastAssistant.content.metadata) {
-                  lastAssistant.content.metadata = {};
-                }
-                lastAssistant.content.metadata.structuredOutput = bufferedObject;
-              }
-            }
-
-            // Run `processLLMResponse` for any input processors that implement
-            // it. Pairs with `processLLMRequest`: lets a processor write the
-            // response to a cache (or sink) using state stashed in the
-            // request hook. Skipped on cache hit — that response did not come
-            // from the model, so writing it back would just rewrite the same
-            // value to the same key.
-            if (!cachedResponse) {
-              try {
-                await requestStepRunner.runProcessLLMResponse({
-                  chunks: collectedChunks,
-                  model: currentStep.model,
-                  stepNumber: inputData.output?.steps?.length || 0,
-                  steps: inputData.output?.steps || [],
-                  warnings,
-                  request,
-                  rawResponse,
-                  fromCache: false,
-                  retryCount: inputData.processorRetryCount || 0,
-                  requestContext,
-                  tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                  writer: requestStepWriter,
-                  abortSignal: options?.abortSignal,
-                });
-              } catch (responseProcessorError) {
-                if (responseProcessorError instanceof TripWire) {
-                  logger?.warn('Streaming response processor tripwire triggered', {
-                    reason: responseProcessorError.message,
-                    processorId: responseProcessorError.processorId,
-                    retry: responseProcessorError.options?.retry,
-                  });
-                  return buildTripWireBailResponse({
-                    error: responseProcessorError,
-                    controller,
-                    runId,
-                    model: currentStep.model,
-                    messageList,
-                    messageId: currentStep.messageId,
-                    stepTools: currentStep.tools,
-                    _internal: _internal!,
-                  });
-                }
-                logger?.error('Error in processLLMResponse processors:', responseProcessorError);
-                throw responseProcessorError;
-              }
-            }
-          } catch (error) {
-            const provider = model?.provider;
-            const modelIdStr = model?.modelId;
-
-            // Handle abort first — a client-disconnect mid-stream is the
-            // expected exit path, not an error. Logging it at error level
-            // pollutes monitoring (see #15844 for the production
-            // numbers). Bail out with a debug log before the upstream /
-            // generic error branches so we never emit an
-            // `error`-level entry for an AbortError.
-            if (isAbortError(error) && options?.abortSignal?.aborted) {
-              logger?.debug?.('LLM execution aborted', { runId });
-              await options?.onAbort?.({
-                steps: inputData?.output?.steps ?? [],
-              });
-
-              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-
-              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
-            }
-
-            const isUpstreamError = APICallError.isInstance(error);
-
-            if (isUpstreamError) {
-              const providerInfo = provider ? ` from ${provider}` : '';
-              const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
-              logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
-                error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelIdStr && { modelId: modelIdStr }),
-              });
-            } else {
-              logger?.error('Error in LLM execution', {
-                error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelIdStr && { modelId: modelIdStr }),
-              });
-            }
-
-            if (isLastModel) {
-              // Defer enqueueing the error chunk — processAPIError handlers may intercept it
-              // and signal a retry instead.
-              runState.setState({
-                hasErrored: true,
-                apiError: error,
-                deferredErrorChunk: {
-                  type: 'error',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: { error },
-                },
-                stepResult: {
-                  isContinued: false,
-                  reason: 'error',
-                },
-              });
-            } else {
-              // For non-last models, try processAPIError before falling through to next model
-              // This allows error processors to fix the request and retry with the SAME model
-              const processorRunner = new ProcessorRunner({
-                inputProcessors: inputProcessors || [],
-                outputProcessors: outputProcessors || [],
-                errorProcessors: errorProcessors || [],
-                logger: logger || new ConsoleLogger({ level: 'error' }),
-                agentName: agentId || 'unknown',
-                processorStates,
-              });
-
-              const currentRetryCount = inputData.processorRetryCount || 0;
-              const canRetryError =
-                maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
-              const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
-                ? {
-                    custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                      outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
-                  }
-                : undefined;
-
-              const errorResult = await processorRunner.runProcessAPIError({
-                error,
-                messages: messageList.get.all.db(),
-                messageList,
-                stepNumber: inputData.output?.steps?.length || 0,
-                steps: inputData.output?.steps || [],
-                retryCount: currentRetryCount,
+                fromCache: false,
+                retryCount: inputData.processorRetryCount || 0,
                 requestContext,
-                writer: apiErrorWriter,
+                tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                writer: requestStepWriter,
                 abortSignal: options?.abortSignal,
-                messageId: currentMessageId,
-                rotateResponseMessageId: () => {
-                  currentMessageId = _internal?.generateId?.() ?? generateId();
-                  // Keep the active output stream in sync so bail/retry paths
-                  // below report the rotated id instead of the stale one, and so
-                  // any subsequent chunks the stream writes itself use the new id.
-                  outputStream.messageId = currentMessageId;
-                  return currentMessageId;
-                },
               });
-
-              if (errorResult.retry && canRetryError) {
-                // Signal retry - store on runState so it's handled after the callback returns
-                runState.setState({
-                  hasErrored: false,
-                  apiError: undefined,
+            } catch (responseProcessorError) {
+              if (responseProcessorError instanceof TripWire) {
+                logger?.warn('Streaming response processor tripwire triggered', {
+                  reason: responseProcessorError.message,
+                  processorId: responseProcessorError.processorId,
+                  retry: responseProcessorError.options?.retry,
                 });
-
-                // Return normally (don't throw) so executeStreamWithFallbackModels considers this done
-                // The retry will be handled by the processAPIError handling below
-                return {
-                  outputStream,
-                  callBail: false,
-                  runState,
+                return buildTripWireBailResponse({
+                  error: responseProcessorError,
+                  controller,
+                  runId,
+                  model: currentStep.model,
+                  messageList,
+                  messageId: currentStep.messageId,
                   stepTools: currentStep.tools,
-                  stepWorkspace: currentStep.workspace,
-                  processAPIErrorRetry: {
-                    retry: true,
-                  },
-                };
+                  _internal: _internal,
+                });
               }
-
-              throw error;
+              logger?.error('Error in processLLMResponse processors:', responseProcessorError);
+              throw responseProcessorError;
             }
           }
+        } catch (error) {
+          // Force-close any server tool spans opened during the failed stream
+          // before abort/error/fallback handling can return or throw.
+          cleanupProviderToolSpans(true);
 
-          // Handle abort detected via signal check in processOutputStream (loop broke early).
-          // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
-          // so this handles the case where processOutputStream completed normally via `break`.
-          if (options?.abortSignal?.aborted) {
+          const provider = model?.provider;
+          const modelIdStr = model?.modelId;
+
+          // Handle abort first — a client-disconnect mid-stream is the
+          // expected exit path, not an error. Logging it at error level
+          // pollutes monitoring (see #15844 for the production
+          // numbers). Bail out with a debug log before the upstream /
+          // generic error branches so we never emit an
+          // `error`-level entry for an AbortError.
+          if (isAbortError(error) && options?.abortSignal?.aborted) {
+            logger?.debug?.('LLM execution aborted', { runId });
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });
@@ -1653,27 +1808,149 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
 
-          return {
-            outputStream,
-            callBail: false,
-            runState,
-            stepTools: currentStep.tools,
-            stepWorkspace: currentStep.workspace,
-          };
-        });
+          const isUpstreamError = APICallError.isInstance(error);
+
+          if (isUpstreamError) {
+            const providerInfo = provider ? ` from ${provider}` : '';
+            const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
+            logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          } else {
+            logger?.error('Error in LLM execution', {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          }
+
+          if (isLastModel) {
+            // Defer enqueueing the error chunk — processAPIError handlers may intercept it
+            // and signal a retry instead.
+            runState.setState({
+              hasErrored: true,
+              apiError: error,
+              deferredErrorChunk: {
+                type: 'error',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { error },
+              },
+              stepResult: {
+                isContinued: false,
+                reason: 'error',
+              },
+            });
+          } else {
+            // For non-last models, try processAPIError before falling through to next model
+            // This allows error processors to fix the request and retry with the SAME model
+            const processorRunner = new ProcessorRunner({
+              inputProcessors: inputProcessors || [],
+              outputProcessors: outputProcessors || [],
+              errorProcessors: errorProcessors || [],
+              logger: logger || new ConsoleLogger({ level: 'error' }),
+              agentName: agentId || 'unknown',
+              processorStates,
+            });
+
+            const currentRetryCount = inputData.processorRetryCount || 0;
+            const canRetryError =
+              maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
+            const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? {
+                  custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                    outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
+                }
+              : undefined;
+
+            const errorResult = await processorRunner.runProcessAPIError({
+              error,
+              messages: messageList.get.all.db(),
+              messageList,
+              stepNumber: inputData.output?.steps?.length || 0,
+              steps: inputData.output?.steps || [],
+              retryCount: currentRetryCount,
+              requestContext,
+              tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+              writer: apiErrorWriter,
+              abortSignal: options?.abortSignal,
+              messageId: currentMessageId,
+              rotateResponseMessageId: () => {
+                currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+                // Keep the active output stream in sync so bail/retry paths
+                // below report the rotated id instead of the stale one, and so
+                // any subsequent chunks the stream writes itself use the new id.
+                outputStream.messageId = currentMessageId;
+                return currentMessageId;
+              },
+            });
+
+            if (errorResult.retry && canRetryError) {
+              // Signal retry - store on runState so it's handled after the callback returns
+              runState.setState({
+                hasErrored: false,
+                apiError: undefined,
+              });
+
+              // Return normally (don't throw) so executeStreamWithFallbackModels considers this done
+              // The retry will be handled by the processAPIError handling below
+              return {
+                outputStream,
+                callBail: false,
+                runState,
+                stepTools: currentStep.tools,
+                stepWorkspace: currentStep.workspace,
+                processAPIErrorRetry: {
+                  retry: true,
+                },
+              };
+            }
+
+            throw error;
+          }
+        }
+
+        // Handle abort detected via signal check in processOutputStream (loop broke early).
+        // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
+        // so this handles the case where processOutputStream completed normally via `break`.
+        if (options?.abortSignal?.aborted) {
+          cleanupProviderToolSpans(true);
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+          });
+
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+          return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+        }
+
+        return {
+          outputStream,
+          callBail: false,
+          runState,
+          stepTools: currentStep.tools,
+          stepWorkspace: currentStep.workspace,
+          toolResultTripwire: toolResultTripwireFromStream,
+        };
+      });
 
       if (executedStepModel) {
         messageList.enrichLastStepStart(executedStepModel);
       }
 
-      // Store modified tools and workspace in _internal so toolCallStep can access them
-      // without going through workflow serialization (which would lose execute functions)
-      if (_internal) {
-        _internal.stepTools = stepTools;
-        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
+      // Publish modified tools/workspace to the run scope so toolCallStep can read them
+      // without going through workflow serialization (which would lose execute functions).
+      writeScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools', stepTools);
+      const existingWorkspace = stepWorkspace ?? readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
+      if (existingWorkspace !== undefined) {
+        writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', existingWorkspace);
       }
 
-      if (callBail) {
+      const bailFromExecution = () => {
         const usage = outputStream._getImmediateUsage();
         const responseMetadata = runState.state.responseMetadata;
         const text = outputStream._getImmediateText();
@@ -1704,6 +1981,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             nonUser: messageList.get.response.aiV5.model(),
           },
         });
+      };
+
+      if (callBail) {
+        return bailFromExecution();
       }
 
       // Handle processAPIError for API rejections
@@ -1739,11 +2020,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           steps: inputData.output?.steps || [],
           retryCount: currentRetryCount,
           requestContext,
+          tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
           writer: apiErrorWriter2,
           abortSignal: options?.abortSignal,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
-            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
             // Keep the active output stream in sync so the retry payload and
             // any downstream chunks use the rotated id.
             outputStream.messageId = currentMessageId;
@@ -1762,8 +2044,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
+      if (apiErrorRetryResult?.retry && options?.abortSignal?.aborted) {
+        cleanupProviderToolSpans(true);
+        await options.onAbort?.({
+          steps: inputData?.output?.steps ?? [],
+        });
+        safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+        return bailFromExecution();
+      }
+
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
+        cleanupProviderToolSpans(true);
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -1835,8 +2127,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       });
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
-      // This allows processors to validate/modify the response and trigger retries if needed
-      let processOutputStepTripwire: TripWire | null = null;
+      // This allows processors to validate/modify the response and trigger retries if needed.
+      //
+      // toolResultTripwireFromStreamOuter is a tripwire that fired during stream processing
+      // from a processToolResult hook (per-tool, post-tool-execute). We seed
+      // processOutputStepTripwire with it so the existing tripwire/retry/abort flow handles
+      // both kinds of step-level processor tripwires uniformly.
+      let processOutputStepTripwire: TripWire | null = toolResultTripwireFromStreamOuter ?? null;
       if (outputProcessors && outputProcessors.length > 0) {
         const processorRunner = new ProcessorRunner({
           inputProcessors: [],
@@ -1880,6 +2177,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList,
             stepNumber,
             finishReason: immediateFinishReason,
+            providerMetadata: outputStream._getImmediateProviderMetadata(),
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
             usage: outputStream._getImmediateUsage(),
@@ -2009,10 +2307,26 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
       // inadvertently re-enabling it.
       // See: https://github.com/mastra-ai/mastra/issues/15717
-      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted) && finishReason !== 'length';
+      // `error` failures, `length` truncation, and `content-filter` refusals
+      // must never be overridden by a pending tool call: retrying re-sends the
+      // same request (reproducing the failure/truncation, or re-triggering the
+      // same refusal) and the loop spins until maxSteps — or forever when
+      // maxSteps is unset. Note we deliberately do NOT exclude `stop` here:
+      // some models return finishReason='stop' alongside tool calls, which the
+      // loop must process.
+      const hasPendingToolCalls =
+        toolCalls &&
+        toolCalls.some(tc => !tc.providerExecuted) &&
+        finishReason !== 'error' &&
+        finishReason !== 'length' &&
+        finishReason !== 'content-filter';
       const shouldContinue =
-        shouldRetry ||
-        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
+        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+
+      // On terminal exit, materialize spans for provider tool calls whose result never arrived.
+      // On retry (shouldRetry), pending calls from the rejected attempt must also be flushed —
+      // the LLM will produce a fresh response with new tool calls.
+      cleanupProviderToolSpans(!shouldContinue || shouldRetry);
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;

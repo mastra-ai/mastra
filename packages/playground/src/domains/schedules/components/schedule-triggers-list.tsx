@@ -1,5 +1,7 @@
 import type { ScheduleTriggerResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, Txt } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AlertTriangleIcon } from 'lucide-react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
@@ -86,8 +88,8 @@ export function ScheduleTriggersList({
           <span
             className={
               isLinked
-                ? 'text-accent1 font-mono text-ui-sm whitespace-nowrap'
-                : 'text-neutral3 font-mono text-ui-sm whitespace-nowrap'
+                ? 'text-accent1 text-ui-sm font-mono whitespace-nowrap'
+                : 'text-neutral3 text-ui-sm font-mono whitespace-nowrap'
             }
           >
             {t.runId}
@@ -101,14 +103,14 @@ export function ScheduleTriggersList({
             <DataList.Cell height="compact">
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
+                  <span className="text-ui-sm text-accent2 inline-flex items-center gap-1.5 whitespace-nowrap">
                     <AlertTriangleIcon size={14} />
                     publish failed
                   </span>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-neutral3">
+                  <span className="text-ui-sm text-neutral3 inline-flex items-center gap-1.5 whitespace-nowrap">
                     pending
                   </span>
                 )}

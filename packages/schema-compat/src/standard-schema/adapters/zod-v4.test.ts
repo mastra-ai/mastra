@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { standardSchemaToJSONSchema, toStandardSchema as toRoutedStandardSchema } from '../standard-schema';
 import { toStandardSchema } from './zod-v4';
 
 describe('zod-v4 standard-schema adapter', () => {
@@ -199,6 +200,56 @@ describe('zod-v4 standard-schema adapter', () => {
       expect(items.required).toEqual(['content', 'status', 'activeForm']);
     });
 
+    it('serializes built-in Mastra Code command tool schemas as JSON Schema objects', () => {
+      const toolSchemas = {
+        ask_user: z.object({
+          question: z.string().min(1),
+          options: z
+            .array(
+              z.object({
+                label: z.string(),
+                description: z.string().optional(),
+              }),
+            )
+            .optional(),
+        }),
+        task_write: z.object({
+          tasks: z.array(
+            z.object({
+              id: z.string().optional(),
+              content: z.string().min(1),
+              status: z.enum(['pending', 'in_progress', 'completed']),
+              activeForm: z.string().min(1),
+            }),
+          ),
+        }),
+        task_check: z.object({}),
+        submit_plan: z.object({
+          title: z.string().nullable().optional(),
+          plan: z.string().min(1),
+        }),
+      };
+
+      const serialized = Object.fromEntries(
+        Object.entries(toolSchemas).map(([name, schema]) => {
+          // Simulate the Zod 3.25 v4 compatibility export shape where schemas expose _zod
+          // but do not provide native ~standard.jsonSchema converters.
+          delete (schema as any)['~standard'].jsonSchema;
+          return [name, standardSchemaToJSONSchema(toRoutedStandardSchema(schema as any), { io: 'input' })];
+        }),
+      ) as Record<keyof typeof toolSchemas, any>;
+
+      for (const schema of Object.values(serialized)) {
+        expect(schema.type).toBe('object');
+        expect(schema.properties).toBeDefined();
+      }
+      expect(serialized.ask_user.properties.options.items.type).toBe('object');
+      expect(serialized.task_write.properties.tasks.items.required).toEqual(['content', 'status', 'activeForm']);
+      expect(serialized.task_check.properties).toEqual({});
+      expect(serialized.submit_plan.required).toEqual(['plan']);
+      expect(serialized.submit_plan.properties.title).toEqual({ anyOf: [{ type: 'string' }, { type: 'null' }] });
+    });
+
     it('should pass adapter options to z.toJSONSchema', () => {
       const zodSchema = z.object({
         name: z.string(),
@@ -244,7 +295,7 @@ describe('zod-v4 standard-schema adapter', () => {
       warnSpy.mockRestore();
     });
 
-    it('should not produce console warnings when using draft-07 target', () => {
+    it('should set $schema when using a valid draft-07 target', () => {
       const zodSchema = z.object({ name: z.string() });
       const standardSchema = toStandardSchema(zodSchema);
 
@@ -259,6 +310,60 @@ describe('zod-v4 standard-schema adapter', () => {
       expect(jsonSchema.$schema).toBeDefined(); // $schema should be set when target is valid
 
       warnSpy.mockRestore();
+    });
+  });
+
+  describe('z.record() patch parity with zodToJsonSchema', () => {
+    // Zod v4 has a known bug where `z.record(valueSchema)` puts the value in
+    // `def.keyType` instead of `def.valueType`, crashing `toJSONSchema`'s
+    // `recordProcessor` with "Cannot read properties of undefined (reading '_zod')".
+    // `zodToJsonSchema` works around this with `patchRecordSchemas`; the adapter
+    // now applies the same patch so both entry points behave consistently.
+
+    it('does not crash on z.record(z.boolean())', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
+      const schema = z.object({ flags: z.record(z.boolean()) });
+      const standardSchema = toStandardSchema(schema);
+
+      expect(() => standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' })).not.toThrow();
+    });
+
+    it('produces a usable JSON Schema for z.record(z.boolean())', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
+      const schema = z.object({ flags: z.record(z.boolean()) });
+      const standardSchema = toStandardSchema(schema);
+
+      const result = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.properties.flags.type).toBe('object');
+      expect(result.properties.flags.additionalProperties).toEqual({ type: 'boolean' });
+      expect(result.properties.flags.propertyNames).toEqual({ type: 'string' });
+      expect(result.properties.flags.required).toBeUndefined();
+    });
+
+    it('handles z.record() nested inside z.object().nullable()', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
+      const schema = z.object({ tags: z.record(z.string()).nullable() });
+      const standardSchema = toStandardSchema(schema);
+
+      expect(() => standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' })).not.toThrow();
+    });
+
+    it('patches the buggy zod <= 4.3.6 record def shape (value stored in keyType)', () => {
+      // On zod < 4.4.0, single-arg z.record(valueSchema) stores the value schema
+      // in def.keyType and leaves def.valueType undefined. The workspace zod has
+      // the upstream fix, so recreate the buggy def shape directly to keep this
+      // regression testable regardless of the installed zod version.
+      const schema = z.object({ flags: z.record(z.string(), z.boolean()) });
+      const def = (schema.shape.flags as any)._zod.def;
+      def.keyType = def.valueType;
+      def.valueType = undefined;
+
+      const standardSchema = toStandardSchema(schema);
+      const result = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.properties.flags.type).toBe('object');
+      expect(result.properties.flags.additionalProperties).toEqual({ type: 'boolean' });
     });
   });
 });

@@ -1,4 +1,5 @@
-import { Button, Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { AgentStepContainer } from './agent-step-container';
@@ -32,7 +33,7 @@ export const AgentProfileIdentityStep = ({ avatar, details }: AgentProfileIdenti
         </Button>
       }
     >
-      <div className="relative w-full h-full flex flex-col items-center justify-center gap-4 py-6 px-6 text-center">
+      <div className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-6 py-6 text-center">
         {avatar}
         {details}
       </div>

@@ -13,8 +13,11 @@ vi.mock('../badges/tool-approval-buttons', () => ({
   ToolApprovalButtons: mockToolApprovalButtons,
 }));
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: () => null,
+}));
+
+vi.mock('@mastra/playground-ui/icons/AgentIcon', () => ({
   AgentIcon: () => null,
 }));
 
@@ -28,8 +31,8 @@ vi.mock('../badges/background-task-metadata-dialog', () => ({
   BackgroundTaskMetadataDialogTrigger: () => null,
 }));
 
-vi.mock('../tool-fallback', () => ({
-  ToolFallback: () => null,
+vi.mock('../tool-card', () => ({
+  ToolCard: () => null,
 }));
 
 vi.mock('react-markdown', () => ({

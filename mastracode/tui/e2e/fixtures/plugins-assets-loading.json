@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "E2E plugin bundled command executed.\n\nARGUMENTS:",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC plugin bundled command response"
+      }
+    },
+    {
+      "match": {
+        "userMessage": "E2E plugin bundled skill instructions.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC plugin bundled skill response"
+      }
+    }
+  ]
+}

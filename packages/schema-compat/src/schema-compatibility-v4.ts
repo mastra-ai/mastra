@@ -123,6 +123,17 @@ export type ShapeValue<T extends z.ZodObject<any, any>> = ZodShape<T>[ShapeKey<T
 type ConstraintHelperText = string[];
 
 /**
+ * Returns the v3-style type name (e.g. "ZodString") for a Zod v4 schema. Zod v4
+ * stores the kind as a lowercase `type` (e.g. "string"), so this normalizes it
+ * for comparison against the `*_ZOD_TYPES` lists, mirroring the dispatcher in
+ * `schema-compatibility.ts`.
+ */
+function zodV4TypeName(value: unknown): string {
+  const v4Type = (value as { _zod?: { def?: { type?: string } } } | undefined)?._zod?.def?.type;
+  return v4Type ? 'Zod' + v4Type.charAt(0).toUpperCase() + v4Type.slice(1) : '';
+}
+
+/**
  * Abstract base class for creating schema compatibility layers for different AI model providers.
  *
  * This class provides a framework for transforming Zod schemas to work with specific AI model
@@ -496,6 +507,12 @@ export class SchemaCompatLayer {
                     // @ts-expect-error - fix later
                     constraints.push(`input must match this regex ${check._zod.def.pattern}`);
                     break;
+                  default:
+                    // Formats without a textual description (ipv4, datetime,
+                    // base64, etc.) must be preserved as real validation instead
+                    // of being silently dropped.
+                    newChecks.push(check);
+                    break;
                 }
               }
               break;
@@ -611,18 +628,20 @@ export class SchemaCompatLayer {
     if (checks) {
       for (const check of checks) {
         switch (check._zod.def.check) {
+          // `.max(d)` lowers the upper bound, stored as a `less_than` check: the date must be older than `d`.
           case 'less_than':
-            // @ts-expect-error - fix later
-            const minDate = new Date(check._zod.def.value);
-            if (!isNaN(minDate.getTime())) {
-              constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
-            }
-            break;
-          case 'greater_than':
             // @ts-expect-error - fix later
             const maxDate = new Date(check._zod.def.value);
             if (!isNaN(maxDate.getTime())) {
               constraints.push(`Date must be older than ${maxDate.toISOString()} (ISO)`);
+            }
+            break;
+          // `.min(d)` raises the lower bound, stored as a `greater_than` check: the date must be newer than `d`.
+          case 'greater_than':
+            // @ts-expect-error - fix later
+            const minDate = new Date(check._zod.def.value);
+            if (!isNaN(minDate.getTime())) {
+              constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
             }
             break;
           default:
@@ -650,8 +669,11 @@ export class SchemaCompatLayer {
     value: ZodOptional<any>,
     handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
   ): ZodType {
-    if (handleTypes.includes(value.constructor.name as AllZodType)) {
-      return this.processZodType(value._zod.def.innerType).optional();
+    const innerType = value._zod?.def?.innerType;
+    // Gate on the INNER type, not the wrapper. `value.constructor.name` is always
+    // "ZodOptional", so it never reflects what is being wrapped.
+    if (innerType && handleTypes.includes(zodV4TypeName(innerType) as AllZodType)) {
+      return this.processZodType(innerType).optional();
     } else {
       return value;
     }
@@ -668,8 +690,11 @@ export class SchemaCompatLayer {
     value: ZodNullable<any>,
     handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
   ): ZodType {
-    if (handleTypes.includes(value.constructor.name as AllZodType)) {
-      return this.processZodType(value._zod.def.innerType).nullable();
+    const innerType = value._zod?.def?.innerType;
+    // Gate on the INNER type, not the wrapper. `value.constructor.name` is always
+    // "ZodNullable", so it never reflects what is being wrapped.
+    if (innerType && handleTypes.includes(zodV4TypeName(innerType) as AllZodType)) {
+      return this.processZodType(innerType).nullable();
     } else {
       return value;
     }

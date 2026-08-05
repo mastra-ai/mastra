@@ -1,7 +1,13 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataKeysAndValues, DataList, DataPanel, Notice, TraceIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { format } from 'date-fns/format';
 import {
   ChevronsDownUpIcon,
@@ -14,6 +20,7 @@ import {
   TargetIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ToolMockReportSection } from './tool-mock-report-section';
 
 export type ExperimentResultPanelProps = {
   result: DatasetExperimentResult;
@@ -90,7 +97,7 @@ export function ExperimentResultPanel({
 
       {!collapsed && (
         <DataPanel.Content>
-          <div className="grid gap-4 mb-6">
+          <div className="mb-6 grid gap-4">
             <DataKeysAndValues>
               <DataKeysAndValues.Key>Item Id</DataKeysAndValues.Key>
               <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Item Id to clipboard" copyValue={result.itemId}>
@@ -133,16 +140,18 @@ export function ExperimentResultPanel({
               </DataList>
             )}
 
+            {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
+
             {(result.status || tags.length > 0 || canFlag) && (
               <div className="grid gap-2">
                 <DataPanel.SectionHeading icon={<TagIcon />} className="mb-2">
                   Review
                 </DataPanel.SectionHeading>
                 {(result.status || tags.length > 0) && (
-                  <div className="flex flex-wrap gap-2 items-center">
+                  <div className="flex flex-wrap items-center gap-2">
                     {result.status && (
                       <span
-                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                           result.status === 'needs-review'
                             ? 'bg-orange-500/10 text-orange-400'
                             : result.status === 'complete'
@@ -154,7 +163,7 @@ export function ExperimentResultPanel({
                       </span>
                     )}
                     {tags.map(tag => (
-                      <span key={tag} className="text-xs px-2 py-0.5 rounded bg-surface4 text-neutral4">
+                      <span key={tag} className="bg-surface4 text-neutral4 rounded px-2 py-0.5 text-xs">
                         {tag}
                       </span>
                     ))}

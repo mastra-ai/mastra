@@ -60,6 +60,29 @@ describe('Select', () => {
     expect(screen.getByRole('option', { name: 'Cherry' })).toBeTruthy();
   });
 
+  it('accepts Base UI positioning props through SelectContent', async () => {
+    render(
+      <Select>
+        <SelectTrigger>
+          <SelectValue placeholder="Pick one" />
+        </SelectTrigger>
+        <SelectContent
+          alignItemWithTrigger
+          alignOffset={4}
+          collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
+          positionMethod="fixed"
+          sticky
+        >
+          <SelectItem value="apple">Apple</SelectItem>
+        </SelectContent>
+      </Select>,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    expect(await screen.findByRole('option', { name: 'Apple' })).toBeTruthy();
+  });
+
   it('selects an item and fires onValueChange with the selected value', async () => {
     const onValueChange = vi.fn();
     renderSelect({ onValueChange });

@@ -1,16 +1,9 @@
 'use client';
-
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Input,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
@@ -21,6 +14,7 @@ export interface DuplicateDatasetDialogProps {
   sourceDatasetId: string;
   sourceDatasetName: string;
   sourceDatasetDescription?: string;
+  sourceDatasetTargetType?: string | null;
   onSuccess?: (datasetId: string) => void;
 }
 
@@ -30,6 +24,7 @@ export function DuplicateDatasetDialog({
   sourceDatasetId,
   sourceDatasetName,
   sourceDatasetDescription,
+  sourceDatasetTargetType,
   onSuccess,
 }: DuplicateDatasetDialogProps) {
   const [name, setName] = useState('');
@@ -97,6 +92,7 @@ export function DuplicateDatasetDialog({
       const dataset = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
+        targetType: sourceDatasetTargetType ?? undefined,
       });
 
       // Copy items to new dataset
@@ -183,19 +179,19 @@ export function DuplicateDatasetDialog({
               />
             </div>
 
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset
             </p>
 
             {isDuplicating && (
               <div className="space-y-2">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
                   <div
-                    className="h-full bg-primary transition-all duration-200"
+                    className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-sm text-muted-foreground">{getProgressText()}</p>
+                <p className="text-muted-foreground text-sm">{getProgressText()}</p>
               </div>
             )}
 

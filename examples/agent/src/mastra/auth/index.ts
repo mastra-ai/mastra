@@ -7,6 +7,7 @@
  * - workos: Enterprise SSO (SAML, OIDC)
  * - cloud: Mastra platform OAuth with PKCE
  * - composite: Combines SimpleAuth + MastraCloudAuth via CompositeAuth
+ * - clerk: Clerk JWT-based authentication
  * - auth0-okta: Auth0 for authentication + Okta for RBAC (cross-provider)
  * - okta: Full Okta for both authentication and RBAC
  *
@@ -31,6 +32,10 @@ async function initAuth(): Promise<AuthResult> {
       const { initWorkOS } = await import('./workos');
       return initWorkOS();
     }
+    case 'clerk': {
+      const { initClerk } = await import('./clerk');
+      return initClerk();
+    }
     case 'cloud': {
       const { initCloud } = await import('./cloud');
       return initCloud();
@@ -38,6 +43,10 @@ async function initAuth(): Promise<AuthResult> {
     case 'composite': {
       const { initComposite } = await import('./composite');
       return initComposite();
+    }
+    case 'auth0': {
+      const { initAuth0 } = await import('./auth0');
+      return initAuth0();
     }
     case 'auth0-okta': {
       const { initAuth0Okta } = await import('./auth0-okta');
@@ -51,12 +60,39 @@ async function initAuth(): Promise<AuthResult> {
       const { initStudio } = await import('./studio');
       return initStudio();
     }
+    case 'dual-workos': {
+      const { initDualWorkOS } = await import('./dual-workos');
+      return initDualWorkOS();
+    }
     default:
       return {};
   }
 }
 
-const { mastraAuth, rbacProvider, fgaProvider, auth } = await initAuth();
+const {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  auth,
+  // Dual auth providers
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+} = await initAuth();
 
-export { mastraAuth, rbacProvider, fgaProvider, auth };
+export {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  auth,
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+};
 export type { AuthResult, AuthProviderType } from './types';

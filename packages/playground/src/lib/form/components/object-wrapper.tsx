@@ -1,5 +1,8 @@
 import type { ObjectWrapperProps } from '@autoform/react';
-import { Button, Txt, Icon, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Braces, ChevronDownIcon } from 'lucide-react';
 import React, { useState } from 'react';
 
@@ -20,7 +23,13 @@ export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children })
           </Txt>
         )}
 
-        <Button onClick={() => setIsOpen(!isOpen)} type="button" className="ml-auto px-1" size="sm">
+        <Button
+          aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${hasLabel ? label : 'object'}`}
+          onClick={() => setIsOpen(!isOpen)}
+          type="button"
+          className="ml-auto px-1"
+          size="sm"
+        >
           <Icon size="sm">
             <ChevronDownIcon className={cn('transition-all', isOpen ? 'rotate-180' : 'rotate-0')} />
           </Icon>
@@ -28,7 +37,7 @@ export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children })
       </div>
 
       {isOpen && (
-        <div className={hasLabel ? 'flex flex-col gap-1 *:border-dashed *:border-l *:border-l-border1 *:pl-4' : ''}>
+        <div className={hasLabel ? '*:border-l-border1 flex flex-col gap-1 *:border-l *:border-dashed *:pl-4' : ''}>
           {children}
         </div>
       )}

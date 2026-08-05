@@ -11,6 +11,7 @@ import {
   normalizeStudioBase,
   detectRuntime,
   injectStudioHtmlConfig,
+  escapeStudioHtmlValue,
 } from './utils';
 
 describe('getPackageName', () => {
@@ -596,9 +597,104 @@ describe('injectStudioHtmlConfig', () => {
       requestContextPresets: "''",
       experimentalUI: "'true'",
       agentSignals: "'true'",
+      signalsUI: "'false'",
+      organizationId: "''",
+      platformProjectId: "''",
+      platformObservabilityEndpoint: "''",
       autoDetectUrl: "'false'",
     });
 
     expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
+  });
+
+  it('should inject MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT placeholder', () => {
+    const html = "window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      signalsUI: "'false'",
+      organizationId: "'org-123'",
+      platformProjectId: "'proj-456'",
+      platformObservabilityEndpoint: "'https://observability.example.com'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'https://observability.example.com';");
+  });
+
+  it('should inject MASTRA_SIGNALS_UI placeholder', () => {
+    const html = "window.MASTRA_SIGNALS_UI = '%%MASTRA_SIGNALS_UI%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      signalsUI: "'true'",
+      organizationId: "''",
+      platformProjectId: "''",
+      platformObservabilityEndpoint: "''",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_SIGNALS_UI = 'true';");
+  });
+});
+
+describe('escapeStudioHtmlValue', () => {
+  const hostileValues = [
+    "org'; globalThis.pwned = true; //",
+    '</script><script>alert(1)</script>',
+    'back\\slash',
+    'line\nbreak\rreturn',
+    'sep\u2028and\u2029',
+    'proj-$&-dollar',
+    'org-123',
+    'https://observability.example.com',
+  ];
+
+  it('round-trips every value through a single-quoted JS string literal unchanged', () => {
+    for (const value of hostileValues) {
+      // Evaluate the literal exactly as the browser would evaluate the
+      // injected `window.X = '<escaped>'` assignment.
+
+      const roundTripped = new Function(`return '${escapeStudioHtmlValue(value)}';`)();
+      expect(roundTripped).toBe(value);
+    }
+  });
+
+  it('never emits characters that could terminate the string literal or the script block', () => {
+    for (const value of hostileValues) {
+      const escaped = escapeStudioHtmlValue(value);
+      expect(escaped).not.toMatch(/[<>\n\r\u2028\u2029]/);
+      // Every remaining quote must be escaped, so the literal cannot close early.
+      expect(escaped.replaceAll("\\'", '')).not.toContain("'");
+    }
+  });
+
+  it('leaves benign values byte-identical', () => {
+    expect(escapeStudioHtmlValue('org-123')).toBe('org-123');
+    expect(escapeStudioHtmlValue('https://observability.example.com')).toBe('https://observability.example.com');
   });
 });

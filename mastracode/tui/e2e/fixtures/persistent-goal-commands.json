@@ -1,0 +1,10 @@
+{
+  "fixtures": [
+    {
+      "match": {},
+      "response": {
+        "content": "Persistent goal command e2e acknowledged."
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start a slow Ctrl F custom slash queue run.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 6,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 3
+      },
+      "response": {
+        "content": "Initial Ctrl F custom slash run is still streaming while a queued custom slash command waits. Initial Ctrl F custom slash run completed."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Queued custom slash autocomplete template.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Queued custom slash autocomplete response."
+      }
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 'use client';
 
-import { Spinner, Icon, cn } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
@@ -104,7 +106,7 @@ export function JSONUploadStep({ onFileSelect, isParsing, error }: JSONUploadSte
         {isParsing ? (
           <>
             <Spinner />
-            <span className="text-sm text-neutral4">Parsing JSON...</span>
+            <span className="text-neutral4 text-sm">Parsing JSON...</span>
           </>
         ) : (
           <>
@@ -112,20 +114,20 @@ export function JSONUploadStep({ onFileSelect, isParsing, error }: JSONUploadSte
               <FileJson className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-sm font-medium text-neutral1">Click to upload or drag and drop</span>
-              <span className="text-xs text-neutral4">JSON files only</span>
+              <span className="text-neutral1 text-sm font-medium">Click to upload or drag and drop</span>
+              <span className="text-neutral4 text-xs">JSON files only</span>
             </div>
           </>
         )}
       </div>
 
       {/* Error message */}
-      {error && <div className="text-sm text-accent2">{error}</div>}
+      {error && <div className="text-accent2 text-sm">{error}</div>}
 
       {/* Format hint */}
-      <div className="text-xs text-neutral4 bg-surface2 p-3 rounded-md">
-        <p className="font-medium mb-1">Expected format:</p>
-        <pre className="text-[10px] overflow-x-auto">
+      <div className="text-neutral4 bg-surface2 rounded-md p-3 text-xs">
+        <p className="mb-1 font-medium">Expected format:</p>
+        <pre className="overflow-x-auto text-[10px]">
           {`[
   {
     "input": "Your input data",

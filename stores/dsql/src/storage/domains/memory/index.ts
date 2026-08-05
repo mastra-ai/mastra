@@ -11,6 +11,8 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
   createStorageErrorId,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -230,7 +232,7 @@ export class MemoryDSQL extends MemoryStorage {
       let paramIndex = 1;
 
       if (filter?.resourceId) {
-        whereClauses.push(`"resourceId" = ${paramIndex}`);
+        whereClauses.push(`"resourceId" = $${paramIndex}`);
         queryParams.push(filter.resourceId);
         paramIndex++;
       }
@@ -238,7 +240,7 @@ export class MemoryDSQL extends MemoryStorage {
       // Aurora DSQL stores JSONB as TEXT, so cast to jsonb for containment operator
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          whereClauses.push(`metadata::jsonb @> ${paramIndex}::jsonb`);
+          whereClauses.push(`metadata::jsonb @> $${paramIndex}::jsonb`);
           queryParams.push(JSON.stringify({ [key]: value }));
           paramIndex++;
         }
@@ -262,7 +264,7 @@ export class MemoryDSQL extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ${paramIndex} OFFSET ${paramIndex + 1}`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -635,6 +637,7 @@ export class MemoryDSQL extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
@@ -664,14 +667,31 @@ export class MemoryDSQL extends MemoryStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.#db.client.manyOrNone<MessageRowFromDB>(dataQuery, [...queryParams, limitValue, offset]);
-      const messages: MessageRowFromDB[] = [...(rows || [])];
+      let total: number;
+      let messages: MessageRowFromDB[];
+      if (metadataFilter) {
+        const rows = await this.#db.client.manyOrNone<MessageRowFromDB>(
+          `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
+          queryParams,
+        );
+        const filteredRows = (rows || []).filter(row =>
+          storageMessageMatchesMetadataFilter(row.content, metadataFilter),
+        );
+        total = filteredRows.length;
+        messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+      } else {
+        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+        total = parseInt(countResult.count, 10);
+        const limitValue = perPageInput === false ? total : perPage;
+        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const rows = await this.#db.client.manyOrNone<MessageRowFromDB>(dataQuery, [
+          ...queryParams,
+          limitValue,
+          offset,
+        ]);
+        messages = [...(rows || [])];
+      }
+      const primaryPageCount = messages.length;
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
@@ -726,7 +746,9 @@ export class MemoryDSQL extends MemoryStorage {
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,

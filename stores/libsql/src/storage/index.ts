@@ -1,8 +1,9 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -21,7 +22,9 @@ import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
+import { ThreadStateLibSQL } from './domains/thread-state';
 import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsLibSQL } from './domains/workflow-definitions';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -45,11 +48,14 @@ export {
   ScoresLibSQL,
   SkillsLibSQL,
   FavoritesLibSQL,
+  ThreadStateLibSQL,
   ToolProviderConnectionsLibSQL,
+  WorkflowDefinitionsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
 export type { LibSQLDomainConfig } from './db';
+export { LibSQLFactoryStorage, type LibSQLFactoryStorageConfig } from './factory-storage';
 
 export type LibSQLStorageDomain = keyof StorageDomains;
 
@@ -87,6 +93,19 @@ export type LibSQLBaseConfig = {
    */
   initialBackoffMs?: number;
   /**
+   * SQLite `busy_timeout` (in milliseconds) applied to the underlying connection
+   * for local (`file:`/`:memory:`) databases. When a write hits a locked
+   * database, the driver waits up to this long for the lock to clear instead of
+   * failing immediately with `SQLITE_BUSY`. Requires `@libsql/client` >= 0.17.4,
+   * which also ensures the timeout survives connections created after
+   * `transaction()` (see libsql-client-ts#288/#345).
+   *
+   * Has no effect for remote (`libsql://`/`https://`) clients or when an existing
+   * `client` is supplied.
+   * @default 5000
+   */
+  connectionTimeoutMs?: number;
+  /**
    * Overrides local SQLite PRAGMA values used for startup/read performance.
    * Only applies to local file and in-memory databases.
    */
@@ -111,6 +130,13 @@ export type LibSQLBaseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * Opt-in, table-granular, age-based retention policies. Declare per-table
+   * `maxAge` per domain (e.g. `{ memory: { messages: { maxAge: '30d' } } }`);
+   * unset tables are kept forever. Wire `storage.prune()` to your own cron to
+   * apply them. See {@link RetentionConfig}.
+   */
+  retention?: RetentionConfig;
 };
 
 export type LibSQLConfig =
@@ -144,6 +170,7 @@ export class LibSQLStore extends MastraCompositeStore {
   private client: Client;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
+  private readonly connectionTimeoutMs: number;
   private readonly pragmasReady: Promise<void>;
   private readonly isLocalDb: boolean;
   private readonly localPragmas: Required<LibSQLLocalPragmaOptions>;
@@ -154,10 +181,11 @@ export class LibSQLStore extends MastraCompositeStore {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('LibSQLStore: id must be provided and cannot be empty.');
     }
-    super({ id: config.id, name: `LibSQLStore`, disableInit: config.disableInit });
+    super({ id: config.id, name: `LibSQLStore`, disableInit: config.disableInit, retention: config.retention });
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
+    this.connectionTimeoutMs = config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
     this.localPragmas = {
       cacheSize: config.localPragmas?.cacheSize ?? DEFAULT_LOCAL_CACHE_SIZE,
       mmapSize: config.localPragmas?.mmapSize ?? DEFAULT_LOCAL_MMAP_SIZE,
@@ -169,12 +197,15 @@ export class LibSQLStore extends MastraCompositeStore {
         this.shouldCacheInit = false;
       }
 
+      this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
+
       this.client = createClient({
         url: config.url,
         ...(config.authToken ? { authToken: config.authToken } : {}),
+        // `busy_timeout` only applies to local sqlite3 connections; remote
+        // contention is handled server-side. See libsql-client-ts#288/#345.
+        ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
-
-      this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;
@@ -190,6 +221,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     const scores = new ScoresLibSQL(domainConfig);
     const workflows = new WorkflowsLibSQL(domainConfig);
+    const workflowDefinitions = new WorkflowDefinitionsLibSQL(domainConfig);
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
@@ -209,10 +241,12 @@ export class LibSQLStore extends MastraCompositeStore {
     const harness = new HarnessLibSQL(domainConfig);
     const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
     const notifications = new NotificationsLibSQL(domainConfig);
+    const threadState = new ThreadStateLibSQL(domainConfig);
 
     this.stores = {
       scores,
       workflows,
+      workflowDefinitions,
       memory,
       observability,
       agents,
@@ -232,13 +266,16 @@ export class LibSQLStore extends MastraCompositeStore {
       harness,
       toolProviderConnections,
       notifications,
+      threadState,
     };
   }
 
   private async applyLocalPragmas(): Promise<void> {
     const pragmas = [
       ['journal_mode=WAL', 'PRAGMA journal_mode=WAL;'],
-      ['busy_timeout=5000', 'PRAGMA busy_timeout=5000;'],
+      // Keep in sync with the connection-level `timeout` passed to createClient
+      // so a custom connectionTimeoutMs isn't clobbered back to a hardcoded value.
+      [`busy_timeout=${this.connectionTimeoutMs}`, `PRAGMA busy_timeout=${this.connectionTimeoutMs};`],
       ['synchronous=NORMAL', 'PRAGMA synchronous=NORMAL;'],
       ['temp_store=MEMORY', 'PRAGMA temp_store=MEMORY;'],
       [`cache_size=${this.localPragmas.cacheSize}`, `PRAGMA cache_size=${this.localPragmas.cacheSize};`],
@@ -306,38 +343,14 @@ export class LibSQLStore extends MastraCompositeStore {
   }
 
   /**
-   * Closes the underlying libsql client, releasing all OS file handles.
-   *
-   * For local file databases, first runs PRAGMA wal_checkpoint(TRUNCATE) and
-   * switches back to journal_mode=DELETE so that Windows releases the -wal
-   * and -shm sidecar files promptly. Without this, the handles stay open
-   * until process exit, causing EBUSY errors when callers try to fs.rm the
-   * storage directory after Mastra.shutdown().
-   *
-   * Remote (Turso) databases skip the WAL pragmas and just close the client.
+   * Closes the underlying libsql client, releasing this store's OS file handles.
    *
    * Safe to call more than once; subsequent calls are no-ops.
    */
   async close(): Promise<void> {
-    if (this.client.closed) {
-      return;
+    if (!this.client.closed) {
+      this.client.close();
     }
-
-    // A store built from an injected client may still point at a local file even
-    // though `isLocalDb` (derived from the url config) is false, so also trust the
-    // client's own protocol to decide whether WAL cleanup is needed.
-    const isLocalFileDb = this.isLocalDb || this.client.protocol === 'file';
-
-    if (isLocalFileDb) {
-      try {
-        await this.client.execute('PRAGMA wal_checkpoint(TRUNCATE);');
-        await this.client.execute('PRAGMA journal_mode=DELETE;');
-      } catch (err) {
-        this.logger.warn('LibSQLStore: Failed to checkpoint WAL before close.', err);
-      }
-    }
-
-    this.client.close();
   }
 }
 

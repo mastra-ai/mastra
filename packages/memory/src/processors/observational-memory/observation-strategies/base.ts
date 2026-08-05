@@ -3,6 +3,7 @@ import type { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
+import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
 import { stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
@@ -28,6 +29,7 @@ const hasherPromise = xxhash();
  */
 export interface StrategyDeps {
   storage: MemoryStorage;
+  memory?: Memory;
   messageHistory: MessageHistory;
   tokenCounter: TokenCounter;
   observationConfig: ResolvedObservationConfig;
@@ -112,13 +114,15 @@ export abstract class ObservationStrategy {
           threadId,
           writer,
           abortSignal,
+          mainAgent: this.opts.agent,
+          sendSignal: this.opts.sendSignal,
           reflectionHooks,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
       }
 
-      return { observed: true, usage: output.usage };
+      return { observed: true, usage: output.usage, providerMetadata: output.providerMetadata };
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
 
@@ -137,7 +141,7 @@ export abstract class ObservationStrategy {
         await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
         if (abortSignal?.aborted) throw error;
         omError('[OM] Observation failed', error);
-        return { observed: false };
+        return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
       }
 
       // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.

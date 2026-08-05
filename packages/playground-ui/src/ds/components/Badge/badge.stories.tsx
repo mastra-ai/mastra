@@ -43,3 +43,31 @@ export const Matrix: Story = {
     </div>
   ),
 };
+
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <span className="text-ui-sm text-neutral3 w-8">md</span>
+        <Badge size="md">Default</Badge>
+        <Badge size="md" icon={<Tag />}>
+          With icon
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-ui-sm text-neutral3 w-8">sm</span>
+        <Badge size="sm">Default</Badge>
+        <Badge size="sm" icon={<Tag />}>
+          With icon
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-ui-sm text-neutral3 w-8">xs</span>
+        <Badge size="xs">Default</Badge>
+        <Badge size="xs" icon={<Tag />}>
+          With icon
+        </Badge>
+      </div>
+    </div>
+  ),
+};

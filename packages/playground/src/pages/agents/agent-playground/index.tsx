@@ -1,10 +1,7 @@
-import {
-  PermissionDenied,
-  SessionExpired,
-  Spinner,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
@@ -29,8 +26,8 @@ function AgentPlayground() {
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
-  const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+  const { data: versionsData, isLoading: isLoadingVersions } = useAgentVersions({
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 
@@ -47,7 +44,7 @@ function AgentPlayground() {
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
   const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
-  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
+  const isLoading = isLoadingCodeAgent || isLoadingVersions || (hasVersions && isLoadingStoredAgent);
   const hasMemory = Boolean(memory?.result);
 
   // Fetch version data when a specific version is selected
@@ -142,7 +139,7 @@ function AgentPlayground() {
   }
 
   if (!codeAgent) {
-    return <div className="text-center py-4">Agent not found</div>;
+    return <div className="py-4 text-center">Agent not found</div>;
   }
 
   return (
@@ -163,7 +160,7 @@ function AgentPlayground() {
         agentId={agentId!}
         agentName={codeAgent?.name}
         modelVersion={codeAgent?.modelVersion}
-        agentVersionId={isViewingPreviousVersion ? (selectedVersionId ?? undefined) : undefined}
+        agentVersionId={selectedVersionId ?? latestVersion?.id}
         hasMemory={hasMemory}
         activeVersionId={activeVersionId}
         selectedVersionId={selectedVersionId ?? undefined}

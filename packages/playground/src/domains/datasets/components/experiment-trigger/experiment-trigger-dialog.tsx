@@ -1,6 +1,6 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
-  Button,
-  Spinner,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -8,9 +8,9 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-  CodeEditor,
-  Label,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { format } from 'date-fns';
 import { useMemo, useRef, useState } from 'react';
@@ -52,7 +52,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-sm text-destructive">Failed to parse request context schema</p>;
+    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
   }
 
   return (
@@ -206,7 +206,7 @@ export function ExperimentTriggerDialog({
           <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
             {isRunning ? (
               <>
-                <Spinner className="w-4 h-4" />
+                <Spinner className="h-4 w-4" />
                 Running...
               </>
             ) : (

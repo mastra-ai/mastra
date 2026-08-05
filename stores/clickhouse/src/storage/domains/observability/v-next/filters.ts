@@ -261,6 +261,7 @@ export function buildMetricsFilterConditions(filters: MetricsFilter | undefined,
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
   assertNoDeprecatedSourceFilter(filters.source, 'executionSource', 'metrics');
   addCommonFilterFields(filters, tableAlias, out);
+  addIn(col('traceId'), filters.traceIds, 'traceIds', out);
   addIn(col('name'), filters.name, 'metricNames', out);
   addEq(col('provider'), filters.provider, 'provider', 'String', out);
   addEq(col('model'), filters.model, 'model', 'String', out);

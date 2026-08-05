@@ -581,6 +581,18 @@ describe('MyPrivateGateway', () => {
 
 1. **Test thoroughly**: Write unit tests for all gateway methods
 
+## Showing only custom gateways in Studio
+
+By default, **Studio** lists every external model provider (such as OpenAI, Anthropic, and Gemini) alongside any custom gateways you register. To hide the external providers, set the `AUTO_BLOCK_EXTERNAL_PROVIDERS` environment variable:
+
+```bash
+AUTO_BLOCK_EXTERNAL_PROVIDERS=true
+```
+
+When this variable is set to `true` or `1`, Mastra returns only the providers from gateways you register yourself. The static provider registry and the built-in gateways (`models.dev`, `netlify`, and `mastra`) are hidden from the model picker. This is useful when you route all model traffic through a single private gateway and don't want the other providers to appear.
+
+With this variable set and no custom gateway registered, the model picker is empty. Register at least one custom gateway to expose its models.
+
 ## Built-in Gateways
 
 Mastra includes built-in gateways as reference implementations:

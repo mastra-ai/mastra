@@ -1,5 +1,4 @@
-// @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -7,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useVisibilityChange } from '../use-visibility-change-skill';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
@@ -48,6 +47,12 @@ const makeWrapper = (defaultVisibility: SkillEditFormValues['visibility'] = 'pri
 };
 
 describe('useVisibilityChange (skill)', () => {
+  beforeEach(() => {
+    // The visibility mutation reads auth capabilities to gate workspace writes;
+    // default to auth-disabled so permission checks pass without network noise.
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
+  });
+
   afterEach(() => {
     cleanup();
   });

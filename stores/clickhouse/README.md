@@ -68,8 +68,34 @@ type ClickhouseConfig = {
   url: string; // Clickhouse HTTP interface URL
   username: string; // Database username
   password: string; // Database password
+  replication?: {
+    cluster?: string; // Adds ON CLUSTER to Mastra-owned DDL when set
+    zookeeperPath?: string; // Defaults to '/clickhouse/tables/{shard}/{database}/{table}'
+    replicaName?: string; // Defaults to '{replica}'
+  };
 };
 ```
+
+### Replicated ClickHouse clusters
+
+Set `replication` when Mastra writes to a multi-replica ClickHouse cluster through a load balancer. Mastra will create its tables with replicated MergeTree engines and add `ON CLUSTER` to Mastra-owned DDL when `cluster` is provided.
+
+```typescript
+const store = new ClickhouseStore({
+  url: 'http://clickhouse-lb:8123',
+  username: 'default',
+  password: 'password',
+  replication: {
+    cluster: 'company_cluster',
+  },
+});
+```
+
+The default `zookeeperPath` is `/clickhouse/tables/{shard}/{database}/{table}`. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match. Mastra does not infer your cluster's convention from Keeper.
+
+Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These operations can be expensive on a large cluster. Prefer running them outside peak hours.
+
+If Mastra finds an existing local `MergeTree` or `ReplacingMergeTree` table while replication is enabled, initialization fails instead of silently mixing local and replicated tables. Migrate existing local tables manually before enabling this option.
 
 ## Features
 
@@ -89,6 +115,7 @@ The store uses different table engines for different types of data:
 
 - `MergeTree()`: Used for messages, traces, and evals
 - `ReplacingMergeTree()`: Used for threads and workflow snapshots
+- `ReplicatedMergeTree(...)` / `ReplicatedReplacingMergeTree(...)`: Used instead when `replication` is enabled
 
 ## Storage Methods
 

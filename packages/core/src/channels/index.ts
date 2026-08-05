@@ -1,8 +1,12 @@
 export { AgentChannels } from './agent-channels';
+export { AgentControllerChannels } from './agent-controller-channels';
+export type { AgentControllerChannelsConfig } from './agent-controller-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
+export { resolveWaitUntil } from './wait-until';
+export type { WaitUntilFn, WaitUntilResolver } from './wait-until';
 export type {
   ChannelAdapterBaseConfig,
   ChannelAdapterConfig,
@@ -17,6 +21,7 @@ export type {
   ChannelContext,
   ChannelHandler,
   ChannelHandlerConfig,
+  ChannelHandlerContext,
   ChannelHandlers,
   ChannelInstallationInfo,
   ChannelPlatformInfo,
@@ -25,6 +30,8 @@ export type {
   PostableMessage,
   ResolveResourceId,
   ResolveResourceIdContext,
+  ResolveThreadId,
+  ResolveThreadIdContext,
   StaticToolDisplay,
   StreamingConfig,
   StreamingOnlyToolDisplay,

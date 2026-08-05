@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Calculator, Calendar, CreditCard, Settings, Smile, User } from 'lucide-react';
+import { Bot, Calculator, Calendar, CreditCard, GitBranch, Rocket, Settings, Shield, Smile, User } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '../Button';
+import { Kbd } from '../Kbd';
 import {
   Command,
   CommandDialog,
@@ -26,46 +27,136 @@ const meta: Meta<typeof Command> = {
 export default meta;
 type Story = StoryObj<typeof Command>;
 
+const iconClassName = 'shrink-0 text-neutral3';
+
+const InlineResult = ({
+  icon,
+  title,
+  subtitle,
+  value,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  value: string;
+}) => (
+  <CommandItem value={value} className="h-auto items-start gap-3 px-2.5 py-2">
+    <span className="bg-surface5 text-neutral4 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md">
+      {icon}
+    </span>
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-ui-sm leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
+      <span className="text-ui-xs leading-ui-xs text-neutral3 truncate">{subtitle}</span>
+    </span>
+  </CommandItem>
+);
+
 export const Default: Story = {
   render: () => (
-    <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+    <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Suggestions">
           <CommandItem>
-            <Calendar className="mr-2" />
+            <Calendar className={iconClassName} />
             <span>Calendar</span>
           </CommandItem>
           <CommandItem>
-            <Smile className="mr-2" />
+            <Smile className={iconClassName} />
             <span>Search Emoji</span>
           </CommandItem>
           <CommandItem>
-            <Calculator className="mr-2" />
+            <Calculator className={iconClassName} />
             <span>Calculator</span>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Settings">
           <CommandItem>
-            <User className="mr-2" />
+            <User className={iconClassName} />
             <span>Profile</span>
             <CommandShortcut>⌘P</CommandShortcut>
           </CommandItem>
           <CommandItem>
-            <CreditCard className="mr-2" />
+            <CreditCard className={iconClassName} />
             <span>Billing</span>
             <CommandShortcut>⌘B</CommandShortcut>
           </CommandItem>
           <CommandItem>
-            <Settings className="mr-2" />
+            <Settings className={iconClassName} />
             <span>Settings</span>
             <CommandShortcut>⌘S</CommandShortcut>
           </CommandItem>
         </CommandGroup>
       </CommandList>
     </Command>
+  ),
+};
+
+export const InlineVercelStyle: Story = {
+  render: () => (
+    <div className="border-border1 bg-surface2 shadow-dialog w-sm overflow-hidden rounded-xl border">
+      <Command className="bg-surface2 rounded-none">
+        <CommandInput
+          placeholder="Find..."
+          rightSlot={
+            <Kbd className="border-border1 bg-surface4 text-neutral4 min-w-0 rounded px-1.5 py-0 text-[10px] leading-4">
+              Esc
+            </Kbd>
+          }
+        />
+        <CommandList
+          scrollArea
+          scrollAreaClassName="max-h-[22rem]"
+          scrollAreaViewportClassName="rounded-[inherit]"
+          className="p-1.5"
+        >
+          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandGroup heading="Projects">
+            <InlineResult
+              icon={<Settings className="size-3.5" />}
+              title="Settings"
+              subtitle="Mastra"
+              value="settings mastra account billing"
+            />
+            <InlineResult
+              icon={<Rocket className="size-3.5" />}
+              title="mastra-cloud-admin"
+              subtitle="Project"
+              value="mastra cloud admin project"
+            />
+            <InlineResult
+              icon={<GitBranch className="size-3.5" />}
+              title="codex/eu-residency-ux-plan"
+              subtitle="platform-admin-portal"
+              value="codex eu residency ux plan platform admin portal"
+            />
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Commands">
+            <InlineResult
+              icon={<Shield className="size-3.5" />}
+              title="Deployments"
+              subtitle="mastra-docs-1.x"
+              value="deployments mastra docs"
+            />
+            <InlineResult
+              icon={<Settings className="size-3.5" />}
+              title="On-Demand Concurrent Builds"
+              subtitle="Mastra / Build and Deployment / Settings"
+              value="on demand concurrent builds mastra build deployment settings"
+            />
+            <InlineResult
+              icon={<Bot className="size-3.5" />}
+              title="Navigation Assistant"
+              subtitle="Search projects, routes, and commands"
+              value="navigation assistant search projects routes commands"
+            />
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </div>
   ),
 };
 
@@ -86,9 +177,9 @@ export const WithDialog: Story = {
 
     return (
       <>
-        <p className="text-sm text-neutral3 mb-4">
+        <p className="text-neutral3 mb-4 text-sm">
           Press{' '}
-          <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-border1 bg-surface4 px-1.5 font-mono text-[10px] font-medium text-neutral5">
+          <kbd className="border-border1 bg-surface4 text-neutral5 pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium select-none">
             <span className="text-xs">⌘</span>K
           </kbd>{' '}
           or click the button below
@@ -100,32 +191,32 @@ export const WithDialog: Story = {
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup heading="Suggestions">
               <CommandItem onSelect={() => setOpen(false)}>
-                <Calendar className="mr-2" />
+                <Calendar className={iconClassName} />
                 <span>Calendar</span>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Smile className="mr-2" />
+                <Smile className={iconClassName} />
                 <span>Search Emoji</span>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Calculator className="mr-2" />
+                <Calculator className={iconClassName} />
                 <span>Calculator</span>
               </CommandItem>
             </CommandGroup>
             <CommandSeparator />
             <CommandGroup heading="Settings">
               <CommandItem onSelect={() => setOpen(false)}>
-                <User className="mr-2" />
+                <User className={iconClassName} />
                 <span>Profile</span>
                 <CommandShortcut>⌘P</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <CreditCard className="mr-2" />
+                <CreditCard className={iconClassName} />
                 <span>Billing</span>
                 <CommandShortcut>⌘B</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Settings className="mr-2" />
+                <Settings className={iconClassName} />
                 <span>Settings</span>
                 <CommandShortcut>⌘S</CommandShortcut>
               </CommandItem>
@@ -139,7 +230,7 @@ export const WithDialog: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+    <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
       <CommandInput placeholder="Search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -150,7 +241,7 @@ export const Empty: Story = {
 
 export const WithShortcuts: Story = {
   render: () => (
-    <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+    <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
       <CommandInput placeholder="Type a command..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -209,7 +300,7 @@ export const SearchOnly: Story = {
     const filteredItems = items.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
     return (
-      <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+      <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
         <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>

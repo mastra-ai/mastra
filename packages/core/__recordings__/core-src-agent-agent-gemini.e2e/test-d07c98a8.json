@@ -3,14 +3,13 @@
     "name": "test-d07c98a8",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle basic generation with Gemini",
-    "createdAt": "2026-05-28T17:33:22.007Z",
-    "updatedAt": "2026-05-28T17:33:32.333Z"
+    "createdAt": "2026-07-14T17:14:57.446Z"
   },
   "recordings": [
     {
-      "hash": "262f4fd0e8d9b16b",
+      "hash": "ababc2b8d79c430e",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -32,7 +31,7 @@
             ]
           }
         },
-        "timestamp": 1779989610685
+        "timestamp": 1784049296741
       },
       "response": {
         "status": 200,
@@ -40,9 +39,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:33:32 GMT",
+          "date": "Tue, 14 Jul 2026 17:14:57 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1198",
+          "server-timing": "gfet4t7; dur=625",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -55,35 +54,30 @@
               "content": {
                 "parts": [
                   {
-                    "text": "Hello! As a large language model, I don't experience feelings like humans do, so I can't say I'm \"good\" or \"bad\" in the same way. However, I am functioning well and ready to assist you! How can I help you today?\n"
+                    "text": "Hello! I'm functioning perfectly, thank you for asking. How are you doing today?"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.18253163159903835
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 11,
-            "candidatesTokenCount": 59,
-            "totalTokenCount": 70,
+            "promptTokenCount": 12,
+            "candidatesTokenCount": 19,
+            "totalTokenCount": 56,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 11
+                "tokenCount": 12
               }
             ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 59
-              }
-            ],
+            "thoughtsTokenCount": 25,
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "a3wYasSeE-3XjMcP5OPxwQE"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "kG5Wau-dNPLjnsEPlvfHyQ0"
         },
         "isStreaming": false
       }

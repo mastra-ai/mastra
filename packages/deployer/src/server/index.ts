@@ -20,7 +20,8 @@ import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
 import type { DescribeRouteOptions } from 'hono-openapi';
-import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
+import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
+import { agentLearningProxyHandler } from './handlers/agent-learning';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -208,32 +209,35 @@ export async function createHonoServer(
   // to avoid "can't modify immutable headers" error on WebSocket upgrade
   // This is async because it dynamically imports @hono/node-ws to avoid
   // bundling ws into user code. Returns null if ws is not available.
-  const browserStreamSetup = await setupBrowserStream(app, {
-    getToolset: async (agentId: string) => {
-      // Look up agent and return its browser if configured.
-      // First try the runtime registry (code-defined + previously hydrated agents),
-      // then fall back to the editor for stored agents (hydrates on first access).
-      try {
-        const runtimeAgent = mastra.getAgentById(agentId);
-        if (runtimeAgent) {
-          return runtimeAgent.browser;
-        }
-      } catch {
-        // Agent not in runtime registry — try stored agents via editor
-      }
+  const browserStreamSetup =
+    options.browserStream === false
+      ? null
+      : await setupBrowserStream(app, {
+          getToolset: async (agentId: string) => {
+            // Look up agent and return its browser if configured.
+            // First try the runtime registry (code-defined + previously hydrated agents),
+            // then fall back to the editor for stored agents (hydrates on first access).
+            try {
+              const runtimeAgent = mastra.getAgentById(agentId);
+              if (runtimeAgent) {
+                return runtimeAgent.browser;
+              }
+            } catch {
+              // Agent not in runtime registry — try stored agents via editor
+            }
 
-      try {
-        const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
-        return storedAgent?.browser;
-      } catch {
-        return undefined;
-      }
-    },
-    apiPrefix,
-  });
+            try {
+              const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
+              return storedAgent?.browser;
+            } catch {
+              return undefined;
+            }
+          },
+          apiPrefix,
+        });
 
   // Fallback session probe when browser streaming isn't available
-  // (ws / @hono/node-ws not installed, or serverless environment).
+  // (ws / @hono/node-ws not installed, disabled by deployer, or serverless environment).
   // Lets the client decide not to open a WS instead of failing the upgrade.
   if (!browserStreamSetup) {
     app.get(`${apiPrefix}/agents/:agentId/browser/session`, c =>
@@ -271,6 +275,10 @@ export async function createHonoServer(
     }),
     healthHandler,
   );
+
+  if (options?.isDev && options.studio) {
+    app.get('/api/learning/*', agentLearningProxyHandler);
+  }
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
@@ -470,20 +478,11 @@ export async function createHonoServer(
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
+      const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
+      const organizationId = process.env.MASTRA_ORGANIZATION_ID || '';
+      const platformProjectId = process.env.MASTRA_PLATFORM_PROJECT_ID || '';
+      const platformObservabilityEndpoint = process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
-
-      // Helper function to escape JSON for embedding in HTML/JavaScript
-      const escapeForHtml = (json: string): string => {
-        return json
-          .replace(/\\/g, '\\\\')
-          .replace(/'/g, "\\'")
-          .replace(/\n/g, '\\n')
-          .replace(/\r/g, '\\r')
-          .replace(/</g, '\\u003c')
-          .replace(/>/g, '\\u003e')
-          .replace(/\u2028/g, '\\u2028')
-          .replace(/\u2029/g, '\\u2029');
-      };
 
       const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
@@ -494,13 +493,17 @@ export async function createHonoServer(
         apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
-        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        cloudApiEndpoint: `'${escapeStudioHtmlValue(cloudApiEndpoint)}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
-        telemetryDisabled: `'${process.env.MASTRA_TELEMETRY_DISABLED ?? ''}'`,
-        requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        telemetryDisabled: `'${escapeStudioHtmlValue(process.env.MASTRA_TELEMETRY_DISABLED ?? '')}'`,
+        requestContextPresets: `'${escapeStudioHtmlValue(requestContextPresets)}'`,
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
+        signalsUI: `'${signalsUI}'`,
+        organizationId: `'${escapeStudioHtmlValue(organizationId)}'`,
+        platformProjectId: `'${escapeStudioHtmlValue(platformProjectId)}'`,
+        platformObservabilityEndpoint: `'${escapeStudioHtmlValue(platformObservabilityEndpoint)}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -607,6 +610,14 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   } else {
     await workerLifecycle.startEventEngine();
   }
+
+  // Fire-and-forget anonymous token usage telemetry (respects MASTRA_TELEMETRY_DISABLED).
+  // Dynamic import keeps compatibility with older @mastra/core versions without the
+  // `@mastra/core/telemetry` entry point.
+  void import('@mastra/core/telemetry').then(({ syncUsageTelemetry }) => syncUsageTelemetry(mastra)).catch(() => {});
+  void import('@mastra/core/telemetry')
+    .then(({ syncFeatureUsageTelemetry }) => syncFeatureUsageTelemetry(mastra))
+    .catch(() => {});
 
   // Graceful shutdown so storage backends release resources (e.g. DuckDB's
   // native file lock) before the process exits. On `mastra dev` hot reloads

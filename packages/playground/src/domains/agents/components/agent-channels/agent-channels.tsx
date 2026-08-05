@@ -1,14 +1,10 @@
-import {
-  Button,
-  DataList,
-  DataListSkeleton,
-  ListSearch,
-  NoDataPageLayout,
-  PageLayout,
-  StatusBadge,
-  Txt,
-  toast,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemo, useState } from 'react';
 import {
   useChannelPlatforms,
@@ -112,10 +108,10 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
 
   return (
     <DataList.RowStatic>
-      <DataList.Cell className="text-left text-neutral4">
-        <span className="flex items-center gap-3 min-w-0">
+      <DataList.Cell className="text-neutral4 text-left">
+        <span className="flex min-w-0 items-center gap-3">
           <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-          <span className="flex flex-col min-w-0">
+          <span className="flex min-w-0 flex-col">
             <span className="truncate">{platform.name}</span>
             {activeInstallation ? (
               <Txt variant="ui-xs" className="text-neutral5 truncate">
@@ -144,7 +140,7 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
             type="button"
             onClick={handleDisconnect}
             disabled={isDisconnecting}
-            className="shrink-0 text-[11px] text-neutral5 hover:text-accent2 transition-colors disabled:opacity-50"
+            className="text-neutral5 hover:text-accent2 shrink-0 text-[11px] transition-colors disabled:opacity-50"
           >
             {isDisconnecting ? 'Removing...' : 'Remove'}
           </button>

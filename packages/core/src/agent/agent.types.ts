@@ -1,15 +1,18 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
+import type { ActorSignal } from '../auth/ee';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { MastraStreamTransformOptions } from '../stream/types';
 import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
+import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -340,6 +343,9 @@ export interface NetworkRoutingConfig {
  * Full configuration options for agent.network() execution.
  */
 export type NetworkOptions<OUTPUT = undefined> = {
+  /** Model used by the routing agent for this execution */
+  model?: DynamicArgument<MastraModelConfig>;
+
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
@@ -473,6 +479,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
+
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
@@ -585,6 +594,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
+
+  /**
+   * Experimental transforms applied to `MastraModelOutput.fullStream`.
+   * Transform factories create a fresh `TransformStream` for every consumer.
+   */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
 
   /** Per-invocation transform policy for tool payloads in display and transcript serializers. */
   transform?: ToolPayloadTransformPolicy;

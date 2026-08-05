@@ -1,7 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { assert, describe, it, expect } from 'vitest';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 
 type Span = Parameters<typeof formatHierarchicalSpans>[0][number];
+type FormattedSpan = ReturnType<typeof formatHierarchicalSpans>[number];
+
+function getAt<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  assert(item !== undefined, `Expected item at index ${index}`);
+  return item;
+}
+
+function getChildren(span: FormattedSpan): FormattedSpan[] {
+  const children = span.spans;
+  assert(children, `Expected ${span.id} to have child spans`);
+  return children;
+}
 
 function span(spanId: string, parentSpanId: string | null, overrides: Partial<Span> = {}): Span {
   return {
@@ -26,17 +39,17 @@ describe('formatHierarchicalSpans', () => {
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('root');
       expect(result[0].spans).toHaveLength(1);
-      expect(result[0].spans![0].id).toBe('child');
+      expect(getAt(getChildren(result[0]), 0).id).toBe('child');
     });
 
     it('nests descendants under the correct parent across multiple levels', () => {
       const result = formatHierarchicalSpans([span('root', null), span('a', 'root'), span('b', 'a'), span('c', 'b')]);
       expect(result).toHaveLength(1);
-      const a = result[0].spans![0];
+      const a = getAt(getChildren(result[0]), 0);
       expect(a.id).toBe('a');
-      const b = a.spans![0];
+      const b = getAt(getChildren(a), 0);
       expect(b.id).toBe('b');
-      expect(b.spans![0].id).toBe('c');
+      expect(getAt(getChildren(b), 0).id).toBe('c');
     });
 
     it('surfaces orphans (parent not present in spans) as additional roots', () => {
@@ -56,7 +69,7 @@ describe('formatHierarchicalSpans', () => {
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('anchor');
       expect(result[0].spans).toHaveLength(1);
-      expect(result[0].spans![0].id).toBe('child');
+      expect(getAt(getChildren(result[0]), 0).id).toBe('child');
     });
 
     it('nests descendants of the anchor under it (multi-level subtree)', () => {
@@ -66,9 +79,13 @@ describe('formatHierarchicalSpans', () => {
       );
       const anchorRoot = result[0];
       expect(anchorRoot.id).toBe('anchor');
-      const a = anchorRoot.spans![0];
+      const a = getAt(getChildren(anchorRoot), 0);
       expect(a.id).toBe('a');
-      expect(a.spans!.map(s => s.id).sort()).toEqual(['b', 'c']);
+      expect(
+        getChildren(a)
+          .map(s => s.id)
+          .sort(),
+      ).toEqual(['b', 'c']);
     });
 
     it('does not promote a parentSpanId==null sibling to root when an anchor is specified', () => {

@@ -1,3 +1,4 @@
+import { jsonSchema } from '@mastra/schema-compat';
 import { describe, it, expectTypeOf } from 'vitest';
 import zDefault from 'zod';
 import { z } from 'zod/v4';
@@ -62,6 +63,34 @@ describe('createTool execute inputData type inference (issue #16528)', () => {
       description: 'Test',
       execute: async inputData => {
         expectTypeOf(inputData).toBeUnknown();
+        return undefined;
+      },
+    });
+  });
+});
+
+describe('createTool accepts jsonSchema() without cast (issue #16384)', () => {
+  it('accepts a jsonSchema() schema without requiring "as never" cast', () => {
+    createTool({
+      id: 'json-schema-input',
+      description: 'Test',
+      inputSchema: jsonSchema<{ city: string }>({
+        type: 'object',
+        properties: { city: { type: 'string' } },
+        required: ['city'],
+      }),
+      execute: async _inputData => {
+        return undefined;
+      },
+    });
+  });
+
+  it('accepts a plain JSONSchema7 object without cast', () => {
+    createTool({
+      id: 'plain-json-schema',
+      description: 'Test',
+      inputSchema: { type: 'object' as const, properties: { name: { type: 'string' as const } } },
+      execute: async _inputData => {
         return undefined;
       },
     });

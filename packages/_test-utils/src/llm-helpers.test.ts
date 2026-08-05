@@ -160,6 +160,7 @@ describe('getModelRecordingName', () => {
   it('handles model with specificationVersion', () => {
     expect(getModelRecordingName({ specificationVersion: 'v2' })).toBe('sdk-v2');
     expect(getModelRecordingName({ specificationVersion: 'v3' })).toBe('sdk-v3');
+    expect(getModelRecordingName({ specificationVersion: 'v4' })).toBe('sdk-v4');
   });
 
   it('returns unknown-model for unrecognized config', () => {
@@ -178,6 +179,10 @@ describe('isV5PlusModel', () => {
 
   it('returns true for v3 specificationVersion', () => {
     expect(isV5PlusModel({ specificationVersion: 'v3' })).toBe(true);
+  });
+
+  it('returns true for v4 specificationVersion', () => {
+    expect(isV5PlusModel({ specificationVersion: 'v4' })).toBe(true);
   });
 
   it('returns false for v1 specificationVersion', () => {

@@ -379,7 +379,7 @@ describe('Long session: observation and reflection lifecycle', () => {
     let maxObservationTokens = 0;
     let observationTokensBeforeReflection = 0;
 
-    // ── Stream event tracking (mirrors mastracode harness state) ──
+    // ── Stream event tracking (mirrors mastracode controller state) ──
     let totalStatusParts = 0;
     const turnsWithBufferingStart = new Set<number>();
     const turnsWithActivation = new Set<number>();
@@ -693,7 +693,7 @@ describe('Long session: observation and reflection lifecycle', () => {
     // ── Stream event: observation start/end markers ──
     // Finish cleanup no longer forces a final observation pass, so observation
     // work may still happen during the lifecycle without emitting a terminal
-    // turn marker in this harness.
+    // turn marker in this controller.
     expect(tracker.observerCalls).toBeGreaterThanOrEqual(3);
     for (const [, pair] of observationPairsPerTurn) {
       expect(pair.ends).toBeGreaterThanOrEqual(pair.starts);

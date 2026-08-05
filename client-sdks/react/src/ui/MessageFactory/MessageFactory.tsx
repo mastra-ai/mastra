@@ -108,7 +108,10 @@ const renderPart = (
     case 'file':
       return renderers.File?.(part) ?? fallback?.(part) ?? null;
     case 'step-start':
-      return renderers.StepStart?.(part) ?? fallback?.(part) ?? null;
+      // `step-start` is an internal step-framing marker with no user-facing
+      // content. Absent an explicit opt-in renderer it renders nothing and is
+      // intentionally NOT routed to `fallback`.
+      return renderers.StepStart?.(part) ?? null;
     case 'tool-invocation':
       return renderers.ToolInvocation?.(part) ?? fallback?.(part) ?? null;
     case 'source':

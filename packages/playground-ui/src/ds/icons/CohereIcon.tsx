@@ -1,7 +1,7 @@
 import React from 'react';
 
 export const CohereIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg className="h-3 w-3" xmlns="http://www.w3.org/2000/svg" width="17" height="18" fill="none" {...props}>
+  <svg className="size-3" xmlns="http://www.w3.org/2000/svg" width="17" height="18" fill="none" {...props}>
     <mask id="mask0_174_2406" maskUnits="userSpaceOnUse" x="0" y="0" width="17" height="18">
       <path d="M17 0.5H0V17.5H17V0.5Z" fill="white" />
     </mask>

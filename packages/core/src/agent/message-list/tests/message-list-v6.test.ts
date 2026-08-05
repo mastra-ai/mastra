@@ -441,6 +441,55 @@ describe('MessageList AI SDK v6 support', () => {
     });
   });
 
+  it('preserves stored toModelOutput metadata across db to v6 ui to db round-trips', () => {
+    const toolResultMessage: MastraDBMessage = {
+      id: 'msg-model-output',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'call-1',
+              toolName: 'screenshotTool',
+              state: 'result',
+              args: { url: 'https://example.com' },
+              result: { ok: true, _b64: 'base64imagedata' },
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const uiMessage = new MessageList().add([toolResultMessage], 'memory').get.all.aiV6.ui()[0]!;
+    const toolUIPart = uiMessage.parts.find(part => AIV6.isToolUIPart(part)) as any;
+
+    // Stored modelOutput travels on the v6 UI part as callProviderMetadata
+    expect(toolUIPart?.callProviderMetadata?.mastra?.modelOutput).toEqual({
+      type: 'content',
+      value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+    });
+
+    // And survives ingestion back into a db message
+    const roundTripped = new MessageList().add([uiMessage], 'memory').get.all.db()[0]!;
+    const roundTrippedPart = roundTripped.content.parts.find(part => part.type === 'tool-invocation') as any;
+    expect(roundTrippedPart?.toolInvocation?.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+    expect(roundTrippedPart?.providerMetadata?.mastra?.modelOutput).toEqual({
+      type: 'content',
+      value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+    });
+  });
+
   it('does not duplicate source or data parts when v5 fallback adds missing text', () => {
     const messages: MastraDBMessage[] = [
       {

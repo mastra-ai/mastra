@@ -1,0 +1,45 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_subagent_startup_restore",
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "Parent received the restored-model Explore subagent result from src/subagent-startup-restore.ts."
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": false,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Delegate explore using the restored subagent model default."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_subagent_startup_restore",
+            "name": "subagent",
+            "arguments": {
+              "agentType": "explore",
+              "task": "Find SUBAGENT_STARTUP_RESTORE in the fixture project and report the file path."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {},
+      "response": {
+        "content": "Explore subagent startup restore result: SUBAGENT_STARTUP_RESTORE is defined in src/subagent-startup-restore.ts."
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+---
+extends: existence
+message: "AI colloquial assessment: '%s'. State the assessment directly."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  # ==========================================================================
+  # "X lands" — figurative landing of jokes, points, arguments, analogies.
+  # Anchored to a narrow noun list (and to "really/actually lands"). The broad
+  # arrival-verb sense (a request lands on a node, a PR lands in main) lives in
+  # FigurativeLands, which exempts these assessment nouns and literal landings.
+  # ==========================================================================
+  - "[Tt]he (?:joke|point|argument|line|metaphor|analogy|comparison|critique|distinction|observation|framing|insight|takeaway|punchline|callback|bit|reference|callout) (?:really |actually |just |finally )?lands?\\b"
+  - "[Tt]he (?:joke|point|argument|line|metaphor|analogy|comparison|critique|distinction|observation|framing|insight|takeaway|punchline|callback|bit|reference|callout) (?:really|actually|just|finally) landed\\b"
+  - "\\b(?:really|actually) lands\\b"
+  - "\\b(?:really|actually) landed\\b"
+  # Figurative "lands" beyond the curated nouns: abstract subjects and
+  # assessment completions that can't be a literal landing.
+  - "\\bland(?:s|ed)? flat\\b"
+  - "\\bwhere (?:it|this|that|everything|the whole thing) (?:really |finally |ultimately |just |all )?lands?\\b"
+
+  # ==========================================================================
+  # "X is the move" — anchored verdict. Bare "the move" is too broad (chess,
+  # dance, real-estate), so we only catch the assessment shape.
+  # ==========================================================================
+  - "\\bis the move\\b"
+  - "\\bwas the move\\b"
+  - "\\b(?:that|this)'?s the move\\b"
+  - "\\b(?:that|this) is the move\\b"
+  - "\\bthe right move\\b"
+  - "\\bthe smart move\\b"
+  - "\\bthe obvious move\\b"
+  - "\\bthe play here\\b"
+  - "\\bthe move here\\b"
+
+  # ==========================================================================
+  # "What really matters" — the knowing-tone matters phrase. Bare "matters" is
+  # ordinary English; this targets the rhetorical wind-up.
+  # ==========================================================================
+  - "\\bwhat really matters\\b"
+  - "\\bwhat truly matters\\b"
+  - "\\bwhat actually matters\\b"
+  - "\\bwhat genuinely matters\\b"
+  - "\\bwhat matters most\\b"
+  - "\\ball that (?:really |truly |actually )?matters\\b"
+  - "\\bthe only thing that (?:really |truly |actually )?matters\\b"

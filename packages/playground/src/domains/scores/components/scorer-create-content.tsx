@@ -1,5 +1,5 @@
 import type { CreateStoredScorerParams } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useRef } from 'react';
 
 import { useStoredScorerMutations } from '../hooks/use-stored-scorers';

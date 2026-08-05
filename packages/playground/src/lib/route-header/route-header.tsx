@@ -1,4 +1,8 @@
-import { Breadcrumb, Button, Crumb, DocsIcon, Header, Icon } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Header } from '@mastra/playground-ui/components/Header';
+import { DocsIcon } from '@mastra/playground-ui/icons/DocsIcon';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Link } from 'react-router';
 import { RouteHeaderActionsSlot } from './route-header-actions';
 import { useRouteHeaderCrumbsOverride } from './route-header-crumbs-context';
@@ -60,7 +64,7 @@ export function RouteHeader() {
             variant="ghost"
             size="sm"
             aria-label={docs.label ?? 'Documentation'}
-            className="min-w-0 max-w-[14rem]"
+            className="max-w-[14rem] min-w-0"
           >
             <DocsIcon />
             <span className="min-w-0 truncate">{docs.label ?? 'Documentation'}</span>

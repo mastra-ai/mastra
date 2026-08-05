@@ -18,9 +18,7 @@ The `DatasetsManager` class provides the public API for managing datasets, inclu
 ```typescript title="src/mastra/datasets/manage.ts"
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 // Create a dataset
 const dataset = await mastra.datasets.create({
@@ -37,9 +35,7 @@ const { datasets } = await mastra.datasets.list()
 ```typescript title="src/mastra/datasets/get-delete.ts"
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 // Get by ID
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
@@ -55,9 +51,7 @@ Retrieves a specific experiment (run) by ID. Unlike `dataset.getExperiment()`, t
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 // Get experiment directly without knowing the dataset
 const experiment = await mastra.datasets.getExperiment({
@@ -73,9 +67,7 @@ console.log(`Status: ${experiment.status}`)
 ```typescript title="src/mastra/datasets/compare.ts"
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const comparison = await mastra.datasets.compareExperiments({
   experimentIds: ['exp-1', 'exp-2'],
@@ -88,9 +80,7 @@ const comparison = await mastra.datasets.compareExperiments({
 `DatasetsManager` isn't instantiated directly. Access it from a `Mastra` instance:
 
 ```typescript
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 const datasetsManager = mastra.datasets
 ```
 

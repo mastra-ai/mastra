@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Please retry attachment after hook"
+      },
+      "response": {
+        "content": "MC attachment blocked retry response"
+      }
+    }
+  ]
+}

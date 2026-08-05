@@ -5,6 +5,8 @@ import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';
+import { readScoped } from '../../run-scope-access';
+import { RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 
@@ -23,6 +25,8 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
     agentId,
     agentName,
   } = params;
+
+  const scopeCtx = { mastra, runId, _internal };
 
   // Track iteration count across executions of this step
   let currentIteration = 0;
@@ -95,8 +99,8 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
         agentId: agentId || '',
         agentName: agentName || '',
         runId: runId,
-        threadId: _internal?.threadId,
-        resourceId: _internal?.resourceId,
+        threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+        resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
         customContext: requestContext ? Object.fromEntries(requestContext.entries()) : undefined,
       };
 
@@ -129,34 +133,38 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
         }
       }
 
-      // Add feedback as assistant message for the LLM to see in next iteration
+      // Add feedback as assistant message for the LLM to see in next iteration.
+      // Skipped when the check passes: the loop ends, so the report would only
+      // leak into the resolved final text and thread memory.
       const maxIterationReached = maxSteps ? currentIteration >= maxSteps : false;
-      const feedback = formatStreamCompletionFeedback(isTaskCompleteResult, maxIterationReached);
-      messageList.add(
-        {
-          id: mastra?.generateId(),
-          createdAt: new Date(),
-          type: 'text',
-          role: 'assistant',
-          content: {
-            parts: [
-              {
-                type: 'text',
-                text: feedback,
+      if (!isTaskCompleteResult.complete) {
+        const feedback = formatStreamCompletionFeedback(isTaskCompleteResult, maxIterationReached);
+        messageList.add(
+          {
+            id: mastra?.generateId(),
+            createdAt: new Date(),
+            type: 'text',
+            role: 'assistant',
+            content: {
+              parts: [
+                {
+                  type: 'text',
+                  text: feedback,
+                },
+              ],
+              metadata: {
+                mode: 'stream',
+                completionResult: {
+                  passed: isTaskCompleteResult.complete,
+                  suppressFeedback: !!isTaskComplete.suppressFeedback,
+                },
               },
-            ],
-            metadata: {
-              mode: 'stream',
-              completionResult: {
-                passed: isTaskCompleteResult.complete,
-                suppressFeedback: !!isTaskComplete.suppressFeedback,
-              },
+              format: 2,
             },
-            format: 2,
-          },
-        } as MastraDBMessage,
-        'response',
-      );
+          } as MastraDBMessage,
+          'response',
+        );
+      }
 
       // Emit is-task-complete event
       controller.enqueue({

@@ -1,7 +1,5 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog, Icon, Skeleton } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -9,13 +7,15 @@ import {
   ThreadListItems,
   ThreadListNewItem,
   ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui/components/ThreadList';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
-  isLoading: boolean;
   threadId: string;
   onDelete: (threadId: string) => void;
   resourceId: string;
@@ -25,7 +25,6 @@ export interface ChatThreadsProps {
 
 export const ChatThreads = ({
   threads,
-  isLoading,
   threadId,
   onDelete,
   resourceId,
@@ -37,11 +36,6 @@ export const ChatThreads = ({
   const { canDelete } = usePermissions();
 
   const canDeleteThread = canDelete('memory');
-
-  if (isLoading) {
-    return <ChatThreadSkeleton />;
-  }
-
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
@@ -121,19 +115,6 @@ const DeleteThreadDialog = ({ open, onOpenChange, onDelete }: DeleteThreadDialog
     </AlertDialog>
   );
 };
-
-const ChatThreadSkeleton = () => (
-  <div className="p-4 w-full h-full space-y-2">
-    <div className="flex justify-end">
-      <Skeleton className="h-9 w-9" />
-    </div>
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-  </div>
-);
 
 function isDefaultThreadName(name: string): boolean {
   const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;

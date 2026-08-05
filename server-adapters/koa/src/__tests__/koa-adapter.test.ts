@@ -9,6 +9,8 @@ import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
@@ -348,7 +350,7 @@ describe('Koa Server Adapter', () => {
         { prefix: '' },
       );
 
-      expect(app.middleware).toHaveLength(3);
+      expect(app.middleware).toHaveLength(4);
 
       server = await new Promise(resolve => {
         const s = app.listen(0, () => resolve(s));
@@ -889,6 +891,67 @@ describe('Koa Server Adapter', () => {
     });
   });
 
+  // Repro for https://github.com/mastra-ai/mastra/issues/17821 — a chunk that
+  // JSON.stringify can't handle (e.g. a BigInt step output) used to throw inside
+  // the stream loop and silently close the HTTP stream.
+  describe('Stream Chunk Serialization', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('serializes BigInt chunks and skips unserializable chunks without killing the stream', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/unserializable-stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithUnserializableChunk(),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server!.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/test/unserializable-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const chunks = await consumeSSEStream(response.body);
+      expectSerializedStreamChunks(chunks);
+    });
+  });
+
   describe('Abort Signal', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;
@@ -1054,6 +1117,47 @@ describe('Koa Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.use(middleware);
     },
+  });
+
+  describe('Channel webhook diagnostics', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = new Koa();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const startedServer = app.listen(0, () => resolve(startedServer));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/agents/support/channels/slack/webhook`, {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
+    });
   });
 
   describe('Custom API Routes (registerApiRoute)', () => {

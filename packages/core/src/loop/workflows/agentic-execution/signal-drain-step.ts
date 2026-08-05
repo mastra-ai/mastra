@@ -1,6 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { ChunkType } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
+import { readScoped } from '../../run-scope-access';
+import { DRAIN_PENDING_SIGNALS_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -11,19 +13,23 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
   runId,
   messageList,
   mastra,
+  rotateResponseMessageId,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  const scopeCtx = { mastra, runId, _internal };
   return createStep({
     id: 'signalDrainStep',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData }) => {
       const typedInput = inputData as LLMIterationData<Tools, OUTPUT>;
-      const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
+      const drainPendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals');
+      const pendingSignals = drainPendingSignals?.(runId) ?? [];
       if (pendingSignals.length === 0) {
         return typedInput;
       }
 
       messageList.markResponseMessageBoundary(typedInput.stepResult?.messageId ?? typedInput.messageId);
+      const nextMessageId = rotateResponseMessageId();
       for (const pendingSignal of pendingSignals) {
         const signalForTranscript = messageList.addSignal(pendingSignal);
         controller.enqueue(signalForTranscript.toDataPart() as unknown as ChunkType<OUTPUT>);
@@ -31,9 +37,10 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
 
       return {
         ...typedInput,
-        messageId: _internal?.generateId?.() ?? mastra?.generateId?.() ?? typedInput.messageId,
+        messageId: nextMessageId,
         stepResult: {
           ...typedInput.stepResult,
+          messageId: nextMessageId,
           reason: 'other',
           isContinued: true,
         },

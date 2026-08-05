@@ -5,8 +5,8 @@ import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
-import { createStep } from '../../../workflows/evented';
 import type { ExecuteFunctionParams } from '../../../workflows/step';
+import { createStep } from '../../../workflows/workflow';
 import { createLLMMappingStep } from './llm-mapping-step';
 
 type ToolCallOutput = {
@@ -244,6 +244,19 @@ describe('createLLMMappingStep HITL behavior', () => {
     // Should NOT bail — the agentic loop should continue so the model can see the error and retry
     expect(bail).not.toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(true);
+    // Should record the failure as `output-error` with the message in `errorText`,
+    // not as a successful `result`, so it stays distinguishable on recall/replay.
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'output-error',
+          toolCallId: 'call-1',
+          toolName: 'brokenTool',
+          errorText: 'Tool execution failed',
+        }),
+      }),
+    );
   });
 
   it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {
@@ -1023,7 +1036,7 @@ describe('createLLMMappingStep toModelOutput', () => {
     );
   });
 
-  it('should normalize media parts in toModelOutput to image-data/file-data', async () => {
+  it('should preserve media parts in toModelOutput', async () => {
     const toModelOutputMock = vi.fn(() => ({
       type: 'content',
       value: [
@@ -1069,8 +1082,8 @@ describe('createLLMMappingStep toModelOutput', () => {
             modelOutput: {
               type: 'content',
               value: [
-                { type: 'image-data', data: 'base64png', mediaType: 'image/png' },
-                { type: 'file-data', data: 'base64pdf', mediaType: 'application/pdf' },
+                { type: 'media', data: 'base64png', mediaType: 'image/png' },
+                { type: 'media', data: 'base64pdf', mediaType: 'application/pdf' },
                 { type: 'text', text: 'caption' },
               ],
             },
@@ -1121,7 +1134,7 @@ describe('createLLMMappingStep toModelOutput', () => {
           mastra: expect.objectContaining({
             modelOutput: {
               type: 'content',
-              value: [null, undefined, 'not-an-object', { type: 'image-data', data: 'abc', mediaType: 'image/png' }],
+              value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
             },
           }),
         }),

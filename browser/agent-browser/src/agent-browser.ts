@@ -1,4 +1,9 @@
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import {
+  MastraBrowser,
+  ScreencastStreamImpl,
+  DEFAULT_THREAD_ID,
+  createBrowserRecordingTools,
+} from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -178,7 +183,7 @@ export class AgentBrowser extends MastraBrowser {
     this.sharedManager = new BrowserManager();
 
     const localConfig = this.config as BrowserConfig;
-    const launchOptions: BrowserLaunchOptions = {
+    const launchOptions: BrowserLaunchOptions & { cdpHeaders?: Record<string, string> } = {
       headless: this.headless,
       viewport: localConfig.viewport,
       profile: localConfig.profile,
@@ -189,6 +194,9 @@ export class AgentBrowser extends MastraBrowser {
     // Resolve CDP URL if provided (can be string or function)
     if (localConfig.cdpUrl) {
       launchOptions.cdpUrl = await this.resolveCdpUrl(localConfig.cdpUrl);
+    }
+    if (localConfig.cdpHeaders) {
+      launchOptions.cdpHeaders = localConfig.cdpHeaders;
     }
 
     await this.sharedManager.launch(launchOptions);
@@ -322,6 +330,10 @@ export class AgentBrowser extends MastraBrowser {
    */
   getTools(): Record<string, Tool<any, any>> {
     const tools = createAgentBrowserTools(this);
+    if (this.browserConfig.recording) {
+      Object.assign(tools, createBrowserRecordingTools(this, this.browserConfig.recording));
+    }
+
     const exclude = this.browserConfig.excludeTools;
     if (exclude?.length) {
       for (const name of exclude) {
@@ -808,6 +820,23 @@ export class AgentBrowser extends MastraBrowser {
     }
   }
 
+  /**
+   * Start a `waitForNavigation` wait (when `waitUntil` is set) and immediately
+   * attach a noop catch handler so a navigation timeout/rejection can't become
+   * an unhandled rejection (crashing the process) while the caller's action is
+   * still pending. Callers should still `await` the returned promise to observe
+   * the original error.
+   */
+  private startNavigationWait(
+    page: Page,
+    waitUntil: 'load' | 'domcontentloaded' | 'networkidle' | undefined,
+    timeout: number,
+  ): ReturnType<Page['waitForNavigation']> | undefined {
+    const navigation = waitUntil ? page.waitForNavigation({ waitUntil, timeout }) : undefined;
+    navigation?.catch(() => {});
+    return navigation;
+  }
+
   // ---------------------------------------------------------------------------
   // 3. browser_click - Click on element
   // ---------------------------------------------------------------------------
@@ -830,7 +859,7 @@ export class AgentBrowser extends MastraBrowser {
 
       const timeout = input.timeout ?? this.defaultTimeout;
 
-      const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+      const navigation = this.startNavigationWait(page, input.waitUntil, timeout);
 
       await locator.click({
         button: input.button ?? 'left',
@@ -935,7 +964,7 @@ export class AgentBrowser extends MastraBrowser {
     try {
       const page = await this.getPage(threadId);
       const timeout = input.timeout ?? this.defaultTimeout;
-      const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+      const navigation = this.startNavigationWait(page, input.waitUntil, timeout);
 
       await page.keyboard.press(input.key);
 
@@ -977,7 +1006,7 @@ export class AgentBrowser extends MastraBrowser {
       if (input.index !== undefined) selectValue.index = input.index;
 
       const timeout = input.timeout ?? this.defaultTimeout;
-      const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+      const navigation = this.startNavigationWait(page, input.waitUntil, timeout);
 
       const selected = await locator.selectOption(selectValue, { timeout });
 

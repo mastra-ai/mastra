@@ -2,6 +2,8 @@ import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
+import { getEntryId, getEntryWorkflow } from '../../step-entry';
+import { resolveForeachConcurrency } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
@@ -43,7 +45,7 @@ export async function processWorkflowLoop(
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
 
   // Get iteration count from step results metadata (same pattern as control-flow.ts)
-  const prevIterationCount = stepResults[step.step?.id]?.metadata?.iterationCount ?? 0;
+  const prevIterationCount = stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0;
   const iterationCount = prevIterationCount + 1;
 
   const loopCondition = await stepExecutor.evaluateCondition({
@@ -69,7 +71,20 @@ export async function processWorkflowLoop(
     runId,
     executionPath,
     resumeSteps: [] as string[],
-    stepResults,
+    // Carry the iteration count forward on the loop body's stepResults entry. The
+    // loop-again path does not merge the body result back into stepResults[bodyStepId]
+    // (only prevResult carries it), and the evented step executor never writes
+    // iterationCount, so without this the next processWorkflowLoop re-reads 0 and the
+    // condition is always evaluated with iterationCount === 1 (an infinite loop when
+    // termination depends on the count). Mirrors the default engine, which stamps
+    // metadata.iterationCount onto the step result. See handlers/step.ts.
+    stepResults: {
+      ...stepResults,
+      [getEntryId(step.step)]: {
+        ...stepResults[getEntryId(step.step)],
+        metadata: { ...stepResults[getEntryId(step.step)]?.metadata, iterationCount },
+      },
+    },
     prevResult: stepResult,
     resumeData: undefined,
     activeStepsPath,
@@ -142,7 +157,7 @@ export async function processWorkflowForEach(
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
-    step.step.id
+    getEntryId(step.step)
   ] as any;
 
   const idx = currentResult?.output?.length ?? 0;
@@ -182,7 +197,7 @@ export async function processWorkflowForEach(
     const iterationResult = currentResult?.output?.[forEachIndex];
     if (iterationResult?.status === 'suspended' || iterationResult === null) {
       // Only pass resumeData to the targeted iteration
-      const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+      const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
       const targetArray = (prevResult as any)?.output;
       const iterationPrevResult =
         isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)
@@ -264,7 +279,7 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults: {
             ...stepResults,
-            [step.step.id]: {
+            [getEntryId(step.step)]: {
               ...currentResult,
               status: 'suspended',
               suspendedAt: Date.now(),
@@ -307,7 +322,10 @@ export async function processWorkflowForEach(
 
     if (suspendedIndices.length > 0) {
       // Limit resumption to concurrency value (like initial execution)
-      const concurrency = step.opts.concurrency ?? 1;
+      const concurrency = resolveForeachConcurrency(step.opts, {
+        inputData: (prevResult as any)?.output,
+        getInitData: () => (stepResults as any)?.input,
+      });
       const indicesToResume = suspendedIndices.slice(0, concurrency);
 
       // Reset suspended iterations to "pending" state before re-running them.
@@ -330,7 +348,7 @@ export async function processWorkflowForEach(
       await workflowsStore?.updateWorkflowResults({
         workflowName: workflowId,
         runId,
-        stepId: step.step.id,
+        stepId: getEntryId(step.step),
         result: {
           ...currentResult,
           output: updatedOutput,
@@ -339,7 +357,7 @@ export async function processWorkflowForEach(
       });
 
       // Check if inner step is a nested workflow
-      const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+      const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
 
       // Resume iterations up to concurrency limit
       // Wrap in try-catch to prevent partial state issues if some publishes fail
@@ -401,11 +419,11 @@ export async function processWorkflowForEach(
       await workflowsStore?.updateWorkflowResults({
         workflowName: workflowId,
         runId,
-        stepId: step.step.id,
+        stepId: getEntryId(step.step),
         result,
         requestContext,
       });
-      stepResults[step.step.id] = result as any;
+      stepResults[getEntryId(step.step)] = result as StepResult<any, any, any, any>;
     }
 
     await pubsub.publish('workflows', {
@@ -438,13 +456,17 @@ export async function processWorkflowForEach(
 
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency
-    const concurrency = Math.min(step.opts.concurrency ?? 1, targetLen);
+    const resolvedConcurrency = resolveForeachConcurrency(step.opts, {
+      inputData: (prevResult as any)?.output,
+      getInitData: () => (stepResults as any)?.input,
+    });
+    const concurrency = Math.min(resolvedConcurrency, targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
     await workflowsStore?.updateWorkflowResults({
       workflowName: workflowId,
       runId,
-      stepId: step.step.id,
+      stepId: getEntryId(step.step),
       result: {
         status: 'success',
         output: dummyResult as any,
@@ -456,7 +478,7 @@ export async function processWorkflowForEach(
 
     // Check if inner step is a nested workflow - only then extract individual items
     // Regular steps use foreachIdx in step executor for item extraction
-    const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+    const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
 
     for (let i = 0; i < concurrency; i++) {
       // For nested workflows, extract individual item since they receive prevResult directly
@@ -496,7 +518,7 @@ export async function processWorkflowForEach(
   await workflowsStore?.updateWorkflowResults({
     workflowName: workflowId,
     runId,
-    stepId: step.step.id,
+    stepId: getEntryId(step.step),
     result: {
       status: 'success',
       output: (currentResult as any).output,
@@ -508,7 +530,7 @@ export async function processWorkflowForEach(
 
   // For nested workflows, extract individual item since they receive prevResult directly
   // For regular steps, step executor handles extraction via foreachIdx
-  const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+  const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
   const targetArray = (prevResult as any)?.output;
   const iterationPrevResult =
     isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)

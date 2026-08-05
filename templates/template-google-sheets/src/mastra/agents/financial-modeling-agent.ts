@@ -4,9 +4,6 @@ import { Memory } from '@mastra/memory';
 import { Composio } from '@composio/core';
 import { MastraProvider } from '@composio/mastra';
 
-// High max steps value
-const MAX_STEPS = 1000;
-
 export const financialModelingAgent = new Agent({
   id: 'financial-modeling-agent',
   name: 'Financial Modeling Agent',
@@ -56,7 +53,6 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return composioTools;
   },
-  defaultOptions: { maxSteps: MAX_STEPS },
 });
 
 const getFinancialModelingAgentPrompt = (needsAuth: boolean) => `

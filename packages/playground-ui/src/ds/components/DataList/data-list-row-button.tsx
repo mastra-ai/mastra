@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
-import { dataListRowInteractiveStyles, dataListRowStyles } from './shared';
+import { dataListRowInteractiveStyles, dataListRowStyles, dataListRowVariants } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import { cn } from '@/lib/utils';
 
@@ -13,7 +13,19 @@ export type DataListRowButtonProps = ComponentPropsWithoutRef<'button'> & DataLi
  */
 export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButtonProps>(
   (
-    { children, className, type = 'button', flushLeft, flushRight, colStart, colEnd, featured, style, ...rest },
+    {
+      children,
+      className,
+      type = 'button',
+      flushLeft,
+      flushRight,
+      colStart,
+      colEnd,
+      featured,
+      variant,
+      style,
+      ...rest
+    },
     ref,
   ) => {
     const isWrapped = useDataListRowWrapperContext();
@@ -28,7 +40,10 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
           'text-left',
           !isWrapped && flushLeft && 'ml-0!',
           !isWrapped && flushRight && 'mr-0!',
-          featured && 'bg-surface4',
+          // `!` so the selection fill wins over borderless table root styling
+          // (higher-specificity descendant rules); same color in `default`.
+          featured && 'bg-surface4!',
+          dataListRowVariants({ variant }),
           className,
         )}
         style={resolvedStyle}

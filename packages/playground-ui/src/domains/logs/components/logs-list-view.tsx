@@ -77,7 +77,7 @@ export function LogsListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <LogsDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
+    <LogsDataList columns={COLUMNS} variant="striped" scrollRef={scrollRef} className="min-w-0">
       <LogsDataList.Top>
         <LogsDataList.TopCell>Date</LogsDataList.TopCell>
         <LogsDataList.TopCell>Time</LogsDataList.TopCell>
@@ -109,6 +109,7 @@ export function LogsListView({
                 data-index={vi.index}
                 onClick={() => onLogClick(log)}
                 featured={isFeatured}
+                variant={log.level === 'error' || log.level === 'fatal' ? 'error' : 'default'}
               >
                 <LogsDataList.DateCell timestamp={log.timestamp} />
                 <LogsDataList.TimeCell timestamp={log.timestamp} />

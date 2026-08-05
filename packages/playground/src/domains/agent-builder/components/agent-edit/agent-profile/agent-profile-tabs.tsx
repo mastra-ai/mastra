@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import type { CSSProperties } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { useBuilderPaneGates } from '../../../hooks/use-builder-pane-gates';
@@ -72,7 +72,7 @@ export const AgentProfileTabs = ({
           {integrationsTabEnabled && <Tab value="integrations">Integrations</Tab>}
         </TabList>
 
-        <div className="min-h-0 overflow-y-auto h-full">
+        <div className="h-full min-h-0 overflow-y-auto">
           {modelTabEnabled && (
             <TabContent value="model" className={twoPaneTabContentClassName}>
               <Models editable={isEditable} />

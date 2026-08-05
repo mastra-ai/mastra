@@ -53,6 +53,17 @@
   transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
 }
 
+.drawer-popup-floating {
+  --bleed: 0rem;
+  --drawer-floating-offset: 0.75rem;
+}
+
+@media (min-width: 40rem) {
+  .drawer-popup-floating {
+    --drawer-floating-offset: 1rem;
+  }
+}
+
 /* ---- Bottom sheet (swipe down) ---------------------------------------------- */
 
 .drawer-popup[data-swipe-direction='down'] {
@@ -67,6 +78,11 @@
   transform: translateY(calc(100% - var(--bleed) + 2px));
 }
 
+.drawer-popup-floating[data-swipe-direction='down'][data-starting-style],
+.drawer-popup-floating[data-swipe-direction='down'][data-ending-style] {
+  transform: translateY(calc(100% + var(--drawer-floating-offset)));
+}
+
 /* ---- Top sheet (swipe up) --------------------------------------------------- */
 
 .drawer-popup[data-swipe-direction='up'] {
@@ -77,6 +93,11 @@
 .drawer-popup[data-swipe-direction='up'][data-starting-style],
 .drawer-popup[data-swipe-direction='up'][data-ending-style] {
   transform: translateY(calc(-100% + var(--bleed) - 2px));
+}
+
+.drawer-popup-floating[data-swipe-direction='up'][data-starting-style],
+.drawer-popup-floating[data-swipe-direction='up'][data-ending-style] {
+  transform: translateY(calc(-100% - var(--drawer-floating-offset)));
 }
 
 /* Collapse a stacked top/bottom parent to the frontmost drawer's height. */
@@ -101,6 +122,16 @@
 .drawer-popup[data-swipe-direction='left'][data-starting-style],
 .drawer-popup[data-swipe-direction='left'][data-ending-style] {
   transform: translateX(-100%);
+}
+
+.drawer-popup-floating[data-swipe-direction='right'][data-starting-style],
+.drawer-popup-floating[data-swipe-direction='right'][data-ending-style] {
+  transform: translateX(calc(100% + var(--drawer-floating-offset)));
+}
+
+.drawer-popup-floating[data-swipe-direction='left'][data-starting-style],
+.drawer-popup-floating[data-swipe-direction='left'][data-ending-style] {
+  transform: translateX(calc(-100% - var(--drawer-floating-offset)));
 }
 
 /* ---- Backdrop --------------------------------------------------------------- */

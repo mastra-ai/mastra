@@ -19,6 +19,7 @@ import type { ObservationRunOpts } from './types';
 ObservationStrategy.create = ((om: ObservationalMemory, opts: ObservationRunOpts): ObservationStrategy => {
   const deps: StrategyDeps = {
     storage: om.getStorage(),
+    memory: om.getMemory(),
     messageHistory: om.getMessageHistory(),
     tokenCounter: om.getTokenCounter(),
     observationConfig: om.getObservationConfig(),

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { Button } from '../Button';
 import { DropdownMenu } from '../DropdownMenu';
@@ -12,7 +13,17 @@ afterEach(() => {
   cleanup();
 });
 
-const getGroup = () => document.querySelector<HTMLDivElement>('[data-slot="buttons-group"]')!;
+const getGroup = () => {
+  const group = document.querySelector<HTMLDivElement>('[data-slot="buttons-group"]');
+  assert(group, 'Expected buttons group');
+  return group;
+};
+
+const getButton = () => {
+  const button = document.querySelector('button');
+  assert(button, 'Expected button');
+  return button;
+};
 
 describe('ButtonsGroup', () => {
   it('close spacing keys the right-edge rounding off a visible next sibling (not :last-child)', () => {
@@ -52,7 +63,7 @@ describe('ButtonsGroup', () => {
     );
 
     // Base UI appends a visually-hidden <input aria-hidden> right after the trigger.
-    const trigger = document.querySelector('button')!;
+    const trigger = getButton();
     const next = trigger.nextElementSibling;
     expect(next?.tagName).toBe('INPUT');
     expect(next?.getAttribute('aria-hidden')).toBe('true');
@@ -126,7 +137,7 @@ describe('ButtonsGroup', () => {
     // trigger's own `w-full`), so consumers don't need `shrink-0`/`w-fit`.
     expect(getGroup().className).toContain('[&>[data-slot=select-trigger]]:w-fit');
     // And the trigger actually carries the data-slot the rule targets.
-    expect(document.querySelector('button')!.getAttribute('data-slot')).toBe('select-trigger');
+    expect(getButton().getAttribute('data-slot')).toBe('select-trigger');
   });
 
   it('a DropdownMenu trigger composes as a real split-button segment, and the seam survives opening', () => {
@@ -144,7 +155,8 @@ describe('ButtonsGroup', () => {
       </ButtonsGroup>,
     );
     const group = getGroup();
-    const trigger = group.querySelector('[aria-label="More save options"]')!;
+    const trigger = group.querySelector('[aria-label="More save options"]');
+    assert(trigger, 'Expected menu trigger');
     // Closed: DropdownMenu renders no DOM of its own and the menu content is portaled out, so
     // the group has exactly the two button segments — the trigger is the last one (pill corner).
     expect(group.querySelectorAll(':scope > button').length).toBe(2);

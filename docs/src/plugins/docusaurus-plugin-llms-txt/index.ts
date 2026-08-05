@@ -19,6 +19,8 @@ const PLUGIN_NAME = 'docusaurus-plugin-llms-txt'
 const CONCURRENCY = 10
 const PLUGIN_DIR = path.dirname(new URL(import.meta.url).pathname)
 
+const CONTENT_PREFIX = `> Discover all available pages from the documentation index: https://mastra.ai/llms.txt\n\n`
+
 export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTxtPluginOptions): Plugin {
   // Validate and resolve options
   validateOptions(userOptions)
@@ -79,7 +81,7 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
 
             if (cachedContent) {
               // Write cached content to file (build dir is cleared each time)
-              await writeLlmsTxt(llmsTxtPath, cachedContent)
+              await writeLlmsTxt(llmsTxtPath, cachedContent, CONTENT_PREFIX)
               cachedCount++
               return { route, title: cachedTitle, cached: true }
             }
@@ -89,7 +91,7 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
           const { llmsTxt, metadata } = await processHtml(html, route, options)
 
           // Write individual llms.txt file
-          await writeLlmsTxt(llmsTxtPath, llmsTxt)
+          await writeLlmsTxt(llmsTxtPath, llmsTxt, CONTENT_PREFIX)
 
           // Update cache with title and content
           cache.set(route, contentHash, metadata.title, llmsTxt)

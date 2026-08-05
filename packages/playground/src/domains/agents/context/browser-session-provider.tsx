@@ -359,7 +359,6 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
       hasSession,
       viewMode,
       isPanelOpen: viewMode === 'modal',
-      isInSidebar: viewMode === 'sidebar',
       isActive: hasSession, // backward compat - reflects session activity, not view mode
       status,
       currentUrl,

@@ -1716,4 +1716,62 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
     expect(subAgentTool).toBeDefined();
     expect(subAgentTool.description).toContain('subAgent');
   });
+
+  it('reuses sub-agent tool schemas across conversions', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [{ type: 'text', text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent',
+      name: 'Sub Agent',
+      instructions: 'You are a sub-agent',
+      model: mockModel,
+    });
+
+    const parentAgent = new Agent({
+      id: 'parent-agent',
+      name: 'Parent Agent',
+      instructions: 'You are a parent agent',
+      model: mockModel,
+      agents: { subAgent },
+    });
+
+    const getSubAgentToolSchemasSpy = vi.spyOn(parentAgent as any, 'getSubAgentToolSchemas');
+    let firstTools!: Record<string, any>;
+    let secondTools!: Record<string, any>;
+    let firstSchemas: any;
+    let secondSchemas: any;
+
+    try {
+      firstTools = await parentAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+      });
+      secondTools = await parentAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+      });
+
+      expect(getSubAgentToolSchemasSpy).toHaveBeenCalledTimes(2);
+      firstSchemas = getSubAgentToolSchemasSpy.mock.results[0]?.value;
+      secondSchemas = getSubAgentToolSchemasSpy.mock.results[1]?.value;
+    } finally {
+      getSubAgentToolSchemasSpy.mockRestore();
+    }
+
+    const firstSubAgentTool = firstTools['agent-subAgent'];
+    const secondSubAgentTool = secondTools['agent-subAgent'];
+
+    expect(secondSubAgentTool).not.toBe(firstSubAgentTool);
+    expect(secondSchemas.inputSchema).toBe(firstSchemas.inputSchema);
+    expect(secondSchemas.outputSchema).toBe(firstSchemas.outputSchema);
+  });
 });

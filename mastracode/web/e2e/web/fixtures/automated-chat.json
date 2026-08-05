@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Say the smoke phrase",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "WEB scenario smoke response"
+      }
+    }
+  ]
+}

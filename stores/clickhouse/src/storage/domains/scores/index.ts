@@ -12,18 +12,36 @@ import {
   transformScoreRow as coreTransformScoreRow,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination, ScoreTenancyFilters } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
+
+/**
+ * Builds a multi-tenant scope SQL fragment and its named query params.
+ * Returns a clause prefixed with ` AND ` (empty when no filters) plus params.
+ */
+function buildTenancyFilter(filters?: ScoreTenancyFilters): { sql: string; params: Record<string, unknown> } {
+  const clauses: string[] = [];
+  const params: Record<string, unknown> = {};
+  if (filters?.organizationId !== undefined) {
+    clauses.push('organizationId = {var_organizationId:String}');
+    params.var_organizationId = filters.organizationId;
+  }
+  if (filters?.projectId !== undefined) {
+    clauses.push('projectId = {var_projectId:String}');
+    params.var_projectId = filters.projectId;
+  }
+  return { sql: clauses.length > 0 ? ` AND ${clauses.join(' AND ')}` : '', params };
+}
 
 export class ScoresStorageClickhouse extends ScoresStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, replication } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#db = new ClickhouseDB({ client, ttl, replication });
   }
 
   async init(): Promise<void> {
@@ -150,15 +168,18 @@ export class ScoresStorageClickhouse extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
+    const tenancy = buildTenancyFilter(filters);
     try {
       // Get total count
       const countResult = await this.client.query({
-        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = {var_runId:String}`,
-        query_params: { var_runId: runId },
+        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = {var_runId:String}${tenancy.sql}`,
+        query_params: { var_runId: runId, ...tenancy.params },
         format: 'JSONEachRow',
       });
       const countRows = await countResult.json();
@@ -189,11 +210,12 @@ export class ScoresStorageClickhouse extends ScoresStorage {
 
       // Get paginated results
       const result = await this.client.query({
-        query: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = {var_runId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
+        query: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = {var_runId:String}${tenancy.sql} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_runId: runId,
           var_limit: limitValue,
           var_offset: start,
+          ...tenancy.params,
         },
         format: 'JSONEachRow',
         clickhouse_settings: {
@@ -226,20 +248,22 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       );
     }
   }
-
   async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
     source,
     pagination,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
+    const tenancy = buildTenancyFilter(filters);
     let whereClause = `scorerId = {var_scorerId:String}`;
     if (entityId) {
       whereClause += ` AND entityId = {var_entityId:String}`;
@@ -250,6 +274,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     if (source) {
       whereClause += ` AND source = {var_source:String}`;
     }
+    whereClause += tenancy.sql;
 
     try {
       // Get total count
@@ -260,6 +285,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           var_entityId: entityId,
           var_entityType: entityType,
           var_source: source,
+          ...tenancy.params,
         },
         format: 'JSONEachRow',
       });
@@ -299,6 +325,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           var_entityId: entityId,
           var_entityType: entityType,
           var_source: source,
+          ...tenancy.params,
         },
         format: 'JSONEachRow',
         clickhouse_settings: {
@@ -336,16 +363,19 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
+    const tenancy = buildTenancyFilter(filters);
     try {
       // Get total count
       const countResult = await this.client.query({
-        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = {var_entityId:String} AND entityType = {var_entityType:String}`,
-        query_params: { var_entityId: entityId, var_entityType: entityType },
+        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = {var_entityId:String} AND entityType = {var_entityType:String}${tenancy.sql}`,
+        query_params: { var_entityId: entityId, var_entityType: entityType, ...tenancy.params },
         format: 'JSONEachRow',
       });
       const countRows = await countResult.json();
@@ -376,12 +406,13 @@ export class ScoresStorageClickhouse extends ScoresStorage {
 
       // Get paginated results
       const result = await this.client.query({
-        query: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = {var_entityId:String} AND entityType = {var_entityType:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
+        query: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = {var_entityId:String} AND entityType = {var_entityType:String}${tenancy.sql} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_entityId: entityId,
           var_entityType: entityType,
           var_limit: limitValue,
           var_offset: start,
+          ...tenancy.params,
         },
         format: 'JSONEachRow',
         clickhouse_settings: {
@@ -419,17 +450,21 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
+    const tenancy = buildTenancyFilter(filters);
     try {
       const countResult = await this.client.query({
-        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String}`,
+        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String}${tenancy.sql}`,
         query_params: {
           var_traceId: traceId,
           var_spanId: spanId,
+          ...tenancy.params,
         },
         format: 'JSONEachRow',
       });
@@ -460,12 +495,13 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.client.query({
-        query: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
+        query: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String}${tenancy.sql} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_traceId: traceId,
           var_spanId: spanId,
           var_limit: limitValue,
           var_offset: start,
+          ...tenancy.params,
         },
         format: 'JSONEachRow',
         clickhouse_settings: {

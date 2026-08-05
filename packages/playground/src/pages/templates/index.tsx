@@ -1,4 +1,6 @@
-import { Header, HeaderTitle, Icon, MainContentLayout } from '@mastra/playground-ui';
+import { Header, HeaderTitle } from '@mastra/playground-ui/components/Header';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PackageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -88,7 +90,7 @@ export default function Templates() {
         <TemplatesList
           templates={filteredTemplates}
           linkComponent={Link}
-          className="max-w-[80rem] mx-auto"
+          className="mx-auto max-w-[80rem]"
           isLoading={isLoading}
         />
       </div>

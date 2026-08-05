@@ -164,10 +164,27 @@ export type ProcessorOutputStepPhaseType = {
   messageList: MessageList;
   stepNumber: number;
   finishReason?: string;
+  /** Provider-specific metadata for the step (e.g. Bedrock guardrail trace). */
+  providerMetadata?: Record<string, unknown>;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
   usage?: Record<string, unknown>;
   systemMessages?: CoreMessageType[];
+  retryCount?: number;
+};
+
+export type ProcessorToolResultPhaseType = {
+  phase: 'toolResult';
+  messages: ProcessorMessageType[];
+  messageList: MessageList;
+  stepNumber: number;
+  toolName: string;
+  toolCallId: string;
+  args?: unknown;
+  result?: unknown;
+  providerExecuted?: boolean;
+  systemMessages?: CoreMessageType[];
+  steps?: Array<StepResult<ToolSet>>;
   retryCount?: number;
 };
 
@@ -176,10 +193,11 @@ export type ProcessorStepInputType =
   | ProcessorInputStepPhaseType
   | ProcessorOutputStreamPhaseType
   | ProcessorOutputResultPhaseType
-  | ProcessorOutputStepPhaseType;
+  | ProcessorOutputStepPhaseType
+  | ProcessorToolResultPhaseType;
 
 export type ProcessorStepOutputType = {
-  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
   messages?: ProcessorMessageType[];
   messageList?: MessageList;
   systemMessages?: CoreMessageType[];
@@ -189,10 +207,18 @@ export type ProcessorStepOutputType = {
   state?: Record<string, unknown>;
   result?: SerializableOutputResult;
   finishReason?: string;
+  /** Provider-specific metadata for the step (e.g. Bedrock guardrail trace). */
+  providerMetadata?: Record<string, unknown>;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
   usage?: Record<string, unknown>;
   retryCount?: number;
+  // Tool-result phase fields (toolResult inputs carry the raw tool return value as `toolResultValue`)
+  toolName?: string;
+  toolCallId?: string;
+  args?: unknown;
+  toolResultValue?: unknown;
+  providerExecuted?: boolean;
   model?: MastraLanguageModel;
   tools?: ProcessorStepToolsConfig;
   toolChoice?: ToolChoice<ToolSet>;
@@ -306,7 +332,10 @@ export const DataPartSchema: z.ZodType<DataPartType> = z
   .object({
     type: z.string().refine(t => t.startsWith('data-'), { message: 'Type must start with "data-"' }),
     id: z.string().optional(),
-    data: z.unknown(),
+    // In Zod v4, a bare z.unknown() field is treated as non-optional, so a
+    // missing `data` key would fail validation. data-* parts may omit data
+    // (see DataPartType where `data` is optional), so mark it optional.
+    data: z.unknown().optional(),
   })
   .passthrough();
 
@@ -593,6 +622,10 @@ export const ProcessorOutputStepPhaseSchema = z.object({
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
   finishReason: z.string().optional().describe('The finish reason from the LLM (stop, tool-use, length, etc.)'),
+  providerMetadata: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Provider-specific metadata for the step (e.g. Bedrock guardrail trace under bedrock.trace.guardrail)'),
   toolCalls: z.array(toolCallSchema).optional().describe('Tool calls made in this step (if any)'),
   text: z.string().optional().describe('Generated text from this step'),
   usage: z
@@ -600,6 +633,29 @@ export const ProcessorOutputStepPhaseSchema = z.object({
     .optional()
     .describe('Token usage for the current step (inputTokens, outputTokens, totalTokens, etc.)'),
   systemMessages: systemMessagesSchema.optional(),
+  retryCount: retryCountSchema,
+});
+
+/**
+ * Schema for 'toolResult' phase - processToolResult
+ * Processes a tool's result after tool.execute() returns successfully and
+ * before the result is added to the message list / fed to the next LLM call.
+ */
+export const ProcessorToolResultPhaseSchema = z.object({
+  phase: z.literal('toolResult'),
+  messages: messagesSchema,
+  messageList: messageListSchema,
+  stepNumber: z.number().describe('The current step number (0-indexed)'),
+  toolName: z.string().describe('Name of the tool that was executed'),
+  toolCallId: z.string().describe('Unique identifier for this specific tool call'),
+  args: z.unknown().optional().describe('Arguments the LLM passed to the tool'),
+  result: z.unknown().optional().describe('Raw value returned by tool.execute() (already serialized)'),
+  providerExecuted: z
+    .boolean()
+    .optional()
+    .describe('Whether this result came from a provider-executed tool (e.g. Anthropic web_search)'),
+  systemMessages: systemMessagesSchema.optional(),
+  steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
   retryCount: retryCountSchema,
 });
 
@@ -617,6 +673,7 @@ export const ProcessorOutputStepPhaseSchema = z.object({
  * - 'outputStream': Process streaming chunks
  * - 'outputResult': Process complete output after streaming
  * - 'outputStep': Process output after each LLM response (before tools)
+ * - 'toolResult': Process a tool's result after tool.execute() (before next LLM call)
  */
 export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.discriminatedUnion('phase', [
   ProcessorInputPhaseSchema,
@@ -624,6 +681,7 @@ export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.dis
   ProcessorOutputStreamPhaseSchema,
   ProcessorOutputResultPhaseSchema,
   ProcessorOutputStepPhaseSchema,
+  ProcessorToolResultPhaseSchema,
 ]);
 
 /**
@@ -635,7 +693,7 @@ export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.dis
  */
 export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.object({
   // Phase field
-  phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']),
+  phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult']),
 
   // Message-based fields (used by most phases)
   messages: messagesSchema.optional(),
@@ -658,6 +716,13 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   toolCalls: z.array(toolCallSchema).optional(),
   text: z.string().optional(),
   usage: z.record(z.string(), z.unknown()).optional(),
+
+  // Tool-result phase fields
+  toolName: z.string().optional(),
+  toolCallId: z.string().optional(),
+  args: z.unknown().optional(),
+  toolResultValue: z.unknown().optional(),
+  providerExecuted: z.boolean().optional(),
 
   // Retry count
   retryCount: z.number().optional(),

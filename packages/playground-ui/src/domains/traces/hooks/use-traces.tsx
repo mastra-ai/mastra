@@ -1,9 +1,9 @@
 import type {
-  LightSpanRecord,
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
+  TraceSpan,
 } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
@@ -77,27 +77,14 @@ function isHttp501(error: unknown): boolean {
 
 type FetchTracesFnArgs = TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
-  mode?: 'page' | 'delta';
-  page?: number;
-  perPage?: number;
-  after?: string;
-  limit?: number;
-};
+} & ({ mode: 'delta'; after?: string; limit?: number } | { mode?: 'page'; page: number; perPage: number });
 
-const fetchTracesFn = async ({
-  client,
-  mode,
-  page,
-  perPage,
-  after,
-  limit,
-  filters,
-  listMode = 'traces',
-}: FetchTracesFnArgs) => {
+const fetchTracesFn = async (args: FetchTracesFnArgs) => {
+  const { client, filters, listMode = 'traces' } = args;
   const params =
-    mode === 'delta'
-      ? { mode: 'delta' as const, after, limit, filters }
-      : { pagination: { page: page!, perPage: perPage! }, filters };
+    args.mode === 'delta'
+      ? { mode: 'delta' as const, after: args.after, limit: args.limit, filters }
+      : { pagination: { page: args.page, perPage: args.perPage }, filters };
 
   if (listMode === 'branches') {
     return client.listBranches(params as ListBranchesArgs);
@@ -135,7 +122,7 @@ function getPageSpans(page: TracesPageResponse) {
 /** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
  *  Also surfaces page 0's deltaCursor so the live-tail query can read it reactively. */
 export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
-  spans: LightSpanRecord[];
+  spans: TraceSpan[];
   deltaCursor: string | undefined;
 } {
   const seen = new Set<string>();
@@ -163,6 +150,7 @@ export function refreshPage0Rows(
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
+  if (!firstPage) return old;
 
   const refreshedRows =
     listMode === 'branches' && 'branches' in refreshed
@@ -222,6 +210,7 @@ export function mergeDeltaIntoPage0(
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
+  if (!firstPage) return old;
   const nextCursor = delta.deltaCursor ?? firstPage.deltaCursor;
 
   let updatedFirst: TracesPageResponse;
@@ -253,7 +242,7 @@ export interface UseTracesArgs extends TracesFilters {
 }
 
 interface UseTracesReturn {
-  data: { spans: LightSpanRecord[]; deltaCursor: string | undefined } | undefined;
+  data: { spans: TraceSpan[]; deltaCursor: string | undefined } | undefined;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;

@@ -1,9 +1,9 @@
-import { Txt } from '@mastra/playground-ui';
-import { LockIcon, TriangleAlertIcon } from 'lucide-react';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { LockIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
-import { AgentSearchbar } from '../agent-searchbar';
 import { AgentSelectableCard } from '../agent-selectable-card';
 import { FilterableList } from './filterable-list';
 import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
@@ -136,14 +136,18 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
         )}
 
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
-          <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
-            <AgentSearchbar
-              onSearch={setSearch}
-              label="Search models"
-              placeholder="Search models or providers..."
-              size="lg"
-              debounceMs={0}
-            />
+          <div data-testid="model-card-picker-search" className="bg-surface3 max-w-[30ch] shrink-0 rounded-full">
+            <InputGroup variant="outline" size="lg">
+              <InputGroupAddon align="inline-start">
+                <SearchIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                aria-label="Search models"
+                placeholder="Search models or providers..."
+                onChange={event => setSearch(event.target.value)}
+              />
+            </InputGroup>
           </div>
 
           {groups.length === 0 ? (
@@ -199,12 +203,12 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           <Txt
             variant="ui-sm"
             as="h3"
-            className="text-neutral3 uppercase tracking-wide"
+            className="text-neutral3 tracking-wide uppercase"
             data-testid={`model-provider-section-title-${group.providerId}`}
           >
             {group.providerName}
           </Txt>
-          <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 content-start gap-2 sm:grid-cols-2 lg:gap-6 2xl:grid-cols-3">
             {group.models.map(entry => {
               const cleanedProvider = cleanProviderId(entry.provider);
               const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
@@ -238,11 +242,11 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="mx-6 mb-6 flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
+      className="border-accent6 bg-accent6Dark/40 text-accent6 mx-6 mb-6 flex items-start gap-2 rounded-md border px-3 py-2"
       data-testid="model-detail-stale-warning"
       role="alert"
     >
-      <TriangleAlertIcon className="h-4 w-4 shrink-0 mt-0.5" />
+      <TriangleAlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
       <Txt variant="ui-xs">
         <span className="font-medium">
           {provider}/{modelId}
@@ -260,14 +264,14 @@ interface LockedModelChipProps {
 
 const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
   <div
-    className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2"
+    className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
     data-testid="model-detail-locked-chip"
   >
-    <LockIcon className="h-4 w-4 shrink-0 text-neutral3" />
-    <Txt variant="ui-sm" className="font-medium text-neutral6 truncate">
+    <LockIcon className="text-neutral3 h-4 w-4 shrink-0" />
+    <Txt variant="ui-sm" className="text-neutral6 truncate font-medium">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>
-    <Txt variant="ui-xs" className="ml-auto shrink-0 text-neutral3">
+    <Txt variant="ui-xs" className="text-neutral3 ml-auto shrink-0">
       Set by admin
     </Txt>
   </div>

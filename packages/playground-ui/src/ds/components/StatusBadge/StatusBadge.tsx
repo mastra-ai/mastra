@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 const statusBadgeVariants = cva(
   // Base styles
-  'inline-flex items-center gap-1.5 rounded-full text-ui-xs font-medium transition-colors duration-normal',
+  'duration-normal inline-flex w-fit max-w-full items-center gap-1.5 rounded-full text-ui-xs font-medium transition-colors',
   {
     variants: {
       variant: {
@@ -48,9 +48,9 @@ const dotVariants = cva('rounded-full', {
       neutral: 'bg-neutral3',
     },
     size: {
-      sm: 'w-1 h-1',
-      md: 'w-1.5 h-1.5',
-      lg: 'w-2 h-2',
+      sm: 'size-1',
+      md: 'size-1.5',
+      lg: 'size-2',
     },
     pulse: {
       true: 'animate-pulse',

@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useParams } from 'react-router';
@@ -46,7 +46,7 @@ export default function AgentBuilderSkillsEdit() {
 }
 
 const AgentBuilderSkillEditSkeleton = () => (
-  <div className="h-screen w-screen flex items-center justify-center">
+  <div className="flex h-screen w-screen items-center justify-center">
     <Spinner />
   </div>
 );
@@ -138,7 +138,7 @@ const AgentBuilderSkillEditReady = ({ id, initialUserMessage }: ReadyProps) => {
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
       }
       primaryAction={
-        <div className="hidden lg:flex items-center gap-2">
+        <div className="hidden items-center gap-2 lg:flex">
           <VisibilitySelectConnected skillId={id} />
         </div>
       }

@@ -1,9 +1,27 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Home, Bot, Workflow, Settings, Database, FileText, Users, Bell, LifeBuoy, BookOpen } from 'lucide-react';
+import {
+  Brain,
+  CalendarClock,
+  Home,
+  Bot,
+  Workflow,
+  Settings,
+  Database,
+  FileText,
+  History,
+  Users,
+  Bell,
+  LifeBuoy,
+  BookOpen,
+  Radio,
+  Search,
+  Sparkles,
+  Wrench,
+} from 'lucide-react';
 import { useState, forwardRef } from 'react';
 import { TooltipProvider } from '../Tooltip';
-import { MainSidebar, MainSidebarProvider } from './main-sidebar';
-import type { MainSidebarProviderProps } from './main-sidebar';
+import { getIsLinkActive, MainSidebar, MainSidebarProvider, useMainSidebar } from './main-sidebar';
+import type { MainSidebarProviderProps, NavSection } from './main-sidebar';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +30,27 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/ds/components/Dialog';
+import { LogoWithoutText } from '@/ds/components/Logo';
+import {
+  AgentIcon,
+  DatasetsIcon,
+  ExperimentsIcon,
+  HomeIcon,
+  LogsIcon,
+  McpServerIcon,
+  MetricsIcon,
+  ProcessorIcon,
+  PromptIcon,
+  RequestContextIcon,
+  ScorersIcon,
+  SettingsIcon,
+  ToolsIcon,
+  TraceIcon,
+  WorkflowIcon,
+  WorkspacesIcon,
+} from '@/ds/icons';
 import type { LinkComponentProps } from '@/ds/types/link-component';
+import { cn } from '@/lib/utils';
 
 const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, children, ...props }, ref) => (
   <a ref={ref} href={href} {...props}>
@@ -26,33 +64,104 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
 
 const HelperCopy = () => (
   <>
-    <p className="text-neutral5 text-ui-md font-medium">Main content area</p>
-    <p className="text-neutral4 text-ui-sm mt-2 max-w-[40ch]">
-      Hover the sidebar edge to reveal the handle. Drag to resize, click to toggle, or hit{' '}
-      <kbd className="rounded bg-surface5 px-1 font-mono text-[0.65rem] text-neutral4">⌘B</kbd>.
+    <p className="text-ui-md text-neutral5 font-medium">Main content area</p>
+    <p className="text-ui-sm text-neutral4 mt-2 max-w-[40ch]">
+      Hover the sidebar edge to reveal the handle. Drag to resize, or click to toggle.
     </p>
   </>
 );
 
 const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex h-[500px] w-[840px] bg-surface1 border border-border1 rounded-lg">
+  <div className="border-border1 bg-surface1 flex h-125 w-210 rounded-lg border">
     {children}
-    <div className="flex-1 min-w-0 p-6">
+    <div className="min-w-0 flex-1 p-6">
       <HelperCopy />
     </div>
   </div>
 );
 
+const StudioFrame = ({ children }: { children: React.ReactNode }) => (
+  <div className="bg-surface1 flex h-180 w-270 overflow-hidden">
+    {children}
+    <main className="flex min-w-0 flex-1 flex-col">
+      <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
+        <div className="min-w-0">
+          <p className="text-ui-lg text-neutral6 truncate font-semibold">Traces</p>
+          <p className="text-ui-xs text-neutral4 truncate">Observability / Traces</p>
+        </div>
+        <span className="border-border1 bg-surface3 text-ui-xs text-neutral5 rounded-md border px-2.5 py-1 font-medium">
+          Live
+        </span>
+      </header>
+      <section className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+        <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              ['Trace volume', '1,284'],
+              ['p95 latency', '428ms'],
+              ['Error rate', '0.8%'],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
+                <p className="text-ui-xs text-neutral3 font-medium uppercase">{label}</p>
+                <p className="text-neutral6 mt-2 text-2xl font-semibold">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
+            <div className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-ui-md text-neutral6 font-semibold">Recent spans</p>
+                <p className="text-ui-xs text-neutral4">Updated now</p>
+              </div>
+              <div className="grid gap-2">
+                {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
+                  <div
+                    key={name}
+                    className="border-border1 bg-surface2 grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border px-3 py-2"
+                  >
+                    <span className="text-ui-sm text-neutral6 truncate">{name}</span>
+                    <span className="text-ui-xs text-neutral4 text-right">
+                      {index === 1 ? '91ms' : `${220 + index * 56}ms`}
+                    </span>
+                    <span className="text-ui-xs text-accent1 text-right font-medium">ok</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <aside className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
+              <p className="text-ui-md text-neutral6 font-semibold">Trace detail</p>
+              <dl className="text-ui-sm mt-4 grid gap-3">
+                <div>
+                  <dt className="text-neutral3">Service</dt>
+                  <dd className="text-neutral6 mt-1">studio</dd>
+                </div>
+                <div>
+                  <dt className="text-neutral3">Environment</dt>
+                  <dd className="text-neutral6 mt-1">development</dd>
+                </div>
+                <div>
+                  <dt className="text-neutral3">Status</dt>
+                  <dd className="text-neutral6 mt-1">Completed</dd>
+                </div>
+              </dl>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+);
+
 const MobileFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex flex-col h-screen w-screen bg-surface1 overflow-hidden">
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border1 px-3">
+  <div className="bg-surface1 flex h-screen w-screen flex-col overflow-hidden">
+    <header className="border-border1 flex h-12 shrink-0 items-center gap-3 border-b px-3">
       <MainSidebar.MobileTrigger />
       <span className="text-neutral6 text-sm font-medium">Mastra Studio</span>
     </header>
     {children}
-    <div className="flex-1 min-w-0 p-4">
-      <p className="text-neutral5 text-ui-md font-medium">Mobile viewport</p>
-      <p className="text-neutral4 text-ui-sm mt-2 max-w-[34ch]">
+    <div className="min-w-0 flex-1 p-4">
+      <p className="text-ui-md text-neutral5 font-medium">Mobile viewport</p>
+      <p className="text-ui-sm text-neutral4 mt-2 max-w-[34ch]">
         Switch viewports in the toolbar. The sidebar auto-detects via <code>matchMedia</code> against the iframe
         viewport — no manual prop needed.
       </p>
@@ -73,6 +182,137 @@ const withProvider = (provider?: Omit<MainSidebarProviderProps, 'children'>) => 
   </TooltipProvider>
 );
 
+const studioSections: NavSection[] = [
+  {
+    key: 'primitives',
+    title: 'Primitives',
+    links: [
+      { name: 'Agents', url: '/agents', icon: <AgentIcon /> },
+      { name: 'Prompts', url: '/prompts', icon: <PromptIcon /> },
+      { name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> },
+      { name: 'Processors', url: '/processors', icon: <ProcessorIcon /> },
+      { name: 'MCP Servers', url: '/mcps', icon: <McpServerIcon /> },
+      { name: 'Tools', url: '/tools', icon: <ToolsIcon /> },
+      { name: 'Workspaces', url: '/workspaces', icon: <WorkspacesIcon /> },
+      { name: 'Request Context', url: '/request-context', icon: <RequestContextIcon /> },
+    ],
+  },
+  {
+    key: 'evaluation',
+    title: 'Evaluation',
+    links: [
+      { name: 'Overview', url: '/evaluation', icon: <HomeIcon /> },
+      { name: 'Scorers', url: '/scorers', icon: <ScorersIcon /> },
+      { name: 'Datasets', url: '/datasets', icon: <DatasetsIcon /> },
+      { name: 'Experiments', url: '/experiments', icon: <ExperimentsIcon /> },
+    ],
+  },
+  {
+    key: 'observability',
+    title: 'Observability',
+    links: [
+      { name: 'Metrics', url: '/metrics', icon: <MetricsIcon /> },
+      { name: 'Traces', url: '/observability', icon: <TraceIcon /> },
+      { name: 'Logs', url: '/logs', icon: <LogsIcon /> },
+    ],
+  },
+];
+
+const StudioSidebarBody = () => {
+  const { state, isMobile } = useMainSidebar();
+  const activePath = '/observability/traces/live';
+
+  return (
+    <MainSidebar>
+      <div className="mb-2 pt-2">
+        {state === 'collapsed' ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative grid size-9 place-items-center">
+              <LogoWithoutText
+                className={cn(
+                  'size-[1.5rem] shrink-0 transition-opacity duration-150',
+                  !isMobile && 'group-hover/sidebar:opacity-0',
+                )}
+              />
+              {!isMobile && (
+                <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+                  <MainSidebar.Trigger />
+                </div>
+              )}
+            </div>
+            <span className="border-border1 bg-surface4 size-6 rounded-full border" aria-label="Signed in" />
+          </div>
+        ) : (
+          <span className="flex items-center justify-between pr-2 pl-3">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <LogoWithoutText className="size-[1.5rem] shrink-0" />
+              <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+                Mastra Studio
+              </span>
+              {!isMobile && <MainSidebar.Trigger />}
+            </span>
+            <span className="border-border1 bg-surface4 size-7 rounded-full border" aria-label="Signed in" />
+          </span>
+        )}
+      </div>
+
+      <div className="mb-2">
+        <MainSidebar.NavList>
+          <MainSidebar.NavLink asChild state={state} link={{ name: 'Search', url: '#', icon: <Search /> }}>
+            <button
+              type="button"
+              aria-label="Search and navigate"
+              className="border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5 border"
+            >
+              <Search />
+              <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
+              {state !== 'collapsed' && (
+                <kbd
+                  aria-hidden="true"
+                  className="border-border1 bg-surface4 text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none"
+                >
+                  ⌘K
+                </kbd>
+              )}
+            </button>
+          </MainSidebar.NavLink>
+        </MainSidebar.NavList>
+      </div>
+
+      <div className="mb-1">
+        <MainSidebar.NavList>
+          <MainSidebar.NavLink
+            state={state}
+            link={{ name: 'Agent Builder', url: '/agent-builder', icon: <Wrench /> }}
+          />
+        </MainSidebar.NavList>
+      </div>
+
+      <MainSidebar.Nav>
+        <MainSidebar.Sections
+          sections={studioSections}
+          isActive={(link, siblings) => getIsLinkActive(link, activePath, siblings)}
+        />
+      </MainSidebar.Nav>
+
+      <MainSidebar.Bottom className="pb-3">
+        <MainSidebar.NavList>
+          <MainSidebar.NavLink state={state} link={{ name: 'Settings', url: '/settings', icon: <SettingsIcon /> }} />
+          <MainSidebar.NavLink state={state} link={{ name: 'Resources', url: '/resources', icon: <BookOpen /> }} />
+        </MainSidebar.NavList>
+        {state !== 'collapsed' && (
+          <>
+            <hr className="bg-border1 mx-6 my-2 h-px border-0" />
+            <span className="bg-sidebar-nav-active text-ui-xs dark:text-neutral6 ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none font-semibold text-black/80">
+              v0.0.0
+            </span>
+          </>
+        )}
+      </MainSidebar.Bottom>
+    </MainSidebar>
+  );
+};
+
 const meta: Meta<typeof MainSidebar> = {
   title: 'Layout/MainSidebar',
   component: MainSidebar,
@@ -88,7 +328,7 @@ type Story = StoryObj<typeof MainSidebar>;
 export const Default: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-r border-border1 bg-surface2">
+      <MainSidebar className="border-border1 bg-surface2 border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
@@ -109,7 +349,7 @@ export const Default: Story = {
 export const WithSections: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-r border-border1 bg-surface2">
+      <MainSidebar className="border-border1 bg-surface2 border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Main</MainSidebar.NavHeader>
@@ -138,10 +378,68 @@ export const WithSections: Story = {
   ),
 };
 
+export const WithNestedItems: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`MainSidebar.Sections` accepts `children` on a link for nested navigation. Parent rows remain real links, child rows render as subitems, nested rows can include their own icons, and `getIsLinkActive` keeps descendant routes from highlighting the parent at the same time.',
+      },
+    },
+  },
+  render: () => (
+    <DefaultFrame>
+      <MainSidebar className="border-border1 bg-surface2 border-r">
+        <MainSidebar.Nav>
+          <MainSidebar.Sections
+            sections={[
+              {
+                key: 'workspace',
+                title: 'Workspace',
+                links: [
+                  {
+                    name: 'Agents',
+                    url: '/agents',
+                    icon: <Bot />,
+                    children: [
+                      { name: 'Templates', url: '/agents/templates', icon: <Sparkles /> },
+                      { name: 'Memory', url: '/agents/memory', icon: <Brain /> },
+                      { name: 'Channels', url: '/agents/channels', icon: <Radio /> },
+                    ],
+                  },
+                  {
+                    name: 'Workflows',
+                    url: '/workflows',
+                    icon: <Workflow />,
+                    children: [
+                      { name: 'Runs', url: '/workflows/runs', icon: <History /> },
+                      { name: 'Schedules', url: '/workflows/schedules', icon: <CalendarClock /> },
+                    ],
+                  },
+                ],
+              },
+              {
+                key: 'settings',
+                title: 'Admin',
+                separator: true,
+                links: [{ name: 'Settings', url: '/settings', icon: <Settings /> }],
+              },
+            ]}
+            isActive={(link, siblings) => getIsLinkActive(link, '/agents/templates', siblings)}
+          />
+        </MainSidebar.Nav>
+        <MainSidebar.Bottom>
+          <MainSidebar.Trigger />
+        </MainSidebar.Bottom>
+      </MainSidebar>
+    </DefaultFrame>
+  ),
+};
+
 export const WithBottom: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-r border-border1 bg-surface2">
+      <MainSidebar className="border-border1 bg-surface2 border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
@@ -166,39 +464,20 @@ export const WithBottom: Story = {
 };
 
 export const FullSidebar: Story = {
+  name: 'Studio full sidebar',
+  decorators: [withProvider({ defaultWidth: 272, minWidth: 232, maxWidth: 420, collapseBelow: 200 })],
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Full Studio shell using the same sidebar composition pattern as `AppSidebar`: brand header, command search, Agent Builder link, primary sections, bottom links, and main content layout.',
+      },
+    },
+  },
   render: () => (
-    <DefaultFrame>
-      <MainSidebar className="border-r border-border1 bg-surface2">
-        <MainSidebar.Nav>
-          <MainSidebar.NavSection>
-            <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
-            <MainSidebar.NavList>
-              <MainSidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
-              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
-              <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
-            </MainSidebar.NavList>
-          </MainSidebar.NavSection>
-
-          <MainSidebar.NavSeparator />
-
-          <MainSidebar.NavSection>
-            <MainSidebar.NavHeader>Resources</MainSidebar.NavHeader>
-            <MainSidebar.NavList>
-              <MainSidebar.NavLink link={{ name: 'Storage', url: '/storage', icon: <Database /> }} />
-              <MainSidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <FileText /> }} />
-            </MainSidebar.NavList>
-          </MainSidebar.NavSection>
-        </MainSidebar.Nav>
-
-        <MainSidebar.Bottom>
-          <MainSidebar.NavSeparator />
-          <MainSidebar.NavList>
-            <MainSidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <Settings /> }} />
-          </MainSidebar.NavList>
-          <MainSidebar.Trigger />
-        </MainSidebar.Bottom>
-      </MainSidebar>
-    </DefaultFrame>
+    <StudioFrame>
+      <StudioSidebarBody />
+    </StudioFrame>
   ),
 };
 
@@ -207,7 +486,7 @@ export const FullSidebar: Story = {
 /* ------------------------------------------------------------------------- */
 
 const SidebarBody = () => (
-  <MainSidebar className="border-r border-border1 bg-surface2">
+  <MainSidebar className="border-border1 bg-surface2 border-r">
     <MainSidebar.Nav>
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -230,7 +509,7 @@ export const Resizable: Story = {
     docs: {
       description: {
         story:
-          'Drag the right edge to resize between min and max width. Width is persisted to `localStorage` under `sidebar:width`. Dragging below `collapseBelow` snaps the sidebar to its collapsed state; the toggle (or `Ctrl+B`) restores the last expanded width.',
+          'Drag the right edge to resize between min and max width. Width is persisted to `localStorage` under `sidebar:width`. Dragging below `collapseBelow` snaps the sidebar to its collapsed state; the toggle restores the last expanded width.',
       },
     },
   },
@@ -247,7 +526,7 @@ export const Collapsed: Story = {
     docs: {
       description: {
         story:
-          'Icon-only mode. `NavLink` and `NavHeader` both render compact when their `state` prop (or context state) is `"collapsed"`. Use the trigger or `Ctrl+B` to expand.',
+          'Icon-only mode. `NavLink` and `NavHeader` both render compact when their `state` prop (or context state) is `"collapsed"`. Use the trigger to expand.',
       },
     },
   },
@@ -272,7 +551,7 @@ export const FullyCollapsible: Story = {
     docs: {
       description: {
         story:
-          'Set `collapsedWidth: 0` for a fully hidden sidebar. The drag handle persists at the edge so users can re-open it. Drag below `collapseBelow` to snap closed; click the handle (or `Ctrl+B`) to restore the previous width.',
+          'Set `collapsedWidth: 0` for a fully hidden sidebar. The drag handle persists at the edge so users can re-open it. Drag below `collapseBelow` to snap closed; click the handle to restore the previous width.',
       },
     },
   },
@@ -299,7 +578,7 @@ export const Floating: Story = {
   },
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="m-1 bg-surface2 border border-border1/30 rounded-2xl shadow-xl">
+      <MainSidebar className="border-border1/30 bg-surface2 m-1 rounded-2xl border shadow-xl">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -323,11 +602,11 @@ export const Floating: Story = {
 /* ------------------------------------------------------------------------- */
 
 const ParityFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex h-[500px] w-[840px] gap-4 bg-surface1 border border-border1 rounded-lg p-3">{children}</div>
+  <div className="border-border1 bg-surface1 flex h-125 w-210 gap-4 rounded-lg border p-3">{children}</div>
 );
 
 const ParityBody = () => (
-  <MainSidebar className="border border-border1 bg-surface2 rounded-md">
+  <MainSidebar className="border-border1 bg-surface2 rounded-md border">
     <MainSidebar.Nav>
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -355,7 +634,7 @@ export const StateParity: Story = {
     docs: {
       description: {
         story:
-          'Side-by-side expanded vs collapsed. NavLink rows and the Trigger all share **h-9 (36px)** so toggling collapse never reflows surrounding rows. Use this story to visually verify row alignment.',
+          'Side-by-side expanded vs collapsed. NavLink rows and the Trigger all share **h-7 (28px)** so toggling collapse never reflows surrounding rows. Use this story to visually verify row alignment.',
       },
     },
   },
@@ -394,7 +673,7 @@ export const AsChild: Story = {
       const [supportOpen, setSupportOpen] = useState(false);
 
       return (
-        <MainSidebar className="border-r border-border1 bg-surface2">
+        <MainSidebar className="border-border1 bg-surface2 border-r">
           <MainSidebar.Nav>
             <MainSidebar.NavSection>
               <MainSidebar.NavHeader>Navigation</MainSidebar.NavHeader>
@@ -428,7 +707,7 @@ export const AsChild: Story = {
                       <DialogTitle>Contact support</DialogTitle>
                       <DialogDescription>asChild lets a NavLink act as a Dialog trigger.</DialogDescription>
                     </DialogHeader>
-                    <p className="text-neutral4 text-ui-sm">Anything that can be clicked can be a sidebar item.</p>
+                    <p className="text-ui-sm text-neutral4">Anything that can be clicked can be a sidebar item.</p>
                   </DialogContent>
                 </Dialog>
 
@@ -472,7 +751,7 @@ export const Mobile: Story = {
   },
   render: () => (
     <MobileFrame>
-      <MainSidebar className="border-r border-border1 bg-surface2">
+      <MainSidebar className="border-border1 bg-surface2 border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>

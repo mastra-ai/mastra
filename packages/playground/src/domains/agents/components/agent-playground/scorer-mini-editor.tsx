@@ -1,16 +1,14 @@
-import {
-  Badge,
-  Button,
-  Input,
-  Label,
-  ScrollArea,
-  Spinner,
-  Textarea,
-  Txt,
-  Icon,
-  toast,
-  cn,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { ArrowLeft, Play, Save, Plus, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
@@ -372,9 +370,9 @@ export function ScorerMiniEditor({
   }, [savedScorerId, scorerDatasetId, triggerExperiment]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border1">
+      <div className="border-border1 flex items-center gap-2 border-b px-4 py-3">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <Icon>
             <ArrowLeft />
@@ -397,7 +395,7 @@ export function ScorerMiniEditor({
             <Spinner className="mr-2" /> Loading scorer...
           </div>
         ) : (
-          <div className="p-4 space-y-6">
+          <div className="space-y-6 p-4">
             {/* Scorer Configuration */}
             <div className="space-y-4">
               <div className="space-y-2">
@@ -433,7 +431,7 @@ export function ScorerMiniEditor({
               </div>
 
               <div className="flex gap-4">
-                <div className="space-y-2 flex-1">
+                <div className="flex-1 space-y-2">
                   <Label>Min Score</Label>
                   <Input
                     type="number"
@@ -444,7 +442,7 @@ export function ScorerMiniEditor({
                     onChange={e => setScoreMin(Number(e.target.value))}
                   />
                 </div>
-                <div className="space-y-2 flex-1">
+                <div className="flex-1 space-y-2">
                   <Label>Max Score</Label>
                   <Input
                     type="number"
@@ -483,7 +481,7 @@ export function ScorerMiniEditor({
               </div>
 
               {testItems.length === 0 && (
-                <div className="border border-dashed border-border1 rounded-lg p-6 text-center">
+                <div className="border-border1 rounded-lg border border-dashed p-6 text-center">
                   <Txt variant="ui-sm" className="text-icon3">
                     No test items yet. Add items with expected scoring direction to verify your scorer works correctly.
                   </Txt>
@@ -582,9 +580,9 @@ export function ScorerMiniEditor({
 
                     {/* Test result for this item */}
                     {(resultScore !== null || resultError) && (
-                      <div className="flex items-center gap-3 pt-2 border-t border-border1">
+                      <div className="border-border1 flex items-center gap-3 border-t pt-2">
                         {resultError ? (
-                          <div className="flex items-center gap-1.5 text-error">
+                          <div className="text-error flex items-center gap-1.5">
                             <Icon size="sm">
                               <AlertCircle />
                             </Icon>
@@ -596,7 +594,7 @@ export function ScorerMiniEditor({
                               Score: {resultScore?.toFixed(3)}
                             </Txt>
                             {resultReason && (
-                              <Txt variant="ui-xs" className="text-icon3 truncate flex-1">
+                              <Txt variant="ui-xs" className="text-icon3 flex-1 truncate">
                                 {resultReason}
                               </Txt>
                             )}
@@ -611,7 +609,7 @@ export function ScorerMiniEditor({
 
             {/* Summary of test results */}
             {experimentResults.length > 0 && (
-              <div className="border border-border1 rounded-lg p-3">
+              <div className="border-border1 rounded-lg border p-3">
                 <div className="flex items-center gap-3">
                   <Txt variant="ui-sm" className="font-medium">
                     Test Results:
@@ -655,7 +653,7 @@ export function ScorerMiniEditor({
       </ScrollArea>
 
       {/* Action bar */}
-      <div className="flex items-center gap-2 px-4 py-3 border-t border-border1">
+      <div className="border-border1 flex items-center gap-2 border-t px-4 py-3">
         {isEditing ? (
           <>
             <Button variant="default" size="sm" onClick={handleSave} disabled={isSaving || !instructions.trim()}>

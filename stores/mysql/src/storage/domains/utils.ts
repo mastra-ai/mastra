@@ -88,7 +88,7 @@ export function transformToSqlValue(value: any): SqlParam {
   return value;
 }
 
-export function prepareStatement({
+export function prepareInsertOnlyStatement({
   tableName,
   record,
   database,
@@ -108,12 +108,32 @@ export function prepareStatement({
   const columnIdentifiers = columns.map(column => quoteIdentifier(column, 'column name'));
   const values = columns.map(column => transformToSqlValue(record[column]));
   const placeholders = columns.map(() => '?').join(', ');
-  const updateAssignments = columnIdentifiers.map(column => `${column} = ?`).join(', ');
 
-  const sql = `INSERT INTO ${tableIdent} (${columnIdentifiers.join(', ')}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updateAssignments}`;
   return {
-    sql,
-    args: [...values, ...values],
+    sql: `INSERT INTO ${tableIdent} (${columnIdentifiers.join(', ')}) VALUES (${placeholders})`,
+    args: values,
+  };
+}
+
+export function prepareStatement({
+  tableName,
+  record,
+  database,
+}: {
+  tableName: TABLE_NAMES;
+  record: Record<string, any>;
+  database?: string;
+}): {
+  sql: string;
+  args: SqlParam[];
+} {
+  const statement = prepareInsertOnlyStatement({ tableName, record, database });
+  const columns = Object.keys(record).map(column => quoteIdentifier(column, 'column name'));
+  const updateAssignments = columns.map(column => `${column} = ?`).join(', ');
+
+  return {
+    sql: `${statement.sql} ON DUPLICATE KEY UPDATE ${updateAssignments}`,
+    args: [...statement.args, ...statement.args],
   };
 }
 

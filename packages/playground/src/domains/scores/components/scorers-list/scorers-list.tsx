@@ -1,5 +1,10 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Chip, DataList as EntityList, DataListSkeleton as EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
@@ -42,7 +47,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
   }
 
   return (
-    <EntityList columns={COLUMNS}>
+    <EntityList columns={COLUMNS} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -71,7 +76,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         return (
           <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)} LinkComponent={Link}>
             <EntityList.NameCell>
-              <span className="flex min-w-0 max-w-full items-center gap-1.5">
+              <span className="flex max-w-full min-w-0 items-center gap-1.5">
                 <span className="min-w-0 truncate">{name}</span>
                 {isTrajectory && (
                   <Chip size="small" color="purple" className="shrink-0">

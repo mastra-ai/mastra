@@ -68,16 +68,41 @@ Verify observability is configured before testing traces:
 
 ### 1. Check `src/mastra/index.ts`
 
+`create-mastra` now scaffolds `PinoLogger` + `Observability` (not the older
+`createLogger` / `OtelConfig`), and wires a `MastraCompositeStore` with a
+default LibSQL store plus a DuckDB store for the `observability` domain:
+
 ```typescript
-import { createLogger } from '@mastra/core/logger';
-import { OtelConfig } from '@mastra/core/telemetry';
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { DuckDBStore } from '@mastra/duckdb';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import {
+  Observability,
+  MastraStorageExporter,
+  MastraPlatformExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
 
 export const mastra = new Mastra({
-  // ... agents, tools, etc.
-  logger: createLogger({ name: 'my-app', level: 'info' }),
-  telemetry: new OtelConfig({
-    serviceName: 'my-app',
-    enabled: true,
+  // ... agents, workflows, scorers
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
+  }),
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
   }),
 });
 ```
@@ -87,13 +112,15 @@ export const mastra = new Mastra({
 Verify `package.json` includes:
 
 - `@mastra/observability`
+- `@mastra/loggers`
+- `@mastra/libsql` (default store) and `@mastra/duckdb` (observability domain)
 
 ### 3. Check Dev Server Output
 
-When starting the dev server, look for:
-
-- "OpenTelemetry initialized" or similar success message
-- Should NOT see "MASTRA_CLOUD_ACCESS_TOKEN not set" (that's for cloud only)
+When starting the dev server, look for the version banner and Studio URL,
+e.g. `mastra 1.13.0-alpha.4 ready in …` followed by Studio at
+`http://localhost:4111` and the API at `http://localhost:4111/api`.
+Should NOT see `MASTRA_CLOUD_ACCESS_TOKEN not set` (that's for cloud only).
 
 ### Troubleshooting Local Traces
 

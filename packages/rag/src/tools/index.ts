@@ -10,4 +10,5 @@ export type {
   PineconeConfig,
   PgVectorConfig,
   ChromaConfig,
+  TurbopufferConfig,
 } from './types';

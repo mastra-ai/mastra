@@ -1,4 +1,5 @@
-import { Badge, Txt } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentSelectableCard } from '../agent-selectable-card';
 
@@ -37,7 +38,7 @@ export const ToolCard = ({ item, editable, onToggle }: ToolCardProps) => {
           needsConnection ? (
             <Txt
               variant="ui-xs"
-              className="flex h-7 items-center text-neutral3"
+              className="text-neutral3 flex h-7 items-center"
               data-testid={`tool-card-requires-connection-${item.type}-${item.id}`}
             >
               Requires connection

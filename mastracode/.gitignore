@@ -1,4 +1,6 @@
 .env
 .test-tmp/
 .test-tmp-editor/
+.tmp-mc-e2e/
+.tmp-mc-e2e-vitest/
 .mastra-project.json

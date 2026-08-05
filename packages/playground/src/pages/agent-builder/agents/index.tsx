@@ -1,17 +1,14 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
-import {
-  AgentIcon,
-  Button,
-  EmptyState,
-  ErrorState,
-  ListSearch,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -78,7 +75,7 @@ export default function AgentBuilderAgentsPage() {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
-            iconSlot={<AgentIcon className="h-8 w-8 text-neutral3" />}
+            iconSlot={<AgentIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No agents yet"
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={

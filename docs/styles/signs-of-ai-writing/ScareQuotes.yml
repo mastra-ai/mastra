@@ -1,0 +1,6 @@
+extends: existence
+message: "Unnecessary quotation/hedging detected: '%s'"
+level: suggestion
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+raw:
+  - 'so-called [''"].+?[''"]'

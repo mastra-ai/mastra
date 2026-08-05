@@ -1,0 +1,11 @@
+{
+  "temperature": [
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "ZhipuAI/GLM-4.5",
+    "ZhipuAI/GLM-4.6"
+  ]
+}

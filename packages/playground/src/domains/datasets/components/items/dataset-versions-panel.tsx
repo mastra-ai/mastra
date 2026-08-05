@@ -1,6 +1,10 @@
 'use client';
 
-import { Button, ButtonsGroup, Checkbox, Column, ItemList } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { format } from 'date-fns';
 import { XIcon, GitCompareIcon, ArrowRightIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -73,7 +77,7 @@ export function DatasetVersionsPanel({
   return (
     <Column withLeftSeparator={true} className="w-56">
       {isSelectionActive ? (
-        <Column.Toolbar className="grid justify-stretch gap-3 w-full">
+        <Column.Toolbar className="grid w-full justify-stretch gap-3">
           <ButtonsGroup>
             <Button onClick={handleCancelSelection}>Cancel</Button>
             <Button
@@ -149,7 +153,7 @@ export function DatasetVersionsPanel({
                 })}
               </ItemList.Items>
               {hasNextPage && (
-                <Button size="md" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="w-full mt-2">
+                <Button size="md" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="mt-2 w-full">
                   {isFetchingNextPage ? 'Loading...' : 'Load More'}
                 </Button>
               )}

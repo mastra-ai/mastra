@@ -1,16 +1,11 @@
-import {
-  Button,
-  Column,
-  Columns,
-  MainContentContent,
-  MainContentLayout,
-  MainHeader,
-  PermissionDenied,
-  SessionExpired,
-  TextAndIcon,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
@@ -75,7 +70,7 @@ function DatasetCompareVersionsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="text-neutral4 py-8 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
@@ -98,7 +93,7 @@ function DatasetCompareVersionsPage() {
   return (
     <MainContentLayout>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
+        <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-6">
           <MainHeader>
             <MainHeader.Column>
               <MainHeader.Title>

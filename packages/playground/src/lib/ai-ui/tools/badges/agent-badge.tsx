@@ -1,7 +1,8 @@
-import { CodeEditor, AgentIcon } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import React from 'react';
 import Markdown from 'react-markdown';
-import { ToolFallback } from '../tool-fallback';
+import { ToolCard } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
@@ -86,7 +87,7 @@ export const AgentBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
+      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
@@ -123,16 +124,12 @@ export const AgentBadge = ({
 
         return (
           <React.Fragment key={index}>
-            <ToolFallback
+            <ToolCard
               toolName={message.toolName}
-              argsText={typeof message.args === 'string' ? message.args : JSON.stringify(message.args)}
-              result={result}
-              args={message.args}
-              status={{ type: 'complete' }}
-              type="tool-call"
+              input={message.args}
+              output={result}
+              state="output-available"
               toolCallId={message.toolCallId}
-              addResult={() => {}}
-              resume={() => {}}
               metadata={{
                 mode: 'stream',
                 requireApprovalMetadata: parentRequireApprovalMetadata,
@@ -145,7 +142,7 @@ export const AgentBadge = ({
 
       {suspendPayloadSlot !== undefined && suspendPayload && (
         <div>
-          <p className="font-medium pb-2">Agent suspend payload</p>
+          <p className="pb-2 font-medium">Agent suspend payload</p>
           {suspendPayloadSlot}
         </div>
       )}

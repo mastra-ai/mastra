@@ -1,4 +1,6 @@
-import { Button, MarkdownRenderer, Spinner } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -35,7 +37,7 @@ export default function AgentBuilderSkillsView() {
 }
 
 const AgentBuilderSkillViewSkeleton = () => (
-  <div className="h-screen w-screen flex items-center justify-center">
+  <div className="flex h-screen w-screen items-center justify-center">
     <Spinner />
   </div>
 );
@@ -58,7 +60,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="skill-view-page">
       {/* Header */}
-      <div className="flex min-w-0 items-center gap-2 bg-surface1 px-3 py-2 md:px-6 md:py-3">
+      <div className="bg-surface1 flex min-w-0 items-center gap-2 px-3 py-2 md:px-6 md:py-3">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -70,7 +72,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="min-w-0 truncate text-ui-md text-neutral6" data-testid="skill-view-title">
+          <div className="text-ui-md text-neutral6 min-w-0 truncate" data-testid="skill-view-title">
             {skill.name}
           </div>
         </div>
@@ -97,11 +99,11 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
       </div>
 
       {/* Body */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-surface1">
+      <div className="bg-surface1 min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[80ch] px-4 pt-6 pb-10 md:px-10">
           <h1 className="text-display-md text-neutral6">{skill.name}</h1>
           {skill.description && (
-            <p className="mt-2 text-ui-md text-neutral4" data-testid="skill-view-description">
+            <p className="text-ui-md text-neutral4 mt-2" data-testid="skill-view-description">
               {skill.description}
             </p>
           )}

@@ -1,4 +1,5 @@
 import type {
+  BuilderAvailableModelsResponse,
   BuilderSettingsResponse,
   ChannelPlatformInfo,
   ListStoredWorkspacesResponse,
@@ -30,6 +31,21 @@ export const buildBuilderSettings = (overrides?: Partial<BuilderSettingsResponse
       browser: false,
     },
   },
+  ...overrides,
+});
+
+/**
+ * `GET /api/editor/builder/models/available` fixture. The server returns the
+ * already policy-filtered provider/model list; `useAllModels` flattens each
+ * provider's `models` array into `{ provider, providerName, model }` entries.
+ */
+export const buildAvailableModels = (
+  overrides?: Partial<BuilderAvailableModelsResponse>,
+): BuilderAvailableModelsResponse => ({
+  providers: [
+    { id: 'openai', name: 'OpenAI', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-4o'] },
+    { id: 'anthropic', name: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', connected: true, models: ['claude-3-5-sonnet'] },
+  ],
   ...overrides,
 });
 

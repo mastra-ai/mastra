@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "1.2.4",
+  "version": "1.7.0",
   "description": "",
   "type": "module",
   "files": [
@@ -49,15 +49,26 @@
         "default": "./dist/scorers/utils.cjs"
       }
     },
+    "./checks": {
+      "import": {
+        "types": "./dist/checks.d.ts",
+        "default": "./dist/checks.js"
+      },
+      "require": {
+        "types": "./dist/checks.d.ts",
+        "default": "./dist/checks.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build:lib": "pnpm check && tsup --silent --config tsup.config.ts",
+    "build:lib": "pnpm check && tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test": "vitest",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",
@@ -73,6 +84,8 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",
+    "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.86",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
@@ -83,9 +96,9 @@
     "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.3.1",
-    "eslint": "^10.4.1",
-    "tsup": "^8.5.1",
+    "dotenv": "^17.4.2",
+    "eslint": "^10.7.0",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

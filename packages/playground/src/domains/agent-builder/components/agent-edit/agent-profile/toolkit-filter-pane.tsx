@@ -1,8 +1,13 @@
-import { Checkbox, ScrollArea, Skeleton, Txt, cn } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { SearchIcon } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';
-import { AgentSearchbar } from '../agent-searchbar';
 import { ToolkitConnectionControl } from './toolkit-connection-control';
 import type { ProviderSection, ToolkitOption } from './use-provider-toolkit-groups';
 
@@ -52,7 +57,7 @@ const ToolkitFilterRow = memo(
             onCheckedChange={() => onToggle(item.id)}
             style={checkboxStyle}
             data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
-            className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
+            className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
           {item.icon && (
             <img
@@ -141,7 +146,7 @@ const ProviderToolkitSection = ({
       <Txt
         variant="ui-xs"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="px-2 pt-1 text-neutral3 uppercase tracking-wide"
+        className="text-neutral3 px-2 pt-1 tracking-wide uppercase"
       >
         {provider.providerName}
       </Txt>
@@ -204,26 +209,30 @@ export const ToolkitFilterPane = ({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 py-6 px-6"
+      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-6 py-6"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <div className="shrink-0" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <AgentSearchbar
-          onSearch={setSearch}
-          label="Filter toolkits"
-          placeholder="Filter toolkits..."
-          size="lg"
-          debounceMs={0}
-        />
+      <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
+        <InputGroup variant="outline" size="lg">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Filter toolkits"
+            placeholder="Filter toolkits..."
+            onChange={event => setSearch(event.target.value)}
+          />
+        </InputGroup>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 text-ui-xs">
+      <div className="text-ui-xs flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
-          className="text-neutral3 transition-colors hover:text-neutral6 disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Select all
         </button>
@@ -235,7 +244,7 @@ export const ToolkitFilterPane = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
-          className="text-neutral3 transition-colors hover:text-neutral6 disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear all
         </button>

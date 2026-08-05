@@ -42,6 +42,7 @@ describe('resolveTarget', () => {
     vi.clearAllMocks();
     delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
     delete process.env.MASTRA_PROJECT_ID;
+    delete process.env.MASTRA_ORGANIZATION_ID;
     fetchMock.mockRejectedValue(new Error('local unavailable'));
     mocks.getToken.mockResolvedValue('platform-token');
     mocks.loadProjectConfig.mockResolvedValue(null);
@@ -50,6 +51,7 @@ describe('resolveTarget', () => {
   afterEach(() => {
     delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
     delete process.env.MASTRA_PROJECT_ID;
+    delete process.env.MASTRA_ORGANIZATION_ID;
     vi.unstubAllGlobals();
   });
 
@@ -72,6 +74,58 @@ describe('resolveTarget', () => {
     expect(mocks.loadProjectConfig).not.toHaveBeenCalled();
     expect(mocks.getToken).not.toHaveBeenCalled();
     expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('carries a normalized custom API prefix from --server-api-prefix', async () => {
+    await expect(
+      resolveTarget(options({ url: 'https://runtime.example.com', serverApiPrefix: 'api/mastra-studio/' })),
+    ).resolves.toEqual({
+      baseUrl: 'https://runtime.example.com',
+      headers: {},
+      timeoutMs: 30_000,
+      apiPrefix: '/api/mastra-studio',
+    });
+  });
+
+  it('reads the API prefix from MASTRA_API_PREFIX when the flag is absent', async () => {
+    process.env.MASTRA_API_PREFIX = '/api/mastra-studio';
+
+    try {
+      await expect(resolveTarget(options({ url: 'https://runtime.example.com' }))).resolves.toMatchObject({
+        apiPrefix: '/api/mastra-studio',
+      });
+    } finally {
+      delete process.env.MASTRA_API_PREFIX;
+    }
+  });
+
+  it('omits apiPrefix when the prefix resolves to the default /api', async () => {
+    await expect(
+      resolveTarget(options({ url: 'https://runtime.example.com', serverApiPrefix: '/api' })),
+    ).resolves.toEqual({
+      baseUrl: 'https://runtime.example.com',
+      headers: {},
+      timeoutMs: 30_000,
+    });
+  });
+
+  it('probes localhost using the custom API prefix', async () => {
+    const cancel = vi.fn();
+    fetchMock.mockResolvedValueOnce({ ok: true, body: { cancel } });
+
+    await expect(
+      resolveTarget(options({ serverApiPrefix: '/api/mastra-studio' }), fetchMock as typeof fetch),
+    ).resolves.toEqual({
+      baseUrl: 'http://localhost:4111',
+      headers: {},
+      timeoutMs: 30_000,
+      apiPrefix: '/api/mastra-studio',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4111/api/mastra-studio/system/api-schema', {
+      method: 'GET',
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('uses the hosted observability endpoint with env credentials for observability routes', async () => {
@@ -111,7 +165,95 @@ describe('resolveTarget', () => {
     expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
   });
 
-  it('keeps explicit observability headers and URL overrides', async () => {
+  it('uses the hosted learning endpoint with env credentials for learning routes', async () => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/learning/entities')).resolves.toEqual({
+      baseUrl: 'https://output.signals.mastra.ai',
+      headers: {
+        Authorization: 'Bearer env-token',
+        'X-Mastra-Project-Id': 'env-project',
+      },
+      fallbackHeaders: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'env-project',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('uses CLI auth and project config when learning env credentials are unavailable', async () => {
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+
+    await expect(
+      resolveTarget(options(), fetchMock as typeof fetch, '/learning/entities/agent_1/theme-snapshots'),
+    ).resolves.toEqual({
+      baseUrl: 'https://output.signals.mastra.ai',
+      headers: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'project-1',
+        'X-Mastra-Organization-Id': 'org-1',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('prefers the env organization ID over project config for learning routes', async () => {
+    process.env.MASTRA_ORGANIZATION_ID = 'env-org';
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/learning/entities')).resolves.toEqual({
+      baseUrl: 'https://output.signals.mastra.ai',
+      headers: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'project-1',
+        'X-Mastra-Organization-Id': 'env-org',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('does not send the organization header for observability routes', async () => {
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/v1/traces')).resolves.toEqual({
+      baseUrl: 'https://observability.mastra.ai',
+      headers: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'project-1',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('uses explicit --url for learning paths instead of the hosted endpoint', async () => {
+    await expect(
+      resolveTarget(
+        options({ url: 'https://learning-dev.example.com', header: ['Authorization: Bearer custom'] }),
+        fetchMock as typeof fetch,
+        '/learning/entities',
+      ),
+    ).resolves.toEqual({
+      baseUrl: 'https://learning-dev.example.com',
+      headers: { Authorization: 'Bearer custom' },
+      timeoutMs: 30_000,
+    });
+  });
+
+  it('uses explicit --url for observability paths instead of hosted endpoint', async () => {
     process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
     process.env.MASTRA_PROJECT_ID = 'env-project';
 
@@ -131,6 +273,25 @@ describe('resolveTarget', () => {
         'X-Mastra-Project-Id': 'custom-project',
       },
       timeoutMs: 30_000,
+    });
+  });
+
+  it('carries --server-api-prefix for observability paths when --url is set', async () => {
+    await expect(
+      resolveTarget(
+        options({
+          url: 'https://runtime.example.com',
+          serverApiPrefix: '/api/mastra-studio',
+          header: ['Authorization: Bearer token'],
+        }),
+        fetchMock as typeof fetch,
+        '/observability/traces',
+      ),
+    ).resolves.toEqual({
+      baseUrl: 'https://runtime.example.com',
+      headers: { Authorization: 'Bearer token' },
+      timeoutMs: 30_000,
+      apiPrefix: '/api/mastra-studio',
     });
   });
 

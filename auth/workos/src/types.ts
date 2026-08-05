@@ -2,15 +2,14 @@
  * Shared types for WorkOS integration.
  */
 
-import type { JwtPayload } from '@mastra/auth';
 import type {
   EEUser,
   FGARouteResolver,
   MastraFGAPermission,
   MastraFGAPermissionInput,
   RoleMapping,
-} from '@mastra/core/auth/ee';
-import type { RequestContext } from '@mastra/core/di';
+} from '@internal/auth/ee';
+import type { JwtPayload } from '@mastra/auth';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
 // ============================================================================
@@ -155,6 +154,20 @@ export interface MastraAuthWorkosOptions {
    * Runs after `jwtClaims` mapping and can override or augment the resolved user.
    */
   mapJwtPayloadToUser?: (payload: JwtPayload) => Partial<WorkOSUser> | null | undefined;
+  /**
+   * Map an authenticated user to a memory/tenant resource id.
+   *
+   * The returned value is written to the request context as the caller's
+   * `resourceId`, which multi-tenant tool providers use to bucket connected
+   * accounts (for example, Composio's `caller-supplied` scope). Return a
+   * stable per-user or per-tenant identifier such as `user.id`.
+   *
+   * @example
+   * ```typescript
+   * new MastraAuthWorkos({ mapUserToResourceId: user => user.id })
+   * ```
+   */
+  mapUserToResourceId?: (user: WorkOSUser) => string | undefined | null;
 }
 
 // ============================================================================
@@ -238,7 +251,7 @@ export interface FGAResourceMappingEntry {
    * Derive the FGA resource ID from request/user context.
    * Return `undefined` to fall back to the raw Mastra resource ID.
    */
-  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: RequestContext }) => string | undefined;
+  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: unknown }) => string | undefined;
 }
 
 export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, string>> & Record<string, string>;
@@ -248,7 +261,7 @@ export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, str
  *
  * @example
  * ```typescript
- * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ * import { MastraFGAPermissions } from '@internal/auth/ee';
  *
  * new MastraFGAWorkos({
  *   resourceMapping: {

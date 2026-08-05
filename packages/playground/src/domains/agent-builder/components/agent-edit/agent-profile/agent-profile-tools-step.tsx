@@ -1,4 +1,6 @@
-import { Badge, Button, Icon } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 
 import { ArrowRightIcon } from 'lucide-react';
 import { AgentStepContainer } from './agent-step-container';
@@ -27,7 +29,7 @@ export const AgentProfileToolsStep = () => {
         <div className="flex items-center gap-2">
           Selected tools:{' '}
           <Badge variant="default">
-            <strong className="font-semibold text-neutral6">{selectedToolsCount}</strong>
+            <strong className="text-neutral6 font-semibold">{selectedToolsCount}</strong>
           </Badge>
         </div>
       }

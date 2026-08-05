@@ -1,7 +1,8 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { Notice, toast } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowRightToLineIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';

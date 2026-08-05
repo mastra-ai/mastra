@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Globe, LockIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useVisibilityChange } from '../../hooks/use-visibility-change-agent';

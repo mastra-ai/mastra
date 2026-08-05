@@ -17,6 +17,25 @@ interface CommandData {
 
 export type CLI_ORIGIN = 'mastra-cloud' | 'oss';
 
+/**
+ * Bucket the Mastra platform API host into coarse labels for analytics.
+ *
+ * We report the *category* of API surface a deploy is talking to (cloud,
+ * staging, localhost, custom, unknown) rather than the raw host, so
+ * self-hosted or internal domains are never leaked to telemetry.
+ */
+export function bucketApiHost(apiUrl: string): 'cloud' | 'staging' | 'localhost' | 'custom' | 'unknown' {
+  try {
+    const { host, hostname } = new URL(apiUrl);
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return 'localhost';
+    if (host === 'staging.mastra.cloud' || host.endsWith('.staging.mastra.cloud')) return 'staging';
+    if (host === 'platform.mastra.ai' || host === 'mastra.cloud' || host.endsWith('.mastra.cloud')) return 'cloud';
+    return 'custom';
+  } catch {
+    return 'unknown';
+  }
+}
+
 let analyticsInstance: PosthogAnalytics | null = null;
 
 export function getAnalytics(): PosthogAnalytics | null {
@@ -159,6 +178,10 @@ export class PosthogAnalytics {
         ...this.getSystemProperties(),
       },
     });
+  }
+
+  getDistinctId(): string {
+    return this.distinctId;
   }
 
   trackEvent(eventName: string, properties?: Record<string, any>): void {

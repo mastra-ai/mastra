@@ -27,6 +27,7 @@ import {
   parseTtlExpression,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
+  TABLE_SPAN_EVENTS,
 } from './ddl';
 import { isReplacingMergeTreeEngine } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
@@ -196,258 +197,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     });
 
-    it('supports page deltaCursor and delta polling for traces', async () => {
-      await storage.createSpan({
-        span: {
-          traceId: 'delta-trace-1',
-          spanId: 'delta-trace-root-1',
-          parentSpanId: null,
-          name: 'delta-trace-root',
-          spanType: SpanType.AGENT_RUN,
-          isEvent: false,
-          entityType: EntityType.AGENT,
-          entityId: 'delta-trace-agent',
-          entityName: 'delta-trace-agent',
-          userId: null,
-          organizationId: null,
-          resourceId: null,
-          runId: null,
-          sessionId: null,
-          threadId: null,
-          requestId: null,
-          environment: 'delta',
-          source: null,
-          serviceName: null,
-          scope: null,
-          attributes: null,
-          metadata: null,
-          tags: null,
-          links: null,
-          input: null,
-          output: null,
-          error: null,
-          startedAt: new Date('2026-05-01T00:00:00Z'),
-          endedAt: new Date('2026-05-01T00:00:01Z'),
-        },
-      });
-
-      const page = await waitForValue(
-        () => storage.listTraces({ filters: { entityName: 'delta-trace-agent' } }),
-        result => result.spans.length === 1 && typeof result.deltaCursor === 'string',
-      );
-      expect(page.spans[0]!.traceId).toBe('delta-trace-1');
-
-      const bootstrap = await storage.listTraces({ mode: 'delta', filters: { entityName: 'delta-trace-agent' } });
-      expect(bootstrap.spans).toEqual([]);
-      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
-      expect(bootstrap.deltaCursor).toBeTruthy();
-
-      await storage.createSpan({
-        span: {
-          traceId: 'delta-trace-2',
-          spanId: 'delta-trace-root-2',
-          parentSpanId: null,
-          name: 'delta-trace-root',
-          spanType: SpanType.AGENT_RUN,
-          isEvent: false,
-          entityType: EntityType.AGENT,
-          entityId: 'delta-trace-agent',
-          entityName: 'delta-trace-agent',
-          userId: null,
-          organizationId: null,
-          resourceId: null,
-          runId: null,
-          sessionId: null,
-          threadId: null,
-          requestId: null,
-          environment: 'delta',
-          source: null,
-          serviceName: null,
-          scope: null,
-          attributes: null,
-          metadata: null,
-          tags: null,
-          links: null,
-          input: null,
-          output: null,
-          error: null,
-          startedAt: new Date('2026-05-01T00:00:02Z'),
-          endedAt: new Date('2026-05-01T00:00:03Z'),
-        },
-      });
-
-      const delta = await waitForValue(
-        () =>
-          storage.listTraces({
-            mode: 'delta',
-            after: bootstrap.deltaCursor!,
-            filters: { entityName: 'delta-trace-agent' },
-          }),
-        result => result.spans.length === 1,
-      );
-      expect(delta.spans.map(span => span.traceId)).toEqual(['delta-trace-2']);
-      expect(delta.delta).toEqual({ limit: 10, hasMore: false });
-      expect(delta.deltaCursor).toBeTruthy();
-    });
-
-    it('supports page deltaCursor and delta polling for branches', async () => {
-      await storage.batchCreateSpans({
-        records: [
-          {
-            traceId: 'delta-branch-trace-1',
-            spanId: 'delta-branch-root-1',
-            parentSpanId: null,
-            name: 'root',
-            spanType: SpanType.WORKFLOW_RUN,
-            isEvent: false,
-            entityType: EntityType.WORKFLOW_RUN,
-            entityId: 'wf-delta',
-            entityName: 'wf-delta',
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-05-02T00:00:00Z'),
-            endedAt: new Date('2026-05-02T00:00:01Z'),
-          },
-          {
-            traceId: 'delta-branch-trace-1',
-            spanId: 'delta-branch-anchor-1',
-            parentSpanId: 'delta-branch-root-1',
-            name: 'observer',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: EntityType.AGENT,
-            entityId: 'delta-branch-agent',
-            entityName: 'delta-branch-agent',
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-05-02T00:00:00.500Z'),
-            endedAt: new Date('2026-05-02T00:00:00.800Z'),
-          },
-        ],
-      });
-
-      const page = await waitForValue(
-        () => storage.listBranches({ filters: { entityName: 'delta-branch-agent' } }),
-        result => result.branches.length === 1 && typeof result.deltaCursor === 'string',
-      );
-      expect(page.branches[0]!.traceId).toBe('delta-branch-trace-1');
-
-      const bootstrap = await storage.listBranches({ mode: 'delta', filters: { entityName: 'delta-branch-agent' } });
-      expect(bootstrap.branches).toEqual([]);
-      expect(bootstrap.deltaCursor).toBeTruthy();
-
-      await storage.batchCreateSpans({
-        records: [
-          {
-            traceId: 'delta-branch-trace-2',
-            spanId: 'delta-branch-root-2',
-            parentSpanId: null,
-            name: 'root',
-            spanType: SpanType.WORKFLOW_RUN,
-            isEvent: false,
-            entityType: EntityType.WORKFLOW_RUN,
-            entityId: 'wf-delta',
-            entityName: 'wf-delta',
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-05-02T00:00:02Z'),
-            endedAt: new Date('2026-05-02T00:00:03Z'),
-          },
-          {
-            traceId: 'delta-branch-trace-2',
-            spanId: 'delta-branch-anchor-2',
-            parentSpanId: 'delta-branch-root-2',
-            name: 'observer',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: EntityType.AGENT,
-            entityId: 'delta-branch-agent',
-            entityName: 'delta-branch-agent',
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: null,
-            source: null,
-            serviceName: null,
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-05-02T00:00:02.500Z'),
-            endedAt: new Date('2026-05-02T00:00:02.800Z'),
-          },
-        ],
-      });
-
-      const delta = await waitForValue(
-        () =>
-          storage.listBranches({
-            mode: 'delta',
-            after: bootstrap.deltaCursor!,
-            filters: { entityName: 'delta-branch-agent' },
-          }),
-        result => result.branches.length === 1,
-      );
-      expect(delta.branches.map(span => span.traceId)).toEqual(['delta-branch-trace-2']);
-      expect(delta.deltaCursor).toBeTruthy();
-    });
-
     it('supports page deltaCursor and delta polling for logs', async () => {
       await storage.batchCreateLogs({
         logs: [
@@ -498,37 +247,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       );
       expect(delta.logs.map(log => log.logId)).toEqual(['delta-log-2']);
       expect(delta.deltaCursor).toBeTruthy();
-    });
-
-    it('returns a resumable page deltaCursor for empty filtered logs', async () => {
-      const page = await storage.listLogs({ filters: { traceId: 'delta-log-empty' } });
-      expect(page.logs).toEqual([]);
-      expect(page.deltaCursor).toBeTruthy();
-
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            logId: 'delta-log-empty-1',
-            timestamp: new Date('2026-05-03T00:00:02Z'),
-            level: 'info',
-            message: 'delta log after empty page',
-            data: null,
-            traceId: 'delta-log-empty',
-            metadata: null,
-          },
-        ],
-      });
-
-      const delta = await waitForValue(
-        () =>
-          storage.listLogs({
-            mode: 'delta',
-            after: page.deltaCursor!,
-            filters: { traceId: 'delta-log-empty' },
-          }),
-        result => result.logs.length === 1,
-      );
-      expect(delta.logs.map(log => log.logId)).toEqual(['delta-log-empty-1']);
     });
 
     it('supports page deltaCursor and delta polling for metrics', async () => {
@@ -1149,87 +867,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       ).rejects.toThrow('does not support updating spans');
     });
 
-    it('batch creates spans and retrieves trace', async () => {
-      await storage.batchCreateSpans({
-        records: [
-          {
-            traceId: 'trace-3',
-            spanId: 'root-span',
-            parentSpanId: null,
-            name: 'workflow-run',
-            spanType: SpanType.WORKFLOW_RUN,
-            isEvent: false,
-            entityType: EntityType.WORKFLOW_RUN,
-            entityId: 'wf-1',
-            entityName: 'myWorkflow',
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: 'production',
-            source: null,
-            serviceName: 'svc',
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: ['v1'],
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:00Z'),
-            endedAt: new Date('2026-01-01T00:00:02Z'),
-          },
-          {
-            traceId: 'trace-3',
-            spanId: 'child-span',
-            parentSpanId: 'root-span',
-            name: 'agent-step',
-            spanType: SpanType.AGENT_RUN,
-            isEvent: false,
-            entityType: EntityType.AGENT,
-            entityId: 'agent-1',
-            entityName: 'myAgent',
-            userId: null,
-            organizationId: null,
-            resourceId: null,
-            runId: null,
-            sessionId: null,
-            threadId: null,
-            requestId: null,
-            environment: 'production',
-            source: null,
-            serviceName: 'svc',
-            scope: null,
-            attributes: null,
-            metadata: null,
-            tags: null,
-            links: null,
-            input: null,
-            output: null,
-            error: null,
-            startedAt: new Date('2026-01-01T00:00:01Z'),
-            endedAt: new Date('2026-01-01T00:00:02Z'),
-          },
-        ],
-      });
-
-      const trace = await storage.getTrace({ traceId: 'trace-3' });
-      expect(trace).not.toBeNull();
-      expect(trace!.spans).toHaveLength(2);
-
-      const rootResult = await storage.getRootSpan({ traceId: 'trace-3' });
-      expect(rootResult).not.toBeNull();
-      expect(rootResult!.span.name).toBe('workflow-run');
-      expect(rootResult!.span.parentSpanId).toBeNull();
-
-      const traces = await storage.listTraces({});
-      expect(traces.spans.length).toBeGreaterThanOrEqual(1);
-    });
-
     it('batch deletes traces (eventual disappearance)', async () => {
       await storage.createSpan({
         span: {
@@ -1544,84 +1181,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   // getSpans (batch by spanId)
   // ==========================================================================
 
-  describe('getSpans', () => {
-    it('fetches a subset of spans within a trace by spanId', async () => {
-      const baseSpan = {
-        userId: null,
-        organizationId: null,
-        resourceId: null,
-        runId: null,
-        sessionId: null,
-        threadId: null,
-        requestId: null,
-        environment: null,
-        source: null,
-        serviceName: null,
-        scope: null,
-        attributes: null,
-        metadata: null,
-        tags: [],
-        links: null,
-        input: null,
-        output: null,
-        error: null,
-        isEvent: false,
-        entityType: null,
-        entityId: null,
-        entityName: null,
-      } as const;
-      await storage.batchCreateSpans({
-        records: [
-          {
-            ...baseSpan,
-            traceId: 'gs-1',
-            spanId: 'a',
-            parentSpanId: null,
-            name: 'a',
-            spanType: SpanType.AGENT_RUN,
-            input: { prompt: 'hi' }, // verify heavy fields round-trip
-            startedAt: new Date('2026-04-04T00:00:00Z'),
-            endedAt: new Date('2026-04-04T00:00:01Z'),
-          },
-          {
-            ...baseSpan,
-            traceId: 'gs-1',
-            spanId: 'b',
-            parentSpanId: 'a',
-            name: 'b',
-            spanType: SpanType.TOOL_CALL,
-            startedAt: new Date('2026-04-04T00:00:02Z'),
-            endedAt: new Date('2026-04-04T00:00:03Z'),
-          },
-          {
-            ...baseSpan,
-            traceId: 'gs-1',
-            spanId: 'c',
-            parentSpanId: 'a',
-            name: 'c',
-            spanType: SpanType.TOOL_CALL,
-            startedAt: new Date('2026-04-04T00:00:04Z'),
-            endedAt: new Date('2026-04-04T00:00:05Z'),
-          },
-        ],
-      });
-
-      const result = await storage.getSpans({ traceId: 'gs-1', spanIds: ['a', 'c'] });
-      expect(result.traceId).toBe('gs-1');
-      const ids = result.spans.map(s => s.spanId).sort();
-      expect(ids).toEqual(['a', 'c']);
-
-      // Heavy fields are populated (this is the difference from getStructure).
-      const a = result.spans.find(s => s.spanId === 'a')!;
-      expect(a.input).toEqual({ prompt: 'hi' });
-    });
-
-    it('returns empty spans array when no spanIds match', async () => {
-      const result = await storage.getSpans({ traceId: 'no-such-trace', spanIds: ['x'] });
-      expect(result.spans).toEqual([]);
-    });
-  });
-
   // ==========================================================================
   // getBranch
   //
@@ -1629,110 +1188,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   // and getSpans, so getBranch goes through the optimized two-step path in
   // base.ts: structure walk → batch span fetch (no full-trace pull).
   // ==========================================================================
-
-  describe('getBranch', () => {
-    beforeEach(async () => {
-      const baseSpan = {
-        userId: null,
-        organizationId: null,
-        resourceId: null,
-        runId: null,
-        sessionId: null,
-        threadId: null,
-        requestId: null,
-        environment: null,
-        source: null,
-        serviceName: null,
-        scope: null,
-        attributes: null,
-        metadata: null,
-        tags: [],
-        links: null,
-        input: null,
-        output: null,
-        error: null,
-        isEvent: false,
-        entityType: null,
-        entityId: null,
-        entityName: null,
-      } as const;
-      await storage.batchCreateSpans({
-        records: [
-          {
-            ...baseSpan,
-            traceId: 'br-1',
-            spanId: 'root',
-            parentSpanId: null,
-            name: 'root',
-            spanType: SpanType.WORKFLOW_RUN,
-            startedAt: new Date('2026-04-03T00:00:00Z'),
-            endedAt: new Date('2026-04-03T00:00:10Z'),
-          },
-          {
-            ...baseSpan,
-            traceId: 'br-1',
-            spanId: 'A',
-            parentSpanId: 'root',
-            name: 'A',
-            spanType: SpanType.AGENT_RUN,
-            startedAt: new Date('2026-04-03T00:00:01Z'),
-            endedAt: new Date('2026-04-03T00:00:05Z'),
-          },
-          {
-            ...baseSpan,
-            traceId: 'br-1',
-            spanId: 'A1',
-            parentSpanId: 'A',
-            name: 'A1',
-            spanType: SpanType.TOOL_CALL,
-            startedAt: new Date('2026-04-03T00:00:02Z'),
-            endedAt: new Date('2026-04-03T00:00:03Z'),
-          },
-          {
-            ...baseSpan,
-            traceId: 'br-1',
-            spanId: 'A1a',
-            parentSpanId: 'A1',
-            name: 'A1a',
-            spanType: SpanType.MODEL_STEP,
-            startedAt: new Date('2026-04-03T00:00:02.500Z'),
-            endedAt: new Date('2026-04-03T00:00:02.800Z'),
-          },
-          {
-            ...baseSpan,
-            traceId: 'br-1',
-            spanId: 'B',
-            parentSpanId: 'root',
-            name: 'B',
-            spanType: SpanType.AGENT_RUN,
-            startedAt: new Date('2026-04-03T00:00:06Z'),
-            endedAt: new Date('2026-04-03T00:00:09Z'),
-          },
-        ],
-      });
-    });
-
-    it('returns the full subtree by default', async () => {
-      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A' });
-      expect(branch).not.toBeNull();
-      expect(branch!.spans.map(s => s.spanId).sort()).toEqual(['A', 'A1', 'A1a']);
-    });
-
-    it('depth=1 returns only the anchor and its immediate children', async () => {
-      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A', depth: 1 });
-      expect(branch!.spans.map(s => s.spanId).sort()).toEqual(['A', 'A1']);
-    });
-
-    it('depth=0 returns just the anchor', async () => {
-      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A', depth: 0 });
-      expect(branch!.spans.map(s => s.spanId)).toEqual(['A']);
-    });
-
-    it('returns null when the anchor span is not in the trace', async () => {
-      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'missing' });
-      expect(branch).toBeNull();
-    });
-  });
 
   // ==========================================================================
   // Metrics + OLAP
@@ -1842,45 +1297,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(missing).toBeUndefined();
     });
 
-    it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            metricId: 'metric-test-5',
-            timestamp: new Date('2026-01-01T02:00:00Z'),
-            name: 'mastra_collision_metric',
-            value: 10,
-            labels: { segmentA: 'a', segmentB: 'b|c' },
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-          {
-            metricId: 'metric-test-6',
-            timestamp: new Date('2026-01-01T02:00:00Z'),
-            name: 'mastra_collision_metric',
-            value: 20,
-            labels: { segmentA: 'a|b', segmentB: 'c' },
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-        ],
-      });
-
-      const result = await storage.getMetricTimeSeries({
-        name: ['mastra_collision_metric'],
-        interval: '1h',
-        aggregation: 'sum',
-        groupBy: ['segmentA', 'segmentB'],
-      });
-
-      expect(result.series).toHaveLength(2);
-      expect(result.series.every(series => series.name === 'a|b|c')).toBe(true);
-      expect(result.series.map(series => series.points.length)).toEqual([1, 1]);
-      expect(result.series.map(series => series.points[0]!.value).sort((left, right) => left - right)).toEqual([
-        10, 20,
-      ]);
-    });
-
     it('getMetricAggregate returns costUnit: null when costUnits are mixed', async () => {
       // Add a metric with a different costUnit (the beforeEach already inserts 'usd' metrics)
       await storage.batchCreateMetrics({
@@ -1947,21 +1363,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(code).toBeDefined();
       // codeAgent has only 'usd' → consistent → 'usd'
       expect(code!.costUnit).toBe('usd');
-    });
-
-    it('filters metrics by canonical cost fields', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'sum',
-        filters: {
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          costUnit: 'usd',
-        },
-      });
-
-      expect(result.value).toBe(300);
-      expect(result.estimatedCost).toBeCloseTo(0.3);
     });
 
     it('getMetricPercentiles returns percentile series', async () => {
@@ -2531,83 +1932,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       await injectDuplicateDiscoveryRows();
     });
 
-    it('getMetricNames returns distinct names', async () => {
-      const result = await storage.getMetricNames({});
-      expect(result.names).toContain('mastra_agent_duration_ms');
-      expect(result.names).toContain('mastra_tool_calls_started');
-      expect(result.names).toEqual([...new Set(result.names)]);
-    });
-
-    it('getMetricNames filters by prefix', async () => {
-      const result = await storage.getMetricNames({ prefix: 'mastra_agent' });
-      expect(result.names).toContain('mastra_agent_duration_ms');
-      expect(result.names).not.toContain('mastra_tool_calls_started');
-      expect(result.names).toEqual([...new Set(result.names)]);
-    });
-
-    it('getMetricLabelKeys returns label keys', async () => {
-      const result = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
-      expect(result.keys).toContain('agent');
-      expect(result.keys).toContain('status');
-      expect(result.keys).toEqual([...new Set(result.keys)]);
-    });
-
-    it('getMetricLabelValues returns values for a label key', async () => {
-      const result = await storage.getMetricLabelValues({
-        metricName: 'mastra_agent_duration_ms',
-        labelKey: 'status',
-      });
-      expect(result.values).toContain('ok');
-      expect(result.values).toEqual([...new Set(result.values)]);
-    });
-
-    it('getEntityTypes returns distinct entity types', async () => {
-      const result = await storage.getEntityTypes({});
-      expect(result.entityTypes).toContain('agent');
-      expect(result.entityTypes).toContain('tool');
-      expect(result.entityTypes).toContain('input_processor');
-      expect(result.entityTypes).toEqual([...new Set(result.entityTypes)]);
-    });
-
-    it('getEntityNames returns entity names', async () => {
-      const result = await storage.getEntityNames({ entityType: EntityType.AGENT });
-      expect(result.names).toContain('weatherAgent');
-      expect(result.names).toEqual([...new Set(result.names)]);
-
-      const toolNames = await storage.getEntityNames({ entityType: EntityType.TOOL });
-      expect(toolNames.names).toContain('metricTool');
-      expect(toolNames.names).toEqual([...new Set(toolNames.names)]);
-
-      const processorNames = await storage.getEntityNames({ entityType: EntityType.INPUT_PROCESSOR });
-      expect(processorNames.names).toContain('logProcessor');
-      expect(processorNames.names).toEqual([...new Set(processorNames.names)]);
-    });
-
-    it('getServiceNames returns service names', async () => {
-      const result = await storage.getServiceNames({});
-      expect(result.serviceNames).toContain('my-service');
-      expect(result.serviceNames).toContain('metric-service');
-      expect(result.serviceNames).toContain('log-service');
-      expect(result.serviceNames).toEqual([...new Set(result.serviceNames)]);
-    });
-
-    it('getEnvironments returns environments', async () => {
-      const result = await storage.getEnvironments({});
-      expect(result.environments).toContain('production');
-      expect(result.environments).toContain('metric-env');
-      expect(result.environments).toContain('log-env');
-      expect(result.environments).toEqual([...new Set(result.environments)]);
-    });
-
-    it('getTags returns distinct tags', async () => {
-      const result = await storage.getTags({});
-      expect(result.tags).toContain('v1');
-      expect(result.tags).toContain('experiment');
-      expect(result.tags).toContain('metric-tag');
-      expect(result.tags).toContain('log-tag');
-      expect(result.tags).toEqual([...new Set(result.tags)]);
-    });
-
     it('init() reconciles pre-existing MergeTree discovery tables to ReplacingMergeTree', async () => {
       // Simulates an upgrade from an older deployment that created the
       // discovery helper tables as MergeTree. init() should drop the MV
@@ -2700,6 +2024,101 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           expect(mvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
         } finally {
           await migratedStorage.dangerouslyClearAll();
+        }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
+    });
+
+    it('fails before creating vNext tables when replication is enabled with existing local tables', async () => {
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `replication_guard_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_SPAN_EVENTS} (id String) ENGINE = MergeTree ORDER BY id`,
+        });
+
+        const replicatedStorage = new ObservabilityStorageClickhouseVNext({
+          client: scopedClient,
+          replication: { cluster: 'company_cluster' },
+        });
+
+        await expect(replicatedStorage.init()).rejects.toThrow(
+          /existing Mastra tables use non-replicated local engines/,
+        );
+
+        const tables = (await (
+          await scopedClient.query({
+            query: `SELECT name FROM system.tables WHERE database = currentDatabase() ORDER BY name`,
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string }>;
+        expect(tables.map(table => table.name)).toEqual([TABLE_SPAN_EVENTS]);
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
+    });
+
+    it('emits replicated engines for v-next signal tables when replication is enabled', async () => {
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `replication_positive_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        // Cluster omitted so this runs against the single-node test container.
+        // The engine-rewrite path still applies — it produces ReplicatedMergeTree
+        // tables coordinated via the embedded Keeper.
+        const replicatedStorage = new ObservabilityStorageClickhouseVNext({
+          client: scopedClient,
+          replication: {
+            zookeeperPath: `/clickhouse/tables/test/${database}/{table}`,
+            replicaName: 'replica1',
+          },
+        });
+
+        await replicatedStorage.init();
+
+        const engines = (await (
+          await scopedClient.query({
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name LIKE 'mastra_%' AND name NOT LIKE 'mastra_mv_%' ORDER BY name`,
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; engine: string }>;
+
+        expect(engines.length).toBeGreaterThan(0);
+        for (const { name, engine } of engines) {
+          expect(
+            engine.startsWith('Replicated') || engine.startsWith('Shared'),
+            `expected replicated/shared engine for ${name}, got ${engine}`,
+          ).toBe(true);
         }
       } finally {
         await scopedClient.close();

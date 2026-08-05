@@ -1,0 +1,38 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Ask me which environment to deploy to",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_ask_env",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Which environment should we deploy to?",
+              "options": [
+                { "label": "Staging", "description": "Use the staging environment" },
+                { "label": "Production", "description": "Use the production environment" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_env",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Great, deploying to Staging."
+      }
+    }
+  ]
+}

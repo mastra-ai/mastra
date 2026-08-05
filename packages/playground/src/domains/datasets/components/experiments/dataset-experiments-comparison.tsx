@@ -1,16 +1,11 @@
-import {
-  Button,
-  Chip,
-  ChipsGroup,
-  Columns,
-  ItemList,
-  Notice,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  cn,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Chip, ChipsGroup } from '@mastra/playground-ui/components/Chip';
+import { Columns } from '@mastra/playground-ui/components/Columns';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState, useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import { useDatasetExperiment } from '../../hooks/use-dataset-experiments';
@@ -140,7 +135,7 @@ export function DatasetExperimentsComparison({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Spinner />
       </div>
     );
@@ -155,7 +150,7 @@ export function DatasetExperimentsComparison({
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="text-neutral4 text-sm text-center py-8">No comparison data</div>;
+    return <div className="text-neutral4 py-8 text-center text-sm">No comparison data</div>;
   }
 
   const baselineId = comparison.baselineId;
@@ -168,8 +163,8 @@ export function DatasetExperimentsComparison({
         <div className={cn('relative grid xl:grid-cols-[1fr_auto_1fr] gap-4 xl:gap-0')}>
           <ExperimentInComparisonInfo datasetId={datasetId} experiment={expA} type="baseline" />
 
-          <div className="relative flex items-center justify-center px-[2vw] before:absolute before:inset-y-0 before:left-1/2 before:-translate-x-1/2 before:w-[2px] before:bg-border1">
-            <div className="relative z-1 bg-surface2 rounded-lg p-2">
+          <div className="before:bg-border1 relative flex items-center justify-center px-[2vw] before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2">
+            <div className="bg-surface2 relative z-1 rounded-lg p-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button onClick={onSwap}>VS</Button>

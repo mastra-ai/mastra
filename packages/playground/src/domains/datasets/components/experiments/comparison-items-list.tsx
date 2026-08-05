@@ -1,6 +1,7 @@
 import type { CompareExperimentsResponse } from '@mastra/client-js';
-import { Column, ItemList } from '@mastra/playground-ui';
-import type { ItemListColumn } from '@mastra/playground-ui';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
+import type { ItemListColumn } from '@mastra/playground-ui/components/ItemList';
 import { ScoreDelta } from './score-delta';
 
 type ComparisonItem = CompareExperimentsResponse['items'][number];
@@ -62,10 +63,10 @@ export function ComparisonItemsList({
                             baselineScore != null && contenderScore != null ? contenderScore - baselineScore : null;
 
                           return (
-                            <ItemList.Cell key={scorerId} className="flex items-center gap-5 justify-center font-mono">
+                            <ItemList.Cell key={scorerId} className="flex items-center justify-center gap-5 font-mono">
                               {delta != null ? (
                                 <>
-                                  <span className="flex items-center text-neutral2 min-w-24">
+                                  <span className="text-neutral2 flex min-w-24 items-center">
                                     {baselineScore?.toFixed(2)} → {contenderScore?.toFixed(2)}
                                   </span>
                                   <ScoreDelta delta={delta} />

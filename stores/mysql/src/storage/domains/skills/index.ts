@@ -25,6 +25,7 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
@@ -305,8 +306,10 @@ export class SkillsMySQL extends SkillsStorage {
         const changedFields = configFieldNames.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !skillSnapshotFieldValuesEqual(
+              configFields[field as keyof typeof configFields],
+              latestConfig[field as keyof typeof latestConfig],
+            ),
         );
 
         if (changedFields.length > 0) {

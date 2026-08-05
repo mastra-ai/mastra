@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';

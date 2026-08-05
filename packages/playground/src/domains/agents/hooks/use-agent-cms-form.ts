@@ -1,6 +1,6 @@
 import type { CreateStoredAgentParams } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
@@ -52,16 +52,31 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const hasStoredOverride = isEdit && !!options.hasStoredOverride;
   const editorConfig = isEdit ? options.editorConfig : undefined;
 
-  // Derive which fields are owned by the user (vs by code).
-  // editor === false → nothing is owned (locked)
-  // editor.instructions === true → user owns instructions
-  // editor.tools === true → user owns tools (membership + descriptions)
-  // editor.tools === { description: true } → user owns tool descriptions only
-  // Variables (requestContextSchema) are always editable for code agents.
-  const ownsInstructions = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.instructions === true);
-  const ownsTools = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.tools === true);
+  // Derive which fields are owned by the user (vs by code). These flags MUST mirror the server's
+  // getCodeAgentOwnership (packages/server/src/server/handlers/stored-agents.ts): on save the server
+  // strips any field a code agent doesn't own. If the client and server disagree, Studio either sends
+  // data the server silently drops (looks saved, reloads blank) or hides edits the server would keep.
+  // Server semantics for instructions:
+  //   editor === false           → not owned (locked)
+  //   editor unset (undefined)   → owned — legacy default: an editor-unset code agent is fully editable
+  //   editor === true            → not owned (a bare boolean is not an object, so `.instructions` is unset)
+  //   editor.instructions === true → owned
+  // Server semantics for tools mirror this:
+  //   editor unset (undefined)   → owned (membership + descriptions)
+  //   editor.tools === true      → owned (membership + descriptions)
+  //   editor.tools === { description: true } → owns tool descriptions only
+  // The missing `undefined` case was the bug (for both instructions and tools): the old
+  // `=== true`-only checks made an editor-unset code agent send an empty instructions array and
+  // drop tool edits on save, wiping changes the server would have kept.
+  const ownsInstructions =
+    !isCodeAgentOverride ||
+    editorConfig === undefined ||
+    (editorConfig !== false && editorConfig?.instructions === true);
+  const ownsTools =
+    !isCodeAgentOverride || editorConfig === undefined || (editorConfig !== false && editorConfig?.tools === true);
   const ownsToolDescriptions =
     !isCodeAgentOverride ||
+    editorConfig === undefined ||
     (editorConfig !== false &&
       (editorConfig?.tools === true ||
         (typeof editorConfig?.tools === 'object' && editorConfig.tools.description === true)));
@@ -272,11 +287,18 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
 
         if (needsCreate) {
-          // First save for a code agent — create the stored override
+          // First save for a code agent — create the stored override.
+          //
+          // The override is staged as an unpublished draft so the code definition keeps
+          // serving traffic until the user explicitly publishes, matching what every
+          // later save does. Code-source editors have no publish step; the server
+          // publishes there regardless, because the save's whole purpose is the
+          // filesystem write and only published entities reach disk.
           const createParams: CreateStoredAgentParams = {
             id: options.agentId,
             ...sharedParams,
             memory: editMemory,
+            autoPublish: false,
           };
           await createStoredAgent.mutateAsync(createParams);
           setOverrideCreated(true);
@@ -292,13 +314,16 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         // Pass keepDefaultValues so currently rendered field state (e.g. open tabs,
         // focused inputs) is preserved — only the dirty flag is cleared.
         form.reset(values, { keepValues: true });
+        // The version list drives the version dropdown and the published/unpublished
+        // badges, and it is not part of the form dataSource — always refresh it so the
+        // saved version shows up with the right publication state.
+        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
         // For code-mode overrides we intentionally skip stored-agent / agent query
         // invalidation: the dataSource reload would cascade through the
         // resetFormWithData effect and remount the System Prompt tab, which
         // is jarring. The filesystem write is authoritative for code mode and
         // the in-memory form already reflects the saved state.
         if (!isCodeAgentOverride) {
-          void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
         }

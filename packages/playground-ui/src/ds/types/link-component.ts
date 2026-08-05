@@ -1,5 +1,5 @@
-import type { AnchorHTMLAttributes, ForwardRefExoticComponent, RefAttributes } from 'react';
+import type { AnchorHTMLAttributes, ElementType } from 'react';
 
 export type LinkComponentProps = AnchorHTMLAttributes<HTMLAnchorElement>;
 
-export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAttributes<HTMLAnchorElement>>;
+export type LinkComponent = ElementType<LinkComponentProps>;

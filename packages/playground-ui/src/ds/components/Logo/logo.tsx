@@ -61,7 +61,7 @@ function Logo({ className, size = 'md', animateOnHover = false, 'aria-label': ar
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 34 21"
         fill="none"
-        className="logo-svg block w-full h-auto"
+        className="logo-svg block h-auto w-full"
         aria-hidden="true"
       >
         <defs>

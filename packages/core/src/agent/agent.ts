@@ -7,6 +7,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraFGAPermissions } from '../auth/ee';
+import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -22,6 +23,7 @@ import type {
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
+
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { resolveModelConfig } from '../llm';
@@ -40,21 +42,26 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+// `Mastra` is imported type-only here: a runtime import would create an ESM
+// init cycle (agent → mastra → agent/durable → agent) that breaks
+// `class DurableAgent extends Agent` with a TDZ error. The constructor is read
+// from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
+// `await import('../mastra')` fallback for the standalone-agent case where the
+// Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
 import type { Mastra } from '../mastra';
-import { Mastra as MastraClass } from '../mastra';
+import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import { isWorkingMemoryToolName } from '../memory/working-memory-utils';
-import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
 import {
   createNotificationSignal,
   createNotificationSummarySignal,
   summarizeNotifications,
 } from '../notifications/signals';
 import type { SendNotificationSignalInput } from '../notifications/types';
-import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
+import type { DefinitionSource, TracingProperties, ObservabilityContext, TracingPolicy } from '../observability';
 import {
   EntityType,
   InternalSpans,
@@ -79,11 +86,16 @@ import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VE
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
+import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
+import type { AgentSkillsInput, SkillInput } from '../skills/types';
+
 import { InMemoryStore } from '../storage';
+import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
-import type { MastraAgentNetworkStream } from '../stream';
+import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
@@ -101,7 +113,7 @@ import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
-import type { OutputWriter, WorkflowResult, WorkflowRunState } from '../workflows/types';
+import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, isProcessor } from '../workflows/workflow';
@@ -109,6 +121,7 @@ import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
+import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -120,18 +133,38 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+// Value import of durable constants is safe: constants.ts is a leaf module
+// with no imports, so it cannot create the runtime cycle `agent →
+// agent/durable → agent`.
+import { DurableStepIds } from './durable/constants';
+// Type-only imports from the durable module: erased at build time so they
+// don't create the runtime cycle `agent → agent/durable → agent`.
+import type {
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  DurableAgentRecoverActiveRunsOptions,
+  DurableAgentRecoverActiveRunsResult,
+  DurableAgentRecoverOptions,
+  DurableAgentStreamOptions,
+  DurableAgentStreamResult,
+} from './durable/durable-agent';
+import type { AgentStepFinishEventData, AgentSuspendedEventData } from './durable/types';
+import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
+  AgentDurableOption,
   AgentGenerateOptions,
   AgentNotificationConfig,
+  GoalConfig,
   AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
@@ -153,10 +186,13 @@ import type {
   SendAgentMessageResult,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
+  SendAgentSignalAccepted,
   SendAgentSignalOptions,
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
   SendAgentStateSignalResult,
+  SendAgentStreamResumeOptions,
+  SendAgentStreamResumeResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -167,6 +203,70 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+
+// Structural shape of the lazily-built `DurableAgent` wrapper used by
+// `Agent`'s standalone-durable delegators. Declared as a concrete interface
+// (rather than `Record<string, Function>`) so that under
+// `noUncheckedIndexedAccess` each method access is a non-optional function.
+interface StandaloneDurableWrapper {
+  stream: (...args: any[]) => any;
+  generate: (...args: any[]) => any;
+  resume: (...args: any[]) => any;
+  recover: (...args: any[]) => any;
+  resumeGenerate: (...args: any[]) => any;
+  resumeStream: (...args: any[]) => any;
+  approveToolCall: (...args: any[]) => any;
+  declineToolCall: (...args: any[]) => any;
+  streamUntilIdle: (...args: any[]) => any;
+  listActiveRuns: (...args: any[]) => any;
+  recoverActiveRuns: (...args: any[]) => any;
+  observe: (...args: any[]) => any;
+  prepare: (...args: any[]) => any;
+}
+
+const createSubAgentInputSchema = () =>
+  z.object({
+    prompt: z.string().describe('The prompt to send to the agent'),
+    // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
+    threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
+    resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
+    instructions: z
+      .string()
+      .nullish()
+      .describe(
+        'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
+      ),
+    maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+    // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
+    // to return a proper llm response
+  });
+
+const createSubAgentOutputSchema = () =>
+  z.object({
+    text: z.string().describe('The response from the agent'),
+    subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
+    subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
+    subAgentToolResults: z
+      .array(
+        z.object({
+          toolName: z.string().describe('The name of the tool'),
+          toolCallId: z.string().describe('The ID of the tool call'),
+          result: z.unknown().describe('The result of the tool call'),
+          args: z.unknown().describe('The arguments of the tool call').optional(),
+          isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
+        }),
+      )
+      .describe("The results from the agent's tool calls")
+      .optional(),
+  });
+
+type SubAgentToolSchemas = {
+  inputSchema: StandardSchemaWithJSON<SubAgentToolInput>;
+  outputSchema: StandardSchemaWithJSON<SubAgentToolOutput>;
+};
+
+type SubAgentToolInput = z.infer<ReturnType<typeof createSubAgentInputSchema>>;
+type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type ModelFallbacks = {
   id: string;
@@ -190,6 +290,78 @@ type AgentSnapshotMemoryInfo = {
   threadId?: string;
   resourceId?: string;
 };
+
+/**
+ * A suspended tool call inside a suspended agent run — either waiting on a
+ * tool-call approval (`requireApproval` / `requireToolApproval`) or on resume
+ * data for a tool that called `suspend()`.
+ */
+export interface AgentRunToolCall {
+  toolCallId?: string;
+  toolName?: string;
+  /** Arguments the model supplied for the tool call (approval suspensions only). */
+  args?: unknown;
+  /** True when the run is waiting on a tool-call approval. */
+  requiresApproval: boolean;
+  /** The tool-defined suspend payload when the tool itself called `suspend()`. */
+  suspendPayload?: unknown;
+}
+
+/**
+ * Statuses of agent runs discoverable via {@link Agent.listSuspendedRuns}.
+ *
+ * Agent run snapshots are only persisted while a run is waiting on input and
+ * are deleted when the run reaches a terminal state, so `'suspended'` is the
+ * only status discoverable from storage today.
+ */
+export type AgentRunStatus = Extract<WorkflowRunStatus, 'suspended'>;
+
+/**
+ * Filters for {@link Agent.listSuspendedRuns}. Mirrors the `listWorkflowRuns`
+ * filter contract, plus the agent-level `threadId` filter.
+ */
+export interface AgentListSuspendedRunsOptions {
+  /** Only return runs that belong to this memory thread. */
+  threadId?: string;
+  /** Only return runs that belong to this memory resource. */
+  resourceId?: string;
+  /** Only return runs created at or after this date. */
+  fromDate?: Date;
+  /** Only return runs created at or before this date. */
+  toDate?: Date;
+  /**
+   * Number of items per page. Pagination is applied when both `perPage` and
+   * `page` are provided; otherwise all matching runs are returned.
+   */
+  perPage?: number;
+  /** Zero-indexed page number. */
+  page?: number;
+}
+
+/**
+ * An agent run discovered from workflow snapshot storage.
+ */
+export interface AgentRun {
+  /** Run ID accepted by `resumeStream()`, `approveToolCall()`, and `declineToolCall()`. */
+  runId: string;
+  status: AgentRunStatus;
+  threadId?: string;
+  resourceId?: string;
+  /** When the run's snapshot was last persisted (i.e. when it suspended). */
+  suspendedAt: Date;
+  /** Suspended tool calls awaiting approval or resume data. */
+  toolCalls: AgentRunToolCall[];
+}
+
+export interface AgentListSuspendedRunsResult {
+  runs: AgentRun[];
+  /** Total number of matching runs, before pagination. */
+  total: number;
+}
+
+function getInvocationActor(context: unknown): ActorSignal | undefined {
+  return (context as { actor?: ActorSignal } | undefined)?.actor;
+}
 
 type ProcessorWorkflowChildrenContainer = {
   steps?: Record<string, unknown> | unknown[];
@@ -327,6 +499,20 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
  *   memory: new Memory(),
  * });
  * ```
+ *
+ * @example
+ * Opt into durable execution via config — the agent is auto-wrapped with
+ * `createDurableAgent` when it is attached to a `Mastra` instance:
+ * ```typescript
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: 'openai/gpt-5',
+ *   durable: true, // or: { cache, pubsub, maxSteps, cleanupTimeoutMs }
+ * });
+ *
+ * const mastra = new Mastra({ agents: { myAgent: agent } });
+ * ```
  */
 export class Agent<
   TAgentId extends string = string,
@@ -349,18 +535,17 @@ export class Agent<
   maxRetries?: number;
   #mastra?: Mastra;
   /**
-   * Lazily-created Mastra used as a fallback when the agent isn't attached to
-   * a user-supplied Mastra. The agent's prepare-stream workflow runs on the
-   * evented engine, which requires a pubsub for event dispatch — so a bare
-   * `new Agent(...)` (common in unit tests and small scripts) still needs *some*
-   * Mastra. This one carries an in-process EventEmitterPubSub + InMemoryStore;
-   * workers are started on first use. Cleared when `__registerMastra` attaches
-   * a real Mastra later.
+   * Lazily-built in-memory Mastra used when the agent isn't wired into one.
+   * Provides a workflow storage backend for internal snapshot lookups
+   * (loadAgenticLoopSnapshotOrThrow, assertToolCallSuspended,
+   * listSuspendedRuns) so `new Agent(...)` works standalone. Cleared when
+   * `__registerMastra` attaches a real Mastra later.
    */
   #ephemeralMastra?: Mastra;
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
+  #skills?: AgentSkillsInput<TRequestContext>;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
@@ -384,6 +569,7 @@ export class Agent<
   #backgroundTasks?: AgentBackgroundConfig;
   #notifications?: AgentNotificationConfig;
   #signals?: SignalProvider[];
+  #goal?: GoalConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
   /**
@@ -398,8 +584,18 @@ export class Agent<
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
+  readonly #durable?: AgentDurableOption;
+  /**
+   * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
+   * when `durable: true` is set on the config but the agent is not attached
+   * to a Mastra instance (which normally auto-wraps on registration). The
+   * wrapper is created via dynamic import to avoid the ESM init cycle
+   * `agent → agent/durable → agent`.
+   */
+  #standaloneDurable?: unknown;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
+  #subAgentToolSchemas?: SubAgentToolSchemas;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -437,6 +633,7 @@ export class Agent<
     this.#description = config.description;
     this.#metadata = config.metadata;
     this.#options = config.options;
+    this.#durable = config.durable;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -504,6 +701,10 @@ export class Agent<
 
     if (config.memory) {
       this.#memory = config.memory;
+    }
+
+    if (config.skills) {
+      this.#skills = config.skills;
     }
 
     if (config.skillsFormat) {
@@ -598,15 +799,33 @@ export class Agent<
       this.#notifications = config.notifications;
     }
 
-    if (config.signals && config.signals.length > 0) {
-      this.#signals = config.signals;
+    if (config.goal) {
+      this.#goal = config.goal;
+    }
+
+    // Auto-wire the goal state-signal projection when a goal is configured but no
+    // goal provider was supplied, so configuring `goal` alone keeps the model
+    // aware of its current objective (mirrors the task-signal-provider footgun
+    // note). Callers who activate goals purely through the persisted objective
+    // APIs (`setObjective`/`updateObjectiveOptions`) without static `goal` config
+    // should register `GoalSignalProvider` explicitly — we can't auto-wire on
+    // `memory` alone because the goal state processor requires an active
+    // memory-backed thread and would throw for memory agents that never use
+    // goals.
+    const configuredSignals = config.signals ?? [];
+    const hasGoalProvider = configuredSignals.some(p => p.id === 'goal-signals');
+    const effectiveSignals: SignalProvider[] =
+      config.goal && !hasGoalProvider ? [...configuredSignals, new GoalSignalProvider()] : configuredSignals;
+
+    if (effectiveSignals.length > 0) {
+      this.#signals = effectiveSignals;
 
       // Collect processors and tools from signal providers that opt in
       const signalInputProcessors: InputProcessorOrWorkflow[] = [];
       const signalOutputProcessors: OutputProcessorOrWorkflow[] = [];
       let signalTools: Record<string, unknown> = {};
 
-      for (const provider of config.signals) {
+      for (const provider of effectiveSignals) {
         // Propagate Mastra instance before lifecycle so providers have storage access
         if (this.#mastra) {
           provider.__registerMastra(this.#mastra);
@@ -691,6 +910,142 @@ export class Agent<
    */
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
     return this.#backgroundTasks;
+  }
+
+  /**
+   * Returns the agent-level tool payload transform policy, if any.
+   * Used by durable execution to mirror the non-durable layer's
+   * per-call → agent → mastra merge order.
+   */
+  getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
+  }
+
+  /**
+   * Returns the agent's native goal configuration, if any. Read by the loop's
+   * goal step to resolve effective settings (judge model, max runs, prompt).
+   * @internal
+   */
+  __getGoalConfig(): GoalConfig | undefined {
+    return this.#goal;
+  }
+
+  /**
+   * Returns a closure that drains pending signals for a given run from the
+   * shared `AgentThreadStreamRuntime`. Used by `prepareForDurableExecution` to
+   * store the drain function on the in-process `RunRegistryEntry`.
+   * @internal
+   */
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
+    const pubsub = this.getPubSub();
+    return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /**
+   * Returns the uncombined input processors suitable for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest`; this
+   * method returns them individually so the `ProcessorRunner` can invoke
+   * each processor's `processLLMRequest` method.
+   * @internal — used by `DurableAgent` preparation to populate the registry.
+   */
+  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext);
+  }
+
+  /**
+   * Set the durable objective for a thread. The objective is judged in the
+   * execution loop until complete or the run budget is exhausted. Requires a
+   * memory-backed thread and a Mastra storage instance; no-ops otherwise.
+   *
+   * Only the optional fields explicitly provided are persisted into the
+   * objective record; unset fields fall back to the agent's `goal` config at
+   * evaluation time. A judge model (here or in `goal.judge`) is required for the
+   * goal to do anything.
+   *
+   * @experimental Agent goals are experimental and may change in a future release.
+   */
+  async setObjective(
+    objective: string,
+    options: {
+      threadId: string;
+      resourceId?: string;
+      judgeModelId?: string;
+      maxRuns?: number;
+      prompt?: string;
+      id?: string;
+      activeDurationMs?: number;
+    },
+  ): Promise<GoalObjectiveRecord | undefined> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    if (!store || !options.threadId) return undefined;
+
+    const now = Date.now();
+    const suppliedActiveDurationMs = options.activeDurationMs;
+    const activeDurationMs =
+      suppliedActiveDurationMs !== undefined &&
+      Number.isFinite(suppliedActiveDurationMs) &&
+      suppliedActiveDurationMs >= 0
+        ? suppliedActiveDurationMs
+        : 0;
+    const record: GoalObjectiveRecord = {
+      id: options.id ?? randomUUID(),
+      objective,
+      status: 'active',
+      runsUsed: 0,
+      activeDurationMs,
+      startedAt: now,
+      updatedAt: now,
+      ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
+      ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
+      ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
+    };
+    await writeObjective(store, options.threadId, record);
+    return record;
+  }
+
+  /**
+   * Read the current objective record for a thread, or `undefined` when none is
+   * set (or the agent has no storage).
+   */
+  async getObjective(options: { threadId: string }): Promise<GoalObjectiveRecord | undefined> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    return readObjective(store, options.threadId);
+  }
+
+  /**
+   * Drop the objective for a thread.
+   */
+  async clearObjective(options: { threadId: string }): Promise<void> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    await clearObjective(store, options.threadId);
+  }
+
+  /**
+   * Partially update the options of the active objective. Only provided fields
+   * are persisted into the record (so the precedence over agent config is
+   * remembered in thread state). No-ops when no objective is set.
+   */
+  async updateObjectiveOptions(options: {
+    threadId: string;
+    judgeModelId?: string;
+    maxRuns?: number;
+    prompt?: string;
+    status?: GoalObjectiveRecord['status'];
+  }): Promise<GoalObjectiveRecord | undefined> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    const existing = await readObjective(store, options.threadId);
+    if (!store || !existing) return undefined;
+
+    const updated: GoalObjectiveRecord = {
+      ...existing,
+      updatedAt: Date.now(),
+      ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
+      ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
+      ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
+      ...(options.status !== undefined ? { status: options.status } : {}),
+    };
+    await writeObjective(store, options.threadId, updated);
+    return updated;
   }
 
   /**
@@ -825,6 +1180,70 @@ export class Agent<
   }
 
   /**
+   * The `durable` option this agent was constructed with, if any.
+   *
+   * Read by `Mastra.addAgent` to auto-wrap the agent with `createDurableAgent`
+   * at registration time. See {@link AgentDurableOption}.
+   */
+  get durable(): AgentDurableOption | undefined {
+    return this.#durable;
+  }
+
+  /**
+   * Self-referential `agent` accessor exposed only when this agent was
+   * constructed with `durable: true`.
+   *
+   * This lets `isDurableAgentLike()` return `true` for a standalone durable
+   * `Agent` — mirroring the duck-type shape of a real `DurableAgent` wrapper
+   * (`wrapper.agent` points to the wrapped `Agent`). External consumers can
+   * then treat a `new Agent({ durable: true })` as durable-capable without
+   * having to first register it with a Mastra instance.
+   *
+   * `Mastra.addAgent` disambiguates a self-referential placeholder from a real
+   * wrapper by checking `agent.agent === agent` and routes the placeholder
+   * through `createDurableAgent` so registration still produces a proper
+   * `DurableAgent` wrapper.
+   *
+   * Returns `undefined` when this agent is not durable so non-durable agents
+   * do not accidentally satisfy the durable duck-type.
+   */
+  get agent(): Agent<TAgentId, TTools, TOutput> | undefined {
+    return this.#durable ? (this as unknown as Agent<TAgentId, TTools, TOutput>) : undefined;
+  }
+
+  /**
+   * Resolve the DurableAgent that should handle `stream`/`generate` calls when
+   * this agent was constructed with `durable: true` but is being used
+   * standalone (i.e. no `Mastra` instance auto-wrapped it during registration).
+   *
+   * The wrapper is created lazily via a dynamic `import()` of the durable
+   * module to avoid the ESM initialization cycle
+   * `agent → agent/durable → agent` that would TDZ-break
+   * `class DurableAgent extends Agent`. The result is cached on
+   * `#standaloneDurable` so subsequent calls reuse the same wrapper.
+   *
+   * Returns `undefined` when the agent has already been registered with a
+   * Mastra instance (Mastra performs the wrapping itself) or when no
+   * `durable` config is set.
+   */
+  async #getStandaloneDurable(): Promise<StandaloneDurableWrapper | undefined> {
+    if (!this.#durable) return undefined;
+    // When attached to a Mastra instance, Mastra auto-wraps at registration
+    // and the caller is already talking to the DurableAgent — the raw
+    // `Agent` is only reached via internal delegation from the wrapper,
+    // which must not re-enter the durable path.
+    if (this.#mastra) return undefined;
+    if (this.#standaloneDurable) {
+      return this.#standaloneDurable as StandaloneDurableWrapper;
+    }
+    const { createDurableAgent } = await import('./durable/create-durable-agent');
+    const opts = this.#durable === true ? {} : (this.#durable as object);
+    const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...opts });
+    this.#standaloneDurable = wrapper;
+    return wrapper as unknown as StandaloneDurableWrapper;
+  }
+
+  /**
    * Sets or updates the browser instance for this agent.
    * This allows hot-swapping browser configuration without recreating the agent.
    * Browser tools will be automatically updated on the next execution.
@@ -840,26 +1259,59 @@ export class Agent<
 
   /**
    * Returns true if this agent was configured with its own browser instance.
-   * Used by Harness to avoid overwriting agent-level browser configuration.
+   * Used by AgentController to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
     return this.#hasExplicitBrowser;
   }
 
   /**
-   * Gets the skills processors to add to input processors when workspace has skills.
+   * Resolves the combined WorkspaceSkills from agent-level skills and/or workspace skills.
+   * Agent-level skills win on name conflicts when both are present.
+   * @internal
+   */
+  private async resolveSkills(
+    requestContext?: RequestContext,
+    workspaceOverride?: AnyWorkspace,
+  ): Promise<WorkspaceSkills | undefined> {
+    const rc = requestContext || new RequestContext();
+
+    // Resolve agent-level skills (if configured)
+    let agentSkills: WorkspaceSkills | undefined;
+    if (this.#skills) {
+      let resolvedInputs: SkillInput[];
+      if (typeof this.#skills === 'function') {
+        resolvedInputs = await this.#skills({ requestContext: rc as RequestContext<TRequestContext> });
+      } else {
+        resolvedInputs = this.#skills;
+      }
+      if (resolvedInputs.length > 0) {
+        agentSkills = resolveAgentSkills(resolvedInputs);
+      }
+    }
+
+    // Resolve workspace-level skills (if configured)
+    const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
+    const workspaceSkills = workspace?.skills;
+
+    // Merge if both exist (agent skills win on name conflicts)
+    if (agentSkills && workspaceSkills) {
+      const { merged } = await mergeWorkspaceSkills(agentSkills, workspaceSkills);
+      return merged;
+    }
+
+    return agentSkills || workspaceSkills;
+  }
+
+  /**
+   * Gets the skills processors to add to input processors when skills are configured.
+   * Supports both agent-level skills and workspace skills.
    * @internal
    */
   private async getSkillsProcessors(
     configuredProcessors: InputProcessorOrWorkflow[],
     requestContext?: RequestContext,
   ): Promise<InputProcessorOrWorkflow[]> {
-    // Check if workspace has skills configured
-    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
-    if (!workspace?.skills) {
-      return [];
-    }
-
     // Check for existing SkillsProcessor in configured processors to avoid duplicates
     const hasSkillsProcessor = hasEagerSkillsProcessor(configuredProcessors);
     const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredProcessors);
@@ -867,8 +1319,16 @@ export class Agent<
       return [];
     }
 
-    // Create new SkillsProcessor using workspace
-    return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
+    const rc = requestContext || new RequestContext();
+    const workspace = await this.getWorkspace({ requestContext: rc });
+
+    // Resolve combined skills from agent-level and/or workspace
+    const skills = await this.resolveSkills(rc, workspace ?? undefined);
+    if (!skills) {
+      return [];
+    }
+
+    return [new SkillsProcessor({ skills, format: this.#skillsFormat })];
   }
 
   /**
@@ -1122,6 +1582,7 @@ export class Agent<
       errorProcessors,
       logger: this.logger,
       agentName: this.name,
+      agent: this,
       processorStates,
     });
   }
@@ -1143,7 +1604,7 @@ export class Agent<
 
     // Single item that's already a workflow - mark it as processor type and return
     if (processors.length === 1 && isProcessorWorkflow(processors[0]!)) {
-      const workflow = processors[0]!;
+      const workflow = processors[0];
       // Mark the workflow as a processor workflow if not already set
       // Note: This mutates the workflow, but processor workflows are expected to be
       // dedicated to this purpose and not reused as regular workflows
@@ -1162,7 +1623,7 @@ export class Agent<
 
     // If after filtering we have a single workflow, mark it as processor type and return
     if (validProcessors.length === 1 && isProcessorWorkflow(validProcessors[0]!)) {
-      const workflow = validProcessors[0]!;
+      const workflow = validProcessors[0];
       // Mark the workflow as a processor workflow if not already set
       if (!workflow.type) {
         workflow.type = 'processor';
@@ -1263,9 +1724,15 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get channel output processors (with deduplication) — mirrors the input
+    // processor hookup. Channels render the agent's stream to the originating
+    // chat platform via this processor; without it, replies never reach Slack.
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
     // Combine all processors into a single workflow
-    // Memory processors should run last (to persist messages after other processing)
-    const allProcessors = [...configuredProcessors, ...memoryProcessors];
+    // User-configured processors run first so they can transform chunks
+    // (e.g. PII redaction, translation) before the channel renders them.
+    // Memory processors run last to persist the final form.
+    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
@@ -1703,6 +2170,53 @@ export class Agent<
   }
 
   /**
+   * Programmatically invoke a skill by name.
+   *
+   * Loads the full skill instructions and returns them, or returns the skill
+   * object directly. This is the programmatic equivalent of the `skill` tool
+   * that the LLM calls — useful in workflows and custom pipelines.
+   *
+   * @param skillName - Name or path of the skill to invoke
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns The full Skill object with instructions, or null if not found
+   *
+   * @example
+   * ```typescript
+   * // In a workflow step
+   * const skill = await agent.getSkill('code-review');
+   * if (skill) {
+   *   console.log(skill.instructions); // Full skill instructions
+   *   console.log(skill.references);   // Available reference files
+   * }
+   * ```
+   */
+  public async getSkill(skillName: string, options?: { requestContext?: RequestContext }): Promise<Skill | null> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return null;
+    return skills.get(skillName);
+  }
+
+  /**
+   * List all skills available to this agent (from both agent-level and workspace).
+   *
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns Array of skill metadata (name, description, path)
+   *
+   * @example
+   * ```typescript
+   * const skills = await agent.listSkills();
+   * for (const skill of skills) {
+   *   console.log(`${skill.name}: ${skill.description}`);
+   * }
+   * ```
+   */
+  public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return [];
+    return skills.list();
+  }
+
+  /**
    * Sets the agent's browser from workspace if:
    * 1. Agent doesn't already have a browser configured (SDK approach)
    * 2. Workspace has a browser configured (CLI approach)
@@ -1852,8 +2366,35 @@ export class Agent<
     }
 
     const voice = this.#voice;
-    voice?.addTools(await this.listTools({ requestContext }));
-    const instructions = await this.getInstructions({ requestContext });
+
+    const resolvedRequestContext = requestContext ?? new RequestContext();
+    const rawTools = await this.listTools({ requestContext: resolvedRequestContext });
+    const toolEntries = Object.entries(rawTools || {});
+    const model = toolEntries.length ? await this.getModel({ requestContext: resolvedRequestContext }) : undefined;
+    const mastraProxy = this.#mastra ? createMastraProxy({ mastra: this.#mastra, logger: this.logger }) : undefined;
+    const wrappedTools = Object.fromEntries(
+      await Promise.all(
+        toolEntries.map(async ([k, tool]) => {
+          if (!tool) return [k, tool];
+          const options: ToolOptions = {
+            name: k,
+            logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            agentName: this.name,
+            agentId: this.id,
+            requestContext: resolvedRequestContext,
+            tracingPolicy: this.#options?.tracingPolicy,
+            requireApproval: (tool as any).requireApproval,
+            backgroundConfig: (tool as any).background,
+            model,
+          };
+          return [k, makeCoreTool(tool, options)];
+        }),
+      ),
+    );
+    voice?.addTools(wrappedTools as TTools);
+
+    const instructions = await this.getInstructions({ requestContext: resolvedRequestContext });
     voice?.addInstructions(this.#convertInstructionsToString(instructions));
     return voice;
   }
@@ -1909,7 +2450,7 @@ export class Agent<
   }): Promise<string | undefined> {
     const tools: Array<{ mcpMetadata?: McpMetadata } | undefined> = [];
 
-    const assignedTools = await this.listTools({ requestContext });
+    const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
     tools.push(...(Object.values(assignedTools || {}) as { mcpMetadata?: McpMetadata }[]));
 
     for (const toolset of Object.values(toolsets || {})) {
@@ -1964,6 +2505,17 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Returns the tracing policy configured at agent construction time.
+   *
+   * Exposed so out-of-process consumers (e.g. the durable agent runner) can
+   * forward the same policy onto AGENT_RUN spans without reaching into private
+   * fields.
+   */
+  public getTracingPolicy(): TracingPolicy | undefined {
+    return this.#options?.tracingPolicy;
   }
 
   /**
@@ -2209,19 +2761,11 @@ export class Agent<
    * console.log(Object.keys(tools)); // ['calculator', 'weather', ...]
    * ```
    */
-  public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | TTools
-    | Promise<TTools> {
-    if (typeof this.#tools !== 'function') {
-      return ensureToolProperties(this.#tools) as TTools;
-    }
-
-    const result = this.#tools({
-      requestContext: requestContext as RequestContext<TRequestContext>,
-      mastra: this.#mastra,
-    });
-
-    return resolveMaybePromise(result, tools => {
+  public async listTools({
+    requestContext = new RequestContext(),
+    resolveWebSearch = true,
+  }: { requestContext?: RequestContext; resolveWebSearch?: boolean } = {}): Promise<TTools> {
+    const resolveToolList = async (tools: ToolsInput | undefined): Promise<TTools> => {
       if (!tools) {
         const mastraError = new MastraError({
           id: 'AGENT_GET_TOOLS_FUNCTION_EMPTY_RETURN',
@@ -2236,8 +2780,30 @@ export class Agent<
         throw mastraError;
       }
 
-      return ensureToolProperties(tools) as TTools;
+      const ensuredTools = ensureToolProperties(tools) as ToolsInput;
+      if (!resolveWebSearch || !Object.values(ensuredTools).some(isWebSearchTool)) {
+        return ensuredTools as TTools;
+      }
+
+      const model = await this.getModel({ requestContext });
+      return Object.fromEntries(
+        Object.entries(ensuredTools).map(([key, tool]) => [
+          key,
+          isWebSearchTool(tool) ? createWebSearchProviderTool(normalizeWebSearchProvider(model)) : tool,
+        ]),
+      ) as TTools;
+    };
+
+    if (typeof this.#tools !== 'function') {
+      return resolveToolList(this.#tools as ToolsInput | undefined);
+    }
+
+    const result = this.#tools({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
     });
+
+    return resolveMaybePromise(result, tools => resolveToolList(tools as ToolsInput | undefined));
   }
 
   /**
@@ -2679,11 +3245,18 @@ export class Agent<
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
 
-    // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish.
+    // Drop any ephemeral Mastra now that a real one is attached; we no longer
+    // need the storage fallback.
     if (this.#ephemeralMastra) {
-      void this.#ephemeralMastra.stopWorkers().catch(() => {});
       this.#ephemeralMastra = undefined;
+    }
+
+    // Drop the standalone durable wrapper (if any) — Mastra registration
+    // means the durable path is now owned by the DurableAgent that Mastra
+    // created (or was passed) and callers should be talking to that
+    // instance directly. The wrapper is only meaningful pre-registration.
+    if (this.#standaloneDurable) {
+      this.#standaloneDurable = undefined;
     }
 
     // Propagate logger to workspace if it's a direct instance (not a factory function)
@@ -2831,7 +3404,13 @@ export class Agent<
     const lines: string[] = [];
     for (const msg of messages) {
       const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      if (typeof msg.content === 'string' && msg.content) {
+      // AIV4 UI messages can carry the same text in both `content` and a text part.
+      // Skip `content` only when a text part carries the exact same text, so each
+      // message's text is emitted once without ever dropping distinct content.
+      const hasContent = typeof msg.content === 'string' && msg.content !== '';
+      const contentDuplicatedByPart =
+        hasContent && msg.parts?.some(part => part.type === 'text' && part.text === msg.content);
+      if (hasContent && !contentDuplicatedByPart) {
         lines.push(`${role}: ${msg.content}`);
       }
       if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
@@ -2858,12 +3437,11 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
-    // Title generation runs the same evented agentic loop as `#execute` — make
-    // sure the LLM has the effective Mastra (real or ephemeral) so its inner
-    // workflows can dispatch events. Idempotent.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    llm.__registerMastra(effectiveMastra);
-    await effectiveMastra.startWorkers();
+    // Register Mastra on the LLM (if any) so the inner agentic loop has access
+    // for storage/observability. Idempotent.
+    if (this.#mastra) {
+      llm.__registerMastra(this.#mastra);
+    }
 
     let userContent: string;
 
@@ -2947,6 +3525,21 @@ export class Agent<
   getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
+  }
+
+  /**
+   * Restrict UI messages to those that belong to the given thread. Memory can
+   * load messages from other threads of the same resource into the message list
+   * (resource-scoped recall); those must not influence the generated title.
+   */
+  filterUiMessagesByThread<T extends { id: string }>(messageList: MessageList, threadId: string, uiMessages: T[]): T[] {
+    const threadMessageIds = new Set(
+      messageList.get.all
+        .db()
+        .filter(m => !m.threadId || m.threadId === threadId)
+        .map(m => m.id),
+    );
+    return uiMessages.filter(m => threadMessageIds.has(m.id));
   }
 
   async genTitle(
@@ -3164,67 +3757,6 @@ export class Agent<
   }
 
   /**
-   * Returns tools provided by the agent's channels (e.g. discord_send_message).
-   * @internal
-   */
-  private async listChannelTools({
-    runId,
-    resourceId,
-    threadId,
-    requestContext,
-    mastraProxy,
-    autoResumeSuspendedTools,
-    backgroundTaskEnabled,
-    ...rest
-  }: {
-    runId?: string;
-    resourceId?: string;
-    threadId?: string;
-    requestContext: RequestContext;
-    mastraProxy?: MastraUnion;
-    autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
-  } & Partial<ObservabilityContext>) {
-    const observabilityContext = resolveObservabilityContext(rest);
-    const convertedChannelTools: Record<string, CoreTool> = {};
-
-    if (!this.#agentChannels) {
-      return convertedChannelTools;
-    }
-
-    const channelTools = this.#agentChannels.getTools();
-
-    if (Object.keys(channelTools).length > 0) {
-      const memory = await this.getMemory({ requestContext });
-
-      for (const [toolName, tool] of Object.entries(channelTools)) {
-        const options: ToolOptions = {
-          name: toolName,
-          runId,
-          threadId,
-          resourceId,
-          logger: this.logger,
-          mastra: mastraProxy as MastraUnion | undefined,
-          memory,
-          agentName: this.name,
-          requestContext,
-          ...observabilityContext,
-          tracingPolicy: this.#options?.tracingPolicy,
-        };
-        convertedChannelTools[toolName] = makeCoreTool(
-          tool as ToolToConvert,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
-      }
-    }
-
-    return convertedChannelTools;
-  }
-
-  /**
    * Returns skill tools (skill, skill_search, skill_read) when the workspace
    * has skills configured. These are added at the Agent level (like workspace
    * tools) rather than inside a processor, so they persist across turns and
@@ -3259,11 +3791,14 @@ export class Agent<
     }
 
     const workspace = await this.getWorkspace({ requestContext });
-    if (!workspace?.skills) {
+
+    // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
+    const skills = await this.resolveSkills(requestContext, workspace ?? undefined);
+    if (!skills) {
       return convertedSkillTools;
     }
 
-    const skillTools = createSkillTools(workspace.skills);
+    const skillTools = createSkillTools(skills);
 
     if (Object.keys(skillTools).length > 0) {
       this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
@@ -3499,6 +4034,7 @@ export class Agent<
       inputProcessorOverrides?.length ||
       this.#inputProcessors ||
       this.#memory ||
+      this.#skills ||
       this.#workspace ||
       this.#mastra?.getWorkspace() ||
       this.#browser ||
@@ -3598,7 +4134,7 @@ export class Agent<
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory || this.#skills) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
@@ -3816,6 +4352,7 @@ export class Agent<
     outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    model: activeModel,
     ...rest
   }: {
     runId?: string;
@@ -3826,6 +4363,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -3833,7 +4371,7 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
 
     // Mastra tools passed into the Agent
-    const assignedTools = await this.listTools({ requestContext });
+    const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
 
@@ -3842,6 +4380,11 @@ export class Agent<
         if (!tool) {
           return;
         }
+
+        const model = activeModel ?? (await this.getModel({ requestContext }));
+        const toolToConvert = isWebSearchTool(tool)
+          ? createWebSearchProviderTool(normalizeWebSearchProvider(model))
+          : tool;
 
         const options: ToolOptions = {
           name: k,
@@ -3855,13 +4398,13 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model,
           outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
         };
-        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled)];
+        return [k, makeCoreTool(toolToConvert, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled)];
       }),
     );
 
@@ -3887,6 +4430,7 @@ export class Agent<
     toolsets,
     requestContext,
     mastraProxy,
+    outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     ...rest
@@ -3897,6 +4441,7 @@ export class Agent<
     toolsets: ToolsetsInput;
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
@@ -3928,6 +4473,7 @@ export class Agent<
             requestContext,
             ...observabilityContext,
             model: await this.getModel({ requestContext }),
+            outputWriter,
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
             backgroundConfig: (toolObj as any).background,
@@ -3960,6 +4506,7 @@ export class Agent<
     clientTools,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    model: activeModel,
     ...rest
   }: {
     runId?: string;
@@ -3970,6 +4517,7 @@ export class Agent<
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -3979,8 +4527,16 @@ export class Agent<
     if (clientToolsForInput.length > 0) {
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
-        const { execute, ...toolRest } = tool;
-        const toolToConvert = isProviderTool(tool) ? tool : toolRest;
+        const model = activeModel ?? (await this.getModel({ requestContext }));
+        let toolToConvert: ToolToConvert;
+        if (isWebSearchTool(tool)) {
+          toolToConvert = createWebSearchProviderTool(normalizeWebSearchProvider(model));
+        } else if (isProviderTool(tool)) {
+          toolToConvert = tool;
+        } else {
+          const { execute, ...toolRest } = tool;
+          toolToConvert = toolRest;
+        }
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -3993,7 +4549,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
@@ -4049,6 +4605,20 @@ export class Agent<
       .filter((message): message is MastraDBMessage => Boolean(message));
   }
 
+  private getSubAgentToolSchemas(): SubAgentToolSchemas {
+    if (!this.#subAgentToolSchemas) {
+      const inputSchema = createSubAgentInputSchema();
+      const outputSchema = createSubAgentOutputSchema();
+
+      this.#subAgentToolSchemas = {
+        inputSchema: toStandardSchema(inputSchema),
+        outputSchema: toStandardSchema(outputSchema),
+      };
+    }
+
+    return this.#subAgentToolSchemas;
+  }
+
   /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
@@ -4079,45 +4649,18 @@ export class Agent<
 
     if (Object.keys(agents).length > 0) {
       for (const [agentName, agent] of Object.entries(agents)) {
-        const agentInputSchema = z.object({
-          prompt: z.string().describe('The prompt to send to the agent'),
-          // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
-          threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
-          resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
-          instructions: z
-            .string()
-            .nullish()
-            .describe(
-              'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
-            ),
-          maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
-          // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
-          // to return a proper llm response
-        });
-
-        const agentOutputSchema = z.object({
-          text: z.string().describe('The response from the agent'),
-          subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
-          subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
-          subAgentToolResults: z
-            .array(
-              z.object({
-                toolName: z.string().describe('The name of the tool'),
-                toolCallId: z.string().describe('The ID of the tool call'),
-                result: z.unknown().describe('The result of the tool call'),
-                args: z.unknown().describe('The arguments of the tool call').optional(),
-                isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
-              }),
-            )
-            .describe("The results from the agent's tool calls")
-            .optional(),
-        });
+        const { inputSchema: agentInputSchema, outputSchema: agentOutputSchema } = this.getSubAgentToolSchemas();
 
         const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
           ? undefined
-          : (output: z.infer<typeof agentOutputSchema>) => ({
+          : (output: SubAgentToolOutput | string) => ({
               type: 'text' as const,
-              value: output.text,
+              // When a sub-agent invocation is dispatched as a background task, the agentic loop
+              // hands `toModelOutput` the placeholder string from tool-call-step.ts ("Background
+              // task started...") instead of the agentOutputSchema object. Reading `output.text`
+              // off that string is undefined, which serializes to a tool message with null content
+              // that providers (e.g. Anthropic) reject with a 500. Use the string as-is in that case.
+              value: typeof output === 'string' ? output : (output.text ?? ''),
             });
 
         const toolObj = createTool({
@@ -4129,7 +4672,8 @@ export class Agent<
           ...(toModelOutput ? { toModelOutput } : {}),
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
-          execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+          execute: async (inputData: SubAgentToolInput, context) => {
+            const invocationActor = getInvocationActor(context);
             const startTime = Date.now();
             const toolCallId = context?.agent?.toolCallId || randomUUID();
 
@@ -4256,6 +4800,24 @@ export class Agent<
             let effectivePrompt = inputData.prompt;
             let effectiveInstructions = inputData.instructions;
             let effectiveMaxSteps = inputData.maxSteps;
+            // Cap the LLM-provided maxSteps at the sub-agent's own configured
+            // default so the supervisor's model can reduce, but never expand,
+            // the developer-defined step budget. `onDelegationStart`'s
+            // `modifiedMaxSteps` (developer code) below bypasses this cap.
+            const subAgentMaxStepsCap = resolvedDefaultOptions?.maxSteps;
+            if (
+              typeof effectiveMaxSteps === 'number' &&
+              typeof subAgentMaxStepsCap === 'number' &&
+              effectiveMaxSteps > subAgentMaxStepsCap
+            ) {
+              this.logger.warn('Delegation maxSteps exceeds sub-agent default, capping', {
+                agent: this.name,
+                targetAgent: agentName,
+                requestedMaxSteps: effectiveMaxSteps,
+                cappedMaxSteps: subAgentMaxStepsCap,
+              });
+              effectiveMaxSteps = subAgentMaxStepsCap;
+            }
             if (delegation?.onDelegationStart) {
               try {
                 const startResult = await delegation.onDelegationStart(delegationStartContext);
@@ -4431,10 +4993,66 @@ export class Agent<
                 }
               }
 
-              // Pass history as context (not messages) so it reaches the LLM but is not persisted to the sub-agent thread.
-              const messagesForSubAgent: MessageListInput = [{ role: 'user' as const, content: effectivePrompt }];
+              // Supervisor memory (thread/resource identity) is injected into the sub-agent
+              // run only when the parent has thread context and the sub-agent has no memory
+              // config of its own. The prompt message format and the memory option passed to
+              // generate/stream below must stay in lockstep on this condition.
+              const injectSupervisorMemory = Boolean(resourceId && threadId && !resolvedHasOwnMemoryConfig);
+              const subAgentMemoryOption = injectSupervisorMemory
+                ? {
+                    memory: {
+                      resource: subAgentResourceId,
+                      thread: subAgentThreadId,
+                      options: {
+                        lastMessages: false as const,
+                        // Title generation is a top-level thread concern. Ephemeral subagent
+                        // delegation threads are never surfaced, so suppress it here to avoid
+                        // an extra title-generation LLM call per delegation (issue #18738).
+                        generateTitle: false,
+                      },
+                    },
+                  }
+                : {};
 
-              const subAgentPromptCreatedAt = new Date();
+              // Build the delegation prompt as a full DB message up front so its ID is
+              // stable across every write path. MessageList preserves IDs on DB-format
+              // input, so when the sub-agent run itself persists input messages (e.g.
+              // observational memory finalizing a turn), the explicit save after the run
+              // upserts the same row instead of inserting a duplicate prompt.
+              const subAgentUserMessage: MastraDBMessage = {
+                id: this.#mastra?.generateId() || randomUUID(),
+                role: 'user',
+                // New runs let MessageList stamp this after it adds forwarded context.
+                // Resume runs do not add the prompt again, but still need a timestamp
+                // for the explicit transcript save below.
+                ...(resumeData ? { createdAt: new Date() } : {}),
+                threadId: subAgentThreadId,
+                resourceId: subAgentResourceId,
+                content: {
+                  format: 2,
+                  parts: [
+                    {
+                      type: 'text',
+                      text: effectivePrompt,
+                    },
+                  ],
+                },
+              } as MastraDBMessage;
+
+              // The sub-agent run receives only the delegation prompt as input; supervisor
+              // history is forwarded separately via the `context` option so it reaches the
+              // LLM without being persisted to the sub-agent thread. Only pass the pre-built
+              // DB message when supervisor memory is injected into the run — otherwise the
+              // stamped threadId would conflict with the sub-agent's own memory thread.
+              const messagesForSubAgent: MessageListInput = injectSupervisorMemory
+                ? [subAgentUserMessage]
+                : [{ role: 'user' as const, content: effectivePrompt }];
+
+              // Forward the parent's abortSignal so aborting the supervisor stream/generate cancels
+              // in-flight sub-agents. The signal reaches this delegation tool via the tool-execution
+              // context; without forwarding it the sub-agent would run with a detached, never-aborted
+              // signal and keep looping after the parent is cancelled. See issue #14820.
+              const subAgentAbortOptions = context?.abortSignal ? { abortSignal: context.abortSignal } : {};
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
@@ -4444,36 +5062,24 @@ export class Agent<
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: { lastMessages: false },
-                            },
-                          }
-                        : {}),
+                      ...subAgentMemoryOption,
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: { lastMessages: false },
-                            },
-                          }
-                        : {}),
+                      ...subAgentMemoryOption,
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4485,26 +5091,7 @@ export class Agent<
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
-                // Create user message with the original prompt
-                const userMessage: MastraDBMessage = {
-                  id: this.#mastra?.generateId() || randomUUID(),
-                  role: 'user',
-                  type: 'text',
-                  createdAt: subAgentPromptCreatedAt,
-                  threadId: subAgentThreadId,
-                  resourceId: subAgentResourceId,
-                  content: {
-                    format: 2,
-                    parts: [
-                      {
-                        type: 'text',
-                        text: effectivePrompt,
-                      },
-                    ],
-                  },
-                };
-
-                fullSubAgentMessages = [userMessage, ...agentResponseMessages];
+                fullSubAgentMessages = [subAgentUserMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
                 const memory = await resolvedAgent.getMemory({ requestContext });
@@ -4556,8 +5143,10 @@ export class Agent<
                 }
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
+                  ...subAgentAbortOptions,
                 });
                 result = {
                   text: generateResult.text,
@@ -4571,40 +5160,24 @@ export class Agent<
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: {
-                                lastMessages: false,
-                              },
-                            },
-                          }
-                        : {}),
+                      ...subAgentMemoryOption,
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: {
-                                lastMessages: false,
-                              },
-                            },
-                          }
-                        : {}),
+                      ...subAgentMemoryOption,
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4649,26 +5222,7 @@ export class Agent<
                   isError: toolResult.payload.isError,
                 }));
                 const agentResponseMessages = streamResult.messageList.get.response.db();
-                // Create user message with the original prompt
-                const userMessage: MastraDBMessage = {
-                  id: this.#mastra?.generateId() || randomUUID(),
-                  role: 'user',
-                  type: 'text',
-                  createdAt: subAgentPromptCreatedAt,
-                  threadId: subAgentThreadId,
-                  resourceId: subAgentResourceId,
-                  content: {
-                    format: 2,
-                    parts: [
-                      {
-                        type: 'text',
-                        text: effectivePrompt,
-                      },
-                    ],
-                  },
-                };
-
-                fullSubAgentMessages = [userMessage, ...agentResponseMessages];
+                fullSubAgentMessages = [subAgentUserMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
                 const streamMemory = await resolvedAgent.getMemory({ requestContext });
@@ -4722,7 +5276,9 @@ export class Agent<
                 }
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
+                  ...subAgentAbortOptions,
                 });
 
                 let fullText = '';
@@ -5051,6 +5607,7 @@ export class Agent<
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
+            const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
@@ -5080,12 +5637,14 @@ export class Agent<
                   result = await run.resume({
                     resumeData,
                     requestContext,
+                    actor: invocationActor,
                     ...resolveObservabilityContext(context ?? {}),
                   });
                 } else {
                   result = await run.start({
                     inputData: workflowInputData,
                     requestContext,
+                    actor: invocationActor,
                     ...resolveObservabilityContext(context ?? {}),
                     ...(initialState && { initialState }),
                   });
@@ -5094,6 +5653,7 @@ export class Agent<
                 const streamResult = run.streamLegacy({
                   inputData: workflowInputData,
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                 });
 
@@ -5111,11 +5671,13 @@ export class Agent<
                   ? run.resumeStream({
                       resumeData,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                     })
                   : run.stream({
                       inputData: workflowInputData,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
@@ -5254,15 +5816,47 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     requestContext?: RequestContext;
+    outputWriter?: OutputWriter;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
+    delegation?: DelegationConfig;
+    methodType?: AgentMethodType;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
+    const defaultOptions = await this.getDefaultOptions({ requestContext });
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      { ...options, requestContext } as Record<string, unknown>,
+    ) as AgentExecutionOptions & typeof options;
+    const optionMemory = (options as { memory?: AgentExecutionOptionsBase<any>['memory'] }).memory;
+    const mergedMemory = mergedOptions.memory;
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const explicitThreadFromArgs = resolveThreadIdFromArgs({
+      memory: optionMemory,
+      threadId: options.threadId,
+      overrideId: threadIdFromContext,
+    });
+    const defaultThreadFromArgs = resolveThreadIdFromArgs({
+      memory: mergedMemory,
+      overrideId: threadIdFromContext,
+    });
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+
     return this.convertTools({
-      ...options,
+      toolsets: mergedOptions.toolsets,
+      clientTools: mergedOptions.clientTools,
+      threadId: explicitThreadFromArgs?.id ?? defaultThreadFromArgs?.id,
+      resourceId: resourceIdFromContext || options.resourceId || optionMemory?.resource || mergedMemory?.resource,
+      runId: mergedOptions.runId,
       requestContext,
-      methodType: 'stream',
+      outputWriter: mergedOptions.outputWriter,
+      memoryConfig: options.memoryConfig ?? mergedMemory?.options,
+      autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
+      // Use the deep-merged delegation so default callbacks (e.g. messageFilter)
+      // survive when callers pass a partial per-call delegation override.
+      delegation: mergedOptions.delegation,
+      methodType: options.methodType ?? 'stream',
     });
   }
 
@@ -5285,6 +5879,7 @@ export class Agent<
     backgroundTaskEnabled,
     inputProcessors,
     hooks,
+    model,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -5301,6 +5896,7 @@ export class Agent<
     backgroundTaskEnabled?: boolean;
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -5320,6 +5916,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      model,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -5342,6 +5939,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       toolsets: toolsets!,
+      outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
     });
@@ -5356,6 +5954,7 @@ export class Agent<
       clientTools: clientTools!,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      model,
     });
 
     const agentTools = await this.listAgentTools({
@@ -5406,17 +6005,6 @@ export class Agent<
       suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
-    const channelTools = await this.listChannelTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-    });
-
     const browserTools = await this.listBrowserTools({
       runId,
       resourceId,
@@ -5449,13 +6037,24 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
-      ...channelTools,
       ...browserTools,
       ...inputProcessorLoadedTools,
     };
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
+  }
+
+  /**
+   * Returns the agent's statically-configured tool hooks, if any.
+   *
+   * @internal Used by dataset experiments to compose item-level tool mocks with
+   * the user's configured `beforeToolCall`/`afterToolCall` hooks. Run-level hooks
+   * override these via {@link resolveToolHooks}, so callers that need to preserve
+   * the configured hooks must read and compose them explicitly.
+   */
+  getConfiguredToolHooks(): ToolHooks | undefined {
+    return this.#hooks;
   }
 
   private resolveToolHooks(runHooks?: ToolHooks): ToolHooks | undefined {
@@ -5802,33 +6401,172 @@ export class Agent<
       }
     }
 
+    // Durable agentic-loop snapshots don't embed `__streamState` in suspend
+    // payloads; their thread/resource info lives on the serialized workflow
+    // input's message-list state instead.
+    const durableMemoryInfo = (existingSnapshot?.context as Record<string, any> | undefined)?.input?.messageListState
+      ?.memoryInfo;
+    if (durableMemoryInfo && typeof durableMemoryInfo === 'object') {
+      return durableMemoryInfo as AgentSnapshotMemoryInfo;
+    }
+
     return undefined;
   }
 
-  #getSuspendedToolInfo(
-    existingSnapshot: WorkflowRunState | null | undefined,
-  ): { toolCallId?: string; toolName?: string } | undefined {
+  #getSnapshotAgentId(existingSnapshot: WorkflowRunState | null | undefined): string | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__agentId) {
+        return step.suspendPayload.__agentId;
+      }
+    }
+
+    // Durable agentic-loop snapshots persist the owning agent id on the
+    // serialized workflow input instead of in suspend payloads.
+    const durableAgentId = (existingSnapshot?.context as Record<string, any> | undefined)?.input?.agentId;
+    if (typeof durableAgentId === 'string') {
+      return durableAgentId;
+    }
+
+    return undefined;
+  }
+
+  #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
+    const toolCalls: AgentRunToolCall[] = [];
+
+    const collectFromPayload = (payload: Record<string, any>, stepKey: string) => {
+      if (payload.requireToolApproval) {
+        toolCalls.push({
+          toolCallId: payload.requireToolApproval.toolCallId,
+          toolName: payload.requireToolApproval.toolName,
+          args: payload.requireToolApproval.args,
+          requiresApproval: true,
+        });
+      } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
+        toolCalls.push({
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, stepKey),
+          toolName: payload.toolName,
+          requiresApproval: false,
+          suspendPayload: payload.toolCallSuspended,
+        });
+      }
+    };
+
     for (const key in existingSnapshot?.context) {
       const step = existingSnapshot?.context[key];
       if (step?.status !== 'suspended') continue;
       const payload = step.suspendPayload;
       if (!payload) continue;
 
-      if (payload.requireToolApproval) {
-        return {
-          toolCallId: payload.requireToolApproval.toolCallId,
-          toolName: payload.requireToolApproval.toolName,
-        };
-      }
-      if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
-        return {
-          toolCallId: payload.toolCallId,
-          toolName: payload.toolName,
-        };
+      // A foreach step (e.g. parallel tool calls in the agentic loop) can park several
+      // iterations at once, but its step-level suspendPayload only carries the first
+      // suspended iteration. The full set lives in `__workflow_meta.foreachOutput`,
+      // where each suspended entry keeps its own per-iteration payload — surface every
+      // one of them so all pending tool calls are discoverable and resumable.
+      const suspendedIterations = this.#getSuspendedForeachIterations(payload);
+      if (suspendedIterations.length > 0) {
+        for (const iteration of suspendedIterations) {
+          collectFromPayload(iteration.suspendPayload, key);
+        }
+      } else {
+        collectFromPayload(payload, key);
       }
     }
 
-    return undefined;
+    return toolCalls;
+  }
+
+  #getSuspendedForeachIterations(
+    payload: Record<string, any>,
+  ): { status: 'suspended'; suspendPayload: Record<string, any> }[] {
+    // The default engine persists foreach aggregation as an array; the evented
+    // engine persists it as an object keyed by iteration index.
+    const foreachOutput = payload.__workflow_meta?.foreachOutput;
+    const entries = Array.isArray(foreachOutput)
+      ? foreachOutput
+      : foreachOutput && typeof foreachOutput === 'object'
+        ? Object.values(foreachOutput)
+        : [];
+    return entries.filter(
+      (entry: any): entry is { status: 'suspended'; suspendPayload: Record<string, any> } =>
+        entry?.status === 'suspended' && !!entry.suspendPayload,
+    );
+  }
+
+  async #validateSuspendedToolCallTarget({
+    snapshot,
+    toolCallId,
+    runId,
+    method,
+  }: {
+    snapshot: WorkflowRunState;
+    toolCallId: string | undefined;
+    runId: string;
+    method: string;
+  }) {
+    if (toolCallId === undefined) return;
+
+    const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
+      this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+
+    let isSuspended = isTargetSuspended(snapshot);
+    if (!isSuspended) {
+      // A resume stream can expose the next suspension just before its snapshot is
+      // persisted. Briefly poll after authorization so an immediate response to
+      // that newly surfaced tool call is not rejected based on the prior snapshot.
+      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+      const deadline = Date.now() + 2000;
+      while (!isSuspended && workflowsStore && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+        const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
+        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+      }
+    }
+
+    if (!isSuspended) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot resume tool call "${toolCallId}" because it is not suspended.`,
+        details: {
+          agentName: this.name,
+          method,
+          runId,
+          toolCallId,
+        },
+      });
+    }
+  }
+
+  /**
+   * Suspend payloads persisted before they carried `toolCallId` only hold the
+   * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
+   * Recover it when exactly one label points at the suspended step.
+   */
+  #findResumeLabelForStep(existingSnapshot: WorkflowRunState | null | undefined, stepId: string): string | undefined {
+    const labels = Object.entries(existingSnapshot?.resumeLabels ?? {}).filter(
+      ([, target]) => target.stepId === stepId,
+    );
+    return labels.length === 1 ? labels[0]![0] : undefined;
+  }
+
+  #getSuspendedToolInfo(
+    existingSnapshot: WorkflowRunState | null | undefined,
+    targetToolCallId?: string,
+  ): { toolCallId?: string; toolName?: string } | undefined {
+    const suspendedToolCalls = this.#getSuspendedToolCalls(existingSnapshot);
+    // Several tool calls can be parked at once. Never label an explicitly targeted
+    // resume with a sibling if this snapshot predates the target's persistence.
+    const info =
+      targetToolCallId !== undefined
+        ? (suspendedToolCalls.find(toolCall => toolCall.toolCallId === targetToolCallId) ?? {
+            toolCallId: targetToolCallId,
+            toolName: undefined,
+          })
+        : suspendedToolCalls[0];
+    return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
   #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
@@ -5876,16 +6614,24 @@ export class Agent<
     return resourceIdFromContext || memory?.resource || snapshotMemoryInfo?.resourceId;
   }
 
-  async #requireAgentExecutionFGA({
+  /**
+   * Enforce agent-level FGA (`agents:execute`) before running the agent.
+   * `protected` so durable/evented subclasses can enforce the same gate before
+   * their workflow-based execution (they override the public entry points and
+   * would otherwise bypass it).
+   */
+  protected async requireAgentExecutionFGA({
     requestContext,
     memory,
     runId,
     snapshotMemoryInfo,
+    actor,
   }: {
     requestContext?: RequestContext;
     memory?: AgentExecutionOptionsBase<any>['memory'];
     runId?: string;
     snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+    actor?: ActorSignal;
   }): Promise<void> {
     const fgaProvider = this.#mastra?.getServer()?.fga;
     if (!fgaProvider) {
@@ -5894,13 +6640,14 @@ export class Agent<
 
     const user = requestContext?.get('user');
     const executionResourceId = this.#getAgentExecutionResourceId({ requestContext, memory, snapshotMemoryInfo });
-    const { getAgentFGAResourceId, requireFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+    const { getAgentFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
     await requireFGA({
       fgaProvider,
       user,
       resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
       permission: MastraFGAPermissions.AGENTS_EXECUTE,
       requestContext,
+      actor,
       context: {
         resourceId: executionResourceId,
       },
@@ -5914,22 +6661,31 @@ export class Agent<
   }
 
   /**
-   * Lazily build (and cache) an ephemeral Mastra. The agent's prepare-stream
-   * workflow runs on the evented engine, which requires `mastra.pubsub` to
-   * dispatch events — so a `new Agent(...)` that isn't wired into a Mastra
-   * still needs *some* Mastra. Workers are started once and reused for every
-   * subsequent call on this agent. `__registerMastra(real)` tears it down.
+   * Lazily build (and cache) an ephemeral in-memory Mastra. A `new Agent(...)`
+   * that isn't wired into a Mastra still needs *some* storage for internal
+   * snapshot lookups (agentic-loop resume, suspended-run discovery). Reused
+   * for every subsequent call on this agent; `__registerMastra(real)` clears
+   * it.
    */
   async #getOrCreateEphemeralMastra(): Promise<Mastra> {
     if (this.#ephemeralMastra) {
       return this.#ephemeralMastra;
     }
+    // Resolve the Mastra constructor without a static `agent → mastra` runtime
+    // edge (see the type-only import at the top of this file). In any app that
+    // constructed a Mastra, the holder is already populated and no dynamic
+    // import runs; the `await import` is a fallback for standalone agents that
+    // never loaded the Mastra module.
+    const MastraClass = mastraCtorHolder.ctor ?? (await import('../mastra')).Mastra;
     const ephemeral = new MastraClass({
       logger: false,
       storage: new InMemoryStore(),
       pubsub: new EventEmitterPubSub(),
+      // Skip module-level scorer-hook registration: the hook can never resolve
+      // a scorer on this registry-less instance, and it would pin the whole
+      // ephemeral graph against GC for the process lifetime (#19404).
+      __ephemeral: true,
     });
-    await ephemeral.startWorkers();
     this.#ephemeralMastra = ephemeral;
     return ephemeral;
   }
@@ -6112,7 +6868,9 @@ export class Agent<
     // For resumed runs, surface resumeData as the span input and link the resumed
     // span back to the original suspended trace. Mirrors Workflow.resume tracing.
     const isResume = !!resumeContext;
-    const suspendedToolInfo = isResume ? this.#getSuspendedToolInfo(resumeContext?.snapshot) : undefined;
+    const suspendedToolInfo = isResume
+      ? this.#getSuspendedToolInfo(resumeContext?.snapshot, options.toolCallId)
+      : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
           | { traceId?: string; spanId?: string; parentSpanId?: string }
@@ -6138,7 +6896,7 @@ export class Agent<
         : options.tracingOptions;
 
     const spanInput = isResume
-      ? this.#getResumeSpanInput(resumeContext!.resumeData, suspendedToolInfo)
+      ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
       : options.messages;
 
     const agentSpan = getOrCreateSpan({
@@ -6279,68 +7037,18 @@ export class Agent<
         agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub, scope),
     });
 
-    // The prepare-stream workflow runs on the evented engine and needs a
-    // pubsub-equipped Mastra to dispatch events. If the agent isn't attached
-    // to one, fall back to a lazily-created ephemeral Mastra (see field doc).
-    // The same Mastra is registered on the LLM so the agentic loop inside
-    // `capabilities.llm.stream(...)` inherits it.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    // Idempotent: the LLM was already given this.#mastra (or undefined) in
-    // getLLM; re-register so the ephemeral case takes effect.
-    llm.__registerMastra(effectiveMastra);
-
-    const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
-    const executionRunId = randomUUID();
-
-    if (useEventedExecution) {
-      // Evented engine path: needs pubsub workers and internal workflow registration.
-      // Ensure the evented engine's workers are running on the effective Mastra.
-      // Users who just do `new Mastra({ agents })` without calling startWorkers
-      // would otherwise hang here — events would publish but no worker would
-      // consume them. startWorkers is idempotent.
-      await effectiveMastra?.startWorkers();
-      // Register as internal so the evented engine's event processor can resolve
-      // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
-      // We pick the runId up front and register run-scoped (not unscoped), so
-      // concurrent or nested agent invocations never resolve each other's
-      // closure-bound instance. __registerInternalWorkflow also calls
-      // __registerMastra under the hood, which wires the pubsub `createRun` needs.
-      effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
-    } else {
-      // Direct execution path (default): register Mastra for storage/observability
-      // but skip pubsub workers and internal workflow registration (not needed
-      // without events). Avoids requestContext serialisation loss.
-      executionWorkflow.__registerMastra(effectiveMastra);
+    // Register Mastra (if any) on the workflow for storage/observability access.
+    // The agent's prepare-stream workflow runs in-process via the default
+    // execution engine, so no pubsub workers or internal workflow registration
+    // are needed.
+    if (this.#mastra) {
+      executionWorkflow.__registerMastra(this.#mastra);
     }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    try {
-      const run = await executionWorkflow.createRun({ runId: executionRunId });
-      const result = await run.start({ ...observabilityContext });
-      return result;
-    } finally {
-      if (useEventedExecution) {
-        // The WEP's terminal event handlers (processWorkflowEnd / processWorkflowFail /
-        // processWorkflowSuspend) unregister the internal workflow after all events for
-        // this run have been fully processed. This safety-net covers the exceptional path
-        // where run.start() throws before a terminal event is published (e.g. subscription
-        // setup failure). In the normal case the WEP already unregistered, so this is a no-op.
-        effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
-        // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
-        // but the evented engine's `EventedRun.start` still writes the initial 'running' row
-        // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
-        // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
-        // a real failure in the surrounding run.
-        try {
-          await executionWorkflow.deleteWorkflowRunById(executionRunId);
-        } catch (err) {
-          this.logger.debug('Failed to clean up internal execution-workflow run row', {
-            runId: executionRunId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    }
+    const run = await executionWorkflow.createRun();
+    const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+    return result;
   }
 
   /**
@@ -6362,6 +7070,7 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
+    onTitleGenerated,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -6389,14 +7098,9 @@ export class Agent<
       resourceId,
     });
 
-    const messageListResponses = messageList.get.response.aiV4.core();
-
-    const usedWorkingMemory = messageListResponses.some(
-      m => m.role === 'tool' && m.content.some(c => isWorkingMemoryToolName(c.toolName)),
-    );
-    // working memory updates the thread, so we need to get the latest thread if we used it
+    // re-read the latest thread so metadata written mid-run (working memory, processors) isn't overwritten
     const memory = await this.getMemory({ requestContext });
-    const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
+    const thread = (!readOnlyMemory && threadId ? await memory?.getThreadById({ threadId }) : undefined) ?? threadAfter;
 
     // Add LLM response messages to the list
     // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
@@ -6457,36 +7161,41 @@ export class Agent<
         );
 
         const uiMessages = messageList.get.all.ui();
-        const messages = messageList.get.all.core();
         const requiredMessages = minMessages ?? 1;
 
-        if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
-          const userMessage = this.getMostRecentUserMessage(uiMessages);
+        if (shouldGenerate && !thread.title) {
+          const threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages);
 
-          if (userMessage) {
-            void this.genTitle(
-              userMessage,
-              requestContext,
-              observabilityContext,
-              titleModel,
-              titleInstructions,
-              uiMessages,
-            ).then(
-              async title => {
-                if (title) {
-                  await memory.createThread({
-                    threadId: thread.id,
-                    resourceId,
-                    memoryConfig,
-                    title,
-                    metadata: thread.metadata,
-                  });
-                }
-              },
-              error => {
-                this.logger.error('Error persisting generated title:', error);
-              },
-            );
+          if (threadUiMessages.length >= requiredMessages) {
+            const userMessage = this.getMostRecentUserMessage(threadUiMessages);
+
+            if (userMessage) {
+              void this.genTitle(
+                userMessage,
+                requestContext,
+                observabilityContext,
+                titleModel,
+                titleInstructions,
+                threadUiMessages,
+              )
+                .then(async title => {
+                  if (title) {
+                    await memory.createThread({
+                      threadId: thread.id,
+                      resourceId,
+                      memoryConfig,
+                      title,
+                      metadata: thread.metadata,
+                    });
+                    if (typeof onTitleGenerated === 'function') {
+                      await onTitleGenerated(title);
+                    }
+                  }
+                })
+                .catch(error => {
+                  this.logger.error('Error persisting generated title:', error);
+                });
+            }
           }
         }
       } catch (e) {
@@ -6607,9 +7316,10 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
-      } as unknown as AgentExecutionOptions<OUTPUT>,
+      },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
@@ -6682,6 +7392,7 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
@@ -6769,6 +7480,16 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path so callers using the agent outside of a
+    // `Mastra` instance still get durable execution. When attached to
+    // Mastra, the auto-wrap at registration means the caller already
+    // holds a `DurableAgent` and this branch is skipped.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.generate(messages, options) as Promise<FullOutput<OUTPUT>>;
+    }
+
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
@@ -6783,8 +7504,16 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
-    await this.#requireAgentExecutionFGA(mergedOptions);
+    await this.requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      actor,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -6816,7 +7545,8 @@ export class Agent<
     }
 
     const executeOptions = {
-      ...mergedOptions,
+      ...loopOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6858,7 +7588,7 @@ export class Agent<
         id: 'AGENT_GENERATE_MALFORMED_RESULT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
+        text: 'Execution workflow produced a result without getFullOutput',
       });
     }
 
@@ -6890,6 +7620,127 @@ export class Agent<
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
   }
 
+  /**
+   * Lists suspended agent runs from workflow snapshot storage — runs waiting on
+   * a tool-call approval (`requireApproval` / `requireToolApproval`) or on a
+   * tool that called `suspend()`.
+   *
+   * Unlike {@link getActiveThreadRunId}, which only knows about runs started by the
+   * current process, this is backed by storage: it works after a server restart and
+   * across multiple server instances. Pass the returned `runId` to `resumeStream()`,
+   * `approveToolCall()`, or `declineToolCall()`.
+   *
+   * Results are scoped to runs started by this agent: snapshots persist the owning
+   * agent's id, and runs whose snapshots carry a different id are skipped. Filter by
+   * `threadId`/`resourceId` to scope results to a conversation.
+   *
+   * @example
+   * ```typescript
+   * const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
+   * if (runs[0]) {
+   *   await agent.approveToolCall({ runId: runs[0].runId });
+   * }
+   * ```
+   */
+  async listSuspendedRuns(options: AgentListSuspendedRunsOptions = {}): Promise<AgentListSuspendedRunsResult> {
+    const { threadId, resourceId, fromDate, toDate, perPage, page } = options;
+
+    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PER_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" listSuspendedRuns() requires perPage to be a positive integer.`,
+        details: { agentName: this.name, perPage },
+      });
+    }
+    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" listSuspendedRuns() requires page to be a non-negative integer.`,
+        details: { agentName: this.name, page },
+      });
+    }
+
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+
+    if (!workflowsStore) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Agent "${this.name}" listSuspendedRuns() requires storage to discover suspended runs. ` +
+          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL).`,
+        details: { agentName: this.name },
+      });
+    }
+
+    // threadId/resourceId live inside the snapshot state rather than in storage
+    // columns, so fetch all matching rows and filter/paginate here to keep
+    // `total` accurate. Durable agents persist their agentic loop under a
+    // separate workflow name, so query both — otherwise suspended durable runs
+    // are never discoverable.
+    const runs: Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'] = [];
+    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
+      const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
+        workflowName,
+        status: 'suspended',
+        fromDate,
+        toDate,
+      });
+      runs.push(...workflowRuns);
+    }
+
+    const matchedRuns: AgentRun[] = [];
+    for (const run of runs) {
+      let snapshot = run.snapshot;
+      if (typeof snapshot === 'string') {
+        try {
+          snapshot = JSON.parse(snapshot) as WorkflowRunState;
+        } catch {
+          continue;
+        }
+      }
+      if (snapshot?.status !== 'suspended') continue;
+
+      // Snapshots persist the owning agent's id, so runs started by other
+      // agents sharing the same agentic-loop snapshot storage are skipped.
+      // Default-deny: a snapshot whose owning agent id is missing or does not
+      // match is not surfaced, so runs cannot leak across agents.
+      const runAgentId = this.#getSnapshotAgentId(snapshot);
+      if (runAgentId !== this.id) continue;
+
+      // thread/resource info travels in the suspended stream state; the run row's
+      // resourceId column is used as the primary source when present.
+      const memoryInfo = this.#getSnapshotMemoryInfo(snapshot);
+      const runThreadId = memoryInfo?.threadId;
+      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
+      if (threadId && runThreadId !== threadId) continue;
+      if (resourceId && runResourceId !== resourceId) continue;
+
+      matchedRuns.push({
+        runId: run.runId,
+        status: 'suspended',
+        threadId: runThreadId,
+        resourceId: runResourceId,
+        suspendedAt: run.updatedAt,
+        toolCalls: this.#getSuspendedToolCalls(snapshot),
+      });
+    }
+
+    const total = matchedRuns.length;
+    const paginatedRuns =
+      perPage !== undefined && page !== undefined
+        ? matchedRuns.slice(page * perPage, (page + 1) * perPage)
+        : matchedRuns;
+
+    return { runs: paginatedRuns, total };
+  }
+
   abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
@@ -6904,8 +7755,13 @@ export class Agent<
   sendMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
-  ): SendAgentMessageResult {
-    return agentThreadStreamRuntime.sendMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  ): SendAgentMessageResult<OUTPUT> {
+    return agentThreadStreamRuntime.sendMessage<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      message,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -6914,8 +7770,13 @@ export class Agent<
   queueMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
-  ): QueueAgentMessageResult {
-    return agentThreadStreamRuntime.queueMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  ): QueueAgentMessageResult<OUTPUT> {
+    return agentThreadStreamRuntime.queueMessage<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      message,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -6924,8 +7785,13 @@ export class Agent<
   sendStateSignal<OUTPUT = TOutput>(
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
-  ): Promise<SendAgentStateSignalResult> {
-    return agentThreadStreamRuntime.sendStateSignal(this as Agent<any, any, any, any>, state, target, this.getPubSub());
+  ): Promise<SendAgentStateSignalResult<OUTPUT>> {
+    return agentThreadStreamRuntime.sendStateSignal<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      state,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -6934,25 +7800,25 @@ export class Agent<
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput,
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult>;
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>>;
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult[]>;
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]>;
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput | SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult | SendAgentNotificationSignalResult[]> {
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT> | SendAgentNotificationSignalResult<OUTPUT>[]> {
     const isBatch = Array.isArray(notification);
     const inputs = isBatch ? notification : [notification];
-    const results = await this.#sendNotificationSignalBatch(inputs, target);
+    const results = await this.#sendNotificationSignalBatch<OUTPUT>(inputs, target);
     return isBatch ? results : results[0]!;
   }
 
   async #sendNotificationSignalBatch<OUTPUT = TOutput>(
     inputs: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult[]> {
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]> {
     const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
     if (!notifications) {
       throw new Error('sendNotificationSignal requires a notifications storage domain');
@@ -6988,7 +7854,11 @@ export class Agent<
       });
     }
 
-    const results: SendAgentNotificationSignalResult[] = [];
+    const results: SendAgentNotificationSignalResult<OUTPUT>[] = [];
+    // Set when a record stays pending with a scheduled deliverAt/summaryAt —
+    // those are delivered later by the notification dispatch workflow, so the
+    // dispatcher schedule (and scheduler) must be lazily activated.
+    let needsDispatcher = false;
     for (const { record, decision } of planned) {
       if (decision.action === 'discard') {
         const updated = await notifications.updateNotification({
@@ -6997,7 +7867,7 @@ export class Agent<
           status: 'discarded',
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7007,7 +7877,7 @@ export class Agent<
           threadId: record.threadId,
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7030,23 +7900,46 @@ export class Agent<
           deliveryReason: decision.reason,
         });
 
+        if (updated.deliverAt != null || updated.summaryAt != null) {
+          needsDispatcher = true;
+        }
+
         if (shouldEmitSummaryNow) {
           const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
-          const result = agentThreadStreamRuntime.sendSignal(
+          const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
             this as Agent<any, any, any, any>,
             signal,
             { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
             this.getPubSub(),
           );
-          if (!result.accepted) {
+          let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
+          try {
+            summaryAccepted = await result.accepted;
+          } catch (error) {
             const failed = await notifications.updateNotification({
               id: updated.id,
               threadId: updated.threadId,
-              deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
+              // `summaryAt` was cleared to emit this summary. Restore it so the
+              // record stays due and the dispatcher can retry it.
+              summaryAt: now,
+              ...resolveDeliveryFailureUpdate(updated),
               lastDeliveryAttemptAt: new Date(),
-              lastDeliveryError: 'Notification summary signal was rejected',
+              lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
-            results.push({ ...result, record: failed, decision });
+            results.push({ record: failed, decision });
+            continue;
+          }
+          // The routing policy can resolve to `persist`/`discard` (no run, no
+          // delivery). Only stamp `summarySignalId` when a run actually picked
+          // the signal up (`wake`/`deliver`).
+          if (summaryAccepted.action === 'persist' || summaryAccepted.action === 'discard') {
+            results.push({
+              record: updated,
+              decision,
+              signal: result.signal,
+              persisted: result.persisted,
+              accepted: result.accepted,
+            });
             continue;
           }
           const summarized = await notifications.updateNotification({
@@ -7054,31 +7947,55 @@ export class Agent<
             threadId: updated.threadId,
             summarySignalId: result.signal.id,
           });
-          results.push({ ...result, record: summarized, decision });
+          results.push({
+            record: summarized,
+            decision,
+            runId: 'runId' in summaryAccepted ? summaryAccepted.runId : undefined,
+            signal: result.signal,
+            persisted: result.persisted,
+            accepted: result.accepted,
+          });
           continue;
         }
 
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
       const signal = createNotificationSignal({ ...record, status: 'delivered' });
-      const result = agentThreadStreamRuntime.sendSignal(
+      const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
         this as Agent<any, any, any, any>,
         signal,
         target,
         this.getPubSub(),
       );
-      if (!result.accepted) {
+      let delivered: SendAgentSignalAccepted<OUTPUT>;
+      try {
+        delivered = await result.accepted;
+      } catch (error) {
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
-          deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+          ...resolveDeliveryFailureUpdate(record),
           lastDeliveryAttemptAt: new Date(),
-          lastDeliveryError: 'Notification signal was rejected',
+          lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
-        results.push({ ...result, record: failed, decision });
+        results.push({ record: failed, decision });
+        continue;
+      }
+
+      // The routing policy can resolve to `persist`/`discard` (no run picked the
+      // signal up). Don't mark the notification `delivered` in that case — the
+      // record stays in its current state with the emitted signal attached.
+      if (delivered.action === 'persist' || delivered.action === 'discard') {
+        results.push({
+          record,
+          decision,
+          signal: result.signal,
+          persisted: result.persisted,
+          accepted: result.accepted,
+        });
         continue;
       }
 
@@ -7090,7 +8007,18 @@ export class Agent<
         deliveryReason: decision.reason,
       });
 
-      results.push({ ...result, record: updated, decision });
+      results.push({
+        record: updated,
+        decision,
+        runId: 'runId' in delivered ? delivered.runId : undefined,
+        signal: result.signal,
+        persisted: result.persisted,
+        accepted: result.accepted,
+      });
+    }
+
+    if (needsDispatcher) {
+      await this.#mastra?.__ensureNotificationDispatchReady();
     }
 
     return results;
@@ -7099,8 +8027,16 @@ export class Agent<
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
-    return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
+  sendSignal<OUTPUT = TOutput>(
+    signal: AgentSignal,
+    target: SendAgentSignalOptions<OUTPUT>,
+  ): SendAgentSignalResult<OUTPUT> {
+    return agentThreadStreamRuntime.sendSignal<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      signal,
+      target,
+      this.getPubSub(),
+    );
   }
 
   async stream<
@@ -7131,6 +8067,16 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path so callers using the agent outside of a
+    // `Mastra` instance still get durable streams. When attached to Mastra,
+    // the auto-wrap at registration means the caller already holds a
+    // `DurableAgent` and this branch is skipped.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.stream(messages, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
@@ -7145,6 +8091,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -7163,7 +8112,12 @@ export class Agent<
       );
     }
 
-    await this.#requireAgentExecutionFGA(mergedOptions);
+    await this.requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      actor,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -7197,7 +8151,7 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      mergedOptions,
+      loopOptions as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
@@ -7207,10 +8161,14 @@ export class Agent<
         source: 'agent',
         entityId: this.id,
       }) ?? randomUUID();
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, threadStreamPubSub);
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
 
     const executeOptions = {
       ...preparedOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -7248,7 +8206,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -7331,6 +8289,13 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.streamUntilIdle(messages, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
       activeStreams: this.#activeStreamUntilIdle,
       bgManager: this.#mastra?.backgroundTaskManager,
@@ -7448,6 +8413,13 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.resumeStream(resumeData, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -7456,6 +8428,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    const loopStreamOptions = { ...mergedStreamOptions };
+    const actor = mergedStreamOptions.actor;
+    delete loopStreamOptions.actor;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -7475,7 +8450,10 @@ export class Agent<
     }
 
     const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeStream',
+    });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
 
     if (snapshotMemoryInfo?.threadId) {
@@ -7484,13 +8462,21 @@ export class Agent<
         thread: mergedStreamOptions.memory?.thread ?? snapshotMemoryInfo.threadId,
         resource: mergedStreamOptions.memory?.resource ?? snapshotMemoryInfo.resourceId,
       };
+      loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedStreamOptions.requestContext,
       memory: mergedStreamOptions.memory,
       runId: mergedStreamOptions.runId,
       snapshotMemoryInfo,
+      actor,
+    });
+    await this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: streamOptions?.toolCallId,
+      runId,
+      method: 'resumeStream',
     });
 
     const llm = await this.getLLM({
@@ -7520,16 +8506,17 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
     const result = await this.#execute({
       ...preparedOptions,
+      actor,
       structuredOutput: mergedStreamOptions.structuredOutput
         ? {
             ...mergedStreamOptions.structuredOutput,
@@ -7567,7 +8554,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result as unknown as MastraModelOutput<OUTPUT>,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -7621,6 +8608,14 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path so callers using the agent outside of a
+    // `Mastra` instance still get durable execution.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.resumeGenerate(resumeData, options) as Promise<FullOutput<OUTPUT>>;
+    }
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -7629,14 +8624,24 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
+      actor,
+    });
+    await this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: options?.toolCallId,
+      runId,
+      method: 'resumeGenerate',
     });
 
     const llm = await this.getLLM({
@@ -7668,7 +8673,8 @@ export class Agent<
     }
 
     const result = await this.#execute({
-      ...mergedOptions,
+      ...loopOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -7710,7 +8716,7 @@ export class Agent<
         id: 'AGENT_GENERATE_MALFORMED_RESULT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
+        text: 'Execution workflow produced a result without getFullOutput',
       });
     }
 
@@ -7743,10 +8749,69 @@ export class Agent<
    * ```
    */
   async approveToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.approveToolCall(options) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: true }, options);
+  }
+
+  async sendStreamResume<OUTPUT = undefined>(
+    options: SendAgentStreamResumeOptions<OUTPUT>,
+  ): Promise<SendAgentStreamResumeResult> {
+    const { threadId, resourceId, runId, toolCallId, resumeData, streamOptions } = options;
+
+    if (!threadId || !resourceId || !runId) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_MISSING_TARGET',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'sendStreamResume() requires threadId, resourceId, and runId.',
+        details: { threadId, resourceId, runId, agentName: this.name },
+      });
+    }
+
+    const resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
+      { threadId, resourceId, runId, toolCallId },
+      this.getPubSub(),
+    );
+    if (!resumableRun) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" sendStreamResume() could not find a suspended run "${runId}" for thread "${threadId}".`,
+        details: {
+          threadId,
+          resourceId,
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    const resumeOptions = (streamOptions ?? {}) as AgentExecutionOptionsBase<unknown> & { toolCallId?: string };
+
+    await this.resumeStream(resumeData, {
+      ...resumeOptions,
+      runId,
+      ...(resumableRun.toolCallId ? { toolCallId: resumableRun.toolCallId } : {}),
+      memory: {
+        ...(resumeOptions.memory ?? {}),
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    return { accepted: true, runId, toolCallId: resumableRun.toolCallId };
   }
 
   async sendToolApproval<OUTPUT = undefined>(
@@ -7755,11 +8820,22 @@ export class Agent<
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      resumeData?: unknown;
+      declineContext?: { reason?: string; message?: string };
       messages?: MessageListInput;
       streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
+    const {
+      threadId,
+      resourceId,
+      approved,
+      resumeData: customResumeData,
+      declineContext,
+      messages,
+      streamOptions,
+      ...executionOptions
+    } = options;
 
     if (messages && approved) {
       const continuation = agentThreadStreamRuntime.continueWithMessages(
@@ -7779,13 +8855,62 @@ export class Agent<
       return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
     }
 
-    const runId = this.getActiveThreadRunId({ threadId, resourceId });
+    let runId = this.getActiveThreadRunId({ threadId, resourceId });
+    // Tracks whether runId was recovered from storage (not the in-memory active-run
+    // map). Storage-discovered runs are not present in the in-memory thread runtime,
+    // so they must resume directly via resumeStream() rather than through
+    // sendStreamResume(), whose getResumableThreadRun() guard is in-memory only.
+    let resolvedFromStorage = false;
+
+    if (!runId) {
+      // The in-memory active-run map only knows about runs started by this process.
+      // After a server restart (or on another instance) fall back to storage-backed
+      // suspended-run discovery so approvals stay durable.
+      let suspendedRuns: AgentRun[] = [];
+      try {
+        ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
+      } catch (error) {
+        // Only swallow the expected no-storage case — storage outages and
+        // store-driver errors must surface instead of masquerading as
+        // "no suspended run exists".
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          throw error;
+        }
+      }
+
+      const matchingRuns = options.toolCallId
+        ? suspendedRuns.filter(run => run.toolCalls.some(toolCall => toolCall.toolCallId === options.toolCallId))
+        : suspendedRuns;
+
+      if (matchingRuns.length > 1) {
+        throw new MastraError({
+          id: 'AGENT_SEND_TOOL_APPROVAL_AMBIGUOUS_SUSPENDED_RUNS',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            `Agent "${this.name}" sendToolApproval() found ${matchingRuns.length} suspended runs for thread "${threadId}". ` +
+            `Pass a toolCallId to disambiguate, or resume a specific run with approveToolCall()/declineToolCall() and an explicit runId.`,
+          details: {
+            threadId,
+            resourceId,
+            agentName: this.name,
+            runIds: matchingRuns.map(run => run.runId).join(', '),
+          },
+        });
+      }
+
+      runId = matchingRuns[0]?.runId;
+      resolvedFromStorage = runId !== undefined;
+    }
+
     if (!runId) {
       throw new MastraError({
         id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent "${this.name}" sendToolApproval() could not find an active run for thread "${threadId}".`,
+        text:
+          `Agent "${this.name}" sendToolApproval() could not find an active or suspended run for thread "${threadId}". ` +
+          `The run may have already completed or been resumed.`,
         details: {
           threadId,
           resourceId,
@@ -7794,22 +8919,51 @@ export class Agent<
       });
     }
 
-    const approvalOptions = {
-      ...executionOptions,
-      runId,
-      memory: {
-        ...(executionOptions.memory ?? {}),
-        thread: executionOptions.memory?.thread ?? threadId,
-        resource: executionOptions.memory?.resource ?? resourceId,
-      },
-    } as unknown as AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string };
+    const resumeOptions = deepMerge(
+      (streamOptions ?? {}) as Record<string, unknown>,
+      executionOptions as Record<string, unknown>,
+    ) as unknown as AgentExecutionOptions<OUTPUT>;
 
-    if (approved) {
-      await this.approveToolCall(approvalOptions);
-    } else {
-      await this.declineToolCall(approvalOptions);
+    const resumeData =
+      customResumeData !== undefined
+        ? customResumeData
+        : approved
+          ? { approved }
+          : declineContext
+            ? { approved, ...declineContext }
+            : { approved };
+    const resumeStreamOptions = {
+      ...resumeOptions,
+      memory: {
+        ...(resumeOptions.memory ?? {}),
+        thread: resumeOptions.memory?.thread ?? threadId,
+        resource: resumeOptions.memory?.resource ?? resourceId,
+      },
+    };
+
+    if (resolvedFromStorage) {
+      // The run was recovered from storage and is not tracked by the in-memory
+      // thread runtime, so sendStreamResume()'s getResumableThreadRun() guard would
+      // reject it. Resume directly from the persisted snapshot, mirroring the
+      // explicit-runId approveToolCall()/declineToolCall() entry points.
+      // @ts-expect-error - resumeStream overloads don't narrow cleanly here; matches
+      // the same pattern used by approveToolCall()/declineToolCall() above.
+      await this.resumeStream(resumeData, {
+        ...resumeStreamOptions,
+        runId,
+        ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+      });
+      return { accepted: true, runId, toolCallId: options.toolCallId };
     }
-    return { accepted: true, runId, toolCallId: options.toolCallId };
+
+    return this.sendStreamResume({
+      threadId,
+      resourceId,
+      runId,
+      toolCallId: options.toolCallId,
+      resumeData,
+      streamOptions: resumeStreamOptions,
+    });
   }
 
   /**
@@ -7828,8 +8982,17 @@ export class Agent<
    * ```
    */
   async declineToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Route standalone `new Agent({ durable: true })` calls through the
+    // durable execution path.
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.declineToolCall(options) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: false }, options);
   }
@@ -7851,7 +9014,9 @@ export class Agent<
    * ```
    */
   async approveToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: true }, options);
@@ -7874,7 +9039,9 @@ export class Agent<
    * ```
    */
   async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: false }, options);
@@ -8037,7 +9204,9 @@ export class Agent<
     instructions?: DynamicArgument<string>,
   ): Promise<string> {
     const DEFAULT_TITLE_INSTRUCTIONS = `
-      - you will generate a short title based on the first message a user begins a conversation with
+      - you will generate a short title based on a conversation transcript between a user and an assistant
+      - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
+      - always produce a title, even when the transcript is only a greeting or trivial exchange
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
       - do not use quotes or colons
@@ -8056,4 +9225,105 @@ export class Agent<
       });
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Durable-agent method delegators
+  //
+  // These methods only make sense when the agent was constructed with
+  // `durable: true`. They mirror the public surface of `DurableAgent` (which
+  // extends `Agent`) so that a standalone `new Agent({ durable: true })` — used
+  // without being attached to a `Mastra` instance — can still drive durable
+  // execution. Each delegator resolves the lazily-built standalone
+  // `DurableAgent` wrapper via `#getStandaloneDurable()` and forwards the call.
+  //
+  // On a non-durable agent they throw `AGENT_DURABLE_METHOD_NOT_AVAILABLE` so
+  // callers get a clear error instead of a confusing "not a function" from a
+  // typo-safe method that silently does nothing.
+  //
+  // When the agent is attached to a `Mastra`, Mastra auto-wraps at
+  // registration and the caller already holds a `DurableAgent`, so the base
+  // methods below are unreachable via the wrapper — `#getStandaloneDurable()`
+  // returns `undefined` and the throw path fires. To avoid that misleading
+  // error, callers should either use the wrapper Mastra hands back or omit the
+  // `Mastra` registration and rely on the standalone wrapper.
+  // ---------------------------------------------------------------------------
+
+  async #requireStandaloneDurable(method: string): Promise<StandaloneDurableWrapper> {
+    const durable = await this.#getStandaloneDurable();
+    if (!durable) {
+      throw new MastraError({
+        id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent.${method}() is only available on agents constructed with \`durable: true\`. Configure \`new Agent({ durable: true })\` or retrieve the durable agent from a registered Mastra instance.`,
+        details: { agentId: this.id, method },
+      });
+    }
+    return durable;
+  }
+
+  /** Resume a suspended durable run. Only valid when `durable: true`. */
+  async resume(
+    runId: string,
+    resumeData: unknown,
+    options?: DurableAgentStreamOptions<TOutput>,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    const durable = await this.#requireStandaloneDurable('resume');
+    return durable.resume(runId, resumeData, options) as Promise<DurableAgentStreamResult<TOutput>>;
+  }
+
+  /** Recover a persisted durable run in a fresh process. Only valid when `durable: true`. */
+  async recover(
+    runId: string,
+    options?: DurableAgentRecoverOptions<TOutput>,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    const durable = await this.#requireStandaloneDurable('recover');
+    return durable.recover(runId, options) as Promise<DurableAgentStreamResult<TOutput>>;
+  }
+
+  /** List active durable runs. Only valid when `durable: true`. */
+  async listActiveRuns(options?: DurableAgentListActiveRunsOptions): Promise<DurableAgentListActiveRunsResult> {
+    const durable = await this.#requireStandaloneDurable('listActiveRuns');
+    return durable.listActiveRuns(options) as Promise<DurableAgentListActiveRunsResult>;
+  }
+
+  /** Bulk-recover active durable runs. Only valid when `durable: true`. */
+  async recoverActiveRuns(
+    options?: DurableAgentRecoverActiveRunsOptions,
+  ): Promise<DurableAgentRecoverActiveRunsResult> {
+    const durable = await this.#requireStandaloneDurable('recoverActiveRuns');
+    return durable.recoverActiveRuns(options) as Promise<DurableAgentRecoverActiveRunsResult>;
+  }
+
+  /** Observe an in-flight durable run without driving it. Only valid when `durable: true`. */
+  async observe(
+    runId: string,
+    options?: {
+      offset?: number;
+      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+    },
+  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
+    const durable = await this.#requireStandaloneDurable('observe');
+    return durable.observe(runId, options) as Promise<
+      Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }
+    >;
+  }
+
+  /** Prepare a durable execution without starting it. Only valid when `durable: true`. */
+  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<unknown> {
+    const durable = await this.#requireStandaloneDurable('prepare');
+    return durable.prepare(messages, options);
+  }
+
+  // Note: `getWorkflow()` and `getDurableWorkflows()` are intentionally NOT
+  // added to base `Agent`. `DurableAgent` defines them synchronously (and
+  // `getDurableWorkflows` is called by `Mastra.addAgent` at registration
+  // time), so a base async delegator would break the overridden sync
+  // signatures. Callers that need those APIs should hold a `DurableAgent`
+  // reference — either by using `createDurableAgent()` explicitly or by
+  // reading the agent back from a registered `Mastra`.
 }

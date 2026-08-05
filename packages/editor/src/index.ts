@@ -7,12 +7,18 @@ import type {
   SandboxProvider,
   BlobStoreProvider,
   BrowserProvider,
+  WorkspaceProvider,
 } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
-import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
-import type { BlobStore } from '@mastra/core/storage';
+import {
+  createGitHubSourceControlProviderFromEnv,
+  FilesystemStore,
+  MastraCompositeStore,
+  SourceAgentsSourceControl,
+} from '@mastra/core/storage';
+import type { BlobStore, SourceControlProvider } from '@mastra/core/storage';
 import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
@@ -60,6 +66,7 @@ export class MastraEditor implements IMastraEditor {
   private __processorProviders: Record<string, ProcessorProvider>;
   private __source?: 'code' | 'db';
   private __codePath: string;
+  private __sourceControlProvider?: SourceControlProvider;
   private readonly __builderConfig?: AgentBuilderOptions;
   private __builderInstance?: IAgentBuilder;
   private __builderResolved = false;
@@ -93,6 +100,13 @@ export class MastraEditor implements IMastraEditor {
    */
   readonly __browsers: Map<string, BrowserProvider>;
 
+  /**
+   * @internal — exposed for namespace classes to hydrate stored workspace configs.
+   * Maps provider ID to the provider descriptor.
+   * No built-in providers — workspace providers must be registered via config.
+   */
+  readonly __workspaces: Map<string, WorkspaceProvider>;
+
   public readonly agent: EditorAgentNamespace;
   public readonly mcp: EditorMCPNamespace;
   public readonly mcpServer: EditorMCPServerNamespace;
@@ -108,6 +122,9 @@ export class MastraEditor implements IMastraEditor {
     this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
     this.__source = config?.source;
     this.__codePath = config?.codePath ?? './mastra/editor';
+    this.__sourceControlProvider =
+      config?.sourceControlProvider ??
+      createGitHubSourceControlProviderFromEnv(process.env, { pathPrefix: this.__codePath });
 
     // Built-in providers are always registered first, then merged with user-provided ones
     this.__filesystems = new Map<string, FilesystemProvider>();
@@ -135,6 +152,12 @@ export class MastraEditor implements IMastraEditor {
       this.__browsers.set(id, provider);
     }
 
+    // Workspace providers — no built-in providers; workspace packages must be registered
+    this.__workspaces = new Map<string, WorkspaceProvider>();
+    for (const [id, provider] of Object.entries(config?.workspaces ?? {})) {
+      this.__workspaces.set(id, provider);
+    }
+
     this.agent = new EditorAgentNamespace(this);
     this.mcp = new EditorMCPNamespace(this);
     this.mcpServer = new EditorMCPServerNamespace(this);
@@ -158,23 +181,41 @@ export class MastraEditor implements IMastraEditor {
       this.__logger = mastra.getLogger();
     }
 
-    // Code mode routes editor-owned domains to a FilesystemStore at `codePath`.
-    // If app storage already exists, keep it as the default for non-editor domains
-    // and overlay filesystem storage for editor saves.
+    // Code source routes editor-owned domains away from the app's primary storage.
+    // Local development uses a FilesystemStore at `codePath`; hosted/self-hosted
+    // environments can provide a source provider so agent overrides are persisted
+    // through source-control operations instead of a local container filesystem.
     if (this.__source === 'code') {
-      const filesystemStore = new FilesystemStore({ dir: this.__codePath });
       const existingStorage = mastra.getStorage();
 
-      if (existingStorage) {
+      if (this.__sourceControlProvider) {
+        const sourceAgentsStore = new SourceAgentsSourceControl({
+          provider: this.__sourceControlProvider,
+        });
+        const filesystemStore = new FilesystemStore({ dir: this.__codePath });
+
         mastra.setStorage(
           new MastraCompositeStore({
-            id: `${existingStorage.id}-with-editor-filesystem`,
-            default: existingStorage,
+            id: `${existingStorage?.id ?? 'mastra'}-with-editor-source-control`,
+            ...(existingStorage ? { default: existingStorage } : {}),
             editor: filesystemStore,
+            domains: { agents: sourceAgentsStore },
           }),
         );
       } else {
-        mastra.setStorage(filesystemStore);
+        const filesystemStore = new FilesystemStore({ dir: this.__codePath });
+
+        if (existingStorage) {
+          mastra.setStorage(
+            new MastraCompositeStore({
+              id: `${existingStorage.id}-with-editor-filesystem`,
+              default: existingStorage,
+              editor: filesystemStore,
+            }),
+          );
+        } else {
+          mastra.setStorage(filesystemStore);
+        }
       }
     }
 
@@ -379,6 +420,11 @@ export class MastraEditor implements IMastraEditor {
   /** Returns the editor's configured source, or undefined if unset. */
   getSource(): 'code' | 'db' | undefined {
     return this.__source;
+  }
+
+  /** Returns the configured source control provider, if any. */
+  getSourceControlProvider(): SourceControlProvider | undefined {
+    return this.__sourceControlProvider;
   }
 
   /** Registered tool providers */

@@ -20,7 +20,7 @@ Use [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream) if you 
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/streaming/workflow-streaming) for more details.
+See [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads) for more details.
 
 :::
 
@@ -44,7 +44,7 @@ export const mastra = new Mastra({
 })
 ```
 
-You can also use dynamic workflow routing based on a `workflowId`. The URL `/workflow/weatherWorkflow` will resolve to the workflow with the ID `weatherWorkflow`.
+You can also use runtime-defined workflow routing based on a `workflowId`. The URL `/workflow/weatherWorkflow` will resolve to the workflow with the ID `weatherWorkflow`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

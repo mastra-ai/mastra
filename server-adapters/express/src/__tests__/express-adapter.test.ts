@@ -9,8 +9,11 @@ import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -560,6 +563,67 @@ describe('Express Server Adapter', () => {
     });
   });
 
+  // Repro for https://github.com/mastra-ai/mastra/issues/17821 — a chunk that
+  // JSON.stringify can't handle (e.g. a BigInt step output) used to throw inside
+  // the stream loop and silently close the HTTP stream.
+  describe('Stream Chunk Serialization', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      }
+    });
+
+    it('serializes BigInt chunks and skips unserializable chunks without killing the stream', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/unserializable-stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithUnserializableChunk(),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+
+      const response = await fetch(`http://localhost:${address.port}/test/unserializable-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const chunks = await consumeSSEStream(response.body);
+      expectSerializedStreamChunks(chunks);
+    });
+  });
+
   describe('SSE Headers', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;
@@ -912,6 +976,42 @@ describe('Express Server Adapter', () => {
     },
   });
 
+  describe('Channel webhook diagnostics', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => server!.close(() => resolve()));
+        server = null;
+      }
+    });
+
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = express();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const startedServer = app.listen(0, () => resolve(startedServer));
+      });
+      const address = server!.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/agents/support/channels/slack/webhook`, {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
+    });
+  });
+
   describe('Custom API Routes (registerApiRoute)', () => {
     let server: Server | null = null;
 
@@ -1167,5 +1267,45 @@ describe('Express Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });
     });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => {
+      const app = express();
+      app.use(express.json());
+      return app;
+    },
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      app.use(adapter.createContextMiddleware());
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const server: Server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Failed to get server address');
+        }
+        const parsedUrl = new URL(url);
+        const response = await fetch(`http://localhost:${address.port}${parsedUrl.pathname}${parsedUrl.search}`, {
+          method,
+          headers: options.headers,
+          ...(options.body ? { body: options.body } : {}),
+        });
+        return { status: response.status };
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    },
   });
 });

@@ -140,6 +140,7 @@ const skillSearch = new SkillSearchProcessor({
 })
 
 const agent = new Agent({
+  id: 'skill-agent',
   name: 'skill-agent',
   instructions:
     'You are a helpful assistant. Use search_skills to find relevant skills, then load_skill to load their instructions.',

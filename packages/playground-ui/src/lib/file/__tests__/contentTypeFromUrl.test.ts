@@ -73,4 +73,21 @@ describe('getFileContentType', () => {
 
     await expect(getFileContentType('/thing.xyz')).resolves.toBeUndefined();
   });
+
+  it('infers gs:// content type from the extension without fetching', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(getFileContentType('gs://my-bucket/clip.mp4')).resolves.toBe('video/mp4');
+    // gs:// is not browser-fetchable — we must not attempt a HEAD request.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('infers s3:// content type from the extension without fetching', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(getFileContentType('s3://my-bucket/photo.png')).resolves.toBe('image/png');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

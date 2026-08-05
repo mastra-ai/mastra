@@ -1,4 +1,6 @@
-import { Skeleton, Txt, toast } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
@@ -74,7 +76,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   if (isLoading) {
     return (
       <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -84,7 +86,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   if (!tool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-6 py-12 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
@@ -93,7 +95,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   if (!canExecuteTool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-6 py-12 text-center">
         <Txt variant="ui-sm" className="text-neutral3">
           You don't have permission to execute tools.
         </Txt>

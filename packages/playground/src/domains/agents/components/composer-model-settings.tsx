@@ -1,26 +1,15 @@
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  Entry,
-  Label,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  RadioGroup,
-  RadioGroupItem,
-  Skeleton,
-  Slider,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-  cn,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Entry } from '@mastra/playground-ui/components/Entry';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Slider } from '@mastra/playground-ui/components/Slider';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info, Sliders } from 'lucide-react';
 import { useState } from 'react';
 
@@ -191,14 +180,14 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             tooltip="Model settings"
             data-testid="composer-model-settings-trigger"
           >
-            <Sliders className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+            <Sliders className="text-neutral3 hover:text-neutral6 h-5 w-5" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-80 p-4">
+        <PopoverContent align="start" className="w-80 p-4">
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (
-            <section className="space-y-5 @container">
+            <section className="@container space-y-5">
               <Entry label="Chat Method">
                 <RadioGroup
                   value={radioValue}
@@ -295,10 +284,10 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="flex items-center gap-2 text-xs text-neutral3 bg-surface3 rounded px-3 py-2"
+                  className="text-neutral3 bg-surface3 flex items-center gap-2 rounded px-3 py-2 text-xs"
                   data-testid="sampling-restriction-banner"
                 >
-                  <Info className="w-3.5 h-3.5 shrink-0" />
+                  <Info className="h-3.5 w-3.5 shrink-0" />
                   <span>
                     {settings?.modelSettings?.temperature !== undefined
                       ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
@@ -308,7 +297,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
               )}
 
               <Entry label="Temperature">
-                <div className="flex flex-row justify-between items-center gap-2">
+                <div className="flex flex-row items-center justify-between gap-2">
                   <Slider
                     value={[settings?.modelSettings?.temperature ?? -0.1]}
                     max={1}
@@ -333,7 +322,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
               </Entry>
 
               <Entry label="Top P">
-                <div className="flex flex-row justify-between items-center gap-2">
+                <div className="flex flex-row items-center justify-between gap-2">
                   <Slider
                     disabled={!canEditSettings}
                     onValueChange={value =>

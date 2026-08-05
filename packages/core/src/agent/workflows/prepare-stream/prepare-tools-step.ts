@@ -8,6 +8,7 @@ import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
+import { CONVERTED_TOOLS_KEY } from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
@@ -61,6 +62,9 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         backgroundTaskEnabled,
         inputProcessors: options.inputProcessors,
         hooks: options.hooks,
+        // Use the resolved execution model so provider-native placeholders
+        // respect per-call and Studio model overrides.
+        model: capabilities.llm.getModel(),
       });
 
       // Update the agent span with available tool names for observability
@@ -75,7 +79,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
 
       // Tool records contain `execute` functions and are not JSON-serializable.
       // Park them on the factory closure's runScope; map-results-step reads them.
-      runScope.convertedTools = convertedTools;
+      runScope.set(CONVERTED_TOOLS_KEY, convertedTools);
       return {};
     },
   });

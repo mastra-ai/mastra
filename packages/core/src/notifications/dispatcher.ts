@@ -1,8 +1,9 @@
 import type { CreatedAgentSignal } from '../agent/signals';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
-import type { SendAgentSignalOptions } from '../agent/types';
+import type { SendAgentSignalOptions, SendAgentSignalResult } from '../agent/types';
 import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
+import { resolveDeliveryFailureUpdate } from './delivery-policy';
 import { createNotificationSignal, createNotificationSummarySignal, summarizeNotifications } from './signals';
 import type { NotificationsStorage } from './storage';
 import type { NotificationDeliveryThreadState, NotificationRecord } from './types';
@@ -10,15 +11,7 @@ import type { NotificationDeliveryThreadState, NotificationRecord } from './type
 type NotificationDispatchAgent = {
   id?: string;
   getPubSub?: () => PubSub | undefined;
-  sendSignal: (
-    signal: CreatedAgentSignal,
-    target: SendAgentSignalOptions,
-  ) => {
-    accepted: boolean;
-    runId: string;
-    signal: CreatedAgentSignal;
-    persisted?: Promise<void>;
-  };
+  sendSignal: (signal: CreatedAgentSignal, target: SendAgentSignalOptions) => SendAgentSignalResult;
 };
 
 export type DispatchDueNotificationsInput = {
@@ -93,7 +86,7 @@ async function recordDeliveryFailure({
   await storage.updateNotification({
     id: record.id,
     threadId: record.threadId,
-    deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+    ...resolveDeliveryFailureUpdate(record),
     lastDeliveryAttemptAt: now,
     lastDeliveryError: errorMessage(error),
   });
@@ -136,10 +129,11 @@ async function sendNotificationRecord({
   });
   const target: SendAgentSignalOptions = { resourceId: current.resourceId, threadId: current.threadId };
   const result = agent.sendSignal(signal, target);
+  // `accepted` rejects when the signal could not be routed/started (e.g. a
+  // misconfigured agent). Let that propagate so the caller records the
+  // notification as a failed delivery.
+  await result.accepted;
   await result.persisted;
-  if (!result.accepted) {
-    throw new Error(`Notification ${current.id} signal was rejected`);
-  }
   const updated = await storage.updateNotification({
     id: current.id,
     threadId: current.threadId,
@@ -172,10 +166,10 @@ async function sendNotificationSummary({
     ? { resourceId: first.resourceId, threadId: first.threadId, ifIdle: { behavior: 'persist' } }
     : { resourceId: first.resourceId, threadId: first.threadId };
   const result = (agent as NotificationDispatchAgent).sendSignal(signal, target);
+  // `accepted` rejects when the signal could not be routed/started; let it
+  // propagate so the caller records the notifications as failed deliveries.
+  await result.accepted;
   await result.persisted;
-  if (!result.accepted) {
-    throw new Error(`Notification summary for thread ${first.threadId} was rejected`);
-  }
 
   const updatedRecords: NotificationRecord[] = [];
   for (const record of records) {

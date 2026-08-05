@@ -1,4 +1,8 @@
-import { Notice, Badge, Button, MainContentLayout, Spinner } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Check, Download, GitPullRequest, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -133,7 +137,7 @@ function EditLayoutWrapper() {
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 
@@ -316,7 +320,7 @@ function EditLayoutWrapper() {
 
       {isNotFound ? (
         <>
-          <div className="flex items-center justify-center h-full text-neutral3">Agent not found</div>
+          <div className="text-neutral3 flex h-full items-center justify-center">Agent not found</div>
           <div className="hidden">
             <EditFormContent
               agentId={agentId ?? ''}

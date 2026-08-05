@@ -1,5 +1,8 @@
 import type { AutoFormFieldProps } from '@autoform/react';
-import { Button, DatePicker, Popover, PopoverContent, PopoverTrigger, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DatePicker } from '@mastra/playground-ui/components/DateTimePicker';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isValid } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
@@ -48,7 +51,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-surface4" align="start">
+      <PopoverContent className="bg-surface4 w-auto p-0" align="start">
         <DatePicker mode="single" selected={value} onSelect={handleSelect} month={value} onMonthChange={setValue} />
         {value && (
           <div className="p-3 pt-0">

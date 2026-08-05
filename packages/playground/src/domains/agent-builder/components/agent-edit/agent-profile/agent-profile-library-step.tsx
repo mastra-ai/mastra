@@ -1,4 +1,5 @@
-import { Button, Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ArrowRightIcon, CheckIcon, LibraryIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
@@ -40,14 +41,14 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
       }
     >
       <div
-        className="relative w-full h-full flex flex-col items-center justify-center gap-4 py-6 px-6 text-center"
+        className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-6 py-6 text-center"
         data-testid="agent-builder-library-step"
       >
         <Icon size="lg" className="text-neutral4">
           <LibraryIcon />
         </Icon>
         {isInLibrary ? (
-          <p className="flex items-center gap-2 text-neutral2" data-testid="agent-builder-library-added">
+          <p className="text-neutral2 flex items-center gap-2" data-testid="agent-builder-library-added">
             <Icon>
               <CheckIcon />
             </Icon>

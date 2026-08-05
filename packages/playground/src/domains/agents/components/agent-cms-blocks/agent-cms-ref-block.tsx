@@ -1,19 +1,13 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import {
-  CodeEditor,
-  ContentBlock,
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-  Icon,
-  cn,
-} from '@mastra/playground-ui';
-import type { JsonSchema } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -101,10 +95,10 @@ const RefBlockContent = ({
   }, [storedAgentsData?.agents, block.promptBlockId]);
 
   return (
-    <div className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50">
+    <div className="group hover:bg-surface2/50 relative rounded-md transition-colors duration-150">
       {/* Left gutter — drag handle (visible on hover/focus-within) */}
       {!readOnly && (
-        <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+        <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
           <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -119,16 +113,16 @@ const RefBlockContent = ({
       )}
 
       {/* Content area with left accent border */}
-      <div className="border-l-2 border-accent3/30 pl-3">
+      <div className="border-accent3/30 border-l-2 pl-3">
         {isLoading ? (
-          <div className="flex items-center gap-2 text-neutral3 py-3">
+          <div className="text-neutral3 flex items-center gap-2 py-3">
             <Spinner className="h-4 w-4" />
             <Txt variant="ui-sm">Loading prompt block...</Txt>
           </div>
         ) : promptBlock ? (
           <>
             {/* Sync-block header — always visible, with Popover on caret */}
-            <div className="flex items-center gap-1.5 py-1 px-1 -ml-1">
+            <div className="-ml-1 flex items-center gap-1.5 px-1 py-1">
               <Txt variant="ui-xs" className="text-neutral3 truncate">
                 {promptBlock.name}
               </Txt>
@@ -138,7 +132,7 @@ const RefBlockContent = ({
                     <button
                       type="button"
                       aria-label={`Open actions for ${promptBlock.name}`}
-                      className="ml-auto rounded p-0.5 hover:bg-surface4/50 transition-colors duration-150 text-neutral3 hover:text-neutral5"
+                      className="hover:bg-surface4/50 text-neutral3 hover:text-neutral5 ml-auto rounded p-0.5 transition-colors duration-150"
                     >
                       <Icon className="h-3! w-3!">
                         <ChevronDown />
@@ -146,8 +140,8 @@ const RefBlockContent = ({
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[280px] p-0">
-                    <div className="p-3 border-b border-border1">
-                      <Txt variant="ui-sm" className="font-medium text-neutral6">
+                    <div className="border-border1 border-b p-3">
+                      <Txt variant="ui-sm" className="text-neutral6 font-medium">
                         {promptBlock.name}
                       </Txt>
                       {promptBlock.description && (
@@ -159,10 +153,10 @@ const RefBlockContent = ({
                     <div className="p-1">
                       <button
                         type="button"
-                        className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
+                        className="hover:bg-surface4/50 text-neutral5 text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
                         onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                       >
-                        <Icon className="h-3.5! w-3.5! text-neutral3">
+                        <Icon className="text-neutral3 h-3.5! w-3.5!">
                           <ExternalLink />
                         </Icon>
                         Open original
@@ -170,13 +164,13 @@ const RefBlockContent = ({
                       {onDereference && (
                         <button
                           type="button"
-                          className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
+                          className="hover:bg-surface4/50 text-neutral5 text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
                           onClick={() => {
                             debouncedSave.flush();
                             onDereference(localContent);
                           }}
                         >
-                          <Icon className="h-3.5! w-3.5! text-neutral3">
+                          <Icon className="text-neutral3 h-3.5! w-3.5!">
                             <X />
                           </Icon>
                           De-reference block
@@ -185,7 +179,7 @@ const RefBlockContent = ({
                       {onDelete && (
                         <button
                           type="button"
-                          className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-error text-ui-xs"
+                          className="hover:bg-surface4/50 text-error text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
@@ -196,7 +190,7 @@ const RefBlockContent = ({
                       )}
                     </div>
                     {usedByAgents.length > 0 && (
-                      <div className="border-t border-border1 p-3">
+                      <div className="border-border1 border-t p-3">
                         <Txt variant="ui-xs" className="text-neutral3 mb-1.5">
                           Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
                         </Txt>
@@ -219,7 +213,8 @@ const RefBlockContent = ({
               value={localContent}
               onChange={handleContentChange}
               placeholder="Referenced block is empty..."
-              className="border-none rounded-none bg-transparent min-h-12"
+              variant="embedded"
+              className="min-h-12"
               language="markdown"
               highlightVariables
               showCopyButton={false}
@@ -229,7 +224,7 @@ const RefBlockContent = ({
             />
           </>
         ) : (
-          <div className="flex items-center gap-2 text-warning py-3">
+          <div className="text-warning flex items-center gap-2 py-3">
             <Txt variant="ui-sm">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}

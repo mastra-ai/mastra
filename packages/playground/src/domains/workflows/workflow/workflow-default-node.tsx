@@ -1,4 +1,9 @@
-import { Badge, Txt, CheckIcon, CrossIcon, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
+import { CrossIcon } from '@mastra/playground-ui/icons/CrossIcon';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
@@ -89,7 +94,7 @@ export function WorkflowDefaultNode({
         )}
       >
         {hasSpecialBadge && (
-          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-1">
             {isSleepNode && (
               <Badge
                 icon={
@@ -136,7 +141,7 @@ export function WorkflowDefaultNode({
 
           <Txt
             variant="ui-lg"
-            className="text-neutral6 font-medium inline-flex items-center gap-1 justify-between w-full"
+            className="text-neutral6 inline-flex w-full items-center justify-between gap-1 font-medium"
           >
             {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
@@ -149,8 +154,8 @@ export function WorkflowDefaultNode({
         )}
 
         {isForEachNode && step?.foreachProgress && (
-          <div className="px-3 pb-2 flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-surface1 rounded-full overflow-hidden">
+          <div className="flex items-center gap-2 px-3 pb-2">
+            <div className="bg-surface1 h-1.5 flex-1 overflow-hidden rounded-full">
               <div
                 className={cn(
                   'h-full rounded-full transition-all duration-300',

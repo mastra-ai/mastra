@@ -1,6 +1,6 @@
 {
   "name": "@mastra/files-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "FilesSDK filesystem provider for Mastra workspaces — unified storage across S3, R2, GCS, Azure, Vercel Blob, and more",
   "type": "module",
   "main": "dist/index.js",
@@ -19,13 +19,14 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -36,9 +37,9 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
-    "eslint": "^10.4.1",
-    "tsup": "^8.5.1",
+    "@types/node": "22.20.1",
+    "eslint": "^10.7.0",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

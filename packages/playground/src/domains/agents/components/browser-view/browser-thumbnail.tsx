@@ -1,5 +1,7 @@
-import { Button, StatusBadge, cn } from '@mastra/playground-ui';
-import { Monitor, ChevronUp, ChevronDown, Maximize2, PanelRight, X } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
@@ -8,8 +10,6 @@ import { BrowserViewFrame } from './browser-view-frame';
 
 interface BrowserThumbnailProps {
   agentName?: string;
-  /** Hide the "Open in sidebar" button (e.g. when no sidebar is available) */
-  hideSidebar?: boolean;
 }
 
 /**
@@ -17,9 +17,9 @@ interface BrowserThumbnailProps {
  *
  * Has two states:
  * - Collapsed: Small thumbnail bar (click to expand)
- * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
+ * - Expanded: Larger view with screencast + actions, with a button to switch to modal
  */
-export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: BrowserThumbnailProps) {
+export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
   const { hasSession, viewMode, status, currentUrl, setViewMode, closeBrowser } = useBrowserSession();
   const { latestFrame } = useBrowserFrame();
   const { toolCalls } = useBrowserToolCalls();
@@ -67,10 +67,6 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
     setViewMode('modal');
   }, [setViewMode]);
 
-  const handleOpenSidebar = useCallback(() => {
-    setViewMode('sidebar');
-  }, [setViewMode]);
-
   const handleClose = useCallback(async () => {
     await closeBrowser();
   }, [closeBrowser]);
@@ -85,7 +81,7 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
   }, [currentUrl]);
 
   // Don't render if no browser session or if showing in other modes
-  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') {
+  if (!hasSession || viewMode === 'modal') {
     return null;
   }
 
@@ -109,38 +105,38 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
         )}
       >
         {/* Thumbnail preview */}
-        <div className="relative shrink-0 w-24 h-14 bg-surface3 rounded-md overflow-hidden border border-border1">
+        <div className="bg-surface3 border-border1 relative h-14 w-24 shrink-0 overflow-hidden rounded-md border">
           {hasFrame ? (
-            <img ref={imgRef} alt="Browser preview" className="w-full h-full object-cover" />
+            <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
           ) : (
-            <div className="flex items-center justify-center w-full h-full">
-              <Monitor className="h-5 w-5 text-neutral3" />
+            <div className="flex h-full w-full items-center justify-center">
+              <Monitor className="text-neutral3 h-5 w-5" />
             </div>
           )}
           {/* Live indicator dot */}
-          {isLive && <div className="absolute top-1 right-1 w-2 h-2 bg-success rounded-full animate-pulse" />}
+          {isLive && <div className="bg-success absolute top-1 right-1 h-2 w-2 animate-pulse rounded-full" />}
         </div>
 
         {/* Info section */}
-        <div className="flex-1 min-w-0 text-left">
+        <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-neutral6 truncate">{agentName}&apos;s browser</span>
+            <span className="text-neutral6 truncate text-sm font-medium">{agentName}&apos;s browser</span>
             <StatusBadge variant={isLive ? 'success' : 'neutral'} size="sm" withDot pulse={isLive}>
               {isLive ? 'Live' : 'Idle'}
             </StatusBadge>
           </div>
-          <p className="text-xs text-neutral4 truncate mt-0.5">{displayUrl}</p>
+          <p className="text-neutral4 mt-0.5 truncate text-xs">{displayUrl}</p>
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="shrink-0 text-neutral4 group-hover:text-neutral5 transition-colors">
+        <div className="text-neutral4 group-hover:text-neutral5 shrink-0 transition-colors">
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </div>
       </button>
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="border-t border-border1">
+        <div className="border-border1 border-t">
           {/* Interactive screencast */}
           <div className="p-3">
             <div className="relative">
@@ -156,17 +152,6 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
-                {!hideSidebar && (
-                  <Button
-                    variant="default"
-                    size="icon-sm"
-                    tooltip="Open in sidebar"
-                    onClick={handleOpenSidebar}
-                    className="bg-surface1/80 backdrop-blur-sm"
-                  >
-                    <PanelRight className="h-3.5 w-3.5" />
-                  </Button>
-                )}
                 <Button
                   variant="default"
                   size="icon-sm"
@@ -182,9 +167,9 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
 
           {/* Browser actions (scrollable, max height) */}
           {toolCalls.length > 0 && (
-            <div ref={actionsRef} className="border-t border-border1 max-h-40 overflow-y-auto">
+            <div ref={actionsRef} className="border-border1 max-h-40 overflow-y-auto border-t">
               <div className="px-3 py-2">
-                <h4 className="text-xs font-medium text-neutral4 mb-2">Browser Actions</h4>
+                <h4 className="text-neutral4 mb-2 text-xs font-medium">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

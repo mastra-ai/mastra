@@ -4,14 +4,14 @@ import {
   EntityDescription,
   EntityIcon,
   EntityName,
-  Spinner,
-  Switch,
-  Txt,
-  Icon,
-  McpServerIcon,
-  ToolsIcon,
-  cn,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Entity';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 
 interface MCPClientToolPreviewProps {
@@ -91,7 +91,7 @@ export function MCPClientToolPreview({
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center justify-center h-full p-8 text-center">{children}</div>;
+  return <div className="flex h-full items-center justify-center p-8 text-center">{children}</div>;
 }
 
 function ToolList({
@@ -108,8 +108,8 @@ function ToolList({
   const selectedCount = Object.keys(selectedTools).length;
 
   return (
-    <div className="p-5 overflow-y-auto">
-      <div className="text-neutral6 flex gap-2 items-center">
+    <div className="overflow-y-auto p-5">
+      <div className="text-neutral6 flex items-center gap-2">
         <Icon size="lg" className="bg-surface4 rounded-md p-1">
           <McpServerIcon />
         </Icon>

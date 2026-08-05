@@ -1,6 +1,56 @@
 import { describe, expect, it } from 'vitest';
 
-import { aiV5ModelMessageToV2PromptMessage } from './to-prompt';
+import { aiV4CoreMessageToV1PromptMessage, aiV5ModelMessageToV2PromptMessage } from './to-prompt';
+
+describe('aiV4CoreMessageToV1PromptMessage image conversion', () => {
+  it('converts raw base64 image strings to Uint8Array for provider prompts', () => {
+    const base64Image = Buffer.from([1, 2, 3, 4]).toString('base64');
+
+    const result = aiV4CoreMessageToV1PromptMessage({
+      role: 'user',
+      content: [{ type: 'image', image: base64Image, mimeType: 'image/png' }],
+    });
+
+    expect(result.role).toBe('user');
+    expect(result.content[0]).toMatchObject({
+      type: 'image',
+      mimeType: 'image/png',
+    });
+    expect(result.content[0].image).toBeInstanceOf(Uint8Array);
+    expect(Array.from(result.content[0].image as Uint8Array)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('passes an OpenAI Files API file ID through a file part untouched', () => {
+    const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
+
+    // Must not throw "Invalid URL: file-..." (regression for #16408 follow-up)
+    const result = aiV4CoreMessageToV1PromptMessage({
+      role: 'user',
+      content: [{ type: 'file', data: fileId, mimeType: 'application/pdf' }],
+    });
+
+    expect(result.content[0]).toMatchObject({
+      type: 'file',
+      data: fileId,
+      mimeType: 'application/pdf',
+    });
+  });
+
+  it('converts an image part carrying an OpenAI Files API file ID to a file part instead of throwing', () => {
+    const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
+
+    const result = aiV4CoreMessageToV1PromptMessage({
+      role: 'user',
+      content: [{ type: 'image', image: fileId, mimeType: 'image/png' }],
+    });
+
+    expect(result.content[0]).toMatchObject({
+      type: 'file',
+      data: fileId,
+      mimeType: 'image/png',
+    });
+  });
+});
 
 describe('aiV5ModelMessageToV2PromptMessage tool-name sanitization', () => {
   it('sanitizes invalid tool names in tool-call parts', () => {

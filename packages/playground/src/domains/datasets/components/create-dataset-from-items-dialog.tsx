@@ -1,17 +1,11 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Input,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
@@ -59,6 +53,9 @@ export function CreateDatasetFromItemsDialog({
           datasetId: dataset.id,
           input: item.input,
           groundTruth: item.groundTruth,
+          expectedTrajectory: item.expectedTrajectory,
+          toolMocks: item.toolMocks,
+          requestContext: item.requestContext,
           metadata: item.metadata as Record<string, unknown> | undefined,
         });
         setProgress(i + 1);
@@ -122,19 +119,19 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
             </p>
 
             {isCreating && (
               <div className="space-y-2">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
                   <div
-                    className="h-full bg-primary transition-all duration-200"
+                    className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Copying items: {progress} / {items.length}
                 </p>
               </div>

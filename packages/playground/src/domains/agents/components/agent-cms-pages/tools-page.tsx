@@ -1,21 +1,13 @@
-import {
-  Button,
-  EntityName,
-  EntityDescription,
-  EntityContent,
-  Entity,
-  Notice,
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  ScrollArea,
-  Section,
-  SubSectionRoot,
-  Icon,
-  ToolsIcon,
-  cn,
-} from '@mastra/playground-ui';
-import type { RuleGroup } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -185,7 +177,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
+            className="text-neutral3 hover:text-neutral5 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="sm">
@@ -230,15 +222,15 @@ export function ToolsPage() {
                     Add Tools
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 p-0 pt-4 max-h-72 overflow-y-auto">
+                <PopoverContent align="end" className="max-h-72 w-80 overflow-y-auto p-0 pt-4">
                   {unselectedOptions.map(tool => (
                     <button
                       key={tool.value}
                       type="button"
                       onClick={() => handleAddTool(tool.value)}
-                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-0"
+                      className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left transition-colors hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
                     >
-                      <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
+                      <span className="text-ui-md text-neutral5 font-normal">{tool.label}</span>
                       {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
                     </button>
                   ))}

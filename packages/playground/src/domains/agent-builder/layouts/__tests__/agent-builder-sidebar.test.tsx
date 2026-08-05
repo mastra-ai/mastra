@@ -1,8 +1,11 @@
-// @vitest-environment jsdom
-import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // jsdom doesn't provide ResizeObserver — stub it for ScrollArea
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -19,56 +22,24 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !==
   };
 }
 import { AgentBuilderSidebar } from '../agent-builder-sidebar';
+import { authDisabledCapabilities, builderSettings } from './fixtures/builder';
 import { LinkComponentProvider } from '@/lib/framework';
+import { server } from '@/test/msw-server';
 
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => ({
-    tools: true,
-    memory: false,
-    workflows: false,
-    agents: false,
-    avatarUpload: false,
-    skills: false,
-    model: false,
-    favorites: false,
-    browser: false,
-  }),
-}));
+const BASE_URL = 'http://localhost:4111';
 
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
-  useBuilderAgentAccess: () => ({
-    hasAccess: true,
-    canWrite: true,
-    canExecute: true,
-    canManageSkills: true,
-    canUseFavorites: true,
-    denialReason: null,
-  }),
-}));
+// `useBuilderAgentFeatures`, `useBuilderAgentAccess`, `usePermissions`, and
+// `useAuthCapabilities` all resolve to two network calls. With auth disabled,
+// RBAC is off so every capability check is allowed and the Favorites link
+// always renders.
+const commonHandlers = () => [
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)),
+  http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderSettings)),
+];
 
-vi.mock('@/domains/auth/hooks', () => ({
-  useAuthCapabilities: () => ({ data: undefined, isLoading: false }),
-}));
-
-// `usePermissions` imports `useAuthCapabilities` directly (not via the barrel),
-// so we also mock the direct path. Otherwise the hook hits `useQuery` without a
-// `QueryClientProvider` in the sidebar test harness.
-vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
-  useAuthCapabilities: () => ({ data: undefined, isLoading: false }),
-}));
-
-// `usePermissions` also calls `useRoleImpersonation`, which depends on a
-// react-query client. Stub it to a permissive default for the sidebar tests.
-vi.mock('@/domains/auth/hooks/use-role-impersonation', () => ({
-  useRoleImpersonation: () => ({
-    impersonatedRole: null,
-    impersonatedPermissions: null,
-    isImpersonating: false,
-    isSwitching: false,
-    startImpersonation: async () => {},
-    stopImpersonation: () => {},
-  }),
-}));
+beforeEach(() => {
+  server.resetHandlers();
+});
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a {...props}>{children}</a>
@@ -98,6 +69,9 @@ const noopPaths = {
 } as never;
 
 function renderSidebar(initialPath: string) {
+  server.use(...commonHandlers());
+
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
       {
@@ -116,7 +90,13 @@ function renderSidebar(initialPath: string) {
     { initialEntries: [initialPath] },
   );
 
-  return render(<RouterProvider router={router} />);
+  return render(
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MastraReactProvider>,
+  );
 }
 
 describe('AgentBuilderSidebar', () => {
@@ -124,38 +104,44 @@ describe('AgentBuilderSidebar', () => {
     cleanup();
   });
 
-  it('renders My agents, Favorites, and Library links', async () => {
-    renderSidebar('/agent-builder/agents');
+  describe('when rendered on the agents route', () => {
+    it('renders My agents, Favorites, and Library links pointing at their routes', async () => {
+      renderSidebar('/agent-builder/agents');
 
-    const agents = await screen.findByRole('link', { name: /My agents/i });
-    const favorites = await screen.findByRole('link', { name: /Favorites/i });
-    const library = await screen.findByRole('link', { name: /Library/i });
+      const agents = await screen.findByRole('link', { name: /My agents/i });
+      const favorites = await screen.findByRole('link', { name: /Favorites/i });
+      const library = await screen.findByRole('link', { name: /Library/i });
 
-    expect(agents.getAttribute('href')).toBe('/agent-builder/agents');
-    expect(favorites.getAttribute('href')).toBe('/agent-builder/favorite');
-    expect(library.getAttribute('href')).toBe('/agent-builder/library');
+      expect(agents.getAttribute('href')).toBe('/agent-builder/agents');
+      expect(favorites.getAttribute('href')).toBe('/agent-builder/favorite');
+      expect(library.getAttribute('href')).toBe('/agent-builder/library');
+    });
   });
 
-  it('marks the Library link active when on /agent-builder/library', async () => {
-    renderSidebar('/agent-builder/library');
+  describe('when on the library route', () => {
+    it('marks only the Library link active', async () => {
+      renderSidebar('/agent-builder/library');
 
-    const libraryLink = await screen.findByRole('link', { name: /Library/i });
-    expect(libraryLink.className).toMatch(/bg-sidebar-nav-active/);
+      const libraryLink = await screen.findByRole('link', { name: /Library/i });
+      expect(libraryLink.className).toMatch(/bg-sidebar-nav-active/);
 
-    const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-    expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
+      const agentsLink = await screen.findByRole('link', { name: /My agents/i });
+      expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
+    });
   });
 
-  it('marks the Favorites link active when on /agent-builder/favorite', async () => {
-    renderSidebar('/agent-builder/favorite');
+  describe('when on the favorites route', () => {
+    it('marks only the Favorites link active', async () => {
+      renderSidebar('/agent-builder/favorite');
 
-    const favoritesLink = await screen.findByRole('link', { name: /Favorites/i });
-    expect(favoritesLink.className).toMatch(/bg-sidebar-nav-active/);
+      const favoritesLink = await screen.findByRole('link', { name: /Favorites/i });
+      expect(favoritesLink.className).toMatch(/bg-sidebar-nav-active/);
 
-    const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-    expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
+      const agentsLink = await screen.findByRole('link', { name: /My agents/i });
+      expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
 
-    const libraryLink = await screen.findByRole('link', { name: /Library/i });
-    expect(libraryLink.className).not.toMatch(/bg-sidebar-nav-active/);
+      const libraryLink = await screen.findByRole('link', { name: /Library/i });
+      expect(libraryLink.className).not.toMatch(/bg-sidebar-nav-active/);
+    });
   });
 });

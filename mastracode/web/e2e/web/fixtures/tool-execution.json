@@ -1,0 +1,49 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Create greeting.txt that says hello world",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_write",
+            "name": "mastra_workspace_write_file",
+            "arguments": { "path": "greeting.txt", "content": "hello world" }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_write",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_read",
+            "name": "mastra_workspace_read_file",
+            "arguments": { "path": "greeting.txt" }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_read",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Created greeting.txt containing hello world."
+      }
+    }
+  ]
+}
