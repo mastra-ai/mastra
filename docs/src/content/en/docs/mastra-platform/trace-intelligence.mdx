@@ -81,19 +81,20 @@ A theme can persist, disappear, split, merge, or return across snapshots. Treat 
 ## Use the Trace Intelligence page
 
 1. Use the **Agent** selector to switch between agents with available analysis. An agent doesn't appear until its first themes are ready.
-1. Select a theme in the flow to filter every column to traces containing that theme.
-1. Select **View theme details** to inspect its description, trace count, stage share, generated examples, and history.
-1. Select **Clear filter** to restore the complete flow.
+1. Select a theme or **Noise** node in the flow to filter the chart to traces assigned to it. The selected trace signal column moves from the chart to a filter above it because every matching trace now has the same assignment in that column.
+1. Select another theme or **Noise** node in a remaining column to narrow the results further. Active filters combine with AND logic, so a trace must match every filter.
+1. Select **Details →** next to a filter to inspect its filtered summary and generated examples. The summary reports trace count and stage share. Select **Next examples** to continue through examples from the filtered trace set. Theme history remains unfiltered because it spans snapshots.
+1. Remove one filter to recompute the flow, or select **Clear all** to restore the complete flow.
 
 You can also:
 
-- Select a theme in a distribution card to open its details and generated example summaries.
-- Select **Noise** in a distribution card to inspect its distribution and generated example summaries.
+- Select a theme in a distribution card to open its unfiltered details and generated example summaries.
+- Select **Noise** in a distribution card to inspect its unfiltered distribution and generated example summaries.
 - Drag the distribution cards to reorder the trace signal columns and see a different relationship perspective.
 - Use the timeline to select a snapshot, or select **Play** to watch themes change over time.
 - Open a theme's history to see whether it persisted and how its coverage changed.
 
-Filtering the flow by a theme is unavailable for snapshots with more than 2,000 traces. Choose another snapshot or clear the active filter to return to the full flow. Theme and Noise details remain available from the distribution cards.
+Drilling into the flow is unavailable for snapshots with more than 2,000 traces. Choose another snapshot to use flow filters. Theme and Noise details remain available from the distribution cards.
 
 ## Troubleshooting
 
