@@ -1,0 +1,95 @@
+---
+title: "Harness overview"
+description: "Start, continue, update, and preserve agent work beyond a single request."
+packages:
+  - "@mastra/core"
+---
+
+# Harness overview
+
+During a run, an agent executes a model-and-tool loop. The harness gives this loop a lifecycle beyond one connected request.
+
+## Give an agent a lifecycle
+
+A regular [`Agent`](/docs/agents/overview) can reason through several model and tool steps during one `generate()` or `stream()` call. The application invokes the call. A result returns after the agent completes its loop.
+
+A harness controls what happens around and between those calls, including idle time and incoming events. It also defines what remains after an interruption. The agent defines how work is performed. Its harness governs when and how that work continues.
+
+An agent becomes long-running when its thread or objective outlives one connected invocation. It may spend much of that time idle, then resume when a task finishes or new information arrives.
+
+## What a harness controls
+
+### Start work
+
+[Schedules](/docs/long-running-agents/schedules) start agent work at recurring times. A schedule can create an isolated run or send a prompt into an existing thread.
+
+[Signals](/docs/long-running-agents/signals) start or update work when information arrives. A message or application event can wake an idle thread instead of waiting for another call to `stream()`.
+
+### Continue work
+
+[Background tasks](/docs/long-running-agents/background-tasks) let slow tool calls, workflows, and subagents finish without blocking the current agent loop. A completed task stores its result and gives the agent another opportunity to act on it.
+
+[Goals](/docs/long-running-agents/goals) keep a thread-scoped objective active across loop iterations and messages. The agent continues until a judge decides the objective is complete or the run budget is exhausted.
+
+Background tasks allow operations to finish later, while goals keep objectives active until they're complete.
+
+### Bring in new context
+
+Signals deliver information to an agent thread outside the original invocation. New input can wake an idle agent or enter an active run. It can also wait for the following turn.
+
+Use a [signal provider](/docs/long-running-agents/signal-providers) when Mastra should track subscriptions to external resources such as GitHub pull requests, Slack channels, or continuous integration builds. Send a signal directly when your application already knows which thread should receive the event.
+
+### Preserve work
+
+[Durable agents](/docs/long-running-agents/durable-agents) preserve run state and publish stream events independently of the client connection. A client can disconnect and reconnect to the same run, and execution can recover after a process restart.
+
+Long-running describes how long the agent remains responsible for work. Durable describes what happens to that work when its connection or process is interrupted.
+
+### Build an agent experience
+
+[AgentController](/docs/harness/agent-controller) is an opinionated harness for interactive applications. It combines persistent sessions and threads with modes, tool approvals, subagents, channels, and typed events.
+
+Use it to build applications such as coding agents or research workspaces where users return to ongoing work. The other harness capabilities work independently for scheduled, event-driven, or background agents without an interactive interface.
+
+## How the pieces work together
+
+A harness is usually a composition of capabilities. A pull request agent could receive GitHub events through a signal provider and wake the relevant thread with a signal. A goal could keep the review active while background tasks run checks. Durable execution could preserve the run when the application deploys again.
+
+Each capability controls one part of the lifecycle. Combine only the parts the agent needs.
+
+## When to use a harness
+
+Add a harness when one or more of these are true:
+
+- Work should continue after the initiating client disconnects.
+- A slow tool or subagent should run without blocking the current loop.
+- An objective should persist across model calls or user turns.
+- A timer or incoming event should start or update work.
+- A run should recover after a process restart or network interruption.
+- An application needs persistent sessions, modes, approvals, or thread state.
+
+For a request-response interaction where the client remains connected until completion, use [`Agent.generate()`](/reference/agents/generate) or [`Agent.stream()`](/reference/agents/stream).
+
+## Get started
+
+Choose a capability based on what the agent needs to accomplish:
+
+| Need | Start here |
+| - | - |
+| Run slow tools or delegated work without blocking | [Background tasks](/docs/long-running-agents/background-tasks) |
+| Keep working toward a persistent objective | [Goals](/docs/long-running-agents/goals) |
+| Run an agent at recurring times | [Schedules](/docs/long-running-agents/schedules) |
+| Wake or update a thread with new input | [Signals](/docs/long-running-agents/signals) |
+| Connect external events to subscribed threads | [Signal providers](/docs/long-running-agents/signal-providers) |
+| Preserve runs and streams through interruptions | [Durable agents](/docs/long-running-agents/durable-agents) |
+| Build a persistent interactive agent application | [AgentController](/docs/harness/agent-controller) |
+
+## Next steps
+
+- [Background tasks](/docs/long-running-agents/background-tasks)
+- [Durable agents](/docs/long-running-agents/durable-agents)
+- [Goals](/docs/long-running-agents/goals)
+- [Schedules](/docs/long-running-agents/schedules)
+- [Signals](/docs/long-running-agents/signals)
+- [Signal providers](/docs/long-running-agents/signal-providers)
+- [AgentController](/docs/harness/agent-controller)
