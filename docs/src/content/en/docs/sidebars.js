@@ -723,7 +723,7 @@ const sidebars = {
                     {
                       type: 'doc',
                       id: 'observability/integrations/exporters/mastra-platform',
-                      label: 'Mastra platform',
+                      label: 'Mastra Platform',
                     },
                     {
                       type: 'doc',
@@ -809,7 +809,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/metrics/querying',
-              label: 'Querying metrics',
+              label: 'Querying Metrics',
             },
           ],
         },
@@ -881,7 +881,7 @@ const sidebars = {
   platformSidebar: [
     {
       type: 'category',
-      label: 'Mastra platform',
+      label: 'Mastra Platform',
       items: [
         {
           type: 'doc',
