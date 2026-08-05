@@ -29,6 +29,35 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
     return 'jsonSchema7';
   }
 
+  override processToJSONSchema(schema: PublicSchema<any>, io: 'input' | 'output' = 'input'): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(schema, io);
+    const union = jsonSchema.anyOf ?? jsonSchema.oneOf;
+
+    if (io !== 'input' || !Array.isArray(union)) {
+      return jsonSchema;
+    }
+
+    const objectSchemas = union.filter(
+      (subSchema): subSchema is JSONSchema7 =>
+        typeof subSchema === 'object' && subSchema !== null && subSchema.type === 'object',
+    );
+
+    if (objectSchemas.length === 0 || objectSchemas.length !== union.length) {
+      return jsonSchema;
+    }
+
+    delete jsonSchema.anyOf;
+    delete jsonSchema.oneOf;
+    jsonSchema.type = 'object';
+    jsonSchema.properties = Object.assign({}, ...objectSchemas.map(subSchema => subSchema.properties ?? {}));
+    jsonSchema.required = objectSchemas
+      .map(subSchema => subSchema.required ?? [])
+      .reduce((required, branchRequired) => required.filter(key => branchRequired.includes(key)));
+    jsonSchema.additionalProperties = false;
+
+    return jsonSchema;
+  }
+
   shouldApply(): boolean {
     return this.getModel().modelId.includes('claude');
   }

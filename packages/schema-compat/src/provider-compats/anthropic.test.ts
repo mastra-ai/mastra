@@ -63,6 +63,26 @@ describe('AnthropicSchemaCompatLayer', () => {
     });
   });
 
+  describe('tool input root schemas', () => {
+    it('should convert a top-level object union to an object schema', () => {
+      const schema = z.union([z.object({ content: z.string() }), z.object({ sourceUrl: z.string().url() })]);
+
+      const jsonSchema = layer.processToJSONSchema(schema);
+
+      expect(jsonSchema).toMatchObject({
+        type: 'object',
+        properties: {
+          content: { type: 'string' },
+          sourceUrl: { type: 'string' },
+        },
+        additionalProperties: false,
+      });
+      expect(jsonSchema).not.toHaveProperty('anyOf');
+      expect(jsonSchema).not.toHaveProperty('oneOf');
+      expect(jsonSchema).not.toHaveProperty('allOf');
+    });
+  });
+
   describe('number bounds', () => {
     it('should strip number bounds from JSON Schema while preserving Zod validation', async () => {
       const schema = z.object({
