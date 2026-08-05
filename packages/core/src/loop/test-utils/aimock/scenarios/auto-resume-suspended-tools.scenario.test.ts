@@ -25,6 +25,118 @@ describeForAllEngines(
   engine => {
     const getMock = useLoopScenarioAimock();
 
+    it('exposes a custom resume schema only to the suspended tool on the resume turn', async () => {
+      let resumeDataReceived: unknown;
+
+      const confirmTool = createTool({
+        id: 'confirm-action',
+        description: 'Performs an action after confirmation',
+        inputSchema: z.object({ action: z.string() }),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (inputData, context) => {
+          const resumeData = context.agent?.resumeData;
+          if (!resumeData) {
+            return context.agent?.suspend({ message: `Confirm ${inputData.action}` });
+          }
+
+          resumeDataReceived = resumeData;
+          return { action: inputData.action, confirmed: resumeData.confirmed };
+        },
+      });
+      const statusTool = createTool({
+        id: 'get-status',
+        description: 'Gets the current status',
+        inputSchema: z.object({ id: z.string() }),
+        execute: async ({ id }) => ({ id, status: 'ready' }),
+      });
+      const memory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        tools: { 'confirm-action': confirmTool, 'get-status': statusTool },
+        memory,
+        defaultOptions: { autoResumeSuspendedTools: true },
+        engine,
+      });
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Delete the temporary file',
+        memory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/delete/i, {
+            toolCalls: [
+              {
+                id: 'call-suspend',
+                name: 'confirm-action',
+                arguments: { action: 'delete-file' },
+              },
+            ],
+          });
+        },
+      });
+
+      const { output, requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Yes, confirm it',
+        memory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [
+                {
+                  id: 'call-resume',
+                  name: 'confirm-action',
+                  arguments: {
+                    action: 'delete-file',
+                    suspendedToolRunId: 'resume-target',
+                    resumeData: { confirmed: true },
+                  },
+                },
+              ],
+            },
+          );
+          llm.on(
+            { endpoint: 'chat', toolCallId: 'call-resume', hasToolResult: true },
+            { content: 'The temporary file was deleted.' },
+          );
+        },
+      });
+
+      const schemaFor = (request: any, toolName: string) => {
+        const tool = request?.body?.tools?.find((candidate: any) => candidate.function?.name === toolName);
+        const parameters = tool?.function?.parameters;
+        return typeof parameters === 'string' ? JSON.parse(parameters) : parameters;
+      };
+      const initialConfirmSchema = schemaFor(requests[0], 'confirm-action');
+      const initialStatusSchema = schemaFor(requests[0], 'get-status');
+      const resumeConfirmSchema = schemaFor(requests[1], 'confirm-action');
+      const resumeStatusSchema = schemaFor(requests[1], 'get-status');
+
+      expect(initialConfirmSchema.properties).not.toHaveProperty('resumeData');
+      expect(initialStatusSchema.properties).not.toHaveProperty('resumeData');
+      expect(resumeConfirmSchema.properties.resumeData).toMatchObject({
+        type: 'object',
+        required: ['confirmed'],
+        additionalProperties: false,
+      });
+      expect(resumeConfirmSchema.properties.resumeData.properties.confirmed).toMatchObject({ type: 'boolean' });
+      expect(resumeConfirmSchema.properties.suspendedToolRunId).toMatchObject({ type: 'string' });
+      expect(resumeStatusSchema.properties).not.toHaveProperty('resumeData');
+      expect(resumeStatusSchema.properties).not.toHaveProperty('suspendedToolRunId');
+      expect(resumeDataReceived).toEqual({ confirmed: true });
+      expect(await output.text).toContain('deleted');
+    });
+
     it('auto-resumes a suspended tool when the user sends a follow-up message on the same thread', async () => {
       let toolExecuted = false;
       let toolInputName = '';
@@ -71,7 +183,7 @@ describeForAllEngines(
             toolCalls: [
               {
                 id: 'call-1',
-                name: 'find-user',
+                name: 'findUserTool',
                 arguments: { name: 'Dero Israel' },
               },
             ],
@@ -107,7 +219,7 @@ describeForAllEngines(
               toolCalls: [
                 {
                   id: 'call-2',
-                  name: 'find-user',
+                  name: 'findUserTool',
                   arguments: { name: 'Dero Israel', resumeData: { approved: true } },
                 },
               ],
