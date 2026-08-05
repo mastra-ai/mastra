@@ -104,10 +104,8 @@ export function UserSessionsSection() {
   const pending = createSession.isPending || deleteSession.isPending;
 
   const openSession = (session: FactoryUserSession) => {
-    // A user session's thread id is its own id (created with that binding in
-    // `createSession`), so navigate straight to it instead of blocking on a
-    // session create round-trip first — the thread page brings the session
-    // online on mount and shows a skeleton while its messages load.
+    // A user session's thread id is its own id, and the thread page binds the
+    // controller session to it on mount — nothing to await here.
     void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
   };
 
@@ -151,10 +149,23 @@ export function UserSessionsSection() {
             );
           })}
         </MainSidebar.NavList>
-        {sessions.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
-            No sessions yet
-          </Txt>
+        {sessionsQuery.isError ? (
+          // The Plus button is gated on this list, so a failed load has to say
+          // why it is dead and offer the way out.
+          <div className="flex items-center gap-2 px-2 py-1">
+            <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
+              Couldn’t load sessions
+            </Txt>
+            <Button variant="ghost" size="xs" onClick={() => void sessionsQuery.refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : (
+          sessions.length === 0 && (
+            <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
+              No sessions yet
+            </Txt>
+          )
         )}
       </div>
 

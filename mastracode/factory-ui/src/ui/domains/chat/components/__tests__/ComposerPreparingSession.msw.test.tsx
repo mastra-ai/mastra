@@ -34,6 +34,12 @@ interface PreparingSession {
   /** Lets the agent-controller session create finish, as a sandbox would. */
   finishWorkspace: () => void;
   sentMessages: string[];
+  steerAttempts: number;
+}
+
+interface StubPreparingSessionOptions {
+  /** Makes every message dispatch fail, as an offline sandbox would. */
+  failDispatch?: boolean;
 }
 
 /** The controller sends `{ message }`; anything else means the wire shape moved. */
@@ -47,12 +53,13 @@ function readSentMessage(body: unknown): string {
  * Network boundary for a user session whose workspace was never materialized:
  * everything answers except the session create, which hangs until released.
  */
-function stubPreparingSession(): PreparingSession {
+function stubPreparingSession({ failDispatch = false }: StubPreparingSessionOptions = {}): PreparingSession {
   let release = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     release = resolve;
   });
   const sentMessages: string[] = [];
+  const result: PreparingSession = { finishWorkspace: () => release(), sentMessages, steerAttempts: 0 };
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -144,11 +151,16 @@ function stubPreparingSession(): PreparingSession {
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
       sentMessages.push(readSentMessage(await request.json()));
+      if (failDispatch) return HttpResponse.json({ message: 'Sandbox is gone' }, { status: 500 });
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${API}/sessions/:resourceId/steer`, () => {
+      result.steerAttempts += 1;
       return HttpResponse.json({ ok: true });
     }),
   );
 
-  return { finishWorkspace: release, sentMessages };
+  return result;
 }
 
 /** A create left hanging outlives the test, so tests that never wait for the session end here. */
@@ -213,6 +225,55 @@ describe('Composer while a session prepares its workspace', () => {
     await waitFor(() => expect(sentMessages).toEqual(['fix the login bug']));
     // The queued message was shown when it was typed, not echoed again on dispatch.
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
+  });
+
+  it('queues a second message too, instead of steering a session that is not running', async () => {
+    const session = stubPreparingSession();
+    const user = userEvent.setup();
+
+    renderThread();
+
+    const message = () => screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message()).toBeEnabled());
+    await waitFor(() => expect(screen.getByText('Preparing workspace…')).toBeInTheDocument());
+
+    await user.type(message(), 'fix the login bug');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
+
+    // The first message marks the transcript busy, which is what used to divert
+    // this one into a steer.
+    await user.type(message(), 'and add a test');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByText('and add a test')).toBeInTheDocument());
+
+    expect(session.steerAttempts).toBe(0);
+    // The wait is still what the status line names, busy transcript or not.
+    expect(screen.getByText('Preparing workspace…')).toBeInTheDocument();
+
+    session.finishWorkspace();
+
+    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug', 'and add a test']));
+    expect(session.steerAttempts).toBe(0);
+  });
+
+  it('reports a failed dispatch once, not once per reporter', async () => {
+    const session = stubPreparingSession({ failDispatch: true });
+    const user = userEvent.setup();
+
+    renderThread();
+
+    const message = () => screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message()).toBeEnabled());
+    await waitFor(() => expect(screen.getByText('Preparing workspace…')).toBeInTheDocument());
+
+    await user.type(message(), 'fix the login bug');
+    await user.keyboard('{Enter}');
+
+    session.finishWorkspace();
+
+    await waitFor(() => expect(screen.getAllByText(/Sandbox is gone/).length).toBeGreaterThan(0));
+    expect(screen.getAllByText(/Sandbox is gone/)).toHaveLength(1);
   });
 
   it('refuses an image dropped while preparing, since a queued message carries text only', async () => {

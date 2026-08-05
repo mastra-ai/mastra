@@ -30,7 +30,7 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { queueThreadPageKickoff } from '../services/threadPageReadiness';
+import { ThreadPageKickoffTimeoutError, queueThreadPageKickoff } from '../services/threadPageReadiness';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
 import { useComposerSpotlight } from './useComposerSpotlight';
@@ -210,20 +210,23 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     e.target.value = '';
   };
 
+  const queueUntilSessionReady = (threadId: string, text: string) => {
+    localUser(text, false);
+    void queueThreadPageKickoff({ resourceId, projectPath, threadId }, text, {
+      echoed: true,
+      timeoutMs: PREPARING_SESSION_TIMEOUT_MS,
+    }).catch(error => {
+      // The thread page announces its own dispatch failures; only the wait
+      // expiring unclaimed has no other voice.
+      if (!(error instanceof ThreadPageKickoffTimeoutError)) return;
+      clearPending();
+      pushNotice(error.message, 'error');
+    });
+  };
+
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
-    if (queueing && routeThreadId) {
-      localUser(text, false);
-      void queueThreadPageKickoff({ resourceId, projectPath, threadId: routeThreadId }, text, {
-        echoed: true,
-        timeoutMs: PREPARING_SESSION_TIMEOUT_MS,
-      }).catch(error => {
-        clearPending();
-        pushNotice(error instanceof Error ? error.message : 'Failed to send message', 'error');
-      });
-      return;
-    }
     if (onDraftComposer) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
@@ -309,10 +312,22 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
-    // Only a message can wait for the session; commands act on it live.
-    if (queueing && text.startsWith('/')) {
-      updateDraft(text);
-      pushNotice('Commands run once the session is ready.');
+    // Ahead of the steer branch: the first queued message marks the transcript
+    // busy, which would route every later one into a steer the offline session
+    // cannot take.
+    if (queueing && routeThreadId) {
+      // Only a message can wait for the session; commands act on it live.
+      if (text.startsWith('/')) {
+        updateDraft(text);
+        pushNotice('Commands run once the session is ready.');
+        return;
+      }
+      if (images.length > 0) {
+        updateDraft(text);
+        pushNotice('Remove the attached images to send while the session is preparing.');
+        return;
+      }
+      queueUntilSessionReady(routeThreadId, text);
       return;
     }
     if (await runComposerCommand(text)) return;
