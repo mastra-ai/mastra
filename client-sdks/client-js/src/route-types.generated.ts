@@ -1477,6 +1477,7 @@ type Shared_Type_71 =
   | 'input_step_processor'
   | 'output_processor'
   | 'output_step_processor'
+  | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
   | 'workflow_run'
@@ -1907,6 +1908,8 @@ type Shared_Type_81 = {
   executionSource?: string | undefined;
   /** Filter by tags (must have all specified tags) */
   tags?: string[] | undefined;
+  /** Filter by one or more trace IDs */
+  traceIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -8875,6 +8878,7 @@ export type GetObservabilityMetrics_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | unknown;
+  traceIds?: ((string[] | undefined) | undefined) | unknown;
   name?: ((string[] | undefined) | undefined) | unknown;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
