@@ -459,48 +459,12 @@ const sidebars = {
           },
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'harness/agent-controller',
           label: 'Agent Controller',
           customProps: {
             tags: ['beta'],
           },
-          items: [
-            {
-              type: 'doc',
-              id: 'agent-controller/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/session',
-              label: 'Session',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/modes',
-              label: 'Modes',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/threads-and-state',
-              label: 'Threads and State',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/subagents',
-              label: 'Subagents',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/tool-approvals',
-              label: 'Tool Approvals',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/channels',
-              label: 'Channels',
-            },
-          ],
         },
       ],
     },
