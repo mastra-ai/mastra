@@ -782,6 +782,10 @@ export class AgentThreadStreamRuntime {
     threadId: string,
     requestContext?: RequestContext,
   ) {
+    // Transient signals are delivery-only: never write them to storage, even when the
+    // active-behavior asked to persist. Honored here (not just in the memory layer) so it holds
+    // for any memory implementation, including ones without a signal-aware save filter.
+    if (signal.transient) return;
     const memory = await agent.getMemory({ requestContext });
     if (!memory) return;
     await memory.saveMessages({
@@ -881,6 +885,8 @@ export class AgentThreadStreamRuntime {
     threadId: string,
     requestContext?: RequestContext,
   ) {
+    if (signal.transient) return;
+
     await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
     this.#broadcastPersistedSignal(state, pubsub, key, runId, signal, resourceId, threadId);
   }
@@ -2034,6 +2040,14 @@ export class AgentThreadStreamRuntime {
         if (!resourceId || !threadId) {
           throw new Error('resourceId and threadId are required to persist an active signal');
         }
+        // Transient signals are never written to storage, so a `persist` behavior has nothing
+        // to do with them — report the drop honestly as `discard` instead of `persist`.
+        if (signal.transient) {
+          return {
+            signal,
+            accepted: Promise.resolve({ action: 'discard' as const }),
+          };
+        }
         const persisted = this.#persistSignal(
           agent,
           signal,
@@ -2119,6 +2133,14 @@ export class AgentThreadStreamRuntime {
     runId = randomUUID();
     key ??= this.#threadKey(resourceId, threadId);
     if (idleBehavior === 'persist') {
+      // Transient signals are never written to storage, so an idle `persist` behavior drops
+      // them entirely (no store, no broadcast) — report that as `discard`, not `persist`.
+      if (signal.transient) {
+        return {
+          signal,
+          accepted: Promise.resolve({ action: 'discard' as const }),
+        };
+      }
       const persisted = this.#persistAndBroadcastIdleSignal(
         state,
         pubsub,
