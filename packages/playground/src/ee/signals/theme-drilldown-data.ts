@@ -14,6 +14,11 @@ export type ThemeSelection =
 
 export type SelectedTheme = Extract<ThemeSelection, { kind: 'theme' }>;
 
+export interface ThemeSelectionStats {
+  traceCount: number;
+  stageShare: number;
+}
+
 export function findThemeSelection(
   flow: ThemeFlowResponse,
   signalName: string,

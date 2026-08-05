@@ -625,6 +625,94 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByRole('dialog', { name: 'Transcript added' })).not.toBeNull();
       expect(within(screen.getByLabelText('Active drill-down filters')).getAllByText(/Goal|Behavior/)).toHaveLength(2);
     });
+
+    it('shows filtered theme counts and keeps the remaining filters on every examples page', async () => {
+      useFourSignalFlowHandlers();
+      const observedExampleQueries: Array<Record<string, string>> = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101`, () =>
+          HttpResponse.json(themeDetailResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/examples`, ({ request }) => {
+          const query = Object.fromEntries(new URL(request.url).searchParams);
+          observedExampleQueries.push(query);
+          return HttpResponse.json(query.offset === '1' ? secondThemeExamplesResponse : firstThemeExamplesResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/history`, () =>
+          HttpResponse.json(themeHistoryResponse),
+        ),
+      );
+      renderSignals(['goal', 'outcome', 'behavior', 'sentiment']);
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      const noiseNodes = await screen.findAllByRole('button', { name: /^Noise.+1 trace \(50%\)/ });
+      fireEvent.click(noiseNodes[0]!);
+
+      const banner = await screen.findByLabelText('Active drill-down filters');
+      fireEvent.click(within(banner).getByRole('button', { name: 'View details for Goal · Add transcript' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Add transcript' });
+      expect(
+        await within(dialog).findByText('Filtered to traces matching the active drill-down filters.'),
+      ).not.toBeNull();
+      expect(within(dialog).getByText('100%')).not.toBeNull();
+      expect(within(dialog).getByText('1')).not.toBeNull();
+      await within(dialog).findByText('Add this transcript to my workspace.');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Next examples' }));
+      await within(dialog).findByText('Save the transcript with the project.');
+      expect(observedExampleQueries).toEqual([
+        {
+          entityType: 'agent',
+          signalName: 'goal',
+          snapshotId: 'opaque-snapshot-cursor',
+          limit: '5',
+          offset: '0',
+          filterThemes: 'behavior:noise',
+        },
+        {
+          entityType: 'agent',
+          signalName: 'goal',
+          snapshotId: 'opaque-snapshot-cursor',
+          limit: '5',
+          offset: '1',
+          filterThemes: 'behavior:noise',
+        },
+      ]);
+    });
+
+    it('shows filtered noise counts and sends the remaining theme filter for examples', async () => {
+      useFourSignalFlowHandlers();
+      let observedExamplesQuery: Record<string, string> | undefined;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, () => HttpResponse.json(noiseResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise/examples`, ({ request }) => {
+          observedExamplesQuery = Object.fromEntries(new URL(request.url).searchParams);
+          return HttpResponse.json(noiseExamplesResponse);
+        }),
+      );
+      renderSignals(['goal', 'outcome', 'behavior', 'sentiment']);
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      const noiseNodes = await screen.findAllByRole('button', { name: /^Noise.+1 trace \(50%\)/ });
+      fireEvent.click(noiseNodes[0]!);
+
+      const banner = await screen.findByLabelText('Active drill-down filters');
+      fireEvent.click(within(banner).getByRole('button', { name: 'View details for Behavior · Noise' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Noise' });
+      expect(
+        await within(dialog).findByText('Filtered to traces matching the active drill-down filters.'),
+      ).not.toBeNull();
+      expect(within(dialog).getByText('100%')).not.toBeNull();
+      expect(within(dialog).getByText('1')).not.toBeNull();
+      await within(dialog).findByText('The agent retried a fetch without establishing a recurring behavior pattern.');
+      expect(observedExamplesQuery).toEqual({
+        entityType: 'agent',
+        signalName: 'behavior',
+        snapshotId: 'opaque-snapshot-cursor',
+        limit: '5',
+        offset: '0',
+        filterThemes: 'goal:101',
+      });
+    });
   });
 
   describe('when stacked filters leave only one signal column', () => {

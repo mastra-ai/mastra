@@ -14,7 +14,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, ChartNoAxesGantt, Waypoints, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
+import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots, serializeThemeFilters } from './entity-learning-api';
 import { useEntityLearningProgress } from './hooks/use-entity-learning-progress';
 import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
 import { useThemeFlows } from './hooks/use-theme-flows';
@@ -38,7 +38,7 @@ import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findNoiseSelection, findThemeSelection } from './theme-drilldown-data';
-import type { SelectedTheme, ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { ThemeLifelines } from './theme-lifelines';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
@@ -71,6 +71,24 @@ function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; icon: Rea
 
 function selectionLabel(selection: ThemeSelection) {
   return `${formatSignalName(selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
+}
+
+function findSelectionStats(
+  flow: ThemeFlowResponse,
+  drillStack: ThemeSelection[],
+  selection: ThemeSelection | undefined,
+): ThemeSelectionStats | undefined {
+  if (!selection) return undefined;
+  if (drillStack.some(filter => filter.signalName === selection.signalName)) {
+    return { traceCount: flow.snapshot.traceCount, stageShare: flow.snapshot.traceCount > 0 ? 1 : 0 };
+  }
+
+  const stage = flow.stages.find(candidate => candidate.signalName === selection.signalName);
+  const node = stage?.nodes.find(candidate => {
+    if (selection.kind === 'noise') return candidate.kind === 'noise';
+    return candidate.kind === 'theme' && candidate.themeId === selection.themeId;
+  });
+  return node ? { traceCount: node.traceCount, stageShare: node.stageShare } : undefined;
 }
 
 function DrillFilterBanner({
@@ -463,6 +481,21 @@ export function SankeySignals({
     setNoiseSignalName(undefined);
     perspectiveMutation.mutate(nextSignalNames);
   };
+  const detailFilters =
+    viewMode === 'flow' && detailSelection
+      ? drillStack.filter(filter => filter.signalName !== detailSelection.signalName)
+      : [];
+  const detailStats =
+    viewMode === 'flow' && drillStack.length > 0 ? findSelectionStats(flow, drillStack, detailSelection) : undefined;
+  const noiseSelection: ThemeSelection | undefined = noiseSignalName
+    ? { kind: 'noise', signalName: noiseSignalName }
+    : undefined;
+  const noiseFilters =
+    viewMode === 'flow' && noiseSignalName ? drillStack.filter(filter => filter.signalName !== noiseSignalName) : [];
+  const noiseStats =
+    viewMode === 'flow' && drillStack.length > 0 ? findSelectionStats(flow, drillStack, noiseSelection) : undefined;
+  const detailFilterKey = serializeThemeFilters(detailFilters);
+  const noiseFilterKey = serializeThemeFilters(noiseFilters);
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
@@ -598,20 +631,24 @@ export function SankeySignals({
         </>
       )}
       <ThemeDetailPanel
-        key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}`}
+        key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}:${detailFilterKey}`}
         entityId={entityId}
         entityType={entityType}
         snapshotId={snapshot.snapshotId}
         snapshotTotal={snapshot.total}
         selection={detailSelection}
+        filters={detailFilters}
+        filteredStats={detailStats}
         onClose={() => setDetailSelection(undefined)}
       />
       <NoiseDetailPanel
-        key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}`}
+        key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}:${noiseFilterKey}`}
         entityId={entityId}
         entityType={entityType}
         snapshotId={snapshot.snapshotId}
         signalName={noiseSignalName}
+        filters={noiseFilters}
+        filteredStats={noiseStats}
         onClose={() => setNoiseSignalName(undefined)}
       />
     </main>
