@@ -26,6 +26,7 @@ export type ScenarioName =
   | 'browser-wizard-export'
   | 'clipboard-image-paste'
   | 'commit-attribution-prompt'
+  | 'concurrent-thread-startup'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
   | 'custom-pack-import-rename'

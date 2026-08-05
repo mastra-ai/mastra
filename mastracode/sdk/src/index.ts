@@ -108,7 +108,7 @@ import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
-import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { acquireThreadLock, releaseThreadLock, tryAcquireThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
@@ -1018,6 +1018,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ? undefined
       : {
           acquire: acquireThreadLock,
+          tryAcquire: tryAcquireThreadLock,
           release: releaseThreadLock,
         },
   });
