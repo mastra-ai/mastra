@@ -124,6 +124,7 @@ type RunExperiment = (
     unmockedToolPolicy: 'deny';
     requestContext?: Record<string, JsonValue>;
     metadata: Record<string, unknown>;
+    persistence: { experiments: 'none'; scores: 'none' };
     experimentId: string;
     onEvent: (event: ExperimentEvent) => Promise<void>;
   },
@@ -559,6 +560,7 @@ export async function runExperimentWorker({
             policies: packet.policies,
             requestedAt: packet.requestedAt,
           },
+          persistence: { experiments: 'none', scores: 'none' },
           experimentId: request.experimentId,
           onEvent: async event => {
             if (event.type === 'experiment.run.started') await writeEvent('run-started', { semanticEvent: event });

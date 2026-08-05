@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -91,6 +91,30 @@ describe('ExperimentBundler', () => {
       contentDigest: expectedContentDigest,
       excludes: ['experiment-worker-manifest.json'],
     });
+  });
+
+  it('hashes symlink targets without traversing directory symlinks', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const packageStore = await createTemporaryDirectory('mastra-experiment-package-store-');
+    await mkdir(join(output, 'node_modules'));
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await writeFile(join(packageStore, 'package.json'), '{"name":"linked-package"}');
+    await symlink(packageStore, join(output, 'node_modules', 'linked-package'));
+
+    await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
+
+    const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+    expect(manifest.files).toContainEqual({
+      path: 'node_modules/linked-package',
+      type: 'symlink',
+      target: packageStore,
+      sha256: createHash('sha256').update(packageStore).digest('hex'),
+    });
+    expect(manifest.files).not.toContainEqual(
+      expect.objectContaining({ path: 'node_modules/linked-package/package.json' }),
+    );
   });
 
   it('excludes only the root artifact manifest from digests', async () => {

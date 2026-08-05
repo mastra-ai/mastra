@@ -66,7 +66,10 @@ describe('external dependency versions', () => {
       join(externalPackageDir, 'package.json'),
       JSON.stringify({ name: 'external-only-from-workspace', version: '4.5.6', type: 'module', main: './index.js' }),
     );
-    await writeFile(join(externalPackageDir, 'index.js'), `export const externalValue = 'external';`);
+    await writeFile(
+      join(externalPackageDir, 'index.js'),
+      `throw new Error('external dependency loaded during validation');`,
+    );
     await writeFile(
       join(workspacePackageDir, 'src', 'index.js'),
       `import { externalValue } from 'external-only-from-workspace';\nexport const workspaceValue = externalValue;`,

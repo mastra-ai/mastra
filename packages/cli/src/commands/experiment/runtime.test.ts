@@ -209,6 +209,7 @@ describe('runExperimentWorker', () => {
         targetId: 'test-agent',
         scorers: ['quality'],
         unmockedToolPolicy: 'deny',
+        persistence: { experiments: 'none', scores: 'none' },
         metadata: { scorerVersions: { quality: 'v1' } },
       });
       expect(config.data[0]).toMatchObject({

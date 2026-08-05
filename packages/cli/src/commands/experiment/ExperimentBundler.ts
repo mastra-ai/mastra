@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, readlink, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer/build';
@@ -22,7 +22,7 @@ export interface ExperimentWorkerArtifactManifest {
   launch: { executable: string; arguments: string[]; workingDirectory: string };
   dependencies: { manifest: string; lockfile?: string };
   artifact: { digestAlgorithm: 'sha256'; contentDigest: string; excludes: ['experiment-worker-manifest.json'] };
-  files: Array<{ path: string; sha256: string }>;
+  files: Array<{ path: string; sha256: string; type?: 'file' | 'symlink'; target?: string }>;
 }
 
 export class ExperimentBundler extends Bundler {
@@ -118,23 +118,37 @@ export function resolveRuntimePath(
   return fileURLToPath(new URL('./commands/experiment/runtime.js', moduleUrl));
 }
 
-async function collectFileDigests(root: string): Promise<Array<{ path: string; sha256: string }>> {
-  const files: Array<{ path: string; sha256: string }> = [];
+type ArtifactFileDigest = { path: string; sha256: string; type?: 'file' | 'symlink'; target?: string };
+
+async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
+  const files: ArtifactFileDigest[] = [];
   const visit = async (directory: string) => {
-    const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
-      const fullPath = join(directory, entry.name);
-      if (entry.isDirectory()) {
+    const entries = await readdir(directory);
+    for (const name of entries.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))) {
+      const fullPath = join(directory, name);
+      const artifactPath = relative(root, fullPath).replaceAll('\\', '/');
+      if (artifactPath === 'experiment-worker-manifest.json') continue;
+
+      const stats = await lstat(fullPath);
+      if (stats.isDirectory()) {
         await visit(fullPath);
-      } else {
-        const artifactPath = relative(root, fullPath).replaceAll('\\', '/');
-        if (artifactPath === 'experiment-worker-manifest.json') continue;
+      } else if (stats.isFile()) {
         files.push({
           path: artifactPath,
           sha256: createHash('sha256')
             .update(await readFile(fullPath))
             .digest('hex'),
         });
+      } else if (stats.isSymbolicLink()) {
+        const target = await readlink(fullPath);
+        files.push({
+          path: artifactPath,
+          type: 'symlink',
+          target,
+          sha256: createHash('sha256').update(target).digest('hex'),
+        });
+      } else {
+        throw new Error(`Unsupported artifact file type: ${artifactPath}`);
       }
     }
   };
