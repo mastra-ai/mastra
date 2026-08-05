@@ -461,6 +461,11 @@ const sidebars = {
                 },
                 {
                   type: 'doc',
+                  id: 'observability/tracing/exporters/confident-ai',
+                  label: 'Confident AI',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/exporters/console-exporter',
                   label: 'Console',
                 },
