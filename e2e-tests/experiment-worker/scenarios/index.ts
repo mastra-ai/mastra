@@ -144,6 +144,20 @@ export const workspaceLspScenario = fullResourceScenario('workspace-lsp', [
   'lsp-shutdown',
 ]);
 
+export const workspaceBrowserScenario = fullResourceScenario('workspace-browser', [
+  'browser-lazy-before-command',
+  'browser-launched-for-thread',
+  'browser-cli-executed',
+  'browser-closed-on-shutdown',
+]);
+
+export const workspaceFailuresScenario = fullResourceScenario('workspace-failures', [
+  'initialization-failure-reported',
+  'shutdown-failure-reported',
+  'invalid-configurations-rejected',
+  'worker-clean-exit',
+]);
+
 export const postgresScenario: ScenarioDefinition = {
   id: 'postgres',
   fixture: 'postgres',
@@ -194,6 +208,8 @@ export const scenarios = [
   workspaceSearchScenario,
   workspaceMountsScenario,
   workspaceLspScenario,
+  workspaceBrowserScenario,
+  workspaceFailuresScenario,
   postgresScenario,
   nativeDuckdbScenario,
 ];

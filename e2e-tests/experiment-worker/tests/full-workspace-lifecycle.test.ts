@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +11,9 @@ import { materializeProject } from '../helpers/materialize-project.js';
 import { OwnedResources } from '../helpers/process-cleanup.js';
 import { createRunRequest, runProtocol } from '../helpers/run-protocol.js';
 import {
+  workspaceBrowserScenario,
   workspaceDynamicScenario,
+  workspaceFailuresScenario,
   workspaceLspScenario,
   workspaceMountsScenario,
   workspaceOwnedOverrideScenario,
@@ -182,5 +185,49 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(run.result.exitCode).toBe(0);
     },
     workspaceLspScenario.timeoutMs,
+  );
+
+  test(
+    `${workspaceBrowserScenario.id} lazily launches a CLI browser and closes it during shutdown`,
+    async () => {
+      const run = await runProtocol(
+        artifactRoot,
+        manifest,
+        createRunRequest(manifest, {
+          targetType: 'workflow',
+          targetId: 'browser-workflow',
+          items: [{ id: 'browser-item', input: { threadId: 'browser-thread' }, toolMocks: [] }],
+        }),
+      );
+      const output = completedPayloads(run.events).join('\n');
+      expect(output).toContain('"lazyBefore":true');
+      expect(output).toContain('"launched":true');
+      expect(output).toContain('"commandRan":true');
+      const events = JSON.parse(await readFile(join(artifactRoot, 'browser-events.json'), 'utf8')) as string[];
+      expect(events[0]).toMatch(/^launch:/);
+      expect(events.at(-1)).toBe('close');
+    },
+    workspaceBrowserScenario.timeoutMs,
+  );
+
+  test(
+    `${workspaceFailuresScenario.id} reports lifecycle failures and rejects invalid configurations`,
+    async () => {
+      const run = await runProtocol(
+        artifactRoot,
+        manifest,
+        createRunRequest(manifest, {
+          targetType: 'workflow',
+          targetId: 'lifecycle-failure-workflow',
+          items: [{ id: 'failure-item', input: { value: 'verify' }, toolMocks: [] }],
+        }),
+      );
+      const output = completedPayloads(run.events).join('\n');
+      expect(output).toContain('"initFailed":true');
+      expect(output).toContain('"destroyFailed":true');
+      expect(output).toContain('"invalidConfigs":3');
+      expect(run.result.exitCode).toBe(0);
+    },
+    workspaceFailuresScenario.timeoutMs,
   );
 });

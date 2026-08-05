@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { createScorer } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
-import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
+import { executeCommandTool, LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { z } from 'zod';
@@ -363,6 +364,148 @@ const lspWorkflow = createWorkflow({
   .then(lspStep)
   .commit();
 
+const browserRoot = join(process.cwd(), 'browser-workspace-root');
+mkdirSync(browserRoot, { recursive: true });
+const browserCliPath = join(browserRoot, 'agent-browser');
+writeFileSync(browserCliPath, '#!/bin/sh\nprintf "%s\\n" "$*" > browser-command.txt\n');
+chmodSync(browserCliPath, 0o755);
+const browserEventsPath = join(process.cwd(), 'browser-events.json');
+const browserEvents: string[] = [];
+const runningBrowserThreads = new Set<string>();
+const browserClosedListeners = new Set<() => void>();
+const browserProvider = {
+  id: 'fixture-browser',
+  name: 'Fixture Browser',
+  provider: 'fixture',
+  providerType: 'cli',
+  isBrowserRunning: () => runningBrowserThreads.size > 0,
+  launch: async (threadId = 'default') => {
+    browserEvents.push(`launch:${threadId}`);
+    runningBrowserThreads.add(threadId);
+    writeFileSync(browserEventsPath, JSON.stringify(browserEvents));
+  },
+  getCdpUrl: () => 'ws://127.0.0.1:9222/devtools/browser/fixture',
+  connectToExternalCdp: async () => {},
+  onBrowserClosed: (listener: () => void) => {
+    browserClosedListeners.add(listener);
+    return () => browserClosedListeners.delete(listener);
+  },
+  close: async () => {
+    browserEvents.push('close');
+    runningBrowserThreads.clear();
+    for (const listener of browserClosedListeners) listener();
+    writeFileSync(browserEventsPath, JSON.stringify(browserEvents));
+  },
+} as unknown as MastraBrowser;
+const browserWorkspace = new Workspace({
+  id: 'browser-workspace',
+  sandbox: new LocalSandbox({
+    id: 'browser-sandbox',
+    workingDirectory: browserRoot,
+    env: { PATH: `${browserRoot}:${process.env.PATH ?? ''}` },
+  }),
+  browser: browserProvider,
+});
+
+const browserStep = createStep({
+  id: 'browser-step',
+  inputSchema: z.object({ threadId: z.string() }),
+  outputSchema: z.object({ lazyBefore: z.boolean(), launched: z.boolean(), commandRan: z.boolean() }),
+  execute: async ({ inputData }) => {
+    if (browserWorkspace.status !== 'running') await browserWorkspace.init();
+    const lazyBefore = !browserProvider.isBrowserRunning(inputData.threadId);
+    await executeCommandTool.execute(
+      { command: 'agent-browser open https://example.com', timeout: 10, cwd: browserRoot, tail: 0 },
+      { workspace: browserWorkspace, threadId: inputData.threadId },
+    );
+    return {
+      lazyBefore,
+      launched: browserProvider.isBrowserRunning(inputData.threadId),
+      commandRan: existsSync(join(browserRoot, 'browser-command.txt')),
+    };
+  },
+});
+
+const browserWorkflow = createWorkflow({
+  id: 'browser-workflow',
+  inputSchema: z.object({ threadId: z.string() }),
+  outputSchema: z.object({ lazyBefore: z.boolean(), launched: z.boolean(), commandRan: z.boolean() }),
+})
+  .then(browserStep)
+  .commit();
+
+const lifecycleFailureStep = createStep({
+  id: 'lifecycle-failure-step',
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ initFailed: z.boolean(), destroyFailed: z.boolean(), invalidConfigs: z.number() }),
+  execute: async () => {
+    const initFailure = new Workspace({
+      id: 'init-failure-workspace',
+      sandbox: new (class extends LocalSandbox {
+        override async start() {
+          throw new Error('expected workspace init failure');
+        }
+      })({ id: 'init-failure-sandbox', workingDirectory: workspaceRoot }),
+    });
+    let initFailed = false;
+    try {
+      await initFailure.init();
+    } catch {
+      initFailed = initFailure.status === 'error';
+    }
+
+    const destroyFailure = new Workspace({
+      id: 'destroy-failure-workspace',
+      sandbox: new LocalSandbox({
+        id: 'destroy-failure-sandbox',
+        workingDirectory: workspaceRoot,
+        onDestroy: () => {
+          throw new Error('expected workspace destroy failure');
+        },
+      }),
+    });
+    await destroyFailure.init();
+    let destroyFailed = false;
+    try {
+      await destroyFailure.destroy();
+    } catch {
+      destroyFailed = destroyFailure.status === 'error';
+    }
+
+    let invalidConfigs = 0;
+    for (const construct of [
+      () => new Workspace({ id: 'empty-workspace' }),
+      () =>
+        new Workspace({
+          id: 'filesystem-and-mounts',
+          filesystem: new LocalFilesystem({ basePath: workspaceRoot }),
+          mounts: { '/other': new LocalFilesystem({ basePath: workspaceRoot }) },
+        }),
+      () =>
+        new Workspace({
+          id: 'vector-without-embedder',
+          filesystem: new LocalFilesystem({ basePath: workspaceRoot }),
+          vectorStore: searchVector,
+        }),
+    ]) {
+      try {
+        construct();
+      } catch {
+        invalidConfigs += 1;
+      }
+    }
+    return { initFailed, destroyFailed, invalidConfigs };
+  },
+});
+
+const lifecycleFailureWorkflow = createWorkflow({
+  id: 'lifecycle-failure-workflow',
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ initFailed: z.boolean(), destroyFailed: z.boolean(), invalidConfigs: z.number() }),
+})
+  .then(lifecycleFailureStep)
+  .commit();
+
 const resourceScorer = createScorer({
   id: 'resource-score',
   name: 'Resource Score',
@@ -380,6 +523,8 @@ export const mastra = new Mastra({
     searchWorkflow,
     mountWorkflow,
     lspWorkflow,
+    browserWorkflow,
+    lifecycleFailureWorkflow,
   },
   scorers: { resourceScorer },
   storage: new LibSQLStore({ id: 'resources-store', url: 'file:app-storage.db' }),
@@ -403,6 +548,7 @@ for (const registeredWorkspace of [
   searchWorkspace,
   mountedWorkspace,
   lspWorkspace,
+  browserWorkspace,
 ]) {
   mastra.addWorkspace(registeredWorkspace);
 }
