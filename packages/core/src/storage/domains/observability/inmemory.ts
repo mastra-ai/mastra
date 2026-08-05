@@ -1224,6 +1224,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (!(filters.name as string[]).includes(m.name)) return false;
     }
     if (filters.traceId !== undefined && m.traceId !== filters.traceId) return false;
+    if (Array.isArray(filters.traceIds) && !filters.traceIds.includes(m.traceId)) return false;
     if (filters.spanId !== undefined && m.spanId !== filters.spanId) return false;
     if (filters.provider !== undefined && m.provider !== filters.provider) return false;
     if (filters.model !== undefined && m.model !== filters.model) return false;

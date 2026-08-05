@@ -16,22 +16,22 @@ XAI_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
-  instructions: "You are a helpful assistant",
-  model: "xai/grok-4.20-0309-non-reasoning"
-});
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'xai/grok-4.20-0309-non-reasoning',
+})
 
 // Generate a response
-const response = await agent.generate("Hello!");
+const response = await agent.generate('Hello!')
 
 // Stream a response
-const stream = await agent.stream("Tell me a story");
+const stream = await agent.stream('Tell me a story')
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -40,125 +40,125 @@ for await (const chunk of stream) {
 <ProviderModelsTable
   models={[
   {
-    "model": "xai/grok-4.20-0309-non-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1000000,
-    "maxOutput": 30000,
-    "inputCost": 1.25,
-    "outputCost": 2.5
+    model: 'xai/grok-4.20-0309-non-reasoning',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: false,
+    contextWindow: 1000000,
+    maxOutput: 30000,
+    inputCost: 1.25,
+    outputCost: 2.5,
   },
   {
-    "model": "xai/grok-4.20-0309-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 30000,
-    "inputCost": 1.25,
-    "outputCost": 2.5
+    model: 'xai/grok-4.20-0309-reasoning',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 1000000,
+    maxOutput: 30000,
+    inputCost: 1.25,
+    outputCost: 2.5,
   },
   {
-    "model": "xai/grok-4.20-multi-agent-0309",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 30000,
-    "inputCost": 1.25,
-    "outputCost": 2.5
+    model: 'xai/grok-4.20-multi-agent-0309',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: true,
+    contextWindow: 1000000,
+    maxOutput: 30000,
+    inputCost: 1.25,
+    outputCost: 2.5,
   },
   {
-    "model": "xai/grok-4.3",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 30000,
-    "inputCost": 1.25,
-    "outputCost": 2.5
+    model: 'xai/grok-4.3',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 1000000,
+    maxOutput: 30000,
+    inputCost: 1.25,
+    outputCost: 2.5,
   },
   {
-    "model": "xai/grok-4.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 500000,
-    "maxOutput": 500000,
-    "inputCost": 2,
-    "outputCost": 6
+    model: 'xai/grok-4.5',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 500000,
+    maxOutput: 500000,
+    inputCost: 2,
+    outputCost: 6,
   },
   {
-    "model": "xai/grok-build-0.1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 256000,
-    "inputCost": 1,
-    "outputCost": 2
+    model: 'xai/grok-build-0.1',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 256000,
+    maxOutput: 256000,
+    inputCost: 1,
+    outputCost: 2,
   },
   {
-    "model": "xai/grok-imagine-image",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8000,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    model: 'xai/grok-imagine-image',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 8000,
+    maxOutput: null,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "xai/grok-imagine-image-quality",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8000,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    model: 'xai/grok-imagine-image-quality',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 8000,
+    maxOutput: null,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "xai/grok-imagine-video",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 1024,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    model: 'xai/grok-imagine-video',
+    imageInput: true,
+    audioInput: false,
+    videoInput: true,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 1024,
+    maxOutput: null,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "xai/grok-imagine-video-1.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 1024,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  }
+    model: 'xai/grok-imagine-video-1.5',
+    imageInput: true,
+    audioInput: true,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 1024,
+    maxOutput: null,
+    inputCost: null,
+    outputCost: null,
+  },
 ]}
 />
 
@@ -168,31 +168,29 @@ for await (const chunk of stream) {
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: "custom-agent",
-  name: "custom-agent",
+  id: 'custom-agent',
+  name: 'custom-agent',
   model: {
-    id: "xai/grok-4.20-0309-non-reasoning",
+    id: 'xai/grok-4.20-0309-non-reasoning',
     apiKey: process.env.XAI_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
+      'X-Custom-Header': 'value',
+    },
+  },
+})
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
+  id: 'dynamic-agent',
+  name: 'Dynamic Agent',
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
-    return useAdvanced
-      ? "xai/grok-imagine-video-1.5"
-      : "xai/grok-4.20-0309-non-reasoning";
-  }
-});
+    const useAdvanced = requestContext.task === 'complex'
+    return useAdvanced ? 'xai/grok-imagine-video-1.5' : 'xai/grok-4.20-0309-non-reasoning'
+  },
+})
 ```
 
 ## Provider Options
@@ -200,53 +198,51 @@ const agent = new Agent({
 xAI supports the following provider-specific options via the `providerOptions` parameter:
 
 ```typescript
-const response = await agent.generate("Hello!", {
+const response = await agent.generate('Hello!', {
   providerOptions: {
     xai: {
       // See available options in the table below
-    }
-  }
-});
+    },
+  },
+})
 ```
 
 ### Available Options
 
 <PropertiesTable
   content={[
-    {
-        "name": "reasoningEffort",
-        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | undefined",
-        "description": "",
-        "isOptional": true
-    },
-    {
-        "name": "logprobs",
-        "type": "boolean | undefined",
-        "description": "",
-        "isOptional": true
-    },
-    {
-        "name": "topLogprobs",
-        "type": "number | undefined",
-        "description": "",
-        "isOptional": true
-    },
-    {
-        "name": "parallel_function_calling",
-        "type": "boolean | undefined",
-        "description": "",
-        "isOptional": true
-    },
-    {
-        "name": "searchParameters",
-        "type": "{ mode: \"off\" | \"auto\" | \"on\"; returnCitations?: boolean | undefined; fromDate?: string | undefined; toDate?: string | undefined; maxSearchResults?: number | undefined; sources?: ({ ...; } | ... 2 more ... | { ...; })[] | undefined; } | undefined",
-        "description": "",
-        "isOptional": true
-    }
+  {
+    name: 'reasoningEffort',
+    type: '"none" | "low" | "medium" | "high" | undefined',
+    description: '',
+    isOptional: true,
+  },
+  {
+    name: 'logprobs',
+    type: 'boolean | undefined',
+    description: '',
+    isOptional: true,
+  },
+  {
+    name: 'topLogprobs',
+    type: 'number | undefined',
+    description: '',
+    isOptional: true,
+  },
+  {
+    name: 'parallel_function_calling',
+    type: 'boolean | undefined',
+    description: '',
+    isOptional: true,
+  },
+  {
+    name: 'searchParameters',
+    type: '{ mode: "off" | "auto" | "on"; returnCitations?: boolean | undefined; fromDate?: string | undefined; toDate?: string | undefined; maxSearchResults?: number | undefined; sources?: ({ ...; } | ... 2 more ... | { ...; })[] | undefined; } | undefined',
+    description: '',
+    isOptional: true,
+  },
 ]}
 />
-
-
 
 ## Direct provider installation
 

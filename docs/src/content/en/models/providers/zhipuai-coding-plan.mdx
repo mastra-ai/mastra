@@ -16,22 +16,22 @@ ZHIPU_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
-  instructions: "You are a helpful assistant",
-  model: "zhipuai-coding-plan/glm-4.6v"
-});
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'zhipuai-coding-plan/glm-4.6v',
+})
 
 // Generate a response
-const response = await agent.generate("Hello!");
+const response = await agent.generate('Hello!')
 
 // Stream a response
-const stream = await agent.stream("Tell me a story");
+const stream = await agent.stream('Tell me a story')
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -46,89 +46,89 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "zhipuai-coding-plan/glm-4.6v",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 0.9
+    model: 'zhipuai-coding-plan/glm-4.6v',
+    imageInput: true,
+    audioInput: false,
+    videoInput: true,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 128000,
+    maxOutput: 32768,
+    inputCost: 0.3,
+    outputCost: 0.9,
   },
   {
-    "model": "zhipuai-coding-plan/glm-4.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    model: 'zhipuai-coding-plan/glm-4.7',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 204800,
+    maxOutput: 131072,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "zhipuai-coding-plan/glm-5-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    model: 'zhipuai-coding-plan/glm-5-turbo',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 200000,
+    maxOutput: 131072,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "zhipuai-coding-plan/glm-5.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    model: 'zhipuai-coding-plan/glm-5.1',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 200000,
+    maxOutput: 131072,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "zhipuai-coding-plan/glm-5.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    model: 'zhipuai-coding-plan/glm-5.2',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 1000000,
+    maxOutput: 131072,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "zhipuai-coding-plan/glm-5.2-highspeed[1m]",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    model: 'zhipuai-coding-plan/glm-5.2-highspeed',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 1000000,
+    maxOutput: 131072,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "zhipuai-coding-plan/glm-5v-turbo",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
-  }
+    model: 'zhipuai-coding-plan/glm-5v-turbo',
+    imageInput: true,
+    audioInput: false,
+    videoInput: true,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 200000,
+    maxOutput: 131072,
+    inputCost: null,
+    outputCost: null,
+  },
 ]}
 />
 
@@ -138,32 +138,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: "custom-agent",
-  name: "custom-agent",
+  id: 'custom-agent',
+  name: 'custom-agent',
   model: {
-    url: "https://open.bigmodel.cn/api/coding/paas/v4",
-    id: "zhipuai-coding-plan/glm-4.6v",
+    url: 'https://open.bigmodel.cn/api/coding/paas/v4',
+    id: 'zhipuai-coding-plan/glm-4.6v',
     apiKey: process.env.ZHIPU_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
+      'X-Custom-Header': 'value',
+    },
+  },
+})
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
+  id: 'dynamic-agent',
+  name: 'Dynamic Agent',
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
-    return useAdvanced
-      ? "zhipuai-coding-plan/glm-5v-turbo"
-      : "zhipuai-coding-plan/glm-4.6v";
-  }
-});
+    const useAdvanced = requestContext.task === 'complex'
+    return useAdvanced ? 'zhipuai-coding-plan/glm-5v-turbo' : 'zhipuai-coding-plan/glm-4.6v'
+  },
+})
 ```
-
-

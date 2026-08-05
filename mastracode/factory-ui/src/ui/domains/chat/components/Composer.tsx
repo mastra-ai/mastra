@@ -7,6 +7,7 @@ import {
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
+  ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
@@ -102,7 +103,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const spotlightRef = useComposerSpotlight();
+  const spotlightRef = useComposerSpotlight(!busy);
   const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
@@ -324,89 +325,91 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           ))}
         </div>
       )}
-      <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
-        <div aria-hidden="true" className="composer-spotlight-surface" />
-        {images.length > 0 && (
-          <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
-            {images.map(img => (
-              <div key={img.id} className="relative">
-                <img
-                  src={`data:${img.mediaType};base64,${img.data}`}
-                  alt={img.filename ?? 'Attached image'}
-                  className="border-border1 h-14 w-14 rounded-md border object-cover"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-xs"
-                  className="bg-surface3 absolute -top-1 -right-1 rounded-full"
-                  onClick={() => removeImage(img.id)}
-                  aria-label="Remove image"
-                >
-                  <X size={10} />
-                </Button>
-              </div>
-            ))}
-          </ComposerAttachments>
-        )}
-        <ComposerInput
-          ref={inputRef}
-          value={draft}
-          onChange={e => updateDraft(e.target.value)}
-          onKeyDown={onComposerKeyDown}
-          onPaste={onPaste}
-          placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
-          disabled={disabled}
-          maxHeight={composerVariantMaxHeight[variant]}
-          className={cn(composerVariantClass[variant], 'text-[15px]')}
-          aria-label="Message"
-          aria-keyshortcuts="Shift+Tab"
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={onFileInputChange}
-          className="hidden"
-          aria-label="Attach images"
-        />
-        <ComposerActions className="static w-full flex-wrap items-end justify-between px-3 pb-3">
-          <StatusLine />
-          <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              disabled={disabled}
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach image"
-            >
-              <ImagePlus size={14} />
-            </Button>
-            {busy && (
+      <ComposerRing busy={busy} className={modeColorClass}>
+        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
+          <div aria-hidden="true" className="composer-spotlight-surface" />
+          {images.length > 0 && (
+            <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
+              {images.map(img => (
+                <div key={img.id} className="relative">
+                  <img
+                    src={`data:${img.mediaType};base64,${img.data}`}
+                    alt={img.filename ?? 'Attached image'}
+                    className="border-border1 h-14 w-14 rounded-md border object-cover"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-xs"
+                    className="bg-surface3 absolute -top-1 -right-1 rounded-full"
+                    onClick={() => removeImage(img.id)}
+                    aria-label="Remove image"
+                  >
+                    <X size={10} />
+                  </Button>
+                </div>
+              ))}
+            </ComposerAttachments>
+          )}
+          <ComposerInput
+            ref={inputRef}
+            value={draft}
+            onChange={e => updateDraft(e.target.value)}
+            onKeyDown={onComposerKeyDown}
+            onPaste={onPaste}
+            placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
+            disabled={disabled}
+            maxHeight={composerVariantMaxHeight[variant]}
+            className={cn(composerVariantClass[variant], 'text-[15px]')}
+            aria-label="Message"
+            aria-keyshortcuts="Shift+Tab"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onFileInputChange}
+            className="hidden"
+            aria-label="Attach images"
+          />
+          <ComposerActions className="static w-full flex-wrap items-end justify-between px-3 pb-3">
+            <StatusLine />
+            <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
               <Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                onClick={() => void abortMutation.mutateAsync()}
-                aria-label="Abort"
+                disabled={disabled}
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach image"
               >
-                <Square size={14} />
+                <ImagePlus size={14} />
               </Button>
-            )}
-            <Button
-              type="submit"
-              variant="outline"
-              size="icon-sm"
-              disabled={disabled || (!draft.trim() && images.length === 0)}
-              aria-label="Send message"
-            >
-              <ArrowUp size={16} />
-            </Button>
-          </ButtonsGroup>
-        </ComposerActions>
-      </ComposerBox>
+              {busy && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => void abortMutation.mutateAsync()}
+                  aria-label="Abort"
+                >
+                  <Square size={14} />
+                </Button>
+              )}
+              <Button
+                type="submit"
+                variant="outline"
+                size="icon-sm"
+                disabled={disabled || (!draft.trim() && images.length === 0)}
+                aria-label="Send message"
+              >
+                <ArrowUp size={16} />
+              </Button>
+            </ButtonsGroup>
+          </ComposerActions>
+        </ComposerBox>
+      </ComposerRing>
     </ComposerRoot>
   );
 }

@@ -13,7 +13,7 @@ import {
   createSuggestedResponseExtractor,
   createThreadTitleExtractor,
 } from '../built-in-extractors';
-import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import { OBSERVATIONAL_MEMORY_DEFAULTS, getRetrievalInstructions } from '../constants';
 import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
@@ -4138,6 +4138,147 @@ describe('ObservationalMemory Integration', () => {
 
     it('should default retrieval mode to false', () => {
       expect(om.config.retrieval).toBe(false);
+    });
+  });
+
+  describe('retrieval instructions', () => {
+    const makeRetrievalOm = (
+      retrieval: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string },
+    ) =>
+      new ObservationalMemory({
+        storage,
+        retrieval,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+    it('describes cross-thread routing between search, threads, and messages for resource scope', () => {
+      const instructions = getRetrievalInstructions('resource');
+
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Fallback guidance: irrelevant search results should lead to thread discovery
+      expect(instructions).toContain('If search results look irrelevant, do not give up');
+      // Threads without observations may still hold the answer in raw history
+      expect(instructions).toContain('raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only resource retrieval', () => {
+      const instructions = getRetrievalInstructions('resource', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Thread discovery is still the fallback for finding past conversations
+      expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only thread retrieval', () => {
+      const instructions = getRetrievalInstructions('thread', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain('mode: "threads"');
+    });
+
+    it('describes current-thread usage for thread scope', () => {
+      const instructions = getRetrievalInstructions('thread');
+
+      expect(instructions).toContain('limited to the current conversation thread');
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).not.toContain("ALL of this user's conversation threads");
+      expect(instructions).not.toContain('do not give up');
+    });
+
+    it('appends custom instructions after the native guidance without replacing it', () => {
+      const custom = 'Prefer the current conversation when it already contains the answer.';
+      const instructions = getRetrievalInstructions('resource', custom);
+
+      expect(instructions).toContain('## Recall — looking up source messages');
+      expect(instructions).toContain('### Additional recall guidance');
+      expect(instructions.indexOf(custom)).toBeGreaterThan(instructions.indexOf('### Additional recall guidance'));
+    });
+
+    it('omits the custom guidance section when custom instructions are empty', () => {
+      expect(getRetrievalInstructions('resource', '   ')).not.toContain('### Additional recall guidance');
+      expect(getRetrievalInstructions('resource')).not.toContain('### Additional recall guidance');
+    });
+
+    it('injects scope-aware instructions into actor context', () => {
+      const observations = '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 Fact\n</observation-group>';
+
+      const resourceText = (makeRetrievalOm({ vector: true, scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(resourceText).toContain('If search results look irrelevant, do not give up');
+
+      // Browsing-only retrieval (no vector) must not steer the agent toward search
+      const browsingText = (makeRetrievalOm({ scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(browsingText).not.toContain('mode: "search"');
+      expect(browsingText).toContain('mode: "threads"');
+
+      const threadText = (makeRetrievalOm({ scope: 'thread' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(threadText).toContain('limited to the current conversation thread');
+    });
+
+    it('injects appended custom instructions into actor context', () => {
+      const custom = 'Use a small limit with detail="low" for an initial scan.';
+      const text = (makeRetrievalOm({ scope: 'resource', instructions: custom }) as any)
+        .formatObservationsForContext('- 🔴 Fact', undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+
+      expect(text).toContain('### Additional recall guidance');
+      expect(text).toContain(custom);
+    });
+
+    it('returns recall guidance without observations for resource-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'resource', instructions: 'Avoid historical tool calls.' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+      expect(record.activeObservations).toBeFalsy();
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeDefined();
+      const text = messages!.join('\n\n');
+      expect(text).toContain('## Recall — looking up source messages');
+      expect(text).toContain('mode: "threads"');
+      expect(text).toContain('Avoid historical tool calls.');
+    });
+
+    it('returns undefined without observations for thread-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'thread' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('returns undefined without observations when retrieval is disabled', async () => {
+      const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await om.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('defaults retrieval scope to resource when retrieval is true', () => {
+      expect(makeRetrievalOm(true).retrievalScope).toBe('resource');
+      expect(makeRetrievalOm({ scope: 'thread' }).retrievalScope).toBe('thread');
     });
   });
 

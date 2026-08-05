@@ -335,7 +335,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should upsert vectors in an existing table', async () => {
@@ -498,7 +498,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should query vectors from an existing table', async () => {
@@ -609,7 +609,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should update vector and metadata by id', async () => {
@@ -839,7 +839,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should delete vector and metadata by id', async () => {
@@ -921,7 +921,7 @@ describe('Lance vector store tests', () => {
     });
 
     afterAll(async () => {
-      vectorDB.deleteTable(testTableName);
+      await vectorDB.deleteTable(testTableName);
     });
 
     it('should query vectors with metadata', async () => {
@@ -1121,7 +1121,7 @@ describe('Lance vector store tests', () => {
     });
 
     afterAll(async () => {
-      vectorDB.deleteTable(testTableName);
+      await vectorDB.deleteTable(testTableName);
     });
 
     describe('Simple queries', () => {
@@ -1203,7 +1203,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should filter with negated equality (equivalent to $not)', async () => {
@@ -1291,7 +1291,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should query with logical $or operator for metadata filtering', async () => {
@@ -1357,7 +1357,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should query with $and operator using comparison operators', async () => {
@@ -1428,7 +1428,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should query with array $in operator', async () => {
@@ -1510,7 +1510,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should query with nested comparison and pattern matching', async () => {
@@ -1595,7 +1595,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should query with regex pattern matching', async () => {
@@ -1701,7 +1701,7 @@ describe('Lance vector store tests', () => {
       });
 
       afterAll(async () => {
-        vectorDB.deleteTable(testTableName);
+        await vectorDB.deleteTable(testTableName);
       });
 
       it('should find documents with null fields using direct null comparison', async () => {
@@ -2306,16 +2306,21 @@ describe('Lance vector store tests', () => {
       // 256+ rows are required for index creation; place the exact/far vectors deterministically.
       const rows = Array.from({ length: 300 }, (_, i) => ({
         id: String(i + 1),
-        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [0.2, 0.2, 0.2 + i / 1000],
+        vector:
+          i === 0
+            ? [1, 0, 0, 0, 0, 0, 0, 0]
+            : i === 1
+              ? [0, 1, 0, 0, 0, 0, 0, 0]
+              : [0.2, 0.2, 0.2 + i / 1000, 0, 0, 0, 0, 0],
       }));
       await vectorDB.createTable(tableName, rows);
-      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });
+      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 8, metric: 'euclidean' });
 
       // No metric passed: resolveQueryMetric should read 'euclidean' from the index stats.
       const results = await vectorDB.query({
         indexName: 'vector',
         tableName,
-        queryVector: [1, 0, 0],
+        queryVector: [1, 0, 0, 0, 0, 0, 0, 0],
         topK: 300,
       });
 
@@ -2338,15 +2343,20 @@ describe('Lance vector store tests', () => {
       const tableName = 'score_semantics_index_metric_conflict_' + Date.now();
       const rows = Array.from({ length: 300 }, (_, i) => ({
         id: String(i + 1),
-        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [0.2, 0.2, 0.2 + i / 1000],
+        vector:
+          i === 0
+            ? [1, 0, 0, 0, 0, 0, 0, 0]
+            : i === 1
+              ? [0, 1, 0, 0, 0, 0, 0, 0]
+              : [0.2, 0.2, 0.2 + i / 1000, 0, 0, 0, 0, 0],
       }));
       await vectorDB.createTable(tableName, rows);
-      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });
+      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 8, metric: 'euclidean' });
 
       const results = await vectorDB.query({
         indexName: 'vector',
         tableName,
-        queryVector: [1, 0, 0],
+        queryVector: [1, 0, 0, 0, 0, 0, 0, 0],
         topK: 300,
         metric: 'cosine',
       });
