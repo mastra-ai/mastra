@@ -23,7 +23,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { PlatformSandbox } from '@mastra/platform-workspace';
+import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
@@ -154,10 +154,20 @@ function localSandboxEnv(): Record<string, string> {
 const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
 const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 
+// Private-network exec: the workspace-proxy discovers each sandbox's private
+// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
+// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
+// in-process registry; `PlatformSandbox.executeCommand()` reads it on every
+// exec to dial the sidecar's `POST /exec` directly over Railway's private
+// network, falling back to the lease path when no address is registered or
+// a dial fails. Only constructed when `PlatformSandbox` is in play; a
+// `LocalSandbox` dev run has no sidecar and no need for the registry.
+const sandboxAddressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
+
 // Use PlatformSandbox only when its complete identity is configured. Otherwise
 // fall back to LocalSandbox for single-user development.
 const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox()
+  ? new PlatformSandbox({ addressRegistry: sandboxAddressRegistry })
   : new LocalSandbox({
       workingDirectory:
         process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
