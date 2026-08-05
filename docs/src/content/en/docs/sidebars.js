@@ -700,23 +700,17 @@ const sidebars = {
       items: [
         {
           type: 'category',
-          label: 'Observability',
+          label: 'Tracing',
           items: [
             {
               type: 'doc',
               id: 'observability/overview',
-              key: 'observability.overview',
               label: 'Overview',
             },
             {
               type: 'doc',
-              id: 'observability/config',
-              label: 'Config',
-            },
-            {
-              type: 'doc',
-              id: 'observability/storage',
-              label: 'Storage',
+              id: 'observability/tracing/overview',
+              label: 'Tracing',
             },
             {
               type: 'doc',
@@ -728,17 +722,114 @@ const sidebars = {
               id: 'observability/feedback',
               label: 'Feedback',
             },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Tracing',
-          items: [
             {
-              type: 'doc',
-              id: 'observability/tracing/overview',
-              key: 'observability.tracing.overview',
-              label: 'Overview',
+              type: 'category',
+              label: 'Integrations',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/overview',
+                  label: 'Overview',
+                },
+                {
+                  type: 'category',
+                  label: 'Bridges',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/bridges/datadog',
+                      label: 'Datadog',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/bridges/otel',
+                      label: 'OpenTelemetry',
+                    },
+                  ],
+                },
+                {
+                  type: 'category',
+                  label: 'Exporters',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/mastra-storage',
+                      label: 'Mastra Storage',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/mastra-platform',
+                      label: 'Mastra platform',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/arize',
+                      label: 'Arize',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/arthur',
+                      label: 'Arthur',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/braintrust',
+                      label: 'Braintrust',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/confident-ai',
+                      label: 'Confident AI',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/datadog',
+                      label: 'Datadog',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/laminar',
+                      label: 'Laminar',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/langfuse',
+                      label: 'Langfuse',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/langsmith',
+                      label: 'LangSmith',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/otel',
+                      label: 'OpenTelemetry',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/posthog',
+                      label: 'PostHog',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/sentry',
+                      label: 'Sentry',
+                    },
+                  ],
+                },
+                {
+                  type: 'category',
+                  label: 'Processors',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/processors/sensitive-data-filter',
+                      label: 'SensitiveDataFilter',
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },
@@ -755,110 +846,6 @@ const sidebars = {
               type: 'doc',
               id: 'observability/metrics/querying',
               label: 'Querying metrics',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Integrations',
-          items: [
-            {
-              type: 'doc',
-              id: 'observability/integrations/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'category',
-              label: 'Bridges',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/bridges/datadog',
-                  label: 'Datadog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/bridges/otel',
-                  label: 'OpenTelemetry',
-                },
-              ],
-            },
-            {
-              type: 'category',
-              label: 'Exporters',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/mastra-storage',
-                  label: 'Mastra Storage',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/mastra-platform',
-                  label: 'Mastra platform',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/arize',
-                  label: 'Arize',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/arthur',
-                  label: 'Arthur',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/braintrust',
-                  label: 'Braintrust',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/datadog',
-                  label: 'Datadog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/laminar',
-                  label: 'Laminar',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/langfuse',
-                  label: 'Langfuse',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/langsmith',
-                  label: 'LangSmith',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/otel',
-                  label: 'OpenTelemetry',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/posthog',
-                  label: 'PostHog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/sentry',
-                  label: 'Sentry',
-                },
-              ],
-            },
-            {
-              type: 'category',
-              label: 'Processors',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/processors/sensitive-data-filter',
-                  label: 'SensitiveDataFilter',
-                },
-              ],
             },
           ],
         },
