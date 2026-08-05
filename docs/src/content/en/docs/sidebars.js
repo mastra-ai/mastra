@@ -710,13 +710,11 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/overview',
-              key: 'observability.overview',
               label: 'Overview',
             },
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              key: 'observability.tracing.overview',
               label: 'Tracing',
             },
             {
