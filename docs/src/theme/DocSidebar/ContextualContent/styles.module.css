@@ -3,9 +3,10 @@
 }
 
 .backButton {
-  display: inline-flex;
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
   width: 100%;
   padding: var(--ifm-menu-link-padding-vertical) 0;
   border: 0;
@@ -13,11 +14,28 @@
   background: transparent;
   font: inherit;
   font-weight: var(--ifm-font-weight-semibold);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
+}
+
+.backArrow {
+  position: absolute;
+  left: 0;
+  transition: all 150ms ease-in-out;
 }
 
 .backButton:hover,
 .backButton:focus-visible {
   color: var(--ifm-menu-color-active);
+}
+
+.backButton:hover .backArrow,
+.backButton:focus-visible .backArrow {
+  transform: translateX(-0.25rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backArrow {
+    transition: none;
+  }
 }

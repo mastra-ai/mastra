@@ -235,6 +235,31 @@ async function openMobileSidebar(page: Page) {
 }
 
 test.describe('Contextual sidebar', () => {
+  test('desktop: centers the Back label and animates its left-aligned arrow', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
+
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root')).then(link => link.click())
+    await expect(page).toHaveURL('/docs/agents/overview')
+
+    const backButton = visibleSidebarPane(page, 'contextual').getByRole('button', { name: /Back to/ })
+    const backArrow = backButton.locator('span').first()
+    const backLabel = backButton.locator('span').last()
+    const [buttonBox, arrowBox, labelBox] = await Promise.all([
+      backButton.boundingBox(),
+      backArrow.boundingBox(),
+      backLabel.boundingBox(),
+    ])
+    expect(buttonBox).not.toBeNull()
+    expect(arrowBox).not.toBeNull()
+    expect(labelBox).not.toBeNull()
+    expect(Math.abs(labelBox!.x + labelBox!.width / 2 - (buttonBox!.x + buttonBox!.width / 2))).toBeLessThan(1)
+    expect(Math.abs(arrowBox!.x - buttonBox!.x)).toBeLessThan(1)
+    await expect(backArrow).toHaveCSS('transform', 'none')
+    await backButton.hover()
+    await expect(backArrow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -4, 0)')
+  })
+
   test('desktop: navigates, renders configured items, and restores root focus on Back', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
     const getErrors = trackJsErrors(page)

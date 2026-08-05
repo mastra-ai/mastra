@@ -19,8 +19,10 @@ export default function ContextualContent({ activePath, items, label, onBack, on
     <>
       <div className={styles.header}>
         <button className={styles.backButton} type="button" aria-label={`Back to ${label}`} onClick={onBack}>
-          <span aria-hidden="true">←</span>
-          {label}
+          <span className={styles.backArrow} aria-hidden="true">
+            ←
+          </span>
+          <span className={styles.backLabel}>{label}</span>
         </button>
       </div>
       <ContextualSidebarPaneProvider>
