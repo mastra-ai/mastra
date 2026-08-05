@@ -1249,11 +1249,11 @@ export class QualityGuardrail implements Processor {
 
 ### `processToolResult`
 
-Processes a tool's result after `tool.execute()` returns and before the result is added to the message list or fed to the next LLM call. Symmetric with `processOutputStep`, which fires before tool execution. Use this method to scan tool output for prompt injection, redact sensitive fields, or abort the run with `abort('reason', { retry: true })`.
+Processes a tool's result after `tool.execute()` returns and before the result is added to the message list or fed to the next LLM call. Symmetric with `processOutputStep`, which fires before tool execution. Use this method to scan tool output for prompt injection or redact sensitive fields. To reject the result entirely, abort the run with `abort('reason', { retry: true })`.
 
-To replace the tool's result, mutate `messageList` in place via `messageList.updateToolInvocation`. The runtime re-reads the post-processor result from the message list and overwrites the downstream tool-result stream chunk before it is enqueued, so streaming clients see the processed value.
+To replace the tool's result, mutate `messageList` in place via `messageList.updateToolInvocation`. The runtime re-reads the post-processor result from the message list and overwrites the downstream tool-result stream chunk before it's enqueued, so streaming clients see the processed value.
 
-This method does not fire when `tool.execute()` throws; it is called only for successful tool executions where a result is available.
+This method doesn't fire when `tool.execute()` throws. It only runs for successful tool executions where a result is available.
 
 ```typescript prettier:false
 processToolResult?(args: ProcessToolResultArgs): ProcessorMessageResult;
