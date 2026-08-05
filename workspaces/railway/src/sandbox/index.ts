@@ -384,6 +384,8 @@ export class RailwaySandbox extends MastraSandbox {
       this._cancelCheckpointRefresh();
       return;
     }
+    await this._checkpointRefreshInFlight;
+
     const sandbox = this._sandbox;
     this._sandbox = null;
     try {
