@@ -551,7 +551,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           const res = await fetch(`http://localhost:${port}/transitive-workspace`);
           const body = await res.json();
           expect(res.status).toBe(200);
-          expect(body).toEqual({ value: 'a -> b -> c' });
+          expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
         } finally {
           if (proc) {
             try {
