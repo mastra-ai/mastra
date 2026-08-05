@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { glob } from 'tinyglobby';
 
 export async function resolvePublishedVersion(registry: string, packageName: string, tag: string) {
-  const response = await fetch(`${registry}/${packageName.replace('/', '%2f')}`);
+  const response = await fetch(`${registry}/${encodeURIComponent(packageName)}`);
   if (!response.ok) throw new Error(`Could not read ${packageName} metadata from ${registry}: ${response.status}`);
   const metadata = (await response.json()) as { 'dist-tags'?: Record<string, string> };
   const version = metadata['dist-tags']?.[tag];
