@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import type { AgentControllerEvent } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { QueryClient } from '@tanstack/react-query';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
@@ -467,5 +469,104 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
     expect(result.current.state?.threadId).toBe('state-thread-2');
+  });
+
+  describe('persisted message cache', () => {
+    const encoder = new TextEncoder();
+
+    function stubStreamingSession() {
+      let emit: (event: AgentControllerEvent) => void = () => {};
+
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+          HttpResponse.json({ controllerId, resourceId, threadId: 'state-thread' }),
+        ),
+        http.get(sessionUrl, () =>
+          HttpResponse.json({
+            controllerId,
+            resourceId,
+            modeId: 'build',
+            modelId: 'openai/gpt-4o-mini',
+            threadId: 'state-thread',
+            running: false,
+            settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+          }),
+        ),
+        http.get(
+          `${sessionUrl}/stream`,
+          () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                },
+                cancel() {},
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+      );
+
+      return { emit: (event: AgentControllerEvent) => emit(event) };
+    }
+
+    function dbMessage(id: string, text: string): MastraDBMessage {
+      return {
+        id,
+        role: 'assistant',
+        createdAt: new Date('2026-07-23T00:00:00.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text }] },
+      };
+    }
+
+    function cachedMessages(client: QueryClient) {
+      return client.getQueryData<MastraDBMessage[]>(
+        queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100),
+      );
+    }
+
+    it('appends a streamed message to the cached window so a remount reads it', async () => {
+      const { emit } = stubStreamingSession();
+      const { client, result } = renderHookWithProviders(() =>
+        useAgentControllerConnection({ ...hookArgs, onEvent: () => {} }),
+      );
+      client.setQueryData(queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100), [
+        dbMessage('kickoff', 'review this PR'),
+      ]);
+
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      emit({ type: 'message_end', message: dbMessage('reply-1', 'here is the review') });
+
+      await waitFor(() => expect(cachedMessages(client)?.map(m => m.id)).toEqual(['kickoff', 'reply-1']));
+    });
+
+    it('replaces the cached copy of a message it already holds', async () => {
+      const { emit } = stubStreamingSession();
+      const { client, result } = renderHookWithProviders(() =>
+        useAgentControllerConnection({ ...hookArgs, onEvent: () => {} }),
+      );
+      client.setQueryData(queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100), [
+        dbMessage('reply-1', 'partial'),
+      ]);
+
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      emit({ type: 'message_end', message: dbMessage('reply-1', 'complete') });
+
+      await waitFor(() => expect(cachedMessages(client)).toHaveLength(1));
+      expect(cachedMessages(client)?.[0]?.content.parts).toEqual([{ type: 'text', text: 'complete' }]);
+    });
+
+    it('leaves a thread nobody has fetched out of the cache', async () => {
+      const { emit } = stubStreamingSession();
+      const { client, result } = renderHookWithProviders(() =>
+        useAgentControllerConnection({ ...hookArgs, onEvent: () => {} }),
+      );
+
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      emit({ type: 'message_end', message: dbMessage('reply-1', 'here is the review') });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(cachedMessages(client)).toBeUndefined();
+    });
   });
 });

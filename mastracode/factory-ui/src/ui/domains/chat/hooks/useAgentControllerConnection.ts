@@ -1,5 +1,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
@@ -87,6 +89,11 @@ export function useAgentControllerConnection({
         { updatedAt },
       );
     }
+    const persisted = persistedMessage(event);
+    const streamedThreadId = syncQuery.data?.threadId;
+    if (persisted && streamedThreadId) {
+      cacheThreadMessage(queryClient, { agentControllerId, resourceId, threadId: streamedThreadId }, persisted);
+    }
     onEvent(event);
   };
 
@@ -112,6 +119,58 @@ export function useAgentControllerConnection({
     state: syncQuery.data,
     threadId: syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
   };
+}
+
+function isDBMessage(value: unknown): value is MastraDBMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'role' in value &&
+    'content' in value
+  );
+}
+
+/** The persisted form of a message, emitted once the model finishes writing it. */
+function persistedMessage(event: AgentControllerEvent): MastraDBMessage | undefined {
+  if (event.type !== 'message_end') return undefined;
+  return isDBMessage(event.message) ? event.message : undefined;
+}
+
+/**
+ * Fold a persisted message into every cached window of its thread.
+ *
+ * The transcript reducer is the only place the live stream lands, and it dies
+ * with the thread route, so without this the cached window stays frozen at
+ * whatever the thread held when it was first read — re-entering the route would
+ * rebuild the transcript from a snapshot the run has long moved past.
+ *
+ * Matching on the limit-less key prefix covers every window the user has grown
+ * to; a thread nobody has fetched has no cache entry and stays untouched.
+ */
+function cacheThreadMessage(
+  queryClient: QueryClient,
+  address: { agentControllerId: string; resourceId: string; threadId: string },
+  message: MastraDBMessage,
+) {
+  queryClient.setQueriesData<MastraDBMessage[]>(
+    {
+      queryKey: queryKeys.agentControllerThreadMessages(
+        address.agentControllerId,
+        address.resourceId,
+        address.threadId,
+      ),
+    },
+    current => {
+      if (!current) return current;
+      const index = current.findIndex(candidate => candidate.id === message.id);
+      if (index === -1) return [...current, message];
+      const next = [...current];
+      next[index] = message;
+      return next;
+    },
+  );
 }
 
 export function deriveConnectionStatus({
