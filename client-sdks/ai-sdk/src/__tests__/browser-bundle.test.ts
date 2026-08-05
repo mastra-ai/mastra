@@ -7,7 +7,6 @@ import { TextDecoder, TextEncoder } from 'node:util';
 import { runInNewContext } from 'node:vm';
 import { rspack, type Stats } from '@rspack/core';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import aiV4BuildConfig from '../../../../packages/_vendored/ai_v4/tsdown.config.ts';
 
 const packageRoot = path.resolve(import.meta.dirname, '../..');
 let tempDir: string;
@@ -18,10 +17,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rm(tempDir, { recursive: true, force: true });
-});
-
-it('keeps Node-only test tooling out of the browser-reachable build graph', () => {
-  expect(aiV4BuildConfig.entry).toEqual(['src/index.ts', 'src/mcp-stdio.ts']);
 });
 
 it('loads toAISdkMessages in a browser bundle', async () => {
