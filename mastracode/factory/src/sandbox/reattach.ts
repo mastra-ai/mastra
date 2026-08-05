@@ -9,5 +9,5 @@ import { registerSandboxReattach as registerOnCore } from '@mastra/code-sdk/agen
 import type { SandboxFleet } from './fleet.js';
 
 export function registerSandboxReattach(fleet: SandboxFleet): void {
-  registerOnCore(providerSandboxId => fleet.reattachSandbox(providerSandboxId));
+  registerOnCore((providerSandboxId, options) => fleet.reattachSandbox(providerSandboxId, options));
 }

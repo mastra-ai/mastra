@@ -134,7 +134,7 @@ vi.mock('../sandbox-reattach.js', () => ({
   })),
 }));
 
-function createSandboxRequestContext(state: Record<string, unknown>) {
+function createSandboxRequestContext(state: Record<string, unknown>, user?: { workosId?: string; id?: string }) {
   const requestContext = new RequestContext();
   const getState = () => state;
   requestContext.set('controller', {
@@ -142,6 +142,7 @@ function createSandboxRequestContext(state: Record<string, unknown>) {
     getState,
     session: { state: { get: getState } },
   });
+  if (user) requestContext.set('user', user);
   return requestContext;
 }
 
@@ -168,6 +169,17 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/hello');
     // Reuse key embeds the bound workdir (repo root here).
     expect(workspace.id).toBe('mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/hello');
+  });
+
+  it('forwards the caller subject when reattaching a project sandbox', async () => {
+    const { getDynamicWorkspace } = await import('../workspace.js');
+    const { reattachProjectSandbox } = await import('../sandbox-reattach.js');
+
+    await getDynamicWorkspace({
+      requestContext: createSandboxRequestContext({ ...baseState }, { id: 'external-user-1' }) as any,
+    });
+
+    expect(reattachProjectSandbox).toHaveBeenCalledWith('sbx-1', { actingUserId: 'external-user-1' });
   });
 
   it('loads sandbox project skills without adding Web Factory skills', async () => {

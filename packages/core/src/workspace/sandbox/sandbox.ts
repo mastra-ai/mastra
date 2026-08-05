@@ -106,6 +106,8 @@ export interface SandboxCloneOptions {
    * Providers without checkpoint support may ignore this option.
    */
   checkpointName?: string;
+  /** Opaque user subject attributed to provider requests for this clone. */
+  actingUserId?: string;
 }
 
 // =============================================================================

@@ -13,7 +13,14 @@ export interface ReattachedSandbox extends SandboxExec {
   start(): Promise<void>;
 }
 
-export type SandboxReattachFn = (providerSandboxId: string) => Promise<ReattachedSandbox>;
+export interface SandboxReattachOptions {
+  actingUserId?: string;
+}
+
+export type SandboxReattachFn = (
+  providerSandboxId: string,
+  options?: SandboxReattachOptions,
+) => Promise<ReattachedSandbox>;
 
 let reattachFn: SandboxReattachFn | undefined;
 
@@ -23,11 +30,14 @@ export function registerSandboxReattach(fn: SandboxReattachFn): void {
 }
 
 /** Reattach to an already-provisioned sandbox by provider id. */
-export async function reattachProjectSandbox(providerSandboxId: string): Promise<ReattachedSandbox> {
+export async function reattachProjectSandbox(
+  providerSandboxId: string,
+  options?: SandboxReattachOptions,
+): Promise<ReattachedSandbox> {
   if (!reattachFn) {
     throw new Error(
       'No sandbox reattach implementation registered. Sandbox-backed workspaces are only available when the web surface has called registerSandboxReattach().',
     );
   }
-  return reattachFn(providerSandboxId);
+  return reattachFn(providerSandboxId, options);
 }

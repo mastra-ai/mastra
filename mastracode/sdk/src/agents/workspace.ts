@@ -193,6 +193,7 @@ async function getSandboxWorkspace({
   configDir,
   mastra,
   skillExtension,
+  actingUserId,
 }: {
   projectRepositoryId: string;
   sandboxId: string;
@@ -201,6 +202,7 @@ async function getSandboxWorkspace({
   configDir: string;
   mastra?: Mastra;
   skillExtension?: WorkspaceSkillExtension;
+  actingUserId?: string;
 }): Promise<Workspace> {
   // Bind the workspace to the active worktree when one is set, so file tools and
   // command tools operate inside the feature branch's working tree rather than
@@ -226,7 +228,7 @@ async function getSandboxWorkspace({
     // Not registered yet.
   }
 
-  const sandbox = await reattachProjectSandbox(sandboxId);
+  const sandbox = await reattachProjectSandbox(sandboxId, { actingUserId });
   const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
   const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
   const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
@@ -253,6 +255,9 @@ export async function getDynamicWorkspace({
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
+  const user = requestContext.get('user') as { workosId?: unknown; id?: unknown } | undefined;
+  const actingUserId =
+    typeof user?.workosId === 'string' ? user.workosId : typeof user?.id === 'string' ? user.id : undefined;
 
   // Repository-backed project: the repo lives inside a remote sandbox, not on
   // the server host. Reattach to the already-provisioned + materialized sandbox
@@ -267,6 +272,7 @@ export async function getDynamicWorkspace({
       configDir: state.configDir ?? DEFAULT_CONFIG_DIR,
       mastra,
       skillExtension,
+      actingUserId,
     });
   }
 

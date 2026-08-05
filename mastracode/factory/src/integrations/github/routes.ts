@@ -1098,7 +1098,7 @@ async function resolveProjectSandbox(options: {
   if (!sandboxRow.sandboxId) {
     throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
   }
-  return fleet.reattachSandbox(sandboxRow.sandboxId);
+  return fleet.reattachSandbox(sandboxRow.sandboxId, { actingUserId: sandboxRow.userId });
 }
 
 /**
@@ -1367,6 +1367,7 @@ function buildProjectGitRoutes({
             projectRepositoryId: session.projectRepositoryId,
             sandboxId: session.sandboxId,
             sandboxWorkdir: session.sandboxWorkdir,
+            actingUserId: session.userId,
           });
           await github.sourceControlStorage.sandboxPool.release({
             orgId: session.orgId,
@@ -1378,7 +1379,7 @@ function buildProjectGitRoutes({
         } else if (session.sandboxId) {
           let sandbox: MaterializationSandbox | undefined;
           try {
-            sandbox = await fleet.reattachSandbox(session.sandboxId);
+            sandbox = await fleet.reattachSandbox(session.sandboxId, { actingUserId: session.userId });
           } catch {
             // The provider may already have reclaimed the sandbox.
           }
@@ -1629,7 +1630,9 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
-            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
+            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!, {
+              actingUserId: sandboxRow.userId,
+            });
             await teardownProjectSandbox({
               fleet,
               row: sandboxRow,

@@ -1,6 +1,7 @@
 export interface PlatformClientOptions {
   accessToken?: string;
   projectId?: string;
+  actingUserId?: string;
   fetch?: typeof fetch;
 }
 
@@ -26,6 +27,7 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
   return {
     accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
+    actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
     fetch: options.fetch ?? fetch,
   };
@@ -82,6 +84,7 @@ export class PlatformApiError extends Error {
 export class PlatformClient {
   readonly accessToken: string;
   readonly projectId: string;
+  readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
   readonly fetch: typeof fetch;
 
@@ -89,6 +92,7 @@ export class PlatformClient {
     const resolved = resolvePlatformOptions(options);
     this.accessToken = resolved.accessToken;
     this.projectId = resolved.projectId;
+    this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
     this.fetch = resolved.fetch;
   }
@@ -101,6 +105,7 @@ export class PlatformClient {
 
     const headers = new Headers(options.headers);
     headers.set('authorization', `Bearer ${this.accessToken}`);
+    if (this.actingUserId) headers.set('x-acting-user-id', this.actingUserId);
 
     // Strip our helper-only field so the underlying fetch sees a valid RequestInit.
     const { query: _query, ...fetchOptions } = options;
