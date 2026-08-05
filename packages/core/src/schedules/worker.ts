@@ -1,4 +1,4 @@
-import type { AgentSignalIfIdleOptions } from '../agent/types';
+import type { AgentSignal, AgentSignalIfIdleOptions } from '../agent/types';
 import type { Event, EventCallback } from '../events/types';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
@@ -388,21 +388,21 @@ export async function executeAgentSchedule(
 
     let signalResult;
     try {
-      signalResult = agent.sendSignal(
-        {
-          type: effective.signalType ?? 'notification',
-          tagName: effective.tagName ?? 'schedule',
-          contents: effective.prompt,
-          ...(effective.attributes ? { attributes: effective.attributes } : {}),
-          providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
-        },
-        {
-          resourceId: effective.resourceId,
-          threadId: effective.threadId,
-          ...(effective.ifActive ? { ifActive: effective.ifActive } : {}),
-          ...(effective.ifIdle ? { ifIdle: buildIfIdleOptions(effective.ifIdle) } : {}),
-        },
-      );
+      const signalType = effective.signalType ?? 'notification';
+      const signalBase = {
+        tagName: effective.tagName ?? 'schedule',
+        contents: effective.prompt,
+        ...(effective.attributes ? { attributes: effective.attributes } : {}),
+        providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
+      };
+      const signal: AgentSignal =
+        signalType === 'state' ? { ...signalBase, type: 'state' } : { ...signalBase, type: signalType };
+      signalResult = agent.sendSignal(signal, {
+        resourceId: effective.resourceId,
+        threadId: effective.threadId,
+        ...(effective.ifActive ? { ifActive: effective.ifActive } : {}),
+        ...(effective.ifIdle ? { ifIdle: buildIfIdleOptions(effective.ifIdle) } : {}),
+      });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       await safeHookCall(log, () =>
