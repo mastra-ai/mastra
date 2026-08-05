@@ -66,7 +66,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'agents/agent-approval',
-              label: 'Agent Approval',
+              label: 'Human-in-the-Loop',
             },
             {
               type: 'doc',
@@ -130,7 +130,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workflows/human-in-the-loop',
-              label: 'Human-in-the-loop',
+              label: 'Human-in-the-Loop',
             },
             {
               type: 'doc',
@@ -211,7 +211,6 @@ const sidebars = {
         {
           type: 'category',
           label: 'Memory',
-          collapsed: true,
           items: [
             {
               type: 'doc',
@@ -246,7 +245,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'memory/multi-user-threads',
-              label: 'Multi-user Threads',
+              label: 'Multi-User Threads',
             },
           ],
         },
@@ -344,7 +343,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'capabilities/channels/other-adapters',
-              label: 'More',
+              label: 'Other Adapters',
             },
           ],
         },
@@ -409,7 +408,6 @@ const sidebars = {
             {
               type: 'category',
               label: 'MCP',
-              collapsed: true,
               items: [
                 {
                   type: 'doc',
@@ -469,55 +467,6 @@ const sidebars = {
               type: 'doc',
               id: 'editor/overview',
               label: 'Editor',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Deployment',
-          items: [
-            {
-              type: 'doc',
-              id: 'deployment/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/mastra-server',
-              label: 'Mastra Server',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/monorepo',
-              label: 'Monorepo',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/cloud-providers',
-              label: 'Cloud Providers',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/sandbox',
-              label: 'Sandbox',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/web-framework',
-              label: 'Web Framework',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/workflow-runners',
-              label: 'Workflow Runners',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/workers',
-              label: 'Workers',
-              customProps: {
-                tags: ['beta'],
-              },
             },
           ],
         },
@@ -644,6 +593,55 @@ const sidebars = {
             {
               type: 'doc',
               id: 'server/auth/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Deployment',
+          items: [
+            {
+              type: 'doc',
+              id: 'deployment/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/mastra-server',
+              label: 'Mastra Server',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/monorepo',
+              label: 'Monorepo',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/cloud-providers',
+              label: 'Cloud Providers',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/web-framework',
+              label: 'Web Framework',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workflow-runners',
+              label: 'Workflow Runners',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
               label: 'Workers',
               customProps: {
                 tags: ['beta'],
