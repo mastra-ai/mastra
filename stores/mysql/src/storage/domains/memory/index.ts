@@ -12,6 +12,7 @@ import {
   TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
+  validateStorageMetadataFilter,
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
@@ -30,6 +31,7 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageMetadataFilter,
   StorageResourceType,
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
@@ -142,6 +144,28 @@ function parseJSON<T>(value: T | string | null | undefined): T | null {
     return JSON.parse(value) as T;
   } catch {
     return null;
+  }
+}
+
+function addMySQLMessageMetadataFilter(
+  conditions: string[],
+  params: any[],
+  metadataFilter: StorageMetadataFilter | undefined,
+): void {
+  if (!metadataFilter) return;
+
+  for (const [key, value] of Object.entries(metadataFilter)) {
+    const path = `$.metadata.${key}`;
+    conditions.push(`JSON_VALID(${quoteIdentifier('content', 'column name')})`);
+    conditions.push(`JSON_CONTAINS_PATH(${quoteIdentifier('content', 'column name')}, 'one', ?)`);
+    params.push(path);
+    if (value === null) {
+      conditions.push(`JSON_TYPE(JSON_EXTRACT(${quoteIdentifier('content', 'column name')}, ?)) = 'NULL'`);
+      params.push(path);
+    } else {
+      conditions.push(`JSON_EXTRACT(${quoteIdentifier('content', 'column name')}, ?) = CAST(? AS JSON)`);
+      params.push(path, JSON.stringify(value));
+    }
   }
 }
 
@@ -449,9 +473,22 @@ export class MemoryMySQL extends MemoryStorage {
 
     const includeMessages: MastraDBMessage[] = [];
     const seenIds = new Set<string>();
+    const unresolvedIds = include.filter(inc => !inc.threadId).map(inc => inc.id);
+    const resolvedThreadIds = new Map<string, string>();
+
+    if (unresolvedIds.length > 0) {
+      const placeholders = unresolvedIds.map(() => '?').join(', ');
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT id, thread_id FROM ${formatTableName(TABLE_MESSAGES)} WHERE id IN (${placeholders})`,
+        unresolvedIds,
+      );
+      for (const row of rows) {
+        resolvedThreadIds.set(row.id, row.thread_id);
+      }
+    }
 
     for (const inc of include) {
-      const targetThreadId = inc.threadId ?? threadId;
+      const targetThreadId = inc.threadId ?? resolvedThreadIds.get(inc.id) ?? threadId;
 
       let threadMessages = messagesByThread.get(targetThreadId);
       if (!threadMessages) {
@@ -462,6 +499,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       // If the current cached set might be partial (e.g., paginated main thread), reload full thread
       const needsContext =
+        !threadMessages.some(message => message.id === inc.id) ||
         (inc.withPreviousMessages ?? 0) > 0 ||
         (inc.withNextMessages ?? 0) > 0 ||
         threadMessages.length < (inc.withNextMessages ?? 0) + (inc.withPreviousMessages ?? 0) + 1;
@@ -1204,6 +1242,7 @@ export class MemoryMySQL extends MemoryStorage {
       }
     ).selectBy;
     const include = args.include ?? selectBy?.include;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -1264,6 +1303,8 @@ export class MemoryMySQL extends MemoryStorage {
         conditions.push(`${quoteIdentifier('createdAt', 'column name')} ${endOp} ?`);
         params.push(transformToSqlValue(filter.dateRange.end));
       }
+
+      addMySQLMessageMetadataFilter(conditions, params, metadataFilter);
 
       if (selectBy?.vectorSearchString) {
         conditions.push(`${quoteIdentifier('content', 'column name')} LIKE ?`);
@@ -1372,7 +1413,7 @@ export class MemoryMySQL extends MemoryStorage {
       const mainThreadMessageCount = messages.filter(
         msg => msg.threadId !== undefined && threadIdSet.has(msg.threadId),
       ).length;
-      const hasMore = include && include.length ? (mainThreadMessageCount >= total ? false : baseHasMore) : baseHasMore;
+      const hasMore = metadataFilter || !include?.length || mainThreadMessageCount < total ? baseHasMore : false;
 
       return {
         messages,
@@ -1405,6 +1446,7 @@ export class MemoryMySQL extends MemoryStorage {
     args: StorageListMessagesByResourceIdInput,
   ): Promise<StorageListMessagesOutput> {
     const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
       throw new MastraError(
@@ -1453,6 +1495,8 @@ export class MemoryMySQL extends MemoryStorage {
         conditions.push(`${quoteIdentifier('createdAt', 'column name')} ${endOp} ?`);
         params.push(transformToSqlValue(filter.dateRange.end));
       }
+
+      addMySQLMessageMetadataFilter(conditions, params, metadataFilter);
 
       const whereSql = `WHERE ${conditions.join(' AND ')}`;
       const tableName = formatTableName(TABLE_MESSAGES);

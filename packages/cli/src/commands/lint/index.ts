@@ -178,7 +178,12 @@ export function printLintReport(result: LintResult, options: { strict?: boolean 
   for (const issue of result.issues) {
     const prefix =
       issue.severity === 'error' || warningsAreErrors ? pc.red(`[${issue.code}]`) : pc.yellow(`[${issue.code}]`);
-    const message = `${prefix} ${issue.message}\n  ${pc.dim('scope:')} ${issue.scope}\n  ${pc.dim('→')} ${issue.fix}`;
+    // fix can be a string (one line) or string[] (one arrow line per step,
+    // used by preflight-sourced issues so the DB provisioning options don't
+    // squash into one wall of text).
+    const fixLines = Array.isArray(issue.fix) ? issue.fix : [issue.fix];
+    const fixBlock = fixLines.map(line => `  ${pc.dim('→')} ${line}`).join('\n');
+    const message = `${prefix} ${issue.message}\n  ${pc.dim('scope:')} ${issue.scope}\n${fixBlock}`;
 
     if (issue.severity === 'error' || warningsAreErrors) {
       p.log.error(message);

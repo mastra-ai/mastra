@@ -1,10 +1,10 @@
 # React Best Practices Rule Catalog
 
-**Version 0.2.0**
+**Version 0.3.0**
 Mastra Engineering
 January 2026
 
-This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 25 rules across 9 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
+This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 26 rules across 9 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
 
 ## How to Use This Catalog
 
@@ -22,7 +22,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | 4        | Re-render Optimization    | MEDIUM                        | 6          |
 | 5        | Rendering Performance     | MEDIUM                        | 2          |
 | 6        | JavaScript Performance    | LOW-MEDIUM                    | 3          |
-| 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 6          |
+| 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 7          |
 | 8        | Testing                   | MEDIUM-HIGH (correctness)     | 2          |
 | 9        | Type Safety               | HIGH                          | 2          |
 
@@ -67,7 +67,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | ------------------------------------------ | ------------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `rerender-lazy-state-init`                 | Use Lazy State Initialization                                      | MEDIUM      | Pass expensive initial values to `useState` as a lazy initializer function.                                       | `references/rules/rerender-lazy-state-init.md`                 |
 | `rerender-transitions`                     | Use Transitions for Non-Urgent Updates                             | MEDIUM      | Mark frequent, non-urgent updates as transitions to keep the UI responsive.                                       | `references/rules/rerender-transitions.md`                     |
-| `rerender-useeffect-function-calls`        | useEffectEvent when using functions in useEffect                   | MEDIUM      | Use `useEffectEvent` for functions called from effects instead of overusing `useCallback`.                        | `references/rules/rerender-useeffect-function-calls.md`        |
+| `rerender-useeffect-function-calls`        | Use Effect Events only for effect-fired logic                      | MEDIUM      | Keep UI handlers plain; use Effect Events only for non-reactive logic invoked from an Effect.                     | `references/rules/rerender-useeffect-function-calls.md`        |
 | `rerender-no-useeffect-state-reset`        | Never Reset State with useEffect — Remount via Component Hierarchy | MEDIUM-HIGH | Remount stateful branches when upstream identity changes instead of resetting state in `useEffect`.               | `references/rules/rerender-no-useeffect-state-reset.md`        |
 | `rerender-no-usememo-usecallback`          | Do Not Add useMemo or useCallback                                  | MEDIUM      | Never introduce `useMemo` or `useCallback`; leave memoization decisions to developers with profiler evidence.     | `references/rules/rerender-no-usememo-usecallback.md`          |
 | `rerender-no-setstate-in-render-or-effect` | Do Not setState During Render or Effects                           | MEDIUM-HIGH | Derive values during render or move state ownership to an intermediate component instead of syncing with setters. | `references/rules/rerender-no-setstate-in-render-or-effect.md` |
@@ -92,6 +92,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | Rule                                     | Title                                                 | Impact      | Summary                                                                                                                                               | Canonical file                                               |
 | ---------------------------------------- | ----------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `structure-single-responsibility`        | One Component or Hook = One Responsibility = One File | MEDIUM-HIGH | Split domain components and hooks so each file owns one responsibility.                                                                               | `references/rules/structure-single-responsibility.md`        |
+| `structure-narrow-apis`                  | Keep Input and Output APIs Narrow                     | MEDIUM-HIGH | Split units with oversized props, arguments, or return objects; wrapping values in one object does not reduce responsibility.                         | `references/rules/structure-narrow-apis.md`                  |
 | `structure-component-naming`             | JSX-Returning Helpers Must Be Components              | MEDIUM      | Name reusable JSX-returning helpers as PascalCase components and call them with JSX.                                                                  | `references/rules/structure-component-naming.md`             |
 | `structure-derive-dont-duplicate`        | Derive Props and Params, Don't Pass Duplicates        | MEDIUM      | Compute a value from a param/prop already in scope instead of accepting it as a separate arg.                                                         | `references/rules/structure-derive-dont-duplicate.md`        |
 | `structure-complex-derived-logic`        | Extract Complex Derived Logic                         | MEDIUM-HIGH | Treat oversized conditions, nested ternaries, fallback chains, and `let`-based render prep as smells; move them into named locals and helper returns. | `references/rules/structure-complex-derived-logic.md`        |

@@ -32,7 +32,7 @@ export async function sendSlashCommandMessage(
     ctx.addUserMessage({
       id: `user-${Date.now()}`,
       role: 'user',
-      content: [{ type: 'text', text: displayText }],
+      content: { format: 2, parts: [{ type: 'text', text: displayText }] },
       createdAt: new Date(),
     });
     ctx.state.ui.requestRender();

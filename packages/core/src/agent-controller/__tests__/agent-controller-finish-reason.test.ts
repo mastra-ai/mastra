@@ -130,10 +130,10 @@ describe('AgentController: non-success finish reasons', () => {
     expect(errorEvent).toBeDefined();
     expect(errorEvent.error.message).toContain('content filter');
 
-    // The finalized assistant message carries the terminal error state.
+    // DB-native: the terminal error state lives on content.metadata.
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.stopReason).toBe('error');
-    expect(messageEnd?.message.errorMessage).toContain('content filter');
+    expect(messageEnd?.message.content.metadata.stopReason).toBe('error');
+    expect(messageEnd?.message.content.metadata.errorMessage).toContain('content filter');
   });
 
   it('surfaces a content-filter refusal even without provider stop details', async () => {
@@ -150,8 +150,8 @@ describe('AgentController: non-success finish reasons', () => {
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.stopReason).toBe('error');
-    expect(messageEnd?.message.errorMessage).toBe('The model stopped on a content filter.');
+    expect(messageEnd?.message.content.metadata.stopReason).toBe('error');
+    expect(messageEnd?.message.content.metadata.errorMessage).toBe('The model stopped on a content filter.');
   });
 
   it('surfaces a length finish reason as a terminal error state', async () => {
@@ -166,8 +166,8 @@ describe('AgentController: non-success finish reasons', () => {
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.stopReason).toBe('error');
-    expect(messageEnd?.message.errorMessage).toContain('maximum output length');
+    expect(messageEnd?.message.content.metadata.stopReason).toBe('error');
+    expect(messageEnd?.message.content.metadata.errorMessage).toContain('maximum output length');
   });
 
   it('emits an info notice when a server-side fallback model served the turn', async () => {
@@ -212,7 +212,7 @@ describe('AgentController: non-success finish reasons', () => {
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
     expect(events.some(e => e.type === 'error')).toBe(false);
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.stopReason).toBe('complete');
-    expect(messageEnd?.message.errorMessage).toBeUndefined();
+    expect(messageEnd?.message.content.metadata.stopReason).toBe('complete');
+    expect(messageEnd?.message.content.metadata.errorMessage).toBeUndefined();
   });
 });

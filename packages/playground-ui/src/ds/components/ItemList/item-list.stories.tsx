@@ -26,7 +26,7 @@ const agentColumns: ItemListColumn[] = [
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[500px]">
+    <div className="w-125">
       <ItemList>
         <ItemList.Header columns={columns} />
         <ItemList.Items>
@@ -56,7 +56,7 @@ export const Default: Story = {
 
 export const WithSelectedItem: Story = {
   render: () => (
-    <div className="w-[500px]">
+    <div className="w-125">
       <ItemList>
         <ItemList.Header columns={columns} />
         <ItemList.Items>
@@ -86,7 +86,7 @@ export const WithSelectedItem: Story = {
 
 export const EmptyList: Story = {
   render: () => (
-    <div className="w-[500px]">
+    <div className="w-125">
       <ItemList>
         <ItemList.Header columns={columns} />
         <ItemList.Message>No items found. Create your first item to get started.</ItemList.Message>
@@ -97,7 +97,7 @@ export const EmptyList: Story = {
 
 export const WithPagination: Story = {
   render: () => (
-    <div className="w-[500px]">
+    <div className="w-125">
       <ItemList>
         <ItemList.Header columns={columns} />
         <ItemList.Items>
@@ -122,7 +122,7 @@ export const WithPagination: Story = {
 
 export const AgentsList: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <ItemList>
         <ItemList.Header columns={agentColumns} />
         <ItemList.Items>

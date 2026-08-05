@@ -3572,12 +3572,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         resourceId: 'resource-3-generate',
       });
 
-      // TODO: output processors in v2 still run when the model throws an error! that doesn't seem right.
-      // it means in v2 our message history processor saves the input message.
-      if (version === `v1`) {
-        expect(result.messages.length).toBe(0);
-        expect(saveCallCount).toBe(0);
-      }
+      expect(result.messages.length).toBe(0);
+      expect(saveCallCount).toBe(0);
     });
 
     it('should save thread but not messages if error occurs during LLM generation', async () => {

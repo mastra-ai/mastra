@@ -1,0 +1,63 @@
+---
+extends: existence
+message: "AI puffery: '%s'. Use neutral, specific language."
+level: error
+ignorecase: true
+tokens:
+  - nestled in the
+  - nestled in a
+  - nestled between
+  - nestled among
+  - nestled alongside
+  - nestled within
+  - in the heart of
+  - at the heart of
+  - rich cultural heritage
+  - rich history and
+  - rich and diverse
+  - rich and vibrant
+  - vibrant community
+  - vibrant culture
+  - vibrant ecosystem
+  - vibrant atmosphere
+  - natural beauty
+  - natural beauty of
+  - a hub for
+  - a hub of
+  - a dynamic hub
+  - a thriving hub
+  - a cultural hub
+  - a beacon of
+  - a beacon for
+  - a treasure trove of
+  - a treasure trove for
+  - a shining example
+  - a prime example
+  - a masterclass in
+  - a testament to the
+  - a testament to its
+  - renowned for its
+  - renowned for their
+  - renowned for her
+  - renowned for his
+  - widely regarded as
+  - widely recognized as
+  - widely considered
+  - is home to
+  - has emerged as a
+  - has emerged as the
+  - has established itself as
+  - continues to evolve
+  - continues to thrive
+  - continues to grow
+  - continues to inspire
+  - left an indelible mark
+  - left an indelible impact
+  - leaving an indelible mark
+  - left a lasting impact
+  - left a lasting impression
+  - leaving a lasting impact
+  - a lasting legacy
+  - enduring legacy
+  - enduring impact
+  - an enduring legacy

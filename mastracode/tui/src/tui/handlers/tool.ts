@@ -9,7 +9,7 @@
 import { getToolCategory, TOOL_CATEGORIES } from '@mastra/code-sdk/permissions';
 import type { TaskItemInput } from '@mastra/core/signals';
 import { safeStringify } from '@mastra/core/utils';
-import { parse as parsePartialJson } from 'partial-json';
+import { parse as parseJsonRiver } from 'jsonriver';
 
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -21,6 +21,7 @@ import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
 import { showModalOverlay } from '../overlay.js';
+import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
 
@@ -48,6 +49,122 @@ function reconcileToolBoundaries(ctx: EventHandlerContext): void {
 }
 
 const pluginSubagentToolCallIds = new Set<string>();
+
+interface PendingShellOutput {
+  output: string;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const pendingShellOutputs = new Map<string, PendingShellOutput>();
+
+export function clearPendingShellOutputs(): void {
+  for (const pending of pendingShellOutputs.values()) {
+    clearTimeout(pending.timer);
+  }
+  pendingShellOutputs.clear();
+}
+
+type JsonObject = Record<string, unknown>;
+
+class AsyncStringQueue implements AsyncIterable<string> {
+  #chunks: string[] = [];
+  #waiting: ((result: IteratorResult<string>) => void) | undefined;
+  #closed = false;
+
+  push(chunk: string): void {
+    if (this.#closed) return;
+    const waiting = this.#waiting;
+    if (waiting) {
+      this.#waiting = undefined;
+      waiting({ value: chunk, done: false });
+      return;
+    }
+    this.#chunks.push(chunk);
+  }
+
+  close(): void {
+    this.#closed = true;
+    const waiting = this.#waiting;
+    if (waiting) {
+      this.#waiting = undefined;
+      waiting({ value: undefined, done: true });
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<string> {
+    return {
+      next: () => {
+        const chunk = this.#chunks.shift();
+        if (chunk !== undefined) return Promise.resolve({ value: chunk, done: false });
+        if (this.#closed) return Promise.resolve({ value: undefined, done: true });
+        return new Promise(resolve => {
+          this.#waiting = resolve;
+        });
+      },
+    };
+  }
+}
+
+interface ToolInputParserState {
+  queue: AsyncStringQueue;
+  iterator: AsyncIterableIterator<unknown>;
+  latestArgs?: JsonObject;
+  applyTimer?: ReturnType<typeof setTimeout>;
+  closed: boolean;
+}
+
+const toolInputParsers = new Map<string, ToolInputParserState>();
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isTaskStatus(value: unknown): value is TaskItemInput['status'] {
+  return value === 'pending' || value === 'in_progress' || value === 'completed';
+}
+
+function isRenderableTask(value: unknown): value is TaskItemInput {
+  if (!isJsonObject(value) || !isTaskStatus(value.status)) return false;
+  if (typeof value.content !== 'string' || value.content.length === 0) return false;
+  if (value.status === 'in_progress' && (typeof value.activeForm !== 'string' || value.activeForm.length === 0)) {
+    return false;
+  }
+  return true;
+}
+
+function getRenderableTasks(value: unknown): TaskItemInput[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isRenderableTask);
+}
+
+function createToolInputParser(toolCallId: string): ToolInputParserState {
+  const queue = new AsyncStringQueue();
+  const state: ToolInputParserState = {
+    queue,
+    iterator: parseJsonRiver(queue) as AsyncIterableIterator<unknown>,
+    closed: false,
+  };
+  toolInputParsers.set(toolCallId, state);
+  return state;
+}
+
+function closeToolInputParser(toolCallId: string): void {
+  const parser = toolInputParsers.get(toolCallId);
+  if (!parser) return;
+  parser.closed = true;
+  if (parser.applyTimer) {
+    clearTimeout(parser.applyTimer);
+    parser.applyTimer = undefined;
+  }
+  parser.queue.close();
+  toolInputParsers.delete(toolCallId);
+}
+
+export function clearToolInputParsers(): void {
+  for (const toolCallId of toolInputParsers.keys()) {
+    closeToolInputParser(toolCallId);
+  }
+}
 
 type SubagentProgressEvent =
   | { event: 'text'; text: string }
@@ -112,7 +229,7 @@ export function createStaticSubagentComponent(
   ctx.addChildBeforeFollowUps(state.streamingComponent);
 
   reconcileToolBoundaries(ctx);
-  state.ui.requestRender();
+  flushRender(state);
   return component;
 }
 
@@ -141,7 +258,7 @@ function handleSubagentProgress(
   }
 
   reconcileToolBoundaries(ctx);
-  state.ui.requestRender();
+  requestRender(state);
   return true;
 }
 
@@ -276,7 +393,7 @@ export function handleToolApprovalRequired(
   // Show the dialog as an overlay
   showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
   dialog.focused = true;
-  state.ui.requestRender();
+  flushRender(state);
 }
 
 export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, toolName: string, args: unknown): void {
@@ -317,7 +434,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
     if (toolName === 'submit_plan') {
       ensureSubmitPlanComponent(ctx, toolCallId, args);
-      state.ui.requestRender();
+      flushRender(state);
       return;
     }
 
@@ -334,7 +451,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       state.pendingTaskToolIds?.add(toolCallId);
       state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
       ctx.addChildBeforeFollowUps(state.streamingComponent);
-      state.ui.requestRender();
+      flushRender(state);
       return;
     }
 
@@ -355,7 +472,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
-    state.ui.requestRender();
+    flushRender(state);
   }
 
   // File modification tracking is handled by the AgentController display state
@@ -375,7 +492,25 @@ export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, p
     };
     component.updateResult(result, true);
     reconcileToolBoundaries(ctx);
-    state.ui.requestRender();
+    requestRender(state);
+  }
+}
+
+/**
+ * Handle streaming shell output from execute_command tool.
+ */
+function flushPendingShellOutput(ctx: EventHandlerContext, toolCallId: string): void {
+  const pending = pendingShellOutputs.get(toolCallId);
+  if (!pending) return;
+  pendingShellOutputs.delete(toolCallId);
+  clearTimeout(pending.timer);
+
+  const { state } = ctx;
+  const component = state.pendingTools.get(toolCallId);
+  if (component?.appendStreamingOutput) {
+    component.appendStreamingOutput(pending.output);
+    reconcileToolBoundaries(ctx);
+    requestRender(state);
   }
 }
 
@@ -388,13 +523,16 @@ export function handleShellOutput(
   output: string,
   _stream: 'stdout' | 'stderr',
 ): void {
-  const { state } = ctx;
-  const component = state.pendingTools.get(toolCallId);
-  if (component?.appendStreamingOutput) {
-    component.appendStreamingOutput(output);
-    reconcileToolBoundaries(ctx);
-    state.ui.requestRender();
+  const pending = pendingShellOutputs.get(toolCallId);
+  if (pending) {
+    pending.output += output;
+    return;
   }
+
+  pendingShellOutputs.set(toolCallId, {
+    output,
+    timer: setTimeout(() => flushPendingShellOutput(ctx, toolCallId), DEFAULT_RENDER_COALESCE_MS),
+  });
 }
 
 /**
@@ -403,6 +541,9 @@ export function handleShellOutput(
  */
 export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: string, toolName: string): void {
   const { state } = ctx;
+  closeToolInputParser(toolCallId);
+  const parser = createToolInputParser(toolCallId);
+  void processToolInputParser(ctx, toolCallId, parser);
 
   // Mark as seen so handleMessageUpdate doesn't create a duplicate component
   if (!state.seenToolCallIds.has(toolCallId)) {
@@ -422,7 +563,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   // and ask_user (uses AskQuestionInlineComponent)
   if (toolName === 'submit_plan') {
     ensureSubmitPlanComponent(ctx, toolCallId);
-    state.ui.requestRender();
+    flushRender(state);
   } else if (toolName === 'ask_user') {
     if (state.goalManager?.isActive()) {
       return;
@@ -437,7 +578,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
-    state.ui.requestRender();
+    flushRender(state);
   } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
     state.taskToolInsertIndex = state.chatContainer.children.length;
@@ -456,7 +597,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     // to split the streaming component so getTrailingContentParts doesn't overwrite it)
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
-    state.ui.requestRender();
+    flushRender(state);
   } else if (toolName !== 'subagent') {
     if (createStaticSubagentComponent(ctx, toolCallId, toolName, {})) {
       return;
@@ -479,100 +620,139 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
-    state.ui.requestRender();
+    flushRender(state);
+  }
+}
+
+/**
+ * Apply the latest progressive JSON object from the stateful tool-input parser.
+ */
+function applyParsedToolArgs(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  toolName: string,
+  partialArgs: JsonObject,
+): void {
+  const { state } = ctx;
+
+  const component = state.pendingTools.get(toolCallId);
+  if (component) {
+    component.updateArgs(partialArgs, false);
+    reconcileToolBoundaries(ctx);
+    component.refresh?.();
+  }
+
+  if (toolName === 'ask_user') {
+    const askComponent = state.pendingAskUserComponents.get(toolCallId);
+    if (askComponent) {
+      try {
+        askComponent.updateArgs(partialArgs);
+      } catch {
+        // Don't crash on malformed partial args
+      }
+    }
+  }
+
+  if (toolName === 'submit_plan') {
+    const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
+    if (planComponent) {
+      planComponent.updateArgs(partialArgs);
+    }
+  }
+
+  if (toolName === 'task_write' && state.taskProgress) {
+    const tasks = getRenderableTasks(partialArgs.tasks);
+    if (tasks.length > 0) {
+      const existing = state.taskProgress.getTasks();
+      const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
+      if (allExistingDone) {
+        // Old list is done — start fresh, stream new items immediately
+        state.taskProgress.updateTasks(tasks);
+      } else if (tasks.length > 1) {
+        // Merge only completed items (exclude the last still-streaming one)
+        const merged = [...existing];
+        for (const task of tasks.slice(0, -1)) {
+          const idx = task.id
+            ? merged.findIndex(t => t.id === task.id)
+            : merged.findIndex(t => !t.id && t.content === task.content);
+          if (idx >= 0) {
+            merged[idx] = task;
+          } else {
+            merged.push(task);
+          }
+        }
+        state.taskProgress.updateTasks(merged);
+      }
+    }
+  }
+
+  requestRender(state);
+}
+
+function flushLatestParsedToolArgs(ctx: EventHandlerContext, toolCallId: string): void {
+  const parser = toolInputParsers.get(toolCallId);
+  if (!parser || parser.closed || !parser.latestArgs) return;
+
+  const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
+  if (!buffer) return;
+  applyParsedToolArgs(ctx, toolCallId, buffer.toolName, parser.latestArgs);
+}
+
+function scheduleParsedToolArgsApply(ctx: EventHandlerContext, toolCallId: string, parser: ToolInputParserState): void {
+  if (parser.applyTimer) return;
+  parser.applyTimer = setTimeout(() => {
+    parser.applyTimer = undefined;
+    flushLatestParsedToolArgs(ctx, toolCallId);
+  }, DEFAULT_RENDER_COALESCE_MS);
+}
+
+async function processToolInputParser(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  parser: ToolInputParserState,
+): Promise<void> {
+  try {
+    while (!parser.closed) {
+      const next = await parser.iterator.next();
+      if (next.done) return;
+      if (!isJsonObject(next.value)) continue;
+
+      parser.latestArgs = next.value;
+      if (parser.closed) return;
+      scheduleParsedToolArgsApply(ctx, toolCallId, parser);
+    }
+  } catch {
+    closeToolInputParser(toolCallId);
   }
 }
 
 /**
  * Handle an incremental delta of tool call input arguments.
- * Buffers the partial JSON text and attempts to parse it, updating the component's args.
+ * Feeds only the incoming JSON fragment to the stateful parser.
  */
-export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
-  const { state } = ctx;
-  const ds = state.session.displayState.get();
-  const buffer = ds.toolInputBuffers.get(toolCallId);
+export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, argsTextDelta: string): void {
+  const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
   if (buffer === undefined) return;
 
-  const updatedText = buffer.text;
-
-  try {
-    const partialArgs = parsePartialJson(updatedText);
-    if (partialArgs && typeof partialArgs === 'object') {
-      // Update inline tool component if it exists
-      const component = state.pendingTools.get(toolCallId);
-      if (component) {
-        component.updateArgs(partialArgs, false);
-        reconcileToolBoundaries(ctx);
-        component.refresh?.();
-      }
-
-      // For ask_user, stream partial args into the question component
-      if (buffer.toolName === 'ask_user') {
-        const askComponent = state.pendingAskUserComponents.get(toolCallId);
-        if (askComponent) {
-          try {
-            askComponent.updateArgs(partialArgs);
-          } catch {
-            // Don't crash on malformed partial args
-          }
-        }
-      }
-
-      // For submit_plan, stream the path arg into the inline purple plan box.
-      if (buffer.toolName === 'submit_plan') {
-        const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
-        if (planComponent) {
-          planComponent.updateArgs(partialArgs);
-        }
-      }
-
-      // For task_write, stream partial tasks into the pinned TaskProgressComponent.
-      // The last array item is actively being written so its content is unstable.
-      // If all existing pinned items are already completed, the list is stable and
-      // we can stream in new items immediately (including the last one).
-      // Otherwise, exclude the last item to avoid jumpy partial-content matches.
-      if (buffer.toolName === 'task_write' && state.taskProgress) {
-        const tasks = (partialArgs as { tasks?: TaskItemInput[] }).tasks;
-        if (tasks && tasks.length > 0) {
-          const existing = state.taskProgress.getTasks();
-          const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
-          if (allExistingDone) {
-            // Old list is done — start fresh, stream new items immediately
-            state.taskProgress.updateTasks(tasks);
-          } else if (tasks.length > 1) {
-            // Merge only completed items (exclude the last still-streaming one)
-            const merged = [...existing];
-            for (const task of tasks.slice(0, -1)) {
-              if (!task.content) continue;
-              const idx = task.id
-                ? merged.findIndex(t => t.id === task.id)
-                : merged.findIndex(t => !t.id && t.content === task.content);
-              if (idx >= 0) {
-                merged[idx] = task;
-              } else {
-                merged.push(task);
-              }
-            }
-            state.taskProgress.updateTasks(merged);
-          }
-        }
-      }
-
-      state.ui.requestRender();
-    }
-  } catch {
-    // Malformed or incomplete JSON — partial-json throws MalformedJSON for invalid input
+  let parser = toolInputParsers.get(toolCallId);
+  if (!parser) {
+    parser = createToolInputParser(toolCallId);
+    void processToolInputParser(ctx, toolCallId, parser);
   }
+
+  parser.queue.push(argsTextDelta);
 }
 
 /**
  * Clean up the input buffer when tool input streaming ends.
  */
-export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: string): void {
-  // Buffer cleanup handled by AgentController display state
+export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
+  flushLatestParsedToolArgs(ctx, toolCallId);
+  closeToolInputParser(toolCallId);
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
+  flushPendingShellOutput(ctx, toolCallId);
   const { state } = ctx;
   // If this is a subagent tool, store the result in the SubagentExecutionComponent
   const subagentComponent = state.pendingSubagents.get(toolCallId);
@@ -582,7 +762,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       subagentComponent.finish(isError, 0, resultText);
       state.pendingSubagents.delete(toolCallId);
       pluginSubagentToolCallIds.delete(toolCallId);
-      state.ui.requestRender();
+      flushRender(state);
     } else {
       // We'll need to wait for subagent_end to set this
       // Store it temporarily
@@ -618,6 +798,6 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
 
     state.pendingTools.delete(toolCallId);
     state.pendingTaskToolIds?.delete(toolCallId);
-    state.ui.requestRender();
+    flushRender(state);
   }
 }

@@ -9,7 +9,7 @@ const meta: Meta<typeof DataPanel> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="h-[500px] w-[400px]">
+        <div className="h-125 w-100">
           <Story />
         </div>
       </TooltipProvider>

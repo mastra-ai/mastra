@@ -17,9 +17,7 @@ Updates dataset metadata, name, description, and/or schemas. Use Standard JSON S
 import { Mastra } from '@mastra/core'
 import { z } from 'zod'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

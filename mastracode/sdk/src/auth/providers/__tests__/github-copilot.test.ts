@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { CopilotDeviceLoginPending } from '../github-copilot.js';
 import {
   COPILOT_HEADERS,
   fetchCopilotModels,
@@ -7,7 +8,9 @@ import {
   githubCopilotOAuthProvider,
   loginGitHubCopilot,
   normalizeDomain,
+  pollGitHubCopilotDeviceLogin,
   refreshGitHubCopilotToken,
+  startGitHubCopilotDeviceLogin,
 } from '../github-copilot.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -399,6 +402,127 @@ describe('GitHub Copilot OAuth device flow', () => {
     await vi.advanceTimersByTimeAsync(0);
     controller.abort();
     await rejection;
+  });
+});
+
+describe('GitHub Copilot device login step primitives', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function pendingState(overrides: Partial<CopilotDeviceLoginPending> = {}): CopilotDeviceLoginPending {
+    return {
+      domain: 'github.com',
+      deviceCode: 'device-code',
+      userCode: 'ABCD-EFGH',
+      url: 'https://github.com/login/device',
+      instructions: 'Enter code: ABCD-EFGH',
+      intervalMs: 5000,
+      intervalMultiplier: 1.2,
+      slowDownCount: 0,
+      deadlineAt: Date.now() + 900_000,
+      ...overrides,
+    };
+  }
+
+  it('startGitHubCopilotDeviceLogin returns serializable pending state', async () => {
+    const fetchMock = vi.fn(async (input: unknown): Promise<Response> => {
+      expect(getUrl(input)).toBe('https://company.ghe.com/login/device/code');
+      return jsonResponse({
+        device_code: 'device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://company.ghe.com/login/device',
+        interval: 5,
+        expires_in: 900,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = await startGitHubCopilotDeviceLogin('company.ghe.com');
+    expect(pending).toMatchObject({
+      domain: 'company.ghe.com',
+      enterpriseDomain: 'company.ghe.com',
+      deviceCode: 'device-code',
+      userCode: 'ABCD-EFGH',
+      url: 'https://company.ghe.com/login/device',
+      instructions: 'Enter code: ABCD-EFGH',
+      intervalMs: 5000,
+      intervalMultiplier: 1.2,
+      slowDownCount: 0,
+    });
+    expect(pending.deadlineAt).toBeGreaterThan(Date.now());
+    expect(JSON.parse(JSON.stringify(pending))).toEqual(pending);
+  });
+
+  it('pollGitHubCopilotDeviceLogin reports pending on authorization_pending', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ error: 'authorization_pending', error_description: 'pending' })),
+    );
+
+    const pending = pendingState();
+    const result = await pollGitHubCopilotDeviceLogin(pending);
+    expect(result.status).toBe('pending');
+    expect(result.status === 'pending' && result.nextPollMs).toBe(6000); // 5000 * 1.2
+    expect(result.status === 'pending' && result.pending).toEqual(pending);
+  });
+
+  it('pollGitHubCopilotDeviceLogin grows the interval on slow_down and keeps it in the pending state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ error: 'slow_down', error_description: 'slow down', interval: 10 })),
+    );
+
+    const result = await pollGitHubCopilotDeviceLogin(pendingState());
+    expect(result.status).toBe('pending');
+    if (result.status !== 'pending') throw new Error('expected pending');
+    expect(result.pending).toMatchObject({ intervalMs: 10_000, intervalMultiplier: 1.4, slowDownCount: 1 });
+    expect(result.nextPollMs).toBe(14_000); // 10000 * 1.4
+  });
+
+  it('pollGitHubCopilotDeviceLogin completes by minting a Copilot bearer token', async () => {
+    const fetchMock = vi.fn(async (input: unknown): Promise<Response> => {
+      const url = getUrl(input);
+      if (url.endsWith('/login/oauth/access_token')) {
+        return jsonResponse({ access_token: 'ghu_user_token' });
+      }
+      if (url.endsWith('/copilot_internal/v2/token')) {
+        return jsonResponse({ token: 'copilot-bearer', expires_at: 9999999999 });
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await pollGitHubCopilotDeviceLogin(pendingState());
+    expect(result.status).toBe('complete');
+    expect(result.status === 'complete' && result.credentials).toMatchObject({
+      refresh: 'ghu_user_token',
+      access: 'copilot-bearer',
+    });
+  });
+
+  it('pollGitHubCopilotDeviceLogin fails past the deadline without polling upstream', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const plain = await pollGitHubCopilotDeviceLogin(pendingState({ deadlineAt: Date.now() - 1 }));
+    expect(plain).toEqual({ status: 'failed', error: 'Device flow timed out' });
+
+    const drifted = await pollGitHubCopilotDeviceLogin(pendingState({ deadlineAt: Date.now() - 1, slowDownCount: 2 }));
+    expect(drifted.status).toBe('failed');
+    expect(drifted.status === 'failed' && drifted.error).toMatch(/slow_down/);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('pollGitHubCopilotDeviceLogin fails on terminal errors without retrying', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ error: 'access_denied', error_description: 'user declined' })),
+    );
+
+    const result = await pollGitHubCopilotDeviceLogin(pendingState());
+    expect(result).toEqual({ status: 'failed', error: 'Device flow failed: access_denied: user declined' });
   });
 });
 

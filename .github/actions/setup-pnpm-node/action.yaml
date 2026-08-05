@@ -27,9 +27,9 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js 22.x
-      uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
+      uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
       with:
-        node-version: 22.23.1
+        node-version: 24.18.0
 
     # Let pnpm/action-setup handle store caching instead of actions/setup-node.
     # setup-node's cache: 'pnpm' runs `pnpm store path --silent` which returns

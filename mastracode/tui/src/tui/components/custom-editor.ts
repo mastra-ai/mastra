@@ -72,10 +72,8 @@ export type AppAction =
   | 'cycleMode'
   | 'toggleYolo';
 
-// Pre-compiled constants (avoid re-creation per render)
+// Pre-compiled constant (avoid re-creation per render)
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
-const SLASH_CURSOR_RE = /\x1b\[7m\/\x1b\[0m/;
-const AT_CURSOR_RE = /\x1b\[7m@\x1b\[0m/;
 function parseHex(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
@@ -128,6 +126,7 @@ export class CustomEditor extends Editor {
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
   public getPromptAnimator?: () => GradientAnimator | undefined;
+  public requestRender?: () => void;
   private pendingBracketedPaste: string | null = null;
 
   /**
@@ -167,6 +166,14 @@ export class CustomEditor extends Editor {
   private _cachedColorFn?: (s: string) => string;
   private promptIcon = DEFAULT_PROMPT_ICON;
   private lastPromptWasInvisible = false;
+
+  private requestEditorRender(): void {
+    if (this.requestRender) {
+      this.requestRender();
+      return;
+    }
+    this.tui.requestRender();
+  }
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
@@ -216,9 +223,10 @@ export class CustomEditor extends Editor {
     const text = this.getText().trimStart();
     const isSlash = text.startsWith('/');
     const isAt = text.startsWith('@');
+    const isBang = text.startsWith('!');
     const color = this.getModeColor?.() || mastra.green;
     const promptAnimator = this.getPromptAnimator?.();
-    const shouldAnimatePrompt = !isSlash && !isAt;
+    const shouldAnimatePrompt = !isSlash && !isAt && !isBang;
     const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
     const fadeProgress = isPromptAnimated ? promptAnimator!.getFadeProgress() : 1;
     const isTransitioningIn = isPromptAnimated && promptAnimator!.isFadingIn();
@@ -267,11 +275,13 @@ export class CustomEditor extends Editor {
       ? '/'
       : isAt
         ? '@'
-        : chevronBrightness > 0.05
-          ? '›'
-          : dotBrightness > 0.05
-            ? this.promptIcon
-            : ' ';
+        : isBang
+          ? '!'
+          : chevronBrightness > 0.05
+            ? '›'
+            : dotBrightness > 0.05
+              ? this.promptIcon
+              : ' ';
     const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
 
     // Cache colorFn and prompt — only recreate when color changes
@@ -307,8 +317,42 @@ export class CustomEditor extends Editor {
     // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
     const promptWidth = 4; // "│ > " or "│   "
     const contentWidth = width - 6;
-    // Editor renders at content width (prompt char space is separate)
-    const editorLines = super.render(contentWidth);
+    // Slash, mention and shell markers are rendered in the prompt chrome, so remove them
+    // from the editor's layout state before wrapping and restore the state after.
+    const editorState = (
+      this as unknown as {
+        state: { lines: string[]; cursorLine: number; cursorCol: number };
+      }
+    ).state;
+    const decorativePrompt = isSlash ? '/' : isAt ? '@' : isBang ? '!' : undefined;
+    const firstLine = editorState.lines[0];
+    const markerIndex = firstLine?.search(/\S/) ?? -1;
+    const shouldHideDecorativePrompt =
+      decorativePrompt !== undefined && firstLine !== undefined && firstLine[markerIndex] === decorativePrompt;
+    const cursorLine = editorState.cursorLine;
+    const cursorCol = editorState.cursorCol;
+    const cursorOnDecorativePrompt = shouldHideDecorativePrompt && cursorLine === 0 && cursorCol === markerIndex;
+    if (cursorOnDecorativePrompt && !this.voiceListening) {
+      prompt = `\x1b[7m${prompt}\x1b[0m`;
+    }
+    let editorLines: string[];
+    if (shouldHideDecorativePrompt) {
+      editorState.lines[0] = firstLine.slice(0, markerIndex) + firstLine.slice(markerIndex + 1);
+      if (cursorOnDecorativePrompt) {
+        editorState.cursorLine = -1;
+      } else if (editorState.cursorLine === 0 && cursorCol > markerIndex) {
+        editorState.cursorCol = cursorCol - 1;
+      }
+      try {
+        editorLines = super.render(contentWidth);
+      } finally {
+        editorState.lines[0] = firstLine;
+        editorState.cursorLine = cursorLine;
+        editorState.cursorCol = cursorCol;
+      }
+    } else {
+      editorLines = super.render(contentWidth);
+    }
 
     // Extract content lines (skip editor's invisible borders)
     const contentLines: string[] = [];
@@ -328,20 +372,6 @@ export class CustomEditor extends Editor {
         continue;
       }
       contentLines.push(line);
-    }
-
-    // Strip leading "/" or "@" from first content line when shown in prompt
-    if ((isSlash || isAt) && contentLines.length > 0) {
-      let l = contentLines[0]!;
-      const char = isSlash ? '/' : '@';
-      // Handle cursor-highlighted char (reverse video)
-      l = l.replace(isSlash ? SLASH_CURSOR_RE : AT_CURSOR_RE, '');
-      // Remove the first plain occurrence
-      const idx = l.indexOf(char);
-      if (idx !== -1) {
-        l = l.slice(0, idx) + l.slice(idx + 1);
-      }
-      contentLines[0] = l;
     }
 
     // Build rounded box
@@ -685,7 +715,7 @@ export class CustomEditor extends Editor {
     this.setCursorOffset(this.voicePrefix.length + payload.length);
     // Programmatic insertion mutates editor state but does not repaint on its
     // own, so force a render to show the transcript immediately.
-    this.tui.requestRender();
+    this.requestEditorRender();
   }
 
   /**
@@ -781,13 +811,13 @@ export class CustomEditor extends Editor {
       this.voiceListenPhase = 0;
       this.voiceListenTimer ??= setInterval(() => {
         this.voiceListenPhase += 1;
-        this.tui.requestRender();
+        this.requestEditorRender();
       }, 120);
     } else if (this.voiceListenTimer) {
       clearInterval(this.voiceListenTimer);
       this.voiceListenTimer = null;
     }
-    this.tui.requestRender();
+    this.requestEditorRender();
   }
 
   /**

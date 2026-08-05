@@ -1,4 +1,4 @@
-import { throwApiError } from '../auth/client.js';
+import { extractApiErrorDetail, throwApiError } from '../auth/client.js';
 
 export interface Project {
   id: string;
@@ -29,6 +29,38 @@ export interface Environment {
   updatedAt: string;
 }
 
+export type EnvironmentDeployStatus =
+  | 'queued'
+  | 'uploading'
+  | 'starting'
+  | 'building'
+  | 'deploying'
+  | 'running'
+  | 'sleeping'
+  | 'stopped'
+  | 'failed'
+  | 'crashed'
+  | 'cancelled'
+  | 'unknown';
+
+export interface EnvironmentDeploy {
+  id: string;
+  projectId: string;
+  organizationId: string;
+  environmentId: string;
+  projectName: string;
+  environmentName: string;
+  environmentSlug: string;
+  region: string | null;
+  status: EnvironmentDeployStatus;
+  instanceUrl: string | null;
+  error: string | null;
+  errorCode: string | null;
+  createdAt: string | null;
+  githubBranch: string | null;
+  githubCommitSha: string | null;
+}
+
 export async function fetchProjects(token: string, orgId: string): Promise<Project[]> {
   const resp = await fetch(`${getApiUrl()}/v1/projects`, {
     headers: {
@@ -39,7 +71,7 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to fetch projects', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to fetch projects', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { projects: Project[] };
@@ -56,11 +88,32 @@ export async function fetchEnvironments(token: string, orgId: string, projectId:
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to fetch environments', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to fetch environments', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { environments: Environment[] };
   return data.environments;
+}
+
+export async function fetchEnvironmentDeploys(
+  token: string,
+  orgId: string,
+  projectId: string,
+): Promise<EnvironmentDeploy[]> {
+  const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environment-deploys`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+    },
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to fetch deploys', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { deploys: EnvironmentDeploy[] };
+  return data.deploys;
 }
 
 export async function createEnvironment(
@@ -81,11 +134,35 @@ export async function createEnvironment(
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to create environment', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to create environment', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { environment: Environment };
   return data.environment;
+}
+
+/**
+ * Restart an environment's running service so saved env vars take effect
+ * immediately. 409 means the environment has never been deployed.
+ */
+export async function restartEnvironment(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+): Promise<void> {
+  const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments/${envId}/restart`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+    },
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to restart environment', resp.status, extractApiErrorDetail(err));
+  }
 }
 
 export async function deleteEnvironment(token: string, orgId: string, projectId: string, envId: string): Promise<void> {
@@ -99,7 +176,7 @@ export async function deleteEnvironment(token: string, orgId: string, projectId:
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to delete environment', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to delete environment', resp.status, extractApiErrorDetail(err));
   }
 }
 

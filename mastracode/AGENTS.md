@@ -1,23 +1,11 @@
-Build from root: pnpm build:mastracode
-Test from root: pnpm test:mastracode
-Typecheck from root: pnpm --filter ./mastracode check
-Lint from root: pnpm --filter ./mastracode lint
+Packages: `mastracode/sdk` (`@mastra/code-sdk`), `mastracode/tui` (`mastracode`), `mastracode/factory-ui` (`@internal/factory-ui`), and standalone `mastracode/web`. Scope commands to the changed package.
 
-Run pnpm build:mastracode before broad Mastra Code test audits so workspace dependency dist artifacts are available.
-For focused tests, prefer pnpm --filter ./mastracode exec vitest run <test-file> --reporter=dot --bail 1 before the full package suite.
+TUI: build deps with `pnpm build:mastracode`; test SDK+TUI with `pnpm test:mastracode`; typecheck with `pnpm --filter ./mastracode/tui check`; lint with `pnpm --filter ./mastracode/tui lint`. Build first before broad tests.
 
-Most unit tests live under mastracode/src/ and are colocated with the code they cover.
-Run focused agent, model, headless, TUI, command, MCP, plugin, or processor tests before broader validation when those areas change.
+Focused TUI test: `pnpm --filter ./mastracode/tui exec vitest run <test-file> --reporter=dot --bail 1`.
 
-Mastra Code TUI/e2e scenarios live under mastracode/e2e/tui/ with fixtures in mastracode/e2e/fixtures/.
-List scenarios with pnpm --filter ./mastracode run e2e:list.
-Run smoke scenarios with pnpm --filter ./mastracode run e2e:smoke.
-For focused scenario development, use MC_E2E_VITEST_SCENARIOS=<scenario> pnpm --filter ./mastracode exec vitest run --config e2e/vitest.config.ts --reporter=dot.
-Run pnpm --filter ./mastracode run e2e:test -- --reporter=dot before shipping runner changes.
+Factory UI is the independent React SPA and CLI UI artifact; see `mastracode/factory-ui/AGENTS.md`.
 
-For Mastra Code TUI work, use the testing-mastracode-tui skill for interactive/manual testing guidance, but prefer mastracode/e2e/README.md as the source of truth for runner commands.
+Tests are colocated in package `src`. TUI scenarios: `mastracode/tui/e2e/tui/`; fixtures: `mastracode/tui/e2e/fixtures/`. Use `e2e:list`, `e2e:smoke`, or `e2e:test -- --reporter=dot`; focus with `MC_E2E_VITEST_SCENARIOS=<scenario> pnpm --filter ./mastracode/tui exec vitest run --config e2e/vitest.config.ts --reporter=dot`.
 
-TUI-visible or TUI-triggered behavior should have checked-in TUI e2e coverage; lower-level tests are supporting shields, not substitutes.
-If realistic long conversation or OM fixture data is needed, read the local Mastra Code Application Support database only via read-only operations, sanitize it, and transform it into deterministic AIMock-compatible fixtures.
-
-Keep changes here surgical; Mastra Code exercises core harness, storage, memory, tools, MCP, browser, plugins, signals, and TUI integration paths.
+Use `testing-mastracode-tui` for interactive guidance and `mastracode/tui/e2e/README.md` for runner commands. TUI-visible behavior needs checked-in TUI E2E coverage. Sanitize any read-only local Application Support data into deterministic AIMock fixtures.

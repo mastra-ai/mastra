@@ -12,7 +12,7 @@ import type { VersionOverrides } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
-import { deepMerge } from '../../utils';
+import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
@@ -46,14 +46,17 @@ function snapshotRequestContextEntries(
   const out: Record<string, unknown> = {};
   let any = false;
   for (const [key, value] of requestContext.entries()) {
-    try {
-      const cloned = JSON.parse(JSON.stringify(value));
-      out[key as string] = cloned;
-      any = true;
-    } catch {
-      // Skip non-serializable entries silently — they wouldn't survive the
-      // wire on cross-process engines anyway.
-    }
+    // Serialize each entry exactly once with a bounded pass: a shared-reference
+    // graph would otherwise make JSON.stringify expand exponentially and wedge
+    // the event loop on every durable step, and reading the value twice (probe
+    // then clone) could disagree if a getter/toJSON is stateful. Entries that
+    // produce no JSON (non-serializable, or too large to serialize within
+    // budget) are skipped — they wouldn't survive the wire on cross-process
+    // engines anyway.
+    const json = boundedStringify(value);
+    if (json === undefined) continue;
+    out[key as string] = JSON.parse(json);
+    any = true;
   }
   return any ? out : undefined;
 }
@@ -157,6 +160,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   messages: MessageListInput;
   /** Execution options */
   options?: AgentExecutionOptions<OUTPUT>;
+  /** Whether execution options already include the agent defaults. */
+  optionsAreResolved?: boolean;
   /** Run ID (will be generated if not provided) */
   runId?: string;
   /** Request context */
@@ -203,6 +208,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     agent,
     messages,
     options: rawExecOptions,
+    optionsAreResolved = false,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -237,11 +243,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  const defaultOptions = await typedAgent.getDefaultOptions({ requestContext });
-  const execOptions = deepMerge(
-    (defaultOptions ?? {}) as Record<string, unknown>,
-    (rawExecOptions ?? {}) as Record<string, unknown>,
-  ) as AgentExecutionOptions<OUTPUT>;
+  const execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
+    ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
+    : (deepMerge(
+        ((await typedAgent.getDefaultOptions({ requestContext })) ?? {}) as Record<string, unknown>,
+        (rawExecOptions ?? {}) as Record<string, unknown>,
+      ) as AgentExecutionOptions<OUTPUT>);
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
@@ -678,6 +685,63 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
+    // which was never ported to the durable finish step (so `generateTitle` never
+    // fired for durable/evented agents). Parked here because the agent instance is
+    // in scope; the durable finish step invokes it after the run completes. No-op
+    // when the merged config has no `generateTitle` or the thread already has a
+    // title. Non-serializable — cross-process engines skip title generation.
+    generateThreadTitle: memory
+      ? async ({ threadId, resourceId, memoryConfig, messageListState, requestContext: rc, tracingContext }) => {
+          // Re-read the thread so a title written mid-run isn't regenerated, and so we only
+          // generate on the first turn (mirrors the non-durable `!thread.title` guard).
+          const thread = await memory.getThreadById?.({ threadId });
+          const mergedConfig = memory.getMergedThreadConfig?.(memoryConfig);
+          const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
+            mergedConfig?.generateTitle as Parameters<typeof agent.resolveTitleGenerationConfig>[0],
+          );
+          if (!shouldGenerate || thread?.title) return;
+
+          const titleMessageList = new MessageList().deserialize(messageListState);
+          // Only messages of the thread being titled — resource-scoped memory can
+          // load messages from other threads into the deserialized list.
+          const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
+          if (uiMessages.length < (minMessages ?? 1)) return;
+
+          const userMessage = agent.getMostRecentUserMessage(uiMessages);
+          if (!userMessage) return;
+
+          const title = await agent.genTitle(
+            userMessage,
+            rc ?? new RequestContext(),
+            createObservabilityContext(tracingContext),
+            model,
+            instructions,
+            uiMessages,
+          );
+          if (!title) return;
+
+          // Title-only late write. Prefer updateThread when the thread record
+          // already exists so its original createdAt is preserved (createThread
+          // rebuilds the record with a fresh createdAt). Fall back to createThread
+          // for the first-turn case where the record may not be persisted yet.
+          if (thread) {
+            await memory.updateThread({
+              id: threadId,
+              title,
+              metadata: thread.metadata ?? {},
+              memoryConfig,
+            });
+          } else {
+            await memory.createThread({
+              threadId,
+              resourceId,
+              memoryConfig,
+              title,
+            });
+          }
+        }
+      : undefined,
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.

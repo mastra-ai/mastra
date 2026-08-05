@@ -480,12 +480,23 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
+  // If the user didn't pass --env-file and no ambient .env* file exists,
+  // skip the local env-var upload entirely and let the platform use the
+  // env vars stored on the project. The server-side deploy handler merges
+  // request envVars over the stored vars, so an empty (absent) envVars
+  // payload cleanly falls back to what's already stored.
+  let envVars: Record<string, string> = {};
+  const hasEnvFile = opts.envFile ? true : (await getDeployEnvFiles(targetDir)).length > 0;
+  if (hasEnvFile) {
+    envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
+  }
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     p.log.step(`Found ${envCount} env var(s)`);
-  } else {
+  } else if (hasEnvFile) {
     p.log.step('No env vars found in selected env file');
+  } else {
+    p.log.step('No local env file — using env vars stored on the project');
   }
 
   // Pre-upload validation — catch USER-attributable errors before zipping/shipping.
@@ -505,6 +516,7 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
     // and guarded local paths soften to warnings instead of hard errors.
     // TODO(managed-env-names): pass real names once the endpoint exposes them.
     const issues = await preflightBuildOutput(targetDir, mergePreflightEnvVars(storedEnvVars, envVars), {
+      hasEnvFile,
       managedEnvVarNames: null,
     });
     const outcome = await printPreflightIssues(issues, { autoAccept });

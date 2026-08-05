@@ -15,7 +15,7 @@ describe('web scenario: mode-model-persistence', () => {
       aimockFixture: 'mode-model-persistence.json',
       run: async ({ driver }) => {
         // Default mode should be 'build'.
-        expect(driver.state().modeId).toBe('build');
+        expect(driver.sessionState().modeId).toBe('build');
 
         // Send a message first (required to prove the controller is live).
         await driver.submit('hello');
@@ -28,12 +28,15 @@ describe('web scenario: mode-model-persistence', () => {
 
         // Wait for the mode_changed + model_changed events to land.
         const start = Date.now();
-        while (driver.state().modeId !== 'plan' || driver.state().modelId !== 'anthropic/claude-sonnet-4') {
+        while (
+          driver.sessionState().modeId !== 'plan' ||
+          driver.sessionState().modelId !== 'anthropic/claude-sonnet-4'
+        ) {
           if (Date.now() - start > 5000) throw new Error('timeout waiting for mode/model to update');
           await new Promise(r => setTimeout(r, 25));
         }
-        expect(driver.state().modeId).toBe('plan');
-        expect(driver.state().modelId).toBe('anthropic/claude-sonnet-4');
+        expect(driver.sessionState().modeId).toBe('plan');
+        expect(driver.sessionState().modelId).toBe('anthropic/claude-sonnet-4');
 
         // Re-read state via the API to confirm BOTH switches persisted.
         const client = driver.getClient();

@@ -222,6 +222,7 @@ describe('MemorySidebar', () => {
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
     expect(card.className).toContain('bg-transparent');
+    expect(screen.getByTestId('memory-config-badges')).not.toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
@@ -262,7 +263,7 @@ describe('MemorySidebar', () => {
     expect(cta.getAttribute('href')).toBe('https://mastra.ai/docs/memory/overview');
   });
 
-  it('shows the live memory content, without the static config, when the Memory card is clicked', async () => {
+  it('shows the live memory content and recent-message context when the Memory card is clicked', async () => {
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
@@ -274,8 +275,14 @@ describe('MemorySidebar', () => {
     expect(screen.getByTestId('memory-sidebar-card').getAttribute('aria-pressed')).toBe('true');
 
     // The static memory configuration (AgentMemoryConfig with its "General"
-    // section) moved to the agent settings view and is no longer in the panel.
+    // section) and the collapsed card's setup badges are not shown in the panel.
     expect(screen.queryByText('General')).toBeNull();
+    expect(screen.queryByTestId('memory-config-badges')).toBeNull();
+
+    // The expanded content retains the recent-message configuration that is
+    // summarized by the collapsed card's count badge.
+    expect(screen.getByRole('heading', { name: 'Recent Messages' })).not.toBeNull();
+    expect(screen.getByText('Includes the last 10 messages in context.')).not.toBeNull();
 
     // The whole Memory view scrolls on Y, and AgentMemory's root must not trap
     // scrolling with its own h-full/overflow-hidden.

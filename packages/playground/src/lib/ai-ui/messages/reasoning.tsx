@@ -28,8 +28,8 @@ export const Reasoning = ({ text, redacted }: ReasoningProps) => {
       </button>
 
       {!isCollapsed ? (
-        <div className="rounded-lg bg-surface4 p-2 border border-border-1">
-          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-neutral6">{body}</pre>
+        <div className="bg-surface4 border-border-1 rounded-lg border p-2">
+          <pre className="text-ui-sm leading-ui-sm text-neutral6 whitespace-pre-wrap">{body}</pre>
         </div>
       ) : null}
     </div>

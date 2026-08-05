@@ -16,22 +16,22 @@ GROQ_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
-  instructions: "You are a helpful assistant",
-  model: "groq/canopylabs/orpheus-arabic-saudi"
-});
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'groq/allam-2-7b',
+})
 
 // Generate a response
-const response = await agent.generate("Hello!");
+const response = await agent.generate('Hello!')
 
 // Stream a response
-const stream = await agent.stream("Tell me a story");
+const stream = await agent.stream('Tell me a story')
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -40,185 +40,185 @@ for await (const chunk of stream) {
 <ProviderModelsTable
   models={[
   {
-    "model": "groq/canopylabs/orpheus-arabic-saudi",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 4000,
-    "maxOutput": 50000,
-    "inputCost": null,
-    "outputCost": null
+    model: 'groq/allam-2-7b',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 4096,
+    maxOutput: 4096,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "groq/canopylabs/orpheus-v1-english",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 4000,
-    "maxOutput": 50000,
-    "inputCost": null,
-    "outputCost": null
+    model: 'groq/canopylabs/orpheus-arabic-saudi',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 4000,
+    maxOutput: 50000,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "groq/groq/compound",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
+    model: 'groq/canopylabs/orpheus-v1-english',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 4000,
+    maxOutput: 50000,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "groq/groq/compound-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
+    model: 'groq/groq/compound',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 131072,
+    maxOutput: 8192,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "groq/llama-3.1-8b-instant",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.05,
-    "outputCost": 0.08
+    model: 'groq/groq/compound-mini',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 131072,
+    maxOutput: 8192,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "groq/llama-3.3-70b-versatile",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.59,
-    "outputCost": 0.79
+    model: 'groq/llama-3.1-8b-instant',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: false,
+    contextWindow: 131072,
+    maxOutput: 131072,
+    inputCost: 0.05,
+    outputCost: 0.08,
   },
   {
-    "model": "groq/meta-llama/llama-4-scout-17b-16e-instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.11,
-    "outputCost": 0.34
+    model: 'groq/llama-3.3-70b-versatile',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: false,
+    contextWindow: 131072,
+    maxOutput: 32768,
+    inputCost: 0.59,
+    outputCost: 0.79,
   },
   {
-    "model": "groq/meta-llama/llama-prompt-guard-2-22m",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 512,
-    "maxOutput": 512,
-    "inputCost": 0.03,
-    "outputCost": 0.03
+    model: 'groq/meta-llama/llama-prompt-guard-2-22m',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 512,
+    maxOutput: 512,
+    inputCost: 0.03,
+    outputCost: 0.03,
   },
   {
-    "model": "groq/meta-llama/llama-prompt-guard-2-86m",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 512,
-    "maxOutput": 512,
-    "inputCost": 0.04,
-    "outputCost": 0.04
+    model: 'groq/meta-llama/llama-prompt-guard-2-86m',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: 512,
+    maxOutput: 512,
+    inputCost: 0.04,
+    outputCost: 0.04,
   },
   {
-    "model": "groq/openai/gpt-oss-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    model: 'groq/openai/gpt-oss-120b',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 131072,
+    maxOutput: 65536,
+    inputCost: 0.15,
+    outputCost: 0.6,
   },
   {
-    "model": "groq/openai/gpt-oss-20b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 0.075,
-    "outputCost": 0.3
+    model: 'groq/openai/gpt-oss-20b',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 131072,
+    maxOutput: 65536,
+    inputCost: 0.075,
+    outputCost: 0.3,
   },
   {
-    "model": "groq/openai/gpt-oss-safeguard-20b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 0.075,
-    "outputCost": 0.3
+    model: 'groq/openai/gpt-oss-safeguard-20b',
+    imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 131072,
+    maxOutput: 65536,
+    inputCost: 0.075,
+    outputCost: 0.3,
   },
   {
-    "model": "groq/qwen/qwen3-32b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 40960,
-    "inputCost": 0.29,
-    "outputCost": 0.59
+    model: 'groq/qwen/qwen3.6-27b',
+    imageInput: true,
+    audioInput: false,
+    videoInput: false,
+    toolUsage: true,
+    reasoning: true,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    inputCost: 0.6,
+    outputCost: 3,
   },
   {
-    "model": "groq/whisper-large-v3",
-    "imageInput": false,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    model: 'groq/whisper-large-v3',
+    imageInput: false,
+    audioInput: true,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: null,
+    maxOutput: null,
+    inputCost: null,
+    outputCost: null,
   },
   {
-    "model": "groq/whisper-large-v3-turbo",
-    "imageInput": false,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  }
+    model: 'groq/whisper-large-v3-turbo',
+    imageInput: false,
+    audioInput: true,
+    videoInput: false,
+    toolUsage: false,
+    reasoning: false,
+    contextWindow: null,
+    maxOutput: null,
+    inputCost: null,
+    outputCost: null,
+  },
 ]}
 />
 
@@ -228,35 +228,31 @@ for await (const chunk of stream) {
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: "custom-agent",
-  name: "custom-agent",
+  id: 'custom-agent',
+  name: 'custom-agent',
   model: {
-    url: "https://api.groq.com/openai/v1",
-    id: "groq/canopylabs/orpheus-arabic-saudi",
+    url: 'https://api.groq.com/openai/v1',
+    id: 'groq/allam-2-7b',
     apiKey: process.env.GROQ_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
+      'X-Custom-Header': 'value',
+    },
+  },
+})
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
+  id: 'dynamic-agent',
+  name: 'Dynamic Agent',
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
-    return useAdvanced
-      ? "groq/whisper-large-v3-turbo"
-      : "groq/canopylabs/orpheus-arabic-saudi";
-  }
-});
+    const useAdvanced = requestContext.task === 'complex'
+    return useAdvanced ? 'groq/whisper-large-v3-turbo' : 'groq/allam-2-7b'
+  },
+})
 ```
-
-
 
 ## Direct provider installation
 

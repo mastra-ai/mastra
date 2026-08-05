@@ -254,8 +254,7 @@ export interface LibSQLStorageConfig {
   isRemote: boolean;
   /**
    * Optional explicit url for the recall vector DB. When omitted, the factory
-   * uses the shared default vector file. Per-tenant storage sets this so each
-   * tenant's recall vectors live in their own isolated DB, not a shared file.
+   * uses the shared default vector file.
    */
   vectorUrl?: string;
   /** Auth token for the vector DB when `vectorUrl` points at a remote libSQL. */

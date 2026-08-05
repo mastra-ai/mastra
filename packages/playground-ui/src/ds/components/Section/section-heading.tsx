@@ -14,7 +14,7 @@ export function SectionHeading({ headingLevel = 'h2', children, className }: Sec
     <HeadingTag
       className={cn(
         'flex items-center gap-2 text-ui-lg font-bold text-neutral4',
-        '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50',
+        '[&>svg]:size-[1.2em] [&>svg]:opacity-50',
         className,
       )}
     >

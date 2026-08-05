@@ -16,6 +16,7 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -106,6 +107,9 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'unmockedToolPolicy', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'scorerIds', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'externalId', 'TEXT');
 
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -116,6 +120,9 @@ export class DatasetsPG extends DatasetsStorage {
     if (!exists) {
       const fullTableName = getTableName({ indexName: table, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`ALTER TABLE ${fullTableName} ADD COLUMN "${column}" ${sqlType}`);
+      // Raw DDL bypasses alterTable's snapshot maintenance — report it so later
+      // init-path checks in the same window see the column.
+      this.#db.noteColumnAdded(table, column);
     }
   }
 
@@ -126,6 +133,11 @@ export class DatasetsPG extends DatasetsStorage {
         name: 'idx_dataset_items_dataset_version',
         table: TABLE_DATASET_ITEMS,
         columns: ['datasetId', 'datasetVersion'],
+      },
+      {
+        name: 'idx_dataset_items_external_id_history',
+        table: TABLE_DATASET_ITEMS,
+        columns: ['datasetId', 'externalId', 'datasetVersion'],
       },
       {
         name: 'idx_dataset_items_dataset_validto_deleted',
@@ -214,12 +226,15 @@ export class DatasetsPG extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null) ?? null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source) : undefined,
@@ -233,6 +248,7 @@ export class DatasetsPG extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null) ?? null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
       validTo: row.validTo as number | null,
@@ -241,6 +257,8 @@ export class DatasetsPG extends DatasetsStorage {
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source) : undefined,
@@ -262,7 +280,8 @@ export class DatasetsPG extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = input.id ?? crypto.randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const nowIso = now.toISOString();
 
@@ -309,6 +328,11 @@ export class DatasetsPG extends DatasetsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set(['23505']))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_DATASET', 'FAILED'),
@@ -625,17 +649,20 @@ export class DatasetsPG extends DatasetsStorage {
         parentProjectId = (row.projectId as string | null) ?? null;
 
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             id,
             args.datasetId,
             newVersion,
+            args.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
             JSON.stringify(args.input),
             jsonbArg(args.groundTruth),
             jsonbArg(args.expectedTrajectory),
             jsonbArg(args.toolMocks),
+            args.unmockedToolPolicy ?? null,
+            jsonbArg(args.scorerIds),
             jsonbArg(args.requestContext),
             jsonbArg(args.metadata),
             jsonbArg(args.source),
@@ -662,6 +689,8 @@ export class DatasetsPG extends DatasetsStorage {
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
+        unmockedToolPolicy: args.unmockedToolPolicy,
+        scorerIds: args.scorerIds,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -718,6 +747,9 @@ export class DatasetsPG extends DatasetsStorage {
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+      const mergedUnmockedToolPolicy =
+        args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
+      const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -745,17 +777,20 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert new row with merged fields, preserving original createdAt;
         //    tenancy is re-inherited from parent dataset (Option B)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             args.id,
             args.datasetId,
             newVersion,
+            existing.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
             JSON.stringify(mergedInput),
             jsonbArg(mergedGroundTruth),
             jsonbArg(mergedExpectedTrajectory),
             jsonbArg(mergedToolMocks),
+            mergedUnmockedToolPolicy ?? null,
+            jsonbArg(mergedScorerIds),
             jsonbArg(mergedRequestContext),
             jsonbArg(mergedMetadata),
             jsonbArg(mergedSource),
@@ -782,6 +817,8 @@ export class DatasetsPG extends DatasetsStorage {
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
+        unmockedToolPolicy: mergedUnmockedToolPolicy,
+        scorerIds: mergedScorerIds,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -842,17 +879,20 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version);
         //    tenancy re-inherited from parent dataset
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             id,
             datasetId,
             newVersion,
+            existing.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
             JSON.stringify(existing.input),
             jsonbArg(existing.groundTruth),
             jsonbArg(existing.expectedTrajectory),
             jsonbArg(existing.toolMocks),
+            existing.unmockedToolPolicy ?? null,
+            jsonbArg(existing.scorerIds),
             jsonbArg(existing.requestContext),
             jsonbArg(existing.metadata),
             jsonbArg(existing.source),
@@ -884,92 +924,101 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
-      if (!dataset) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
-
+      if (input.items.length === 0) return [];
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const versionsTable = getTableName({
         indexName: TABLE_DATASET_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const versionId = crypto.randomUUID();
-
-      // Pre-generate IDs
-      const itemsWithIds = input.items.map(itemInput => ({ id: crypto.randomUUID(), input: itemInput }));
-
-      // Tenancy inherited from parent dataset (Option B)
-      const parentOrganizationId = dataset.organizationId ?? null;
-      const parentProjectId = dataset.projectId ?? null;
-
-      let newVersion: number;
+      let results: DatasetItem[] = [];
 
       await this.#db.client.tx(async t => {
-        // 1. Single version bump
-        const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+        const dataset = await t.oneOrNone(
+          `SELECT "version", "organizationId", "projectId" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`,
           [input.datasetId],
         );
-        newVersion = row.version as number;
+        if (!dataset)
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: input.datasetId },
+          });
 
-        // 2. N item inserts
-        for (const { id, input: itemInput } of itemsWithIds) {
-          await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-            [
+        const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
+        const historyRows = externalIds.length
+          ? await t.manyOrNone(
+              `SELECT * FROM ${itemsTable} WHERE "datasetId" = $1 AND "externalId" = ANY($2::text[]) ORDER BY "datasetVersion"`,
+              [input.datasetId, externalIds],
+            )
+          : [];
+        const plan = this.planDatasetItemBatch(
+          input.items,
+          historyRows.map(row => this.transformItemRowFull(row)),
+          () => crypto.randomUUID(),
+        );
+        const resolved = new Map<string, DatasetItem>(
+          [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+        );
+        if (plan.inserts.length > 0) {
+          const newVersion = Number(dataset.version) + 1;
+          const now = new Date();
+          const nowIso = now.toISOString();
+          await t.none(`UPDATE ${datasetsTable} SET "version" = $2 WHERE "id" = $1`, [input.datasetId, newVersion]);
+          for (const { id, item } of plan.inserts) {
+            await t.none(
+              `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+              [
+                id,
+                input.datasetId,
+                newVersion,
+                item.externalId ?? null,
+                dataset.organizationId ?? null,
+                dataset.projectId ?? null,
+                JSON.stringify(item.input),
+                jsonbArg(item.groundTruth),
+                jsonbArg(item.expectedTrajectory),
+                jsonbArg(item.toolMocks),
+                item.unmockedToolPolicy ?? null,
+                jsonbArg(item.scorerIds),
+                jsonbArg(item.requestContext),
+                jsonbArg(item.metadata),
+                jsonbArg(item.source),
+                nowIso,
+                nowIso,
+                nowIso,
+                nowIso,
+              ],
+            );
+            resolved.set(id, {
               id,
-              input.datasetId,
-              newVersion,
-              parentOrganizationId,
-              parentProjectId,
-              JSON.stringify(itemInput.input),
-              jsonbArg(itemInput.groundTruth),
-              jsonbArg(itemInput.expectedTrajectory),
-              jsonbArg(itemInput.toolMocks),
-              jsonbArg(itemInput.requestContext),
-              jsonbArg(itemInput.metadata),
-              jsonbArg(itemInput.source),
-              nowIso,
-              nowIso,
-              nowIso,
-              nowIso,
-            ],
+              datasetId: input.datasetId,
+              datasetVersion: newVersion,
+              externalId: item.externalId ?? null,
+              organizationId: dataset.organizationId ?? null,
+              projectId: dataset.projectId ?? null,
+              input: item.input,
+              groundTruth: item.groundTruth,
+              expectedTrajectory: item.expectedTrajectory,
+              toolMocks: item.toolMocks,
+              unmockedToolPolicy: item.unmockedToolPolicy,
+              scorerIds: item.scorerIds,
+              requestContext: item.requestContext,
+              metadata: item.metadata,
+              source: item.source,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+          await t.none(
+            `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
+            [crypto.randomUUID(), input.datasetId, newVersion, nowIso, nowIso],
           );
         }
-
-        // 3. Single dataset_version row
-        await t.none(
-          `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
-          [versionId, input.datasetId, newVersion, nowIso, nowIso],
-        );
+        results = plan.resolvedIds.map(id => resolved.get(id)!);
       });
-
-      return itemsWithIds.map(({ id, input: itemInput }) => ({
-        id,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion!,
-        organizationId: parentOrganizationId,
-        projectId: parentProjectId,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        expectedTrajectory: itemInput.expectedTrajectory,
-        toolMocks: itemInput.toolMocks,
-        requestContext: itemInput.requestContext,
-        metadata: itemInput.metadata,
-        source: itemInput.source,
-        createdAt: now,
-        updatedAt: now,
-      }));
+      return results;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1034,17 +1083,20 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
             [
               item.id,
               input.datasetId,
               newVersion,
+              item.externalId ?? null,
               parentOrganizationId,
               parentProjectId,
               JSON.stringify(item.input),
               jsonbArg(item.groundTruth),
               jsonbArg(item.expectedTrajectory),
               jsonbArg(item.toolMocks),
+              item.unmockedToolPolicy ?? null,
+              jsonbArg(item.scorerIds),
               jsonbArg(item.requestContext),
               jsonbArg(item.metadata),
               jsonbArg(item.source),

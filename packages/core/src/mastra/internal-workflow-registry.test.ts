@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterAll, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
@@ -14,6 +14,19 @@ import { Mastra } from './index';
  *    and prepare-stream workflows.  These carry a timestamp and are evicted
  *    by a lazy sweep when they exceed `Mastra.INTERNAL_WORKFLOW_TTL_MS`.
  */
+
+// The TTL is read once at module load, so the knob has to be set before `./index` is
+// imported. A short TTL suits every test here — they all advance time symbolically.
+const { CONFIGURED_TTL_MS } = vi.hoisted(() => {
+  const ttlMs = 60_000;
+  process.env.MASTRA_SUSPENDED_RUN_TTL_MS = String(ttlMs);
+  return { CONFIGURED_TTL_MS: ttlMs };
+});
+// Vitest reuses a worker process across test files, so leave the default TTL in place
+// for whichever file this worker picks up next.
+afterAll(() => {
+  delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+});
 
 const dummyStep = createStep({
   id: 'noop',
@@ -114,6 +127,15 @@ describe('internal workflow registry', () => {
     it('unregister on missing key is a no-op', () => {
       const m = makeMastra();
       expect(() => m.__unregisterInternalWorkflow('nope', 'run-1')).not.toThrow();
+    });
+  });
+
+  describe('TTL configuration', () => {
+    it('reads the shared MASTRA_SUSPENDED_RUN_TTL_MS knob', () => {
+      // One bound for both halves of a suspended run's in-memory state: this registry
+      // and the agent thread-stream runtime. If the two ever diverge, one of them keeps
+      // a suspended run's state alive after the other has already let it go.
+      expect(Mastra.INTERNAL_WORKFLOW_TTL_MS).toBe(CONFIGURED_TTL_MS);
     });
   });
 

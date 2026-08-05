@@ -18,10 +18,10 @@ describe('web scenario: model-switch', () => {
         // state (driven by the `model_changed` event). The agent's underlying
         // model stays pointed at AIMock, so the request still matches the fixture
         // — this verifies the model-switch control path, not the LLM backend.
-        const before = driver.state().modelId;
+        const before = driver.sessionState().modelId;
         await driver.switchModel('anthropic/claude-sonnet-4');
         await waitFor(
-          () => driver.state().modelId === 'anthropic/claude-sonnet-4',
+          () => driver.sessionState().modelId === 'anthropic/claude-sonnet-4',
           'session model to update to the switched model',
         );
         if (before === 'anthropic/claude-sonnet-4') {

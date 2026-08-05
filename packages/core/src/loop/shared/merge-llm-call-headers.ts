@@ -5,7 +5,7 @@
  *
  * Merge order (later wins):
  *   1. `memoryHeaders` – `x-thread-id` / `x-resource-id`, used by memory-aware
- *      gateways (e.g. Memory Gateway) for server-side enrichment.
+ *      gateways (e.g. the Gateway) for server-side enrichment.
  *   2. `modelConfigHeaders` – headers configured on the agent's model config.
  *   3. `callTimeHeaders` – headers passed via `modelSettings.headers` on the
  *      individual stream/generate call.

@@ -154,6 +154,20 @@ export interface MastraAuthWorkosOptions {
    * Runs after `jwtClaims` mapping and can override or augment the resolved user.
    */
   mapJwtPayloadToUser?: (payload: JwtPayload) => Partial<WorkOSUser> | null | undefined;
+  /**
+   * Map an authenticated user to a memory/tenant resource id.
+   *
+   * The returned value is written to the request context as the caller's
+   * `resourceId`, which multi-tenant tool providers use to bucket connected
+   * accounts (for example, Composio's `caller-supplied` scope). Return a
+   * stable per-user or per-tenant identifier such as `user.id`.
+   *
+   * @example
+   * ```typescript
+   * new MastraAuthWorkos({ mapUserToResourceId: user => user.id })
+   * ```
+   */
+  mapUserToResourceId?: (user: WorkOSUser) => string | undefined | null;
 }
 
 // ============================================================================

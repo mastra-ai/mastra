@@ -13,6 +13,7 @@ import {
   calculatePagination,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -106,6 +107,11 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       },
       {
         collection: TABLE_DATASET_ITEMS,
+        keys: { datasetId: 1, externalId: 1, datasetVersion: 1 },
+        options: { name: 'idx_dataset_items_datasetid_externalid_version', sparse: true },
+      },
+      {
+        collection: TABLE_DATASET_ITEMS,
         keys: { datasetId: 1, validTo: 1, isDeleted: 1, createdAt: -1, id: 1 },
         options: { name: 'idx_dataset_items_list' },
       },
@@ -184,6 +190,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       id: row.id,
       datasetId: row.datasetId,
       datasetVersion: row.datasetVersion,
+      externalId: row.externalId ?? null,
       organizationId: row.organizationId ?? null,
       projectId: row.projectId ?? null,
       input: typeof row.input === 'string' ? safelyParseJSON(row.input) : row.input,
@@ -191,6 +198,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       expectedTrajectory:
         typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
       toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
+      scorerIds: (typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : row.scorerIds) ?? undefined,
       requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
       source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,
@@ -220,7 +229,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const collection = await this.getCollection(TABLE_DATASETS);
 
@@ -248,6 +258,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       return this.transformDatasetRow(record);
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set([11000]))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
@@ -501,6 +515,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: args.groundTruth ?? null,
             expectedTrajectory: args.expectedTrajectory ?? null,
             toolMocks: args.toolMocks ?? null,
+            unmockedToolPolicy: args.unmockedToolPolicy ?? null,
+            scorerIds: args.scorerIds ?? null,
             requestContext: args.requestContext ?? null,
             metadata: args.metadata ?? null,
             source: args.source ?? null,
@@ -531,6 +547,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
+        unmockedToolPolicy: args.unmockedToolPolicy,
+        scorerIds: args.scorerIds,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -576,6 +594,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         args.groundTruth !== undefined ||
         args.expectedTrajectory !== undefined ||
         args.toolMocks !== undefined ||
+        args.unmockedToolPolicy !== undefined ||
+        args.scorerIds !== undefined ||
         args.requestContext !== undefined ||
         args.metadata !== undefined ||
         args.source !== undefined;
@@ -592,6 +612,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+      const mergedUnmockedToolPolicy =
+        args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
+      const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -635,6 +658,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             id: args.id,
             datasetId: args.datasetId,
             datasetVersion: newVersion,
+            externalId: existing.externalId ?? null,
             organizationId: parentOrganizationId,
             projectId: parentProjectId,
             validTo: null,
@@ -643,6 +667,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: mergedGroundTruth,
             expectedTrajectory: mergedExpectedTrajectory ?? null,
             toolMocks: mergedToolMocks ?? null,
+            unmockedToolPolicy: mergedUnmockedToolPolicy ?? null,
+            scorerIds: mergedScorerIds ?? null,
             requestContext: mergedRequestContext,
             metadata: mergedMetadata,
             source: mergedSource,
@@ -672,6 +698,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
+        unmockedToolPolicy: mergedUnmockedToolPolicy,
+        scorerIds: mergedScorerIds,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -743,6 +771,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             id,
             datasetId,
             datasetVersion: newVersion,
+            externalId: existing.externalId ?? null,
             organizationId: parentOrganizationId,
             projectId: parentProjectId,
             validTo: null,
@@ -751,6 +780,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: existing.groundTruth,
             expectedTrajectory: existing.expectedTrajectory ?? null,
             toolMocks: existing.toolMocks ?? null,
+            unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
+            scorerIds: existing.scorerIds ?? null,
             requestContext: existing.requestContext,
             metadata: existing.metadata,
             source: existing.source,
@@ -788,45 +819,30 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
-      if (!dataset) {
+      if (input.items.length === 0) return [];
+
+      const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
+      if (externalIds.length > 0 && !(await this.#connector.supportsTransactions())) {
         throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
+          id: 'DATASET_ITEM_IDENTITY_REQUIRES_TRANSACTIONS',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { datasetId: input.datasetId },
         });
       }
 
-      // No-op for empty batch — don't bump version
-      if (!input.items || input.items.length === 0) {
-        return [];
-      }
-
-      const now = new Date();
-      const versionId = randomUUID();
-
-      // Pre-generate IDs
-      const itemsWithIds = input.items.map(itemInput => ({
-        generatedId: randomUUID(),
-        itemInput,
-      }));
-
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
+      let resolvedItems: DatasetItem[] = [];
 
-      // Single version bump, batch insert items, and record version row atomically
-      let newVersion = 0;
-      let organizationId: string | null = null;
-      let projectId: string | null = null;
       await this.#connector.withTransaction(async session => {
-        const result = await datasetsCollection.findOneAndUpdate(
+        const dataset = await datasetsCollection.findOneAndUpdate(
           { id: input.datasetId },
-          { $inc: { version: 1 } },
+          { $inc: { identityRevision: 1 } },
           { session, returnDocument: 'after' },
         );
-        if (!result) {
+        if (!dataset) {
           throw new MastraError({
             id: createStorageErrorId('MONGODB', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
@@ -834,59 +850,64 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             details: { datasetId: input.datasetId },
           });
         }
-        newVersion = result.version as number;
-        organizationId = (result.organizationId as string | null | undefined) ?? null;
-        projectId = (result.projectId as string | null | undefined) ?? null;
 
-        const docs = itemsWithIds.map(({ generatedId, itemInput }) => ({
-          id: generatedId,
-          datasetId: input.datasetId,
-          datasetVersion: newVersion,
-          organizationId,
-          projectId,
-          validTo: null,
-          isDeleted: false,
-          input: itemInput.input,
-          groundTruth: itemInput.groundTruth ?? null,
-          expectedTrajectory: itemInput.expectedTrajectory ?? null,
-          toolMocks: itemInput.toolMocks ?? null,
-          requestContext: itemInput.requestContext ?? null,
-          metadata: itemInput.metadata ?? null,
-          source: itemInput.source ?? null,
-          createdAt: now,
-          updatedAt: now,
-        }));
-
-        await itemsCollection.insertMany(docs, { session });
-
-        // Single dataset_version row
-        await versionsCollection.insertOne(
-          {
-            id: versionId,
-            datasetId: input.datasetId,
-            version: newVersion,
-            createdAt: now,
-          },
-          { session },
+        const historyRows =
+          externalIds.length === 0
+            ? []
+            : await itemsCollection
+                .find({ datasetId: input.datasetId, externalId: { $in: externalIds } }, { session })
+                .sort({ datasetVersion: 1 })
+                .toArray();
+        const plan = this.planDatasetItemBatch(
+          input.items,
+          historyRows.map(row => this.transformItemRowFull(row)),
+          randomUUID,
         );
+        const resolved = new Map<string, DatasetItem>(
+          [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+        );
+
+        if (plan.inserts.length > 0) {
+          const now = new Date();
+          const newVersion = Number(dataset.version) + 1;
+          await datasetsCollection.updateOne(
+            { id: input.datasetId },
+            { $set: { version: newVersion, updatedAt: now } },
+            { session },
+          );
+          for (const insert of plan.inserts) {
+            const item: DatasetItem = {
+              id: insert.id,
+              datasetId: input.datasetId,
+              datasetVersion: newVersion,
+              externalId: insert.item.externalId ?? null,
+              organizationId: dataset.organizationId ?? null,
+              projectId: dataset.projectId ?? null,
+              input: insert.item.input,
+              groundTruth: insert.item.groundTruth,
+              expectedTrajectory: insert.item.expectedTrajectory,
+              toolMocks: insert.item.toolMocks,
+              unmockedToolPolicy: insert.item.unmockedToolPolicy,
+              scorerIds: insert.item.scorerIds,
+              requestContext: insert.item.requestContext,
+              metadata: insert.item.metadata,
+              source: insert.item.source,
+              createdAt: now,
+              updatedAt: now,
+            };
+            await itemsCollection.insertOne({ ...item, validTo: null, isDeleted: false }, { session });
+            resolved.set(item.id, item);
+          }
+          await versionsCollection.insertOne(
+            { id: randomUUID(), datasetId: input.datasetId, version: newVersion, createdAt: now },
+            { session },
+          );
+        }
+
+        resolvedItems = plan.resolvedIds.map(id => resolved.get(id)!);
       });
 
-      return itemsWithIds.map(({ generatedId, itemInput }) => ({
-        id: generatedId,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion,
-        organizationId,
-        projectId,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        expectedTrajectory: itemInput.expectedTrajectory,
-        toolMocks: itemInput.toolMocks,
-        requestContext: itemInput.requestContext,
-        metadata: itemInput.metadata,
-        source: itemInput.source,
-        createdAt: now,
-        updatedAt: now,
-      }));
+      return resolvedItems;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -957,6 +978,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           id: item.id,
           datasetId: input.datasetId,
           datasetVersion: newVersion,
+          externalId: item.externalId ?? null,
           organizationId: parentOrganizationId,
           projectId: parentProjectId,
           validTo: null,
@@ -965,6 +987,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           groundTruth: item.groundTruth,
           expectedTrajectory: item.expectedTrajectory ?? null,
           toolMocks: item.toolMocks ?? null,
+          unmockedToolPolicy: item.unmockedToolPolicy ?? null,
+          scorerIds: item.scorerIds ?? null,
           requestContext: item.requestContext,
           metadata: item.metadata,
           source: item.source,

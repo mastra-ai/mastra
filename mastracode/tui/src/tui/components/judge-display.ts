@@ -2,13 +2,14 @@
  * JudgeDisplayComponent — renders the goal judge's decision inline in the chat.
  */
 
-import { Container, Text } from '@earendil-works/pi-tui';
+import { Text } from '@earendil-works/pi-tui';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 
-import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import { BOX_INDENT, mastraBrand, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 /** Display-only decision derived from a goal evaluation. */
 export interface GoalJudgeResult {
@@ -33,7 +34,7 @@ const MUTED_COLOR = '#8a8a8a';
 const PAUSED_COLOR = '#f5a524';
 const WAITING_COLOR = '#8a8a8a';
 
-export class JudgeDisplayComponent extends Container {
+export class JudgeDisplayComponent extends WidthAwareContainer {
   private result: GoalJudgeResult | null;
   private turnsUsed: number;
   private maxTurns: number;
@@ -45,7 +46,7 @@ export class JudgeDisplayComponent extends Container {
     this.result = result;
     this.turnsUsed = turnsUsed;
     this.maxTurns = maxTurns;
-    this.renderContent();
+    this.rebuild();
   }
 
   addActivity(line: string): void {
@@ -55,12 +56,12 @@ export class JudgeDisplayComponent extends Container {
     if (this.activity.length > 6) {
       this.activity = this.activity.slice(-6);
     }
-    this.renderContent();
+    this.rebuild();
   }
 
   setStreamingReason(reason: string): void {
     this.streamingReason = reason;
-    this.renderContent();
+    this.rebuild();
   }
 
   setResult(result: GoalJudgeResult, turnsUsed: number, maxTurns: number): void {
@@ -68,7 +69,7 @@ export class JudgeDisplayComponent extends Container {
     this.streamingReason = '';
     this.turnsUsed = turnsUsed;
     this.maxTurns = maxTurns;
-    this.renderContent();
+    this.rebuild();
   }
 
   /** Render the result of an in-loop goal evaluation chunk. */
@@ -80,12 +81,11 @@ export class JudgeDisplayComponent extends Container {
     this.setResult({ decision: 'paused', reason: 'Judge evaluation was interrupted.' }, this.turnsUsed, this.maxTurns);
   }
 
-  private renderContent(): void {
+  protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
     const border = (char: string) => chalk.hex(JUDGE_COLOR)(char);
     const title = chalk.hex(JUDGE_COLOR).bold('Goal');
-    const termWidth = getTermWidth();
     const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
     const horizontal = '─'.repeat(innerWidth + 1);
 
