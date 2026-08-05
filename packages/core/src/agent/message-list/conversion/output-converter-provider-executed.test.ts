@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { AIV5Type } from '../types';
-import { addStartStepPartsForAIV5, aiV5UIMessagesToAIV5ModelMessages, sanitizeV5UIMessages } from './output-converter';
+import {
+  addStartStepPartsForAIV5,
+  aiV5UIMessagesToAIV5ModelMessages,
+  sanitizeAIV4UIMessages,
+  sanitizeV5UIMessages,
+} from './output-converter';
 
 /**
  * Tests for provider-executed tool handling in sanitizeV5UIMessages.
@@ -206,6 +211,59 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
+  });
+});
+
+describe('sanitizeAIV4UIMessages — output-error compatibility', () => {
+  it('maps output-error tool parts to legacy result parts before AI SDK v4 conversion', () => {
+    const msg = {
+      id: 'msg-1',
+      role: 'assistant',
+      content: '',
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'call-1',
+            toolName: 'lookupCustomer',
+            args: { customerId: 'cus_123' },
+            errorText: 'Lookup failed',
+          },
+        },
+      ],
+      toolInvocations: [
+        {
+          state: 'output-error',
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123' },
+          errorText: 'Lookup failed',
+        },
+      ],
+    } as any;
+
+    const [sanitized] = sanitizeAIV4UIMessages([msg]);
+
+    expect(sanitized?.parts[0]).toEqual({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'call-1',
+        toolName: 'lookupCustomer',
+        args: { customerId: 'cus_123' },
+        result: 'Lookup failed',
+      },
+    });
+    expect(sanitized?.toolInvocations).toEqual([
+      {
+        state: 'result',
+        toolCallId: 'call-1',
+        toolName: 'lookupCustomer',
+        args: { customerId: 'cus_123' },
+        result: 'Lookup failed',
+      },
+    ]);
   });
 });
 
