@@ -3,8 +3,10 @@ import fsPromises from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@mastra/core/base';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
+import { parse } from 'yaml';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
@@ -38,6 +40,49 @@ function getTopLevelYamlKey(line: string) {
   return match?.[1];
 }
 
+function validatePnpmBuildApprovals(key: string, block: string): void {
+  if (key !== 'allowBuilds' && key !== 'onlyBuiltDependencies') return;
+
+  let value: unknown;
+  try {
+    value = (parse(block) as Record<string, unknown>)[key];
+  } catch (error) {
+    throw new MastraError(
+      {
+        id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.USER,
+        details: { key },
+        text: `Invalid pnpm ${key} configuration`,
+      },
+      error,
+    );
+  }
+
+  const invalidEntries =
+    key === 'allowBuilds'
+      ? value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.entries(value).filter(
+            ([dependency, approval]) => dependency.trim().length === 0 || typeof approval !== 'boolean',
+          )
+        : [[key, value]]
+      : Array.isArray(value) &&
+          value.every(dependency => typeof dependency === 'string' && dependency.trim().length > 0)
+        ? []
+        : [[key, value]];
+
+  if (invalidEntries.length === 0) return;
+  const invalidEntryNames = invalidEntries.map(([entry]) => entry).join(', ');
+
+  throw new MastraError({
+    id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG',
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+    details: { key, invalidEntries: invalidEntryNames },
+    text: `Invalid pnpm ${key} entries: ${invalidEntryNames}`,
+  });
+}
+
 export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
@@ -62,6 +107,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
 
     const block = lines.slice(start, index).join('\n').trimEnd();
     if (block) {
+      validatePnpmBuildApprovals(key, block);
       blocks.push(block);
     }
   }

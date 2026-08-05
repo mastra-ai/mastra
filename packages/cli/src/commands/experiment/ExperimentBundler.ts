@@ -21,7 +21,11 @@ export interface ExperimentWorkerArtifactManifest {
   protocol: { versions: string[]; framing: 'ndjson'; datasetCanonicalizationVersion: string };
   launch: { executable: string; arguments: string[]; workingDirectory: string };
   dependencies: { manifest: string; lockfile?: string };
-  artifact: { digestAlgorithm: 'sha256'; contentDigest: string; excludes: ['experiment-worker-manifest.json'] };
+  artifact: {
+    digestAlgorithm: 'sha256';
+    contentDigest: string;
+    excludes: ['experiment-worker-manifest.json', 'node_modules'];
+  };
   files: Array<{ path: string; sha256: string; type?: 'file' | 'symlink'; target?: string }>;
 }
 
@@ -76,7 +80,7 @@ export class ExperimentBundler extends Bundler {
       artifact: {
         digestAlgorithm: 'sha256',
         contentDigest,
-        excludes: ['experiment-worker-manifest.json'],
+        excludes: ['experiment-worker-manifest.json', 'node_modules'],
       },
       files,
     };
@@ -127,7 +131,7 @@ async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
     for (const name of entries.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))) {
       const fullPath = join(directory, name);
       const artifactPath = relative(root, fullPath).replaceAll('\\', '/');
-      if (artifactPath === 'experiment-worker-manifest.json') continue;
+      if (artifactPath === 'experiment-worker-manifest.json' || artifactPath === 'node_modules') continue;
 
       const stats = await lstat(fullPath);
       if (stats.isDirectory()) {

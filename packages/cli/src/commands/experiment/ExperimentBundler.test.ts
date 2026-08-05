@@ -89,11 +89,11 @@ describe('ExperimentBundler', () => {
     expect(manifest.artifact).toEqual({
       digestAlgorithm: 'sha256',
       contentDigest: expectedContentDigest,
-      excludes: ['experiment-worker-manifest.json'],
+      excludes: ['experiment-worker-manifest.json', 'node_modules'],
     });
   });
 
-  it('hashes symlink targets without traversing directory symlinks', async () => {
+  it('excludes node_modules from file digests and content digest', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');
     const packageStore = await createTemporaryDirectory('mastra-experiment-package-store-');
@@ -103,18 +103,42 @@ describe('ExperimentBundler', () => {
     await writeFile(join(packageStore, 'package.json'), '{"name":"linked-package"}');
     await symlink(packageStore, join(output, 'node_modules', 'linked-package'));
 
+    const bundler = new ExperimentBundler();
+    await bundler.writeArtifactManifest(output, '1.2.3');
+    const firstManifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+
+    await writeFile(join(packageStore, 'package.json'), '{"name":"changed-linked-package"}');
+    await writeFile(join(output, 'node_modules', 'installed-package.json'), '{"changed":true}');
+    await bundler.writeArtifactManifest(output, '1.2.3');
+    const secondManifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+
+    expect(firstManifest.files).toEqual([
+      { path: 'index.mjs', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { path: 'package.json', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
+    ]);
+    expect(secondManifest.files).toEqual(firstManifest.files);
+    expect(secondManifest.artifact.contentDigest).toBe(firstManifest.artifact.contentDigest);
+  });
+
+  it('hashes symlink targets outside excluded directories without traversing them', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const linkedDirectory = await createTemporaryDirectory('mastra-experiment-linked-directory-');
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await writeFile(join(linkedDirectory, 'nested.txt'), 'not traversed');
+    await symlink(linkedDirectory, join(output, 'linked-directory'));
+
     await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
 
     const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
     expect(manifest.files).toContainEqual({
-      path: 'node_modules/linked-package',
+      path: 'linked-directory',
       type: 'symlink',
-      target: packageStore,
-      sha256: createHash('sha256').update(packageStore).digest('hex'),
+      target: linkedDirectory,
+      sha256: createHash('sha256').update(linkedDirectory).digest('hex'),
     });
-    expect(manifest.files).not.toContainEqual(
-      expect.objectContaining({ path: 'node_modules/linked-package/package.json' }),
-    );
+    expect(manifest.files).not.toContainEqual(expect.objectContaining({ path: 'linked-directory/nested.txt' }));
   });
 
   it('excludes only the root artifact manifest from digests', async () => {
