@@ -82,7 +82,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       // Thread scope - create a new browser manager for this thread
       const manager = new BrowserManager();
 
-      const launchOptions: BrowserLaunchOptions = {
+      const launchOptions: BrowserLaunchOptions & { cdpHeaders?: Record<string, string> } = {
         headless: this.browserConfig.headless,
         viewport: this.browserConfig.viewport,
         profile: this.browserConfig.profile,
@@ -92,6 +92,9 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
 
       if (this.browserConfig.cdpUrl && this.resolveCdpUrl) {
         launchOptions.cdpUrl = await this.resolveCdpUrl(this.browserConfig.cdpUrl);
+      }
+      if (this.browserConfig.cdpHeaders) {
+        launchOptions.cdpHeaders = this.browserConfig.cdpHeaders;
       }
 
       try {
