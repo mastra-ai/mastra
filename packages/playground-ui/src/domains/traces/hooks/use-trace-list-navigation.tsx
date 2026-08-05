@@ -35,11 +35,20 @@ export function useTraceListNavigation<T extends { traceId: string; spanId?: str
   const passSpanId = featuredSpanId != null;
   const navigateTo = (row: T) => onTraceChange(row.traceId, passSpanId ? (row.spanId ?? undefined) : undefined);
 
-  const handlePreviousTrace = featuredTraceIdx > 0 ? () => navigateTo(traces[featuredTraceIdx - 1]) : undefined;
+  const handlePreviousTrace =
+    featuredTraceIdx > 0
+      ? () => {
+          const row = traces[featuredTraceIdx - 1];
+          if (row) navigateTo(row);
+        }
+      : undefined;
 
   const handleNextTrace =
     featuredTraceIdx >= 0 && featuredTraceIdx < traces.length - 1
-      ? () => navigateTo(traces[featuredTraceIdx + 1])
+      ? () => {
+          const row = traces[featuredTraceIdx + 1];
+          if (row) navigateTo(row);
+        }
       : undefined;
 
   return { featuredTraceIdx, handlePreviousTrace, handleNextTrace };

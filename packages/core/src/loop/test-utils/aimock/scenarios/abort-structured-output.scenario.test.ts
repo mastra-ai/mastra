@@ -152,5 +152,5 @@ describeForAllEngines(
       }
     });
   },
-  { skip: ['durable'] },
+  {},
 );

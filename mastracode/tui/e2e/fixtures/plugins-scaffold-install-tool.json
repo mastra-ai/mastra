@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Use the scaffolded example plugin tool.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_scaffolded_example_tool",
+            "name": "example_tool",
+            "arguments": {
+              "message": "hello from scaffold"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_scaffolded_example_tool",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Scaffolded example tool returned hello from scaffold."
+      }
+    }
+  ]
+}

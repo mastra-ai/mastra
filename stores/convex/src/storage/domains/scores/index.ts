@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   ListScoresResponse,
@@ -9,7 +7,7 @@ import type {
   ScoringSource,
 } from '@mastra/core/evals';
 import { TABLE_SCORERS, ScoresStorage, createStorageErrorId } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination, ScoreTenancyFilters } from '@mastra/core/storage';
 
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
@@ -66,15 +64,17 @@ export class ScoresConvex extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: ScoringEntityType;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     return this.listScores({
-      filters: { scorerId, entityId, entityType, source },
+      filters: { scorerId, entityId, entityType, source, ...filters },
       pagination,
     });
   }
@@ -82,12 +82,14 @@ export class ScoresConvex extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     return this.listScores({
-      filters: { runId },
+      filters: { runId, ...filters },
       pagination,
     });
   }
@@ -96,22 +98,25 @@ export class ScoresConvex extends ScoresStorage {
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     entityId: string;
     entityType: ScoringEntityType;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     return this.listScores({
-      filters: { entityId, entityType },
+      filters: { entityId, entityType, ...filters },
       pagination,
     });
   }
-
   private async listScores({
     filters,
     pagination,
   }: {
-    filters: Partial<Pick<ScoreRowData, 'scorerId' | 'entityId' | 'entityType' | 'runId' | 'source'>>;
+    filters: Partial<
+      Pick<ScoreRowData, 'scorerId' | 'entityId' | 'entityType' | 'runId' | 'source' | 'organizationId' | 'projectId'>
+    >;
     pagination: StoragePagination;
   }): Promise<ListScoresResponse> {
     if (pagination.page < 0) {
@@ -132,6 +137,8 @@ export class ScoresConvex extends ScoresStorage {
       .filter(row => (filters.entityType ? row.entityType === filters.entityType : true))
       .filter(row => (filters.runId ? row.runId === filters.runId : true))
       .filter(row => (filters.source ? row.source === filters.source : true))
+      .filter(row => (filters.organizationId !== undefined ? row.organizationId === filters.organizationId : true))
+      .filter(row => (filters.projectId !== undefined ? row.projectId === filters.projectId : true))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     const { perPage, page } = pagination;

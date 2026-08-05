@@ -124,6 +124,12 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       tableName: TABLE_SCORER_DEFINITIONS,
       schema: TABLE_SCHEMAS[TABLE_SCORER_DEFINITIONS],
     });
+    // Add tenancy columns for backwards compatibility (pre-tenancy installs)
+    await this.#db.alterTable({
+      tableName: TABLE_SCORER_DEFINITIONS,
+      schema: TABLE_SCHEMAS[TABLE_SCORER_DEFINITIONS],
+      ifNotExists: ['organizationId', 'projectId'],
+    });
     await this.#db.createTable({
       tableName: TABLE_SCORER_DEFINITION_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_SCORER_DEFINITION_VERSIONS],
@@ -188,14 +194,16 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       // 1. Create the thin scorer definition record
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
-          id, status, "activeVersionId", "authorId", metadata,
+          id, status, "activeVersionId", "authorId", "organizationId", "projectId", metadata,
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           scorerDefinition.id,
           'draft',
           null,
           scorerDefinition.authorId ?? null,
+          scorerDefinition.organizationId ?? null,
+          scorerDefinition.projectId ?? null,
           scorerDefinition.metadata ? JSON.stringify(scorerDefinition.metadata) : null,
           nowIso,
           nowIso,
@@ -205,7 +213,14 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       );
 
       // 2. Extract snapshot fields and create version 1
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = scorerDefinition;
+      const {
+        id: _id,
+        authorId: _authorId,
+        organizationId: _organizationId,
+        projectId: _projectId,
+        metadata: _metadata,
+        ...snapshotConfig
+      } = scorerDefinition;
       const versionId = crypto.randomUUID();
       await this.createVersion({
         id: versionId,
@@ -221,6 +236,8 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: scorerDefinition.authorId,
+        organizationId: scorerDefinition.organizationId,
+        projectId: scorerDefinition.projectId,
         metadata: scorerDefinition.metadata,
         createdAt: now,
         updatedAt: now,
@@ -354,7 +371,16 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
   }
 
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      organizationId,
+      projectId,
+      metadata,
+      status,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -388,6 +414,16 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
+      }
+
+      if (organizationId !== undefined) {
+        conditions.push(`"organizationId" = $${paramIdx++}`);
+        queryParams.push(organizationId);
+      }
+
+      if (projectId !== undefined) {
+        conditions.push(`"projectId" = $${paramIdx++}`);
+        queryParams.push(projectId);
       }
 
       if (metadata && Object.keys(metadata).length > 0) {
@@ -750,6 +786,8 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       status: row.status as StorageScorerDefinitionType['status'],
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
+      organizationId: row.organizationId as string | undefined,
+      projectId: row.projectId as string | undefined,
       metadata: parseJsonResilient(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),

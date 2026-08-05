@@ -26,6 +26,33 @@ interface PropertiesTableProps {
   content?: ContentItem[]
 }
 
+const inlineMarkdownPattern = /(`[^`]+`|\[[^\]]+\]\([^)]+\))/g
+
+const renderInlineMarkdown = (text: string) => {
+  return text.split(inlineMarkdownPattern).map((part, index) => {
+    if (!part) return null
+
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={index} className="language-text">
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (linkMatch) {
+      return (
+        <a key={index} href={linkMatch[2]}>
+          {linkMatch[1]}
+        </a>
+      )
+    }
+
+    return part
+  })
+}
+
 const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
   const renderType = ({ properties = [] }: { properties: Property[] | undefined }) => {
     if (properties && properties.length > 0) {
@@ -68,7 +95,7 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
                         className="text-sm leading-5 text-(--ifm-color-emphasis-700)"
                         data-testid="property-description"
                       >
-                        {param.description}
+                        {renderInlineMarkdown(param.description)}
                       </div>
                       {renderType({ properties: param.properties })}
                     </div>
@@ -112,7 +139,7 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
               )}
             </div>
             <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)" data-testid="property-description">
-              {item.description}
+              {renderInlineMarkdown(item.description)}
             </div>
             {renderType({ properties: item.properties })}
           </div>

@@ -28,8 +28,6 @@ export type {
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
   AgentControllerMode,
   AgentControllerOMConfig,
   AgentControllerRequestContext,
@@ -41,7 +39,7 @@ export type {
   AgentControllerSubagent,
   AgentControllerSubagentHistoryEntry,
   AgentControllerThread,
-  HeartbeatHandler,
+  IntervalHandler,
   ModelAuthStatus,
   ModelUseCountProvider,
   ModelUseCountTracker,
@@ -54,3 +52,4 @@ export type {
   BuiltinToolId,
   TokenUsage,
 } from './types';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../agent/message-list/state/types';

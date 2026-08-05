@@ -1,0 +1,52 @@
+{
+  "name": "examples-voice-agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Trades contractor call center voice agent built with @mastra/livekit, with agent and workflow entrypoints",
+  "scripts": {
+    "dev": "mastra dev",
+    "worker": "node --env-file=.env --import tsx src/mastra/voice-worker.ts dev",
+    "worker:demo": "node --env-file=.env --import tsx src/mastra/voice-worker.ts dev --log-level info",
+    "worker:workflow": "node --env-file=.env --import tsx src/mastra/voice-worker-workflow.ts dev",
+    "worker:regulated": "node --env-file=.env --import tsx src/mastra/voice-worker-regulated.ts dev",
+    "worker:regulated:demo": "node --env-file=.env --import tsx src/mastra/voice-worker-regulated.ts dev --log-level info",
+    "worker:plugin": "node --env-file=.env --import tsx src/mastra/voice-worker-plugin.ts dev",
+    "worker:download-files": "pnpm --dir ../../integrations/livekit exec livekit-agents download-files",
+    "dev:ui": "concurrently --kill-others-on-fail --names mastra,studio \"mastra dev\" \"pnpm --dir ../.. dev:playground\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .mastra *.db"
+  },
+  "dependencies": {
+    "@livekit/agents": "^1.4.5",
+    "@livekit/agents-plugin-livekit": "^1.4.5",
+    "@livekit/agents-plugin-silero": "^1.4.5",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/livekit": "link:../../integrations/livekit",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "mastra": "latest",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsx": "^4",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@livekit/agents": "link:../../integrations/livekit/node_modules/@livekit/agents",
+      "@livekit/agents-plugin-livekit": "link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit",
+      "@livekit/agents-plugin-silero": "link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero",
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/livekit": "link:../../integrations/livekit",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/observability": "link:../../observability/mastra",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.5.1+sha512.93f7b57422ea7068257235b4c16eb60762eb68e1dc23723199cc739043ea9be2c4143274a399d8c6defa2b1176226d9ca1c4b63482d6200c1a8fbaa78c1d1485"
+}

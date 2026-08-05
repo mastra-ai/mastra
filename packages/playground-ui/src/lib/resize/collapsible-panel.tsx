@@ -19,64 +19,6 @@ const PILL_EDGE_MARGIN = 22;
 
 type PanelElementRef = RefObject<HTMLDivElement | null>;
 
-const usePanelSizeTransitions = (elementRef: PanelElementRef) => {
-  const [booted, setBooted] = useState(false);
-  const bootedRef = useRef(false);
-  const bootScheduled = useRef(false);
-  const enableSizeTransitionsRef = useRef<() => void>(() => {});
-
-  const enableSizeTransitions = useCallback(() => {
-    enableSizeTransitionsRef.current();
-  }, []);
-
-  const boot = useCallback(() => {
-    if (bootScheduled.current) return;
-    bootScheduled.current = true;
-    requestAnimationFrame(() => {
-      bootedRef.current = true;
-      setBooted(true);
-      enableSizeTransitionsRef.current();
-    });
-  }, []);
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const group = elementRef.current?.parentElement;
-    if (!group) return;
-    const panels = Array.from(group.children).filter(
-      (child): child is HTMLElement => child instanceof HTMLElement && child.hasAttribute('data-panel'),
-    );
-    const separators = Array.from(group.children).filter(
-      (child): child is HTMLElement => child instanceof HTMLElement && child.hasAttribute('data-separator'),
-    );
-
-    const enable = () => {
-      if (!bootedRef.current) return;
-      panels.forEach(
-        panel =>
-          (panel.style.transition =
-            'flex-grow 300ms var(--ease-out-custom, ease), flex-basis 300ms var(--ease-out-custom, ease)'),
-      );
-    };
-    const disable = () => panels.forEach(panel => (panel.style.transition = 'none'));
-
-    enable();
-    enableSizeTransitionsRef.current = enable;
-    separators.forEach(separator => separator.addEventListener('pointerdown', disable));
-    window.addEventListener('pointerup', enable);
-    window.addEventListener('pointercancel', enable);
-    return () => {
-      enableSizeTransitionsRef.current = () => {};
-      separators.forEach(separator => separator.removeEventListener('pointerdown', disable));
-      window.removeEventListener('pointerup', enable);
-      window.removeEventListener('pointercancel', enable);
-      panels.forEach(panel => (panel.style.transition = ''));
-    };
-  }, [elementRef]);
-
-  return { booted, boot, enableSizeTransitions };
-};
-
 const useCollapsedEdgePill = ({
   collapsed,
   direction,
@@ -112,6 +54,8 @@ const useCollapsedEdgePill = ({
       if (!pill) return;
       beginPillTracking(point);
       pill.style.transitionProperty = 'opacity, translate';
+      // Re-enable top transitions after the browser commits the pill's new
+      // starting position; otherwise it travels in from its previous position.
       requestAnimationFrame(() => {
         pill.style.transitionProperty = '';
       });
@@ -169,18 +113,13 @@ export const CollapsiblePanel = ({
   const [collapsed, setCollapsed] = useState(false);
   const panelRef = usePanelRef();
   const elementRef = useRef<HTMLDivElement | null>(null);
-  const { booted, boot, enableSizeTransitions } = usePanelSizeTransitions(elementRef);
   const { endPillTracking, expandButtonRef, stripRef, pillRef, spawnPill, trackPillPosition } = useCollapsedEdgePill({
     collapsed,
     direction,
     elementRef,
   });
 
-  const expand = useCallback(() => {
-    enableSizeTransitions();
-    if (!panelRef.current) return;
-    panelRef.current.expand();
-  }, [enableSizeTransitions, panelRef]);
+  const expand = () => panelRef.current?.expand();
 
   const numericMinSize = typeof minSize === 'number' ? minSize : null;
 
@@ -199,29 +138,16 @@ export const CollapsiblePanel = ({
         } as CSSProperties
       }
       {...props}
-      onResize={(size, previousSize, panel) => {
-        onResize?.(size, previousSize, panel);
+      onResize={(size, id, previousSize) => {
+        onResize?.(size, id, previousSize);
         if (typeof collapsedSize !== 'number') return;
         setCollapsed(size.inPixels <= collapsedSize);
-        boot();
       }}
     >
       <div
-        inert={collapsed}
-        data-state={collapsed ? 'collapsed' : 'open'}
-        data-direction={direction}
-        style={{
-          minWidth: 'var(--panel-min-w)',
-          opacity: collapsed ? 0 : undefined,
-          translate: collapsed ? (direction === 'left' ? '-100% 0' : '100% 0') : undefined,
-        }}
-        className={cn(
-          'absolute inset-y-0 w-full overflow-hidden',
-          'transition-[opacity,translate] duration-300 ease-out-custom motion-reduce:transition-none',
-          'data-[direction=left]:left-0 data-[direction=right]:right-0',
-          'data-[state=collapsed]:z-10',
-          !booted && 'transition-none',
-        )}
+        hidden={collapsed}
+        style={{ minWidth: 'var(--panel-min-w)' }}
+        className={cn('absolute inset-y-0 w-full overflow-hidden', direction === 'left' ? 'left-0' : 'right-0')}
       >
         {children}
       </div>

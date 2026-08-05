@@ -126,6 +126,14 @@ export const registryData: RegistryFile = {
       count: 69,
     },
     {
+      id: 'mcpindex',
+      name: 'mcpindex',
+      description:
+        'Find MCP servers by natural-language task, with quality scores and an advisory trust screen (REVIEW / UNVERIFIED) that flags a tool before an agent calls it.',
+      url: 'https://mcpindex.ai',
+      tags: ['open-source'],
+    },
+    {
       id: 'mcpmarket',
       name: 'MCP Market',
       description: 'Explore our curated collection of MCP servers to connect AI to your favorite tools.',
@@ -210,6 +218,13 @@ export const registryData: RegistryFile = {
       tags: ['verified'],
       count: 3653,
       postProcessServers: processPulseMcpServers,
+    },
+    {
+      id: 'remoteopenclaw',
+      name: 'Remote OpenClaw',
+      description: 'Free searchable directory of MCP servers, agent skills, and plugins for coding agents.',
+      url: 'https://www.remoteopenclaw.com/',
+      count: 13870,
     },
     {
       id: 'smithery',

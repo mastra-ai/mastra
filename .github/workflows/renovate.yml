@@ -40,7 +40,7 @@ jobs:
     if: github.repository == 'mastra-ai/mastra'
     steps:
       - name: Initial checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -54,7 +54,7 @@ jobs:
       # cache wouldn't necessarily upload when it changes. actions/download-artifact also doesn't work
       # because it only handles artifacts uploaded in the same run, and we want to restore from the
       # previous successful run.
-      - uses: dawidd6/action-download-artifact@v10
+      - uses: dawidd6/action-download-artifact@v21
         if: github.event.inputs.repoCache != 'disabled'
         continue-on-error: true
         with:
@@ -84,12 +84,13 @@ jobs:
           ls -R $cache_dir
 
       - name: Self-hosted Renovate
-        uses: renovatebot/github-action@v43.0.17
+        uses: renovatebot/github-action@v46.1.19
         with:
           configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
           token: ${{ secrets.RENOVATE_PAT  }}
         env:
+          NODE_OPTIONS: --max-old-space-size=8192
           LOG_LEVEL: ${{ github.event.inputs.logLevel }}
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           # This enables the cache -- if this is set, it's not necessary to add it to renovate.json.
@@ -104,7 +105,7 @@ jobs:
           # To solve *that*, we'd have to extract to root (/), which isn't safe.
           tar -czvf $cache_archive -C $cache_dir .
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: github.event.inputs.repoCache != 'disabled'
         with:
           name: ${{ env.cache_key }}

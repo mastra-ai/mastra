@@ -7,6 +7,7 @@ import type {
   SandboxProvider,
   BlobStoreProvider,
   BrowserProvider,
+  WorkspaceProvider,
 } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
@@ -99,6 +100,13 @@ export class MastraEditor implements IMastraEditor {
    */
   readonly __browsers: Map<string, BrowserProvider>;
 
+  /**
+   * @internal — exposed for namespace classes to hydrate stored workspace configs.
+   * Maps provider ID to the provider descriptor.
+   * No built-in providers — workspace providers must be registered via config.
+   */
+  readonly __workspaces: Map<string, WorkspaceProvider>;
+
   public readonly agent: EditorAgentNamespace;
   public readonly mcp: EditorMCPNamespace;
   public readonly mcpServer: EditorMCPServerNamespace;
@@ -142,6 +150,12 @@ export class MastraEditor implements IMastraEditor {
     this.__browsers = new Map<string, BrowserProvider>();
     for (const [id, provider] of Object.entries(config?.browsers ?? {})) {
       this.__browsers.set(id, provider);
+    }
+
+    // Workspace providers — no built-in providers; workspace packages must be registered
+    this.__workspaces = new Map<string, WorkspaceProvider>();
+    for (const [id, provider] of Object.entries(config?.workspaces ?? {})) {
+      this.__workspaces.set(id, provider);
     }
 
     this.agent = new EditorAgentNamespace(this);

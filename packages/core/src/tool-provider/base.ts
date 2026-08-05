@@ -12,6 +12,7 @@ import type {
   ResolveToolsOpts,
   ToolProvider,
   ToolProviderCapabilities,
+  ToolProviderConnectionScope,
   ToolProviderHealth,
   ToolProviderInfo,
   ToolProviderListResult,
@@ -42,6 +43,13 @@ export interface BaseToolProviderOptions {
    * leaves its tools unfiltered.
    */
   allowedTools?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Default identity-bucketing scope for connections authorized against this
+   * provider. This is the app author's tenancy decision (e.g.
+   * `'caller-supplied'` for per-tenant OAuth). The authorize flow applies it
+   * whenever a request doesn't override `scope`. Defaults to `'per-author'`.
+   */
+  defaultScope?: ToolProviderConnectionScope;
 }
 
 /**
@@ -58,10 +66,12 @@ export abstract class BaseToolProvider implements ToolProvider {
 
   protected readonly allowedToolkits: readonly string[];
   protected readonly allowedTools: Readonly<Record<string, readonly string[]>>;
+  readonly defaultScope?: ToolProviderConnectionScope;
 
   constructor(options: BaseToolProviderOptions = {}) {
     this.allowedToolkits = options.allowedToolkits ?? [];
     this.allowedTools = options.allowedTools ?? {};
+    this.defaultScope = options.defaultScope;
   }
 
   // ── VNext catalog (filtered) ──────────────────────────────────────────

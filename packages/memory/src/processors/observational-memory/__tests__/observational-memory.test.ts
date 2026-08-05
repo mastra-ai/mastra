@@ -1,13 +1,21 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
-import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import {
+  createCurrentTaskExtractor,
+  createSuggestedResponseExtractor,
+  createThreadTitleExtractor,
+} from '../built-in-extractors';
+import { OBSERVATIONAL_MEMORY_DEFAULTS, getRetrievalInstructions } from '../constants';
+import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -2709,7 +2717,7 @@ describe('Observer Agent Helpers', () => {
           requestContext,
         });
 
-        expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
+        expect(spy.mock.calls[0][0]).toBe('openai/gpt-4o');
         const content = capturedPrompt[1].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(true);
       } finally {
@@ -2717,7 +2725,7 @@ describe('Observer Agent Helpers', () => {
       }
     });
 
-    it('should inject thread title instructions into the observer request when enabled', async () => {
+    it('should keep skip-continuation task guidance separate from resolved output sections', async () => {
       let capturedPrompt: any;
 
       const observer = new ObserverRunner({
@@ -2727,6 +2735,12 @@ describe('Observer Agent Helpers', () => {
           bufferTokens: false,
           previousObserverTokens: 1000,
           threadTitle: true,
+          extractors: [
+            createCurrentTaskExtractor(),
+            createSuggestedResponseExtractor(),
+            createThreadTitleExtractor(),
+            new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+          ],
         } as any,
         observedMessageIds: new Set(),
         resolveModel: () => ({ model: 'test-model' as any }),
@@ -2749,13 +2763,31 @@ describe('Observer Agent Helpers', () => {
 
       await observer.call(undefined, [createTestMessage('Need a better title', 'user')], undefined, {
         priorThreadTitle: 'Old thread title',
+        skipContinuationHints: true,
       });
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
       expect(capturedPrompt).toHaveLength(2);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[0].content).toContain('Also output a <thread-title>');
+      const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [
+        createCurrentTaskExtractor(),
+        createSuggestedResponseExtractor(),
+        createThreadTitleExtractor(),
+        new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+      ]);
+
+      expect(capturedPrompt[0].content).not.toContain('Also output a <thread-title>');
       expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(systemPrompt).toContain('<current-task>');
+      expect(systemPrompt).toContain('<suggested-response>');
+      expect(systemPrompt).toContain('<thread-title>');
+      expect(systemPrompt).toContain('<user-info>');
+      expect(capturedPrompt[0].content).toContain('Output <observations> every time.');
+      expect(capturedPrompt[0].content).not.toContain(
+        'If the observations include information relevant to <thread-title>',
+      );
+      expect(capturedPrompt[0].content).not.toContain('Only output <observations> and <thread-title>');
+      expect(capturedPrompt[0].content).not.toContain('Do NOT include <current-task> or <suggested-response>');
       expect(capturedPrompt[0].content).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
@@ -2814,8 +2846,8 @@ describe('Observer Agent Helpers', () => {
 
       expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
       expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
-      expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
-      expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');
+      expect(observerCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o');
+      expect(reflectorCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o-mini');
     });
   });
 
@@ -2967,6 +2999,30 @@ Here's the implementation...
       expect(result.currentTask).toBe('Working on implementation');
       expect(result.observations).not.toContain('Working on implementation');
       expect(result.observations).not.toContain('<current-task>');
+    });
+
+    it('should parse thread title and custom inline extractor sections together', () => {
+      const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user information.' });
+      const output = `
+<observations>
+- 🔴 User Tyler introduced himself.
+</observations>
+
+<thread-title>
+Tyler introduction
+</thread-title>
+
+<user-info>
+name: Tyler
+</user-info>
+      `;
+
+      const result = parseObserverOutput(output, [userInfo]);
+
+      expect(result.threadTitle).toBe('Tyler introduction');
+      expect(result.extractedValues).toEqual({ 'user-info': 'name: Tyler' });
+      expect(result.observations).toContain('User Tyler introduced himself');
+      expect(result.observations).not.toContain('<user-info>');
     });
 
     it('should handle output without continuation hint', () => {
@@ -4076,13 +4132,154 @@ describe('ObservationalMemory Integration', () => {
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('## Group `group-1`');
-      expect(formattedText).toContain('_range: `msg-1:msg-2`_');
-      expect(formattedText).toContain('recall tool');
+      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('- 🔴 User prefers direct answers');
+      expect(formattedText).toContain('</observation-group>');
     });
 
     it('should default retrieval mode to false', () => {
       expect(om.config.retrieval).toBe(false);
+    });
+  });
+
+  describe('retrieval instructions', () => {
+    const makeRetrievalOm = (
+      retrieval: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string },
+    ) =>
+      new ObservationalMemory({
+        storage,
+        retrieval,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+    it('describes cross-thread routing between search, threads, and messages for resource scope', () => {
+      const instructions = getRetrievalInstructions('resource');
+
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Fallback guidance: irrelevant search results should lead to thread discovery
+      expect(instructions).toContain('If search results look irrelevant, do not give up');
+      // Threads without observations may still hold the answer in raw history
+      expect(instructions).toContain('raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only resource retrieval', () => {
+      const instructions = getRetrievalInstructions('resource', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Thread discovery is still the fallback for finding past conversations
+      expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only thread retrieval', () => {
+      const instructions = getRetrievalInstructions('thread', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain('mode: "threads"');
+    });
+
+    it('describes current-thread usage for thread scope', () => {
+      const instructions = getRetrievalInstructions('thread');
+
+      expect(instructions).toContain('limited to the current conversation thread');
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).not.toContain("ALL of this user's conversation threads");
+      expect(instructions).not.toContain('do not give up');
+    });
+
+    it('appends custom instructions after the native guidance without replacing it', () => {
+      const custom = 'Prefer the current conversation when it already contains the answer.';
+      const instructions = getRetrievalInstructions('resource', custom);
+
+      expect(instructions).toContain('## Recall — looking up source messages');
+      expect(instructions).toContain('### Additional recall guidance');
+      expect(instructions.indexOf(custom)).toBeGreaterThan(instructions.indexOf('### Additional recall guidance'));
+    });
+
+    it('omits the custom guidance section when custom instructions are empty', () => {
+      expect(getRetrievalInstructions('resource', '   ')).not.toContain('### Additional recall guidance');
+      expect(getRetrievalInstructions('resource')).not.toContain('### Additional recall guidance');
+    });
+
+    it('injects scope-aware instructions into actor context', () => {
+      const observations = '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 Fact\n</observation-group>';
+
+      const resourceText = (makeRetrievalOm({ vector: true, scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(resourceText).toContain('If search results look irrelevant, do not give up');
+
+      // Browsing-only retrieval (no vector) must not steer the agent toward search
+      const browsingText = (makeRetrievalOm({ scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(browsingText).not.toContain('mode: "search"');
+      expect(browsingText).toContain('mode: "threads"');
+
+      const threadText = (makeRetrievalOm({ scope: 'thread' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(threadText).toContain('limited to the current conversation thread');
+    });
+
+    it('injects appended custom instructions into actor context', () => {
+      const custom = 'Use a small limit with detail="low" for an initial scan.';
+      const text = (makeRetrievalOm({ scope: 'resource', instructions: custom }) as any)
+        .formatObservationsForContext('- 🔴 Fact', undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+
+      expect(text).toContain('### Additional recall guidance');
+      expect(text).toContain(custom);
+    });
+
+    it('returns recall guidance without observations for resource-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'resource', instructions: 'Avoid historical tool calls.' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+      expect(record.activeObservations).toBeFalsy();
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeDefined();
+      const text = messages!.join('\n\n');
+      expect(text).toContain('## Recall — looking up source messages');
+      expect(text).toContain('mode: "threads"');
+      expect(text).toContain('Avoid historical tool calls.');
+    });
+
+    it('returns undefined without observations for thread-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'thread' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('returns undefined without observations when retrieval is disabled', async () => {
+      const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await om.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('defaults retrieval scope to resource when retrieval is true', () => {
+      expect(makeRetrievalOm(true).retrievalScope).toBe('resource');
+      expect(makeRetrievalOm({ scope: 'thread' }).retrievalScope).toBe('thread');
     });
   });
 
@@ -5191,8 +5388,8 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('observer system prompt should include thread title instructions when enabled', () => {
-    const systemPrompt = buildObserverSystemPrompt(false, undefined, true);
+  it('observer system prompt should include thread title instructions from the extractor list', () => {
+    const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [createThreadTitleExtractor()]);
 
     expect(systemPrompt).toContain('<thread-title>');
     expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
@@ -6030,6 +6227,73 @@ describe('Resource Scope Observation Flow', () => {
     expect(priorMetadata?.get('thread-1')?.suggestedResponse).toBe('Ask for the invoice number.');
     expect(priorMetadata?.get('thread-2')?.currentTask).toBe('Track rollout readiness');
     multiThreadSpy.mockRestore();
+  });
+
+  it('isolates structured extraction source output per thread in multi-thread observation', async () => {
+    const structuredPrompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: { prompt: unknown }) => {
+        const promptText = JSON.stringify(prompt);
+        const observerOutput = promptText.includes('Thread one')
+          ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+          : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: observerOutput },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
+        const promptText = JSON.stringify(prompt);
+        structuredPrompts.push(promptText);
+        const priority = promptText.includes('thread-1-secret') ? 'alpha' : 'beta';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          content: [{ type: 'text', text: JSON.stringify({ priority }) }],
+          warnings: [],
+        };
+      },
+    });
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model,
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: 'auto',
+        extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() })],
+      } as any,
+      observedMessageIds: new Set(),
+      resolveModel: () => ({ model: model as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+    const results = await observer.callMultiThread(
+      undefined,
+      new Map([
+        ['thread-1', [createTestMessage('Thread one says alpha.', 'user', 't1-msg-1')]],
+        ['thread-2', [createTestMessage('Thread two says beta.', 'user', 't2-msg-1')]],
+      ]),
+      ['thread-1', 'thread-2'],
+    );
+
+    expect(results.results.get('thread-1')?.extractedValues).toEqual({ priority: 'alpha' });
+    expect(results.results.get('thread-2')?.extractedValues).toEqual({ priority: 'beta' });
+    expect(structuredPrompts).toHaveLength(2);
+    const threadOnePrompt = structuredPrompts.find(prompt => prompt.includes('thread-1-secret'));
+    const threadTwoPrompt = structuredPrompts.find(prompt => prompt.includes('thread-2-secret'));
+    expect(threadOnePrompt).toBeDefined();
+    expect(threadOnePrompt).not.toContain('thread-2-secret');
+    expect(threadTwoPrompt).toBeDefined();
+    expect(threadTwoPrompt).not.toContain('thread-1-secret');
   });
 
   it('should NOT use thread tags in thread scope mode', async () => {
@@ -9851,7 +10115,7 @@ describe('Full Async Buffering Flow', () => {
     const reflectorCalls: { input: string }[] = [];
 
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
 
         // Detect whether this is a reflection call (reflector prompt mentions "consolidate")
@@ -10425,12 +10689,12 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
 
     // The mock captures `input: JSON.stringify(prompt).slice(0, 200)`.
-    // buildObserverPrompt appends "Do NOT include <current-task> or <suggested-response>"
-    // when skipContinuationHints is true. Since the mock only captures 200 chars
-    // of the serialized prompt, we can't reliably check the end of the prompt here.
-    // The important thing: the observer was called (buffering happened), and the
-    // skipContinuationHints logic is unit-tested in buildObserverPrompt's own tests.
-    // For this integration test, we verify the async buffering path was exercised.
+    // buildObserverPrompt appends skipContinuationHints guidance near the end of the prompt.
+    // Since the mock only captures 200 chars of the serialized prompt, we can't reliably
+    // check the end of the prompt here. The important thing: the observer was called
+    // (buffering happened), and the skipContinuationHints logic is unit-tested in
+    // buildObserverPrompt's own tests. For this integration test, we verify the async
+    // buffering path was exercised.
     const lastCall = observerCalls[observerCalls.length - 1];
     expect(lastCall).toBeDefined();
     expect(lastCall.input.length).toBeGreaterThan(0);
@@ -10441,104 +10705,101 @@ describe('Full Async Buffering Flow', () => {
   // activate(). The core hint-propagation behavior is covered by the direct test below:
   // "should clear stale thread continuation hints after buffered activation when latest
   // activated chunk has no hints"
-  it.todo(
-    'should clear stale thread continuation hints on sync observation when latest output omits them',
-    async () => {
-      // Use enough messages and a low threshold so that two activation rounds can
-      // succeed sequentially.  The first observer response includes continuation
-      // hints; the second omits them.  After the second activation, the stale
-      // hints from the first round must be cleared (written as undefined).
-      const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
-        messageTokens: 1000,
-        bufferTokens: 500,
-        bufferActivation: 0.7,
-        reflectionObservationTokens: 50000,
-        messageCount: 10,
-        observerResponses: [
-          // Call 1 (async buffering from step 0): hints are parsed from the mock
-          // response and stored in the buffered chunk.
-          // Note: closing tags must be on their own line — the parser regex
-          // requires `^<\/current-task>` (start-of-line anchor with /m flag).
-          '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
-          // Call 2 (async buffering from step 2): no hints → activation clears them.
-          '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
-        ],
-      });
+  it.todo('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+      observerResponses: [
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
+        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+      ],
+    });
 
-      // Step 0 triggers async buffering. After waiting, save fresh messages
-      // so the threshold is met, then a fresh step 0 activates the buffered chunk,
-      // propagating continuation hints to thread metadata.
-      await step(0);
-      await waitForAsyncOps();
+    // Step 0 triggers async buffering. After waiting, save fresh messages
+    // so the threshold is met, then a fresh step 0 activates the buffered chunk,
+    // propagating continuation hints to thread metadata.
+    await step(0);
+    await waitForAsyncOps();
 
-      // Add messages so unobserved token count meets the threshold on the next turn
-      const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const round1Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round1-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
-      }));
-      await storage.saveMessages({ messages: round1Messages });
+    // Add messages so unobserved token count meets the threshold on the next turn
+    const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const round1Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round1-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+    }));
+    await storage.saveMessages({ messages: round1Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterFirstObservation = await storage.getThreadById({ threadId });
-      const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(firstOM.currentTask).toBe('Implement sync path');
-      expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(firstOM.currentTask).toBe('Implement sync path');
+    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
 
-      // Save fresh messages so the threshold is exceeded again on the next round.
-      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const freshMessages = Array.from({ length: 10 }, (_, i) => ({
-        id: `sync-clear-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
-      }));
-      await storage.saveMessages({ messages: freshMessages });
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
 
-      // New step 0 triggers another async buffering round (observer call 2, no hints).
-      // After waiting, another step 0 with fresh messages activates the new chunk,
-      // clearing the stale hints.
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
+    // New step 0 triggers another async buffering round (observer call 2, no hints).
+    // After waiting, another step 0 with fresh messages activates the new chunk,
+    // clearing the stale hints.
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
 
-      // Add more messages for the final activation round
-      const round3Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round3-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
-      }));
-      await storage.saveMessages({ messages: round3Messages });
+    // Add more messages for the final activation round
+    const round3Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round3-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
+    }));
+    await storage.saveMessages({ messages: round3Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterSecondObservation = await storage.getThreadById({ threadId });
-      const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(secondOM.currentTask).toBeUndefined();
-      expect(secondOM.suggestedResponse).toBeUndefined();
-    },
-  );
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(secondOM.currentTask).toBeUndefined();
+    expect(secondOM.suggestedResponse).toBeUndefined();
+  });
 
   it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
     // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
@@ -10904,7 +11165,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -11089,7 +11350,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -11565,7 +11826,7 @@ describe('Full Async Buffering Flow', () => {
 
       let _reflectorCallCount = 0;
       const mockModel = createStreamCapableMockModel({
-        doGenerate: async ({ prompt }) => {
+        doGenerate: async ({ prompt }: { prompt: unknown }) => {
           const promptText = JSON.stringify(prompt);
           const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
           if (isReflection) {
@@ -12775,6 +13036,32 @@ describe('threadId validation in thread scope', () => {
     });
 
     await expect(om.getOrCreateRecord('', 'resource-1')).rejects.toThrow(/requires a threadId/);
+  });
+
+  it('should classify missing thread context as a bad request', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 500, model: 'test-model' },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+    });
+
+    let error: unknown;
+    try {
+      om.getThreadContext(undefined, new MessageList());
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error).toMatchObject({
+      id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+    });
+    expect((error as Error).message).toMatch(/requires a threadId/);
   });
 
   it('should NOT throw when getOrCreateRecord is called without threadId in resource scope', async () => {
@@ -17160,5 +17447,478 @@ describe('Message ordering regressions', () => {
     // No duplicate IDs
     const ids = stored.map(m => m.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('filterObservedMessages — tool-call/result pair preservation', () => {
+  it('keeps the tool-call message during marker pruning when its result is still unobserved', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-thread';
+    const resourceId = 'tool-pair-marker-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: new Date(t1.getTime() + 1),
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-before-marker', 'marker-msg'] } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+    const marker = remaining.find((m: any) => m.id === 'marker-msg');
+
+    expect(remainingIds).toContain('tool-call-before-marker');
+    expect(remainingIds).toContain('marker-msg');
+    expect(remainingIds).toContain('tool-result-after-marker');
+    expect(marker?.content?.parts?.map((part: any) => part.type)).toEqual(['text']);
+    expect(marker?.content?.parts?.[0]?.text).toBe('fresh-tail');
+  });
+
+  it('removes the tool-call message during marker pruning when its result was already observed before the marker', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-observed-thread';
+    const resourceId = 'tool-pair-marker-observed-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-before-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-2',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle-2' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [
+          'tool-call-before-observed-result',
+          'tool-result-before-marker',
+          'marker-msg-observed-result',
+        ],
+      } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-before-observed-result');
+    expect(remainingIds).not.toContain('tool-result-before-marker');
+    expect(remainingIds).toEqual(['marker-msg-observed-result']);
+  });
+
+  it('keeps the tool-call message when its result is in an unobserved message', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-test-thread';
+    const resourceId = 'tool-pair-test-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    // Add observed message with tool call
+    messageList.add(
+      {
+        id: 'tool-call-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    // Add unobserved message with tool result
+    messageList.add(
+      {
+        id: 'tool-result-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-msg');
+  });
+
+  it('keeps the tool-call message when fallback cursor pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-cursor-thread';
+    const resourceId = 'tool-pair-fallback-cursor-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-cursor',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-cursor-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'cursor-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'cursor' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-cursor',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-cursor-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['cursor-msg'] } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-cursor');
+    expect(remainingIds).toContain('tool-result-after-cursor');
+    expect(remainingIds).not.toContain('cursor-msg');
+  });
+
+  it('keeps the tool-call message when fallback time pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-time-thread';
+    const resourceId = 'tool-pair-fallback-time-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-last-observed',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-time-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-last-observed',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-time-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [],
+        lastObservedAt: t0,
+      } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-last-observed');
+    expect(remainingIds).toContain('tool-result-after-last-observed');
+  });
+
+  it('removes the tool-call message when no result is pending', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-no-result-thread';
+    const resourceId = 'tool-pair-no-result-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    // Add observed message with tool call but no result
+    messageList.add(
+      {
+        id: 'tool-call-msg-alone',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg-alone'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-msg-alone');
   });
 });

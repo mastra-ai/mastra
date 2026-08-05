@@ -319,6 +319,55 @@ describe('tool lifecycle', () => {
     });
   });
 
+  it('maps Mastra Code tool progress data chunks to tool updates', async () => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    await (session as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'plugin_tool',
+                args: {},
+              },
+            });
+            controller.enqueue({
+              type: 'data-mastracode-tool-progress',
+              runId: 'run-1',
+              from: ChunkFrom.USER,
+              data: {
+                toolCallId: 'call-1',
+                progress: { status: 'thinking', detail: 'Agent is answering…' },
+              },
+              transient: true,
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_update',
+        toolCallId: 'call-1',
+        partialResult: { status: 'thinking', detail: 'Agent is answering…' },
+      }),
+    );
+    expect(session.displayState.get().activeTools.get('call-1')!.partialResult).toBe(
+      '{"status":"thinking","detail":"Agent is answering…"}',
+    );
+  });
+
   it('uses display transforms while processing tool stream chunks', async () => {
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -374,9 +423,19 @@ describe('tool lifecycle', () => {
       new RequestContext(),
     );
 
-    expect(result.message.content).toEqual([
-      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: { customerId: 'cus_123' } },
-      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: { displayName: 'Acme' }, isError: false },
+    // DB-native: tool call + result collapse into a single tool-invocation part.
+    expect(result.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123' },
+          state: 'result',
+          result: { displayName: 'Acme' },
+          isError: false,
+        },
+      },
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -466,9 +525,18 @@ describe('tool lifecycle', () => {
       new RequestContext(),
     );
 
-    expect(result.message.content).toEqual([
-      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: null },
-      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: null, isError: false },
+    expect(result.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: null,
+          state: 'result',
+          result: null,
+          isError: false,
+        },
+      },
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({

@@ -170,7 +170,7 @@ export function PropertyFilterCreator({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="p-3 w-64"
+        className="w-64 p-3"
         initialFocus={false}
         finalFocus={() => {
           if (skipCloseFocusRef.current) {
@@ -194,9 +194,9 @@ export function PropertyFilterCreator({
                   setError(undefined);
                 }}
               >
-                <ArrowLeftIcon className="h-4 w-4" />
+                <ArrowLeftIcon className="size-4" />
               </button>
-              <FilterIcon className="h-4 w-4 shrink-0 text-neutral3" />
+              <FilterIcon className="text-neutral3 size-4 shrink-0" />
               <span className="text-ui-sm text-neutral3">{`${selectedField.label} · is`}</span>
             </div>
           )}
@@ -266,15 +266,15 @@ export function PropertyFilterCreator({
                     >
                       <span className="truncate">{f.label}</span>
                       {used ? (
-                        <span className="ml-auto text-neutral3">In use</span>
+                        <span className="text-neutral3 ml-auto">In use</span>
                       ) : (
-                        <PlusIcon className="ml-auto h-4 w-4 text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
+                        <PlusIcon className="text-neutral3 ml-auto size-4 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
                       )}
                     </button>
                   );
                 })
               ) : (
-                <div className="px-2 py-1.5 text-ui-sm text-neutral3">No matching property.</div>
+                <div className="text-ui-sm text-neutral3 px-2 py-1.5">No matching property.</div>
               )}
             </div>
           )}
@@ -367,7 +367,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
           role="menuitem"
           data-filter-item=""
           className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 transition-colors',
+            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-neutral4 transition-colors hover:bg-surface4 hover:text-neutral6',
             'focus:bg-surface4 focus:text-neutral6 focus:outline-none',
           )}
           onKeyDown={e => {
@@ -382,9 +382,9 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="h-4 w-4 text-neutral3 shrink-0" />}
+          {open && <ChevronRightIcon className="text-neutral3 size-4 shrink-0" />}
           <span className="truncate">{field.label}</span>
-          {!open && <ChevronRightIcon className="h-4 w-4 ml-auto text-neutral3 shrink-0" />}
+          {!open && <ChevronRightIcon className="text-neutral3 ml-auto size-4 shrink-0" />}
         </button>
       </PopoverTrigger>
       <PopoverContent

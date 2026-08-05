@@ -240,20 +240,26 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updatedAt: now,
       };
 
-      await collection.insertOne(this.serializeAgent(newAgent));
-
       // Extract config fields from the flat input
       const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
-      // Create version 1 from the config
       const versionId = randomUUID();
-      await this.createVersion({
+      const versionDoc: Record<string, any> = {
         id: versionId,
         agentId: agent.id,
         versionNumber: 1,
-        ...snapshotConfig,
         changedFields: Object.keys(snapshotConfig),
         changeMessage: 'Initial version',
+        createdAt: new Date(),
+      };
+      for (const field of SNAPSHOT_FIELDS) {
+        if ((snapshotConfig as any)[field] !== undefined) versionDoc[field] = (snapshotConfig as any)[field];
+      }
+
+      await this.#connector.withTransaction(async session => {
+        await collection.insertOne(this.serializeAgent(newAgent), { session });
+        const versionsCol = await this.getCollection(TABLE_AGENT_VERSIONS);
+        await versionsCol.insertOne(versionDoc, { session });
       });
 
       // Return the thin agent record (activeVersionId remains undefined, status remains 'draft')
@@ -352,13 +358,12 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async delete(id: string): Promise<void> {
     try {
-      // Delete all versions for this agent first
-      await this.deleteVersionsByParentId(id);
-
-      // Then delete the agent
-      const collection = await this.getCollection(TABLE_AGENTS);
-      // Idempotent delete - no-op if agent doesn't exist
-      await collection.deleteOne({ id });
+      await this.#connector.withTransaction(async session => {
+        const versionsCol = await this.getCollection(TABLE_AGENT_VERSIONS);
+        await versionsCol.deleteMany({ agentId: id }, { session });
+        const col = await this.getCollection(TABLE_AGENTS);
+        await col.deleteOne({ id }, { session });
+      });
     } catch (error) {
       throw new MastraError(
         {

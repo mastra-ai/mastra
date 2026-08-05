@@ -174,9 +174,10 @@ export function parseFilterValue(filter: unknown, logger?: Logger | null): Recor
     return {};
   }
 
+  let parsedFilter = filter;
   if (typeof filter === 'string') {
     try {
-      return JSON.parse(filter);
+      parsedFilter = JSON.parse(filter);
     } catch (error) {
       if (logger) {
         logger.error('Invalid filter', { filter, error });
@@ -186,14 +187,13 @@ export function parseFilterValue(filter: unknown, logger?: Logger | null): Recor
   }
 
   // Validate that non-string filter is a plain object
-  if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
+  if (typeof parsedFilter !== 'object' || parsedFilter === null || Array.isArray(parsedFilter)) {
+    const receivedType = Array.isArray(parsedFilter) ? 'array' : typeof parsedFilter;
     if (logger) {
       logger.error('Invalid filter', { filter, error: 'Filter must be a plain object' });
     }
-    throw new Error(
-      `Invalid filter format: expected a plain object, got ${Array.isArray(filter) ? 'array' : typeof filter}`,
-    );
+    throw new Error(`Invalid filter format: expected a plain object, got ${receivedType}`);
   }
 
-  return filter as Record<string, any>;
+  return parsedFilter as Record<string, any>;
 }

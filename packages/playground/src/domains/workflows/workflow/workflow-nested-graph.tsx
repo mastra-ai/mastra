@@ -26,14 +26,15 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setIsMounted(true);
       }, 500); // Delay to ensure modal is fully rendered
+      return () => clearTimeout(timer);
     }
   }, [open]);
 
   return (
-    <div className="w-full h-full relative bg-surface1">
+    <div className="bg-surface1 relative h-full w-full">
       {isMounted ? (
         <ReactFlow
           nodes={nodes}
@@ -52,7 +53,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
           <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} />
         </ReactFlow>
       ) : (
-        <div className="w-full h-full flex items-center justify-center">
+        <div className="flex h-full w-full items-center justify-center">
           <Spinner />
         </div>
       )}

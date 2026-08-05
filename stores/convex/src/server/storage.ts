@@ -16,6 +16,7 @@ import type { GenericId } from 'convex/values';
 
 import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
+import { handleObservationalMemoryOperation } from './observational-memory';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
 
 // Vector-specific table names (not in @mastra/core)
@@ -24,6 +25,10 @@ const VECTOR_TABLE_PREFIX = 'mastra_vector_';
 const CONVEX_TABLE_WORKFLOW_SNAPSHOTS = 'mastra_workflow_snapshots';
 const CONVEX_TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
 const CONVEX_TABLE_DOCUMENTS = 'mastra_documents';
+// Defined locally (not imported from core) because this file is bundled into
+// the user's Convex deployment and older cores in the peer range may not
+// export the observational memory constants.
+const CONVEX_TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 const STORAGE_MUTATION_BATCH_SIZE = 25;
 // Keep this in sync with ConvexDB's loadMany client chunk size. The low cap
 // bounds full-doc responses per request; individual document size still matters.
@@ -247,6 +252,8 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
       return { convexTable: CONVEX_TABLE_BACKGROUND_TASKS, isTyped: true };
     case TABLE_VECTOR_INDEXES:
       return { convexTable: 'mastra_vector_indexes', isTyped: true };
+    case CONVEX_TABLE_OBSERVATIONAL_MEMORY:
+      return { convexTable: CONVEX_TABLE_OBSERVATIONAL_MEMORY, isTyped: true };
     default:
       // Check if it's a vector data table
       if (tableName.startsWith(VECTOR_TABLE_PREFIX)) {
@@ -333,6 +340,20 @@ export async function handleTypedOperation(
   request: StorageRequest,
 ): Promise<StorageResponse> {
   switch (request.op) {
+    case 'omGetLatest':
+    case 'omGetHistory':
+    case 'omUpdateActive':
+    case 'omAppendBufferedChunk':
+    case 'omSwapBuffered':
+    case 'omUpdateBufferedReflection':
+    case 'omSwapBufferedReflection':
+    case 'omUpdateConfig': {
+      if (convexTable !== CONVEX_TABLE_OBSERVATIONAL_MEMORY) {
+        throw new Error(`${request.op} is only supported for ${CONVEX_TABLE_OBSERVATIONAL_MEMORY}`);
+      }
+      return handleObservationalMemoryOperation(ctx, convexTable, request);
+    }
+
     case 'createSchedule': {
       if (convexTable !== 'mastra_schedules') {
         throw new Error(`createSchedule is only supported for mastra_schedules`);

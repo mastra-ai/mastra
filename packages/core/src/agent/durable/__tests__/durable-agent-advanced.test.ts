@@ -530,6 +530,8 @@ describe('DurableAgent workflow state serialization', () => {
     const serialized = JSON.stringify(result.workflowInput.options);
     const deserialized = JSON.parse(serialized);
 
+    // Headers are stripped from serialized modelSettings — they live on
+    // the in-process RunRegistryEntry.callTimeHeaders instead
     expect(deserialized.modelSettings).toEqual({
       temperature: 0.42,
       maxOutputTokens: 1024,
@@ -539,11 +541,11 @@ describe('DurableAgent workflow state serialization', () => {
       frequencyPenalty: 0.2,
       stopSequences: ['<end>', '<stop>'],
       seed: 7,
-      headers: { 'x-trace-id': 'abc-123' },
     });
+    expect(result.registryEntry.callTimeHeaders).toEqual({ 'x-trace-id': 'abc-123' });
   });
 
-  it('should drop non-serializable values from modelSettings', async () => {
+  it('should drop non-serializable values from modelSettings and strip headers', async () => {
     const mockModel = createTextModel('Hello');
     const baseAgent = new Agent({
       id: 'lossy-model-settings-agent',
@@ -563,10 +565,14 @@ describe('DurableAgent workflow state serialization', () => {
       },
     });
 
+    // Headers are stripped from the serialized workflowInput to prevent
+    // sensitive data from reaching durable storage
     expect(result.workflowInput.options.modelSettings).toEqual({
       temperature: 0.5,
-      headers: { ok: 'yes' },
     });
+
+    // String-valued headers are preserved on the in-process registry entry
+    expect(result.registryEntry.callTimeHeaders).toEqual({ ok: 'yes' });
   });
 
   it('should serialize misc options (disableBackgroundTasks, tracingOptions, actor, instructions, system)', async () => {

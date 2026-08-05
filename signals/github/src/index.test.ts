@@ -627,6 +627,60 @@ describe('GithubSignals', () => {
     );
   });
 
+  it('still subscribes when the baseline snapshot read fails and records the error', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-subscribe-snapshot-error',
+      resourceId: 'resource-subscribe-snapshot-error',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true, stdout: '{"ok":true}' })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        throw new Error('gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file');
+      }),
+    };
+    const signal = createSignal({
+      ...GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
+      type: 'reactive',
+    });
+    const messageList = new MessageList({ threadId: thread.id, resourceId: thread.resourceId });
+    messageList.add([signal.toDBMessage({ threadId: thread.id, resourceId: thread.resourceId })], 'input');
+    const chunks: unknown[] = [];
+
+    // The subscribe itself must not fail when only the snapshot read fails.
+    await runGithubSignalsProcessor({
+      processor: new GithubSignals({ threadStore, syncClient }),
+      messageList,
+      requestContext: createRequestContext(thread),
+      chunks,
+    });
+
+    expect(threadStore.saveThread).toHaveBeenCalledTimes(1);
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      owner: 'mastra-ai',
+      repo: 'mastra',
+      number: 123,
+      lastSyncStatus: 'success',
+      lastSnapshotError: 'gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file',
+    });
+    // No baseline cursor and no baseline notification without a snapshot.
+    expect(subscription.lastObservedContentHash).toBeUndefined();
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          tagName: GITHUB_SYNC_STATUS_TAG,
+          attributes: expect.objectContaining({ status: 'subscribed', number: 123 }),
+        }),
+      }),
+    );
+  });
+
   it('preserves one-time hint state and granular cursors when resubscribing', async () => {
     const thread: StorageThreadType = {
       id: 'thread-resubscribe',
@@ -649,6 +703,9 @@ describe('GithubSignals', () => {
                 lastObservedContentHash: 'aggregate-hash',
                 lastObservedThreadContentHash: 'thread-hash',
                 lastObservedHeadSha: 'head-sha',
+                lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+                lastObservedCommentAuthor: 'coderabbitai[bot]',
+                lastObservedCommentIsBot: true,
               },
             ],
           },
@@ -676,6 +733,9 @@ describe('GithubSignals', () => {
       lastObservedContentHash: 'aggregate-hash',
       lastObservedThreadContentHash: 'thread-hash',
       lastObservedHeadSha: 'head-sha',
+      lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+      lastObservedCommentAuthor: 'coderabbitai[bot]',
+      lastObservedCommentIsBot: true,
       lastSyncStatus: 'skipped',
     });
   });
@@ -996,6 +1056,78 @@ describe('GithubSignals', () => {
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions[0]).toMatchObject({
       lastSyncStatus: 'success',
       lastObservedContentHash: 'sync-now-hash',
+    });
+  });
+
+  it('surfaces snapshot read failures on the subscription and clears them after recovery', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-snapshot-error',
+      resourceId: 'resource-snapshot-error',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let snapshotCalls = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotCalls += 1;
+        if (snapshotCalls === 1) {
+          throw new Error('gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file');
+        }
+        return {
+          title: 'Add GitHub signals',
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+          contentHash: 'recovered-hash',
+          latestCommentAuthor: 'contributor',
+        };
+      }),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    // First sync: the snapshot read fails, so the failure must be recorded on
+    // the subscription instead of silently reporting a healthy poll.
+    await expect(processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const failedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [failedSubscription] = (failedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(failedSubscription).toMatchObject({
+      lastSyncStatus: 'success',
+      lastSnapshotError: 'gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file',
+    });
+    expect(failedSubscription.lastObservedContentHash).toBeUndefined();
+
+    // Second sync: the snapshot read recovers, the error clears, and the
+    // baseline observation notifies as usual.
+    await expect(processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    const recoveredThread = vi.mocked(threadStore.saveThread).mock.calls[1]![0].thread;
+    const [recoveredSubscription] = (recoveredThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY]
+      .subscriptions;
+    expect(recoveredSubscription.lastSnapshotError).toBeUndefined();
+    expect(recoveredSubscription).toMatchObject({
+      lastSyncStatus: 'success',
+      lastObservedContentHash: 'recovered-hash',
     });
   });
 
@@ -2332,6 +2464,170 @@ describe('GithubSignals', () => {
       latestCommentIsBot: true,
     });
     expect(botNoise).not.toHaveBeenCalled();
+  });
+
+  it('ignores transient unknown mergeability recomputes', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-mergeability-noise',
+      resourceId: 'resource-mergeability-noise',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-mergeability-noise',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'blocked-hash',
+                lastObservedThreadContentHash: 'thread-hash',
+                lastObservedHeadSha: 'head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const mergeableStates = ['unknown', 'blocked'];
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Test PR',
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:00:00.000Z',
+        contentHash: `${mergeableStates[0]}-hash`,
+        threadContentHash: 'thread-hash',
+        headSha: 'head-sha',
+        mergeableState: mergeableStates.shift(),
+        ciState: 'success' as const,
+        reviewStateHash: 'reviews-0',
+      })),
+    };
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription.lastObservedMergeableState).toBe('blocked');
+  });
+
+  it('ignores observed bot comment edits without suppressing other thread activity', async () => {
+    const firstCommentUrl = 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-1';
+    const secondCommentUrl = 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-2';
+    const thread: StorageThreadType = {
+      id: 'thread-bot-edit',
+      resourceId: 'resource-bot-edit',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-bot-edit',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:01:00.000Z',
+                lastObservedContentHash: 'content-hash',
+                lastObservedThreadContentHash: 'thread-hash',
+                lastObservedHeadSha: 'head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+                lastObservedCommentUrl: firstCommentUrl,
+                lastObservedCommentAuthor: 'coderabbitai[bot]',
+                lastObservedCommentIsBot: true,
+              },
+            ],
+          },
+        },
+      },
+    };
+    const comments = [
+      {
+        url: firstCommentUrl,
+        body: 'Updated walkthrough for the same comment',
+        updatedAt: '2026-01-01T00:02:00.000Z',
+        threadContentHash: 'edited-bot-comment-hash',
+      },
+      {
+        url: firstCommentUrl,
+        body: 'Updated walkthrough for the same comment',
+        githubUpdatedAt: '2026-01-01T00:03:00.000Z',
+        updatedAt: '2026-01-01T00:02:00.000Z',
+        threadContentHash: 'updated-pr-body-hash',
+      },
+      {
+        url: secondCommentUrl,
+        body: 'A new review comment',
+        githubUpdatedAt: '2026-01-01T00:04:00.000Z',
+        updatedAt: '2026-01-01T00:04:00.000Z',
+        threadContentHash: 'new-bot-comment-hash',
+      },
+    ];
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        const comment = comments.shift()!;
+        return {
+          title: 'Test PR',
+          state: 'open',
+          githubUpdatedAt: comment.githubUpdatedAt ?? comment.updatedAt,
+          contentHash: `${comment.threadContentHash}-aggregate`,
+          threadContentHash: comment.threadContentHash,
+          headSha: 'head-sha',
+          mergeableState: 'blocked',
+          ciState: 'success' as const,
+          reviewStateHash: 'reviews-0',
+          latestCommentAuthor: 'coderabbitai[bot]',
+          latestCommentAuthorType: 'Bot',
+          latestCommentIsBot: true,
+          latestCommentBody: comment.body,
+          latestCommentUrl: comment.url,
+          latestCommentUpdatedAt: comment.updatedAt,
+        };
+      }),
+    };
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [expect.objectContaining({ kind: 'pull-request-activity', priority: 'high' })],
+      expect.anything(),
+    );
   });
 
   it('suppresses activity notifications from unauthorized commenters', async () => {

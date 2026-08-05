@@ -5,7 +5,7 @@ import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import { Workflow } from '@mastra/core/workflows';
+import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
   Step,
   StepResult,
@@ -19,6 +19,11 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
+import {
+  compactNestedWorkflowResult,
+  NESTED_WORKFLOW_OUTPUT_MODE,
+  resolveNestedWorkflowOutputMode,
+} from './nested-workflow-output';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -28,23 +33,41 @@ import type {
   InngestWorkflowConfig,
 } from './types';
 
+/**
+ * Resolves the nested `InngestWorkflow` wrapped by a graph entry, if any.
+ * Handles both plain single-step entries and `loop` / `foreach` entries whose
+ * body is a `SingleStepEntry` wrapper (so `{ type: 'step', step: workflow }`
+ * bodies are unwrapped correctly).
+ */
+function getNestedInngestWorkflow(entry: StepFlowEntry): InngestWorkflow | null {
+  let nested: unknown = null;
+  if (entry.type === 'loop' || entry.type === 'foreach') {
+    nested = getEntryWorkflow(entry.step);
+  } else if (isSingleStepEntry(entry)) {
+    nested = getEntryWorkflow(entry);
+  }
+  return nested instanceof InngestWorkflow ? nested : null;
+}
+
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
     string,
     unknown,
     unknown,
     unknown,
     unknown,
     unknown,
-    TEngineType
+    TEngineType,
+    unknown
   >[],
   TWorkflowId extends string = string,
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, TRequestContext> {
   #mastra: Mastra;
   public inngest: Inngest;
 
@@ -67,14 +90,15 @@ export class InngestWorkflow<
       TState,
       TInput,
       TOutput,
-      TSteps & Step<string, any, any, any, any, any, InngestEngineType>[]
+      TSteps & Step<string, any, any, any, any, any, InngestEngineType, any>[],
+      TRequestContext
     >,
     inngest: Inngest,
   ) {
     const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
       params;
 
-    super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
+    super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>);
 
     this.engineType = 'inngest';
 
@@ -133,11 +157,9 @@ export class InngestWorkflow<
   __setPubsubFactory(factory: (defaultPubsub: PubSub) => PubSub) {
     this.#pubsubFactory = factory;
     const updateNested = (step: StepFlowEntry) => {
-      if (
-        (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') &&
-        step.step instanceof InngestWorkflow
-      ) {
-        step.step.__setPubsubFactory(factory);
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        nested.__setPubsubFactory(factory);
       } else if (step.type === 'parallel' || step.type === 'conditional') {
         for (const subStep of step.steps) {
           updateNested(subStep);
@@ -163,11 +185,9 @@ export class InngestWorkflow<
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {
-      if (
-        (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') &&
-        step.step instanceof InngestWorkflow
-      ) {
-        step.step.__registerMastra(mastra);
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        nested.__registerMastra(mastra);
       } else if (step.type === 'parallel' || step.type === 'conditional') {
         for (const subStep of step.steps) {
           updateNested(subStep);
@@ -185,12 +205,14 @@ export class InngestWorkflow<
   async createRun(options?: {
     runId?: string;
     resourceId?: string;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+    disableScorers?: boolean;
+    pubsub?: PubSub;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
     const existingInMemoryRun = this.runs.get(runIdToUse);
-    const newRun = new InngestRun<TEngineType, TSteps, TState, TInput, TOutput>(
+    const newRun = new InngestRun<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>(
       {
         workflowId: this.id,
         runId: runIdToUse,
@@ -207,7 +229,7 @@ export class InngestWorkflow<
       },
       this.inngest,
     );
-    const run = (existingInMemoryRun ?? newRun) as Run<TEngineType, TSteps, TState, TInput, TOutput>;
+    const run = (existingInMemoryRun ?? newRun) as Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>;
 
     this.runs.set(runIdToUse, run);
 
@@ -276,6 +298,11 @@ export class InngestWorkflow<
     return this.cronFunction;
   }
 
+  /**
+   * Gets the durable Inngest function that executes this workflow.
+   *
+   * @returns The memoized Inngest function for this workflow.
+   */
   getFunction(): ReturnType<Inngest['createFunction']> {
     if (this.function) {
       return this.function;
@@ -294,6 +321,12 @@ export class InngestWorkflow<
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
+      /**
+       * Executes a workflow invocation from its Inngest trigger event.
+       *
+       * @param context - The Inngest event, durable step tools, and current attempt.
+       * @returns The workflow result and run identifier returned to Inngest.
+       */
       async ({ event, step, attempt }) => {
         let {
           inputData,
@@ -306,7 +339,11 @@ export class InngestWorkflow<
           timeTravel,
           perStep,
           tracingOptions,
+          actor,
+          nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
         } = event.data;
+        const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
+        const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -373,6 +410,7 @@ export class InngestWorkflow<
             pubsub,
             retryConfig: this.retryConfig,
             requestContext,
+            actor,
             resume,
             timeTravel,
             perStep,
@@ -411,12 +449,19 @@ export class InngestWorkflow<
           } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
 
+        const returnedResult = shouldCompactNestedWorkflowOutput ? compactNestedWorkflowResult(result) : result;
+
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
         let finalizeError: unknown;
         let finalizeErrored = false;
         try {
-          await step.run(`workflow.${this.id}.finalize`, async () => {
+          /**
+           * Finalizes workflow lifecycle reporting in a memoized Inngest step.
+           *
+           * @returns The workflow result, or only its status for compact nested invocations.
+           */
+          const finalizeWorkflow = async () => {
             // For durable agent workflows, emit error event on failure so the
             // client's stream can receive the error and close properly.
             if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
@@ -533,12 +578,13 @@ export class InngestWorkflow<
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
-                cause: result,
+                cause: shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result,
               });
             }
 
-            return result;
-          });
+            return shouldCompactNestedWorkflowOutput ? { status: result.status } : result;
+          };
+          await step.run(`workflow.${this.id}.finalize`, finalizeWorkflow);
         } catch (error) {
           finalizeErrored = true;
           finalizeError = error;
@@ -558,7 +604,7 @@ export class InngestWorkflow<
           throw finalizeError;
         }
 
-        return { result, runId };
+        return { result: returnedResult, runId };
       },
     );
     return this.function;
@@ -566,12 +612,11 @@ export class InngestWorkflow<
 
   getNestedFunctions(steps: StepFlowEntry[]): ReturnType<Inngest['createFunction']>[] {
     return steps.flatMap(step => {
-      if (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') {
-        if (step.step instanceof InngestWorkflow) {
-          return [step.step.getFunction(), ...step.step.getNestedFunctions(step.step.executionGraph.steps)];
-        }
-        return [];
-      } else if (step.type === 'parallel' || step.type === 'conditional') {
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        return [nested.getFunction(), ...nested.getNestedFunctions(nested.executionGraph.steps)];
+      }
+      if (step.type === 'parallel' || step.type === 'conditional') {
         return this.getNestedFunctions(step.steps);
       }
 

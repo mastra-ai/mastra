@@ -42,6 +42,12 @@ export type {
   GoalEvaluationPayload,
   TripwirePayload,
 
+  // Callback Types
+  MastraOnFinishCallback,
+  MastraOnFinishCallbackArgs,
+  MastraStreamTransform,
+  MastraStreamTransformOptions,
+
   // JSON & Data Types
   JSONArray,
   JSONObject,
@@ -73,3 +79,9 @@ export { convertFullStreamChunkToUIMessageStream } from './aisdk/v5/compat';
 // ============================================================================
 export type { CachingTransformStreamOptions } from './caching-transform-stream';
 export { createCachingTransformStream, createReplayStream, withStreamCaching } from './caching-transform-stream';
+
+// ============================================================================
+// Stream Smoothing
+// ============================================================================
+export type { SmoothStreamChunkDetector, SmoothStreamOptions } from './smooth-stream';
+export { smoothStream } from './smooth-stream';

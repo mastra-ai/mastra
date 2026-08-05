@@ -162,10 +162,12 @@ export async function setupStreamingMemoryTest({
 
     describe('data-* parts persistence (issue #10477 and #10936)', () => {
       it('should preserve data-* parts through save → recall → UI conversion round-trip', async () => {
+        const dbPath = join(await mkdtemp(join(tmpdir(), `streaming-memory-data-parts-${Date.now()}-`)), 'mastra.db');
+        const isolatedMemory = (createIsolatedMemory ?? createMemory)(dbPath);
         const threadId = randomUUID();
         const resourceId = 'test-data-parts-resource';
 
-        await memory.createThread({
+        await isolatedMemory.createThread({
           threadId,
           resourceId,
           title: 'Data Parts Test Thread',
@@ -227,9 +229,9 @@ export async function setupStreamingMemoryTest({
           },
         ];
 
-        await memory.saveMessages({ messages: messagesWithDataParts });
+        await isolatedMemory.saveMessages({ messages: messagesWithDataParts });
 
-        const recallResult = await memory.recall({
+        const recallResult = await isolatedMemory.recall({
           threadId,
           resourceId,
         });

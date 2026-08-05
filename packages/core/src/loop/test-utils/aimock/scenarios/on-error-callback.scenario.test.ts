@@ -106,5 +106,5 @@ describeForAllEngines(
       expect(await output.text).toContain('Handled tool error');
     });
   },
-  { skip: ['durable'] },
+  {},
 );

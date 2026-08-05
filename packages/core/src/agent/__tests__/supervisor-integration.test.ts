@@ -1036,31 +1036,25 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
       toolCallId: approvalToolCallId,
     });
 
-    let toolDeclinedMessage = '';
-
     for await (const _chunk of resumeStream.fullStream) {
-      // consume
-      if (_chunk.type === 'tool-output') {
-        const output = _chunk.payload.output;
-        if (output.type === 'tool-result' && output.payload.toolName === 'find-user-tool-decline') {
-          toolDeclinedMessage = output.payload.result;
-        }
-      }
+      // consume — output-denied calls emit no tool-result chunk for the sub-agent's declined tool
     }
 
     const toolResults = await resumeStream.toolResults;
 
     // Verify tool was NOT executed
     expect(mockFindUser).not.toHaveBeenCalled();
-
-    // Verify we got tool results from the sub-agent delegation
+    // The supervisor still gets a tool-result for the agent delegation itself,
+    // even though the sub-agent's tool was output-denied.
     expect(toolResults.length).toBeGreaterThan(0);
 
-    // The supervisor's tool result for the agent delegation should contain the sub-agent's response
+    // The delegation result must still carry the sub-agent's declined outcome — not just exist.
+    // A regression that dropped the denied path would leave the sub-agent unable to report back,
+    // so assert the supervisor-facing result surfaces the decline.
     const subAgentResult = toolResults.find(tr => tr.payload?.toolName === 'agent-approvalDeclineSubAgent');
     expect(subAgentResult).toBeDefined();
     expect(subAgentResult?.payload?.result).toBeDefined();
-    expect(toolDeclinedMessage).toBe('Tool call was not approved by the user');
+    expect(JSON.stringify(subAgentResult?.payload?.result)).toMatch(/declin/i);
   });
 });
 
@@ -1397,6 +1391,120 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
     // isTaskComplete events should have been emitted
     expect(isTaskCompleteEvents.length).toBeGreaterThan(0);
     expect(isTaskCompleteEvents[0].payload.passed).toBe(true);
+  });
+
+  it('should resolve the model answer as final text and not persist the completion report when the check passes', async () => {
+    const answer = 'Both accounts are healthy. Nothing needs attention.';
+    const passingScorer = {
+      id: 'always-complete',
+      name: 'Always Complete',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Task is complete' }),
+    };
+
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'final-text-agent',
+      name: 'Final Text Agent',
+      instructions: 'Do the task.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: answer },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      }),
+      // Memory contributes output processors, which is what re-derives the
+      // final text from the last response message after the stream finishes.
+      memory,
+    });
+
+    const stream = await agent.stream('Do the task.', {
+      maxSteps: 4,
+      isTaskComplete: { scorers: [passingScorer as any] },
+      memory: { resource: 'res-1', thread: 'thread-1' },
+    });
+    for await (const _chunk of stream.fullStream) {
+      // consume
+    }
+
+    // The resolved text and last step text are the model's answer, not the
+    // internal completion-check report.
+    expect(await stream.text).toBe(answer);
+    const steps = await stream.steps;
+    expect(steps.at(-1)?.text).toBe(answer);
+
+    // The answer is persisted to the thread, the report is not.
+    const recalled = await memory.recall({ threadId: 'thread-1' });
+    const persistedTexts = recalled.messages.map(m =>
+      typeof m.content === 'string' ? m.content : (m.content?.parts ?? []).map((p: any) => p.text ?? '').join(''),
+    );
+    expect(persistedTexts.join('\n')).toContain(answer);
+    expect(persistedTexts.join('\n')).not.toContain('Completion Check Results');
+  });
+
+  it('should resolve the last model answer as final text when the check keeps failing until maxSteps', async () => {
+    let call = 0;
+    const answers = ['Attempt one.', 'Attempt two.'];
+    const failingScorer = {
+      id: 'never-complete',
+      name: 'Never Complete',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Not complete' }),
+    };
+
+    const agent = new Agent({
+      id: 'failing-final-text-agent',
+      name: 'Failing Final Text Agent',
+      instructions: 'Do the task.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          const text = answers[Math.min(call++, answers.length - 1)]!;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              // Distinct timestamps per turn: identical createdAt values make the
+              // message sort order (and adjacent-assistant merging) nondeterministic.
+              {
+                type: 'response-metadata',
+                id: `id-${call}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(call * 1000),
+              },
+              { type: 'text-start', id: `text-${call}` },
+              { type: 'text-delta', id: `text-${call}`, delta: text },
+              { type: 'text-end', id: `text-${call}` },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const stream = await agent.stream('Do the task.', {
+      maxSteps: 2,
+      isTaskComplete: { scorers: [failingScorer as any] },
+      memory: { resource: 'res-2', thread: 'thread-2' },
+    });
+    for await (const _chunk of stream.fullStream) {
+      // consume
+    }
+
+    // The run ends at maxSteps with the failing feedback as the newest response
+    // message — the resolved text must still be model output, not the report.
+    // Mock timestamps make attempt-message ordering (and adjacent-assistant
+    // merging) nondeterministic, so assert on the tail instead of equality.
+    const finalText = await stream.text;
+    expect(finalText).not.toContain('Completion Check Results');
+    expect(finalText.endsWith('Attempt two.')).toBe(true);
   });
 
   it('should continue iterating when isTaskComplete scorer fails and stop when it passes', async () => {
@@ -4313,5 +4421,145 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
 
     controller.abort();
     expect(capturedSignal!.aborted).toBe(true);
+  });
+});
+
+describe('Delegation maxSteps cap', () => {
+  // Supervisor model that delegates once and includes maxSteps in the tool-call input,
+  // simulating the LLM filling the optional maxSteps delegation arg.
+  function makeSupervisorModelWithMaxSteps(agentKey: string, prompt: string, maxSteps: number) {
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: `agent-${agentKey}`,
+                input: JSON.stringify({ prompt, maxSteps }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+  }
+
+  // Sub-agent with a fixed text response and its own configured step budget
+  function makeCappedSubAgent(id: string, maxSteps: number) {
+    return new Agent({
+      id,
+      name: id,
+      description: `Sub-agent: ${id}`,
+      instructions: 'You are a helpful sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'child response',
+          content: [{ type: 'text', text: 'child response' }],
+          warnings: [],
+        }),
+      }),
+      defaultOptions: { maxSteps },
+    });
+  }
+
+  it('caps the LLM-provided maxSteps at the sub-agent defaultOptions.maxSteps', async () => {
+    const cappedSubAgent = makeCappedSubAgent('capped-child', 4);
+    const generateSpy = vi.spyOn(cappedSubAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'cap-supervisor',
+      name: 'cap-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('cappedChild', 'do work', 10),
+      agents: { cappedChild: cappedSubAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', { maxSteps: 5 });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(4);
+  });
+
+  it('keeps the LLM-provided maxSteps when it is below the sub-agent default', async () => {
+    const cappedSubAgent = makeCappedSubAgent('reduce-child', 10);
+    const generateSpy = vi.spyOn(cappedSubAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'reduce-supervisor',
+      name: 'reduce-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('reduceChild', 'do work', 3),
+      agents: { reduceChild: cappedSubAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', { maxSteps: 5 });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(3);
+  });
+
+  it('passes the LLM-provided maxSteps through when the sub-agent has no default', async () => {
+    const subAgent = makeSubAgent('uncapped-child', 'child response');
+    const generateSpy = vi.spyOn(subAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'uncapped-supervisor',
+      name: 'uncapped-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('uncappedChild', 'do work', 10),
+      agents: { uncappedChild: subAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', { maxSteps: 5 });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(10);
+  });
+
+  it('lets onDelegationStart modifiedMaxSteps bypass the cap', async () => {
+    const cappedSubAgent = makeCappedSubAgent('hook-child', 4);
+    const generateSpy = vi.spyOn(cappedSubAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'hook-supervisor',
+      name: 'hook-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('hookChild', 'do work', 10),
+      agents: { hookChild: cappedSubAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', {
+      maxSteps: 5,
+      delegation: {
+        onDelegationStart: () => ({ proceed: true, modifiedMaxSteps: 12 }),
+      },
+    });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(12);
   });
 });

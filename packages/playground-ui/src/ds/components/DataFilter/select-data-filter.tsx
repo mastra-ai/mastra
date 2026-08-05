@@ -72,11 +72,11 @@ function SubMenuSearch({
     <div className={cn('px-2 pb-2')}>
       <div
         className={cn(
-          'flex items-center gap-2 border border-border1 rounded-md px-2 py-1',
+          'flex items-center gap-2 rounded-md border border-border1 px-2 py-1',
           'focus-within:border-neutral2',
         )}
       >
-        <SearchIcon className={cn('text-neutral3 h-3.5 w-3.5 shrink-0')} />
+        <SearchIcon className={cn('size-3.5 shrink-0 text-neutral3')} />
         <input
           type="text"
           placeholder="Search..."
@@ -84,7 +84,7 @@ function SubMenuSearch({
           value={value}
           onChange={e => onChange(e.target.value)}
           onKeyDown={e => e.stopPropagation()}
-          className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full')}
+          className={cn('w-full bg-transparent text-ui-sm text-neutral4 outline-none placeholder:text-neutral3')}
         />
       </div>
     </div>
@@ -187,7 +187,7 @@ export function SelectDataFilter({
           <span className={cn('truncate')}>{cat.label}</span>
           {selectedCount > 0 && <span className={cn('ml-auto text-ui-sm text-accent1')}>{selectedCount}</span>}
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent className={cn('max-h-[20rem]')}>
+        <DropdownMenu.SubContent className={cn('max-h-80')}>
           {cat.values.length >= searchThreshold && (
             <SubMenuSearch value={subSearch} onChange={setSubSearch} label={`Search ${cat.label.toLowerCase()}`} />
           )}
@@ -229,7 +229,7 @@ export function SelectDataFilter({
           {activeFilterCount > 0 && (
             <span
               className={cn(
-                'ml-0.5 inline-flex items-center justify-center rounded-full bg-accent1/50 text-neutral5 text-ui-sm w-5 h-5',
+                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-neutral5',
               )}
             >
               {activeFilterCount}
@@ -237,16 +237,16 @@ export function SelectDataFilter({
           )}
         </Button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align={align} className={cn('min-w-[12rem]')}>
+      <DropdownMenu.Content align={align} className={cn('min-w-48')}>
         {/* Search */}
         <div className={cn('px-2 pb-2')}>
           <div
             className={cn(
-              'flex items-center gap-2 border border-border1 rounded-md px-2 py-1',
+              'flex items-center gap-2 rounded-md border border-border1 px-2 py-1',
               'focus-within:border-neutral2',
             )}
           >
-            <SearchIcon className={cn('text-neutral3 h-3.5 w-3.5 shrink-0')} />
+            <SearchIcon className={cn('size-3.5 shrink-0 text-neutral3')} />
             <input
               type="text"
               placeholder="Search filters..."
@@ -254,7 +254,7 @@ export function SelectDataFilter({
               value={filterSearch}
               onChange={e => setFilterSearch(e.target.value)}
               onKeyDown={e => e.stopPropagation()}
-              className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full')}
+              className={cn('w-full bg-transparent text-ui-sm text-neutral4 outline-none placeholder:text-neutral3')}
             />
           </div>
         </div>
@@ -262,20 +262,18 @@ export function SelectDataFilter({
         <DropdownMenu.Separator />
 
         {grouped.map(group => {
-          if (group.items.length === 1 && !group.label) {
-            return renderCategory(group.items[0]);
-          }
+          const firstItem = group.items[0];
 
-          if (group.label && group.items.length === 1) {
-            // Single item in a named group — render directly with group as context
-            return renderCategory(group.items[0]);
+          if (group.items.length === 1 && firstItem) {
+            // A single category (grouped or not) renders directly, without a sub-trigger.
+            return renderCategory(firstItem);
           }
 
           // Multiple items under a group label — nest under a sub-trigger
           return (
             <DropdownMenu.Sub key={group.key}>
               <DropdownMenu.SubTrigger>{group.label}</DropdownMenu.SubTrigger>
-              <DropdownMenu.SubContent className={cn('max-h-[20rem]')}>
+              <DropdownMenu.SubContent className={cn('max-h-80')}>
                 {group.items.map(cat => renderCategory(cat))}
               </DropdownMenu.SubContent>
             </DropdownMenu.Sub>

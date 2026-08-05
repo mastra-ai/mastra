@@ -54,7 +54,8 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
     anchorSpanId ? spanRecord.spanId === anchorSpanId : spanRecord?.parentSpanId == null;
 
   spans.forEach(spanRecord => {
-    const uiSpan = spanMap.get(spanRecord.spanId)!;
+    const uiSpan = spanMap.get(spanRecord.spanId);
+    if (!uiSpan) return;
 
     if (isAnchor(spanRecord)) {
       if (overallEndDate && uiSpan.endTime && overallEndDate > new Date(uiSpan.endTime)) {
@@ -67,7 +68,8 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
     } else {
       const parent = spanRecord.parentSpanId ? spanMap.get(spanRecord.parentSpanId) : undefined;
       if (parent) {
-        parent.spans!.push(uiSpan);
+        parent.spans ??= [];
+        parent.spans.push(uiSpan);
       } else {
         // Orphan: either the parent isn't in the supplied set (branch subtree boundary), or
         // the span has no parent yet wasn't picked as the anchor (rare when `anchorSpanId`

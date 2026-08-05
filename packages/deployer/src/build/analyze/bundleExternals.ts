@@ -414,10 +414,20 @@ async function buildExternalDependencies(
  * Recursively searches through Rollup output chunks to find which module imports a specific external dependency.
  * Used to build the module resolution map for proper external dependency tracking.
  */
-function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
-  const capturedFiles = new Set();
+function findExternalImporter(
+  module: OutputChunk,
+  external: string,
+  allOutputs: OutputChunk[],
+  visited = new Set<string>(),
+): OutputChunk | null {
+  if (visited.has(module.fileName)) {
+    return null;
+  }
 
-  for (const id of module.imports) {
+  visited.add(module.fileName);
+  const capturedFiles = new Set<string>();
+
+  for (const id of [...module.imports, ...module.dynamicImports]) {
     if (isDependencyPartOfPackage(id, external)) {
       return module;
     } else {
@@ -430,7 +440,7 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
   for (const file of capturedFiles) {
     const nextModule = allOutputs.find(o => o.fileName === file);
     if (nextModule) {
-      const importer = findExternalImporter(nextModule, external, allOutputs);
+      const importer = findExternalImporter(nextModule, external, allOutputs, visited);
 
       if (importer) {
         return importer;

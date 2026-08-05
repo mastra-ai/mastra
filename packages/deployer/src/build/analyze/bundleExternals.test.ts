@@ -61,6 +61,31 @@ describe('createVirtualDependencies', () => {
     });
   });
 
+  it('should preserve merged workspace subpath exports in dev cache facades', () => {
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        '@mastra/core/llm',
+        {
+          exports: ['PROVIDER_REGISTRY', 'EMBEDDING_MODELS'],
+          rootPath: '/workspace/packages/core',
+          isWorkspace: true,
+        },
+      ],
+    ]);
+
+    const result = createVirtualDependencies(depsToOptimize, {
+      workspaceRoot: '/workspace',
+      projectRoot: '/workspace/apps/mastra',
+      outputDir: '/workspace/apps/mastra/.mastra/.build',
+      bundlerOptions: { isDev: true },
+    });
+
+    expect(result.optimizedDependencyEntries.get('@mastra/core/llm')).toEqual({
+      name: 'packages/core/node_modules/.cache/@mastra__core__llm',
+      virtual: "export { PROVIDER_REGISTRY, EMBEDDING_MODELS } from '@mastra/core/llm';",
+    });
+  });
+
   it('should handle default export only', () => {
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [

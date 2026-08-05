@@ -1,0 +1,224 @@
+# Mastra Monorepo CODEOWNERS
+# Last matching pattern wins. General patterns first, specific overrides last.
+# Each line: pattern @owner1 @owner2 [@owner3]
+
+# ============================================================================
+# Default fallback
+# ============================================================================
+* @abhiaiyer91 @wardpeet
+
+# ============================================================================
+# packages/core/ — framework root
+# ============================================================================
+/packages/core/ @abhiaiyer91 @wardpeet
+
+# Core internals (alphabetical)
+/packages/core/src/a2a/ @TheIsrael1 @wardpeet
+/packages/core/src/action/ @abhiaiyer91 @wardpeet
+/packages/core/src/agent/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/agent/durable/ @taofeeq-deru @rase-
+/packages/core/src/agent/heartbeat/ @CalebBarnes @TylerBarnes
+/packages/core/src/agent/message-list/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/agent/save-queue/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/agent/workflows/ @rase- @taofeeq-deru @abhiaiyer91
+/packages/core/src/agent-builder/ @YujohnNattrass @mfrachet @NikAiyer
+/packages/core/src/agent-controller/ @abhiaiyer91 @wardpeet
+/packages/core/src/auth/ @rphansen91 @graysonhicks
+/packages/core/src/background-tasks/ @taofeeq-deru @rase-
+/packages/core/src/browser/ @NikAiyer @CalebBarnes
+/packages/core/src/browser/recording/ @DanielSLew @NikAiyer
+/packages/core/src/bundler/ @wardpeet @TheIsrael1 @LekoArts
+/packages/core/src/cache/ @abhiaiyer91 @rase- @taofeeq-deru
+/packages/core/src/channels/ @CalebBarnes @NikAiyer
+/packages/core/src/datasets/ @YujohnNattrass @DanielSLew
+/packages/core/src/deployer/ @wardpeet @TheIsrael1 @LekoArts
+/packages/core/src/di/ @abhiaiyer91 @wardpeet
+/packages/core/src/editor/ @DanielSLew @NikAiyer @YujohnNattrass
+/packages/core/src/error/ @wardpeet @TheIsrael1 @intojhanurag
+/packages/core/src/evals/ @YujohnNattrass @intojhanurag
+/packages/core/src/events/ @rase- @TylerBarnes
+/packages/core/src/features/ @CalebBarnes @TylerBarnes
+/packages/core/src/harness/ @wardpeet @abhiaiyer91
+/packages/core/src/hooks/ @NikAiyer @abhiaiyer91
+/packages/core/src/integration/ @abhiaiyer91 @wardpeet
+/packages/core/src/license/ @junydania @abhiaiyer91
+/packages/core/src/llm/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/llm/model/aisdk/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/llm/model/gateways/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/logger/ @abhiaiyer91 @wardpeet
+/packages/core/src/loop/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/loop/network/ @rase- @taofeeq-deru @abhiaiyer91
+/packages/core/src/mastra/ @wardpeet @abhiaiyer91
+/packages/core/src/mcp/ @DanielSLew @graysonhicks
+/packages/core/src/memory/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/core/src/notifications/ @TylerBarnes @CalebBarnes
+/packages/core/src/observability/ @epinzur @intojhanurag
+/packages/core/src/processor-provider/ @DanielSLew @TylerBarnes @wardpeet
+/packages/core/src/processors/ @DanielSLew @TylerBarnes @wardpeet
+/packages/core/src/relevance/ @NikAiyer @YujohnNattrass
+/packages/core/src/request-context/ @wardpeet @abhiaiyer91
+/packages/core/src/run/ @TheIsrael1 @abhiaiyer91
+/packages/core/src/schema/ @wardpeet @DanielSLew
+/packages/core/src/server/ @wardpeet @rphansen91 @abhiaiyer91
+/packages/core/src/signals/ @TylerBarnes @abhiaiyer91
+/packages/core/src/skills/ @CalebBarnes @abhiaiyer91 @NikAiyer
+/packages/core/src/storage/ @NikAiyer @abhiaiyer91
+/packages/core/src/storage/domains/background-tasks/ @taofeeq-deru @NikAiyer
+/packages/core/src/storage/domains/blobs/ @DanielSLew @NikAiyer
+/packages/core/src/storage/domains/channels/ @CalebBarnes @NikAiyer
+/packages/core/src/storage/domains/datasets/ @YujohnNattrass @NikAiyer
+/packages/core/src/storage/domains/experiments/ @YujohnNattrass @NikAiyer
+/packages/core/src/storage/domains/favorites/ @NikAiyer @DanielSLew
+/packages/core/src/storage/domains/harness/ @wardpeet @NikAiyer
+/packages/core/src/storage/domains/mcp-clients/ @DanielSLew @NikAiyer
+/packages/core/src/storage/domains/mcp-servers/ @DanielSLew @NikAiyer
+/packages/core/src/storage/domains/notifications/ @TylerBarnes @NikAiyer
+/packages/core/src/storage/domains/observability/ @epinzur @NikAiyer
+/packages/core/src/storage/domains/prompt-blocks/ @DanielSLew @NikAiyer
+/packages/core/src/storage/domains/scorer-definitions/ @DanielSLew @NikAiyer
+/packages/core/src/storage/domains/skills/ @DanielSLew @NikAiyer
+/packages/core/src/storage/domains/tool-provider-connections/ @YujohnNattrass @NikAiyer
+/packages/core/src/storage/domains/workspaces/ @DanielSLew @NikAiyer
+/packages/core/src/storage/providers/ @DanielSLew @NikAiyer
+/packages/core/src/stream/ @taofeeq-deru @wardpeet
+/packages/core/src/telemetry/ @epinzur @intojhanurag
+/packages/core/src/tool-loop-agent/ @CalebBarnes @wardpeet
+/packages/core/src/tool-provider/ @DanielSLew @YujohnNattrass
+/packages/core/src/tools/ @wardpeet @abhiaiyer91
+/packages/core/src/tools/tool-builder/ @DanielSLew @wardpeet
+/packages/core/src/tts/ @wardpeet @abhiaiyer91
+/packages/core/src/utils/ @wardpeet @NikAiyer
+/packages/core/src/vector/ @intojhanurag @NikAiyer
+/packages/core/src/voice/ @rphansen91 @wardpeet @abhiaiyer91
+/packages/core/src/voice/aisdk/ @wardpeet @abhiaiyer91
+/packages/core/src/worker/ @rase- @NikAiyer
+/packages/core/src/workflows/ @rase- @taofeeq-deru @abhiaiyer91
+/packages/core/src/workflows/scheduler/ @abhiaiyer91 @rase-
+/packages/core/src/workspace/ @CalebBarnes @NikAiyer
+/packages/core/src/workspace/sandbox/process-manager/ @CalebBarnes @NikAiyer
+
+# ============================================================================
+# packages/ (top-level)
+# ============================================================================
+/packages/cli/ @LekoArts @wardpeet
+/packages/create-mastra/ @wardpeet @TheIsrael1
+/packages/memory/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/memory/src/processors/observational-memory/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/memory/src/processors/working-memory-state/ @CalebBarnes @TylerBarnes @abhiaiyer91
+/packages/evals/ @YujohnNattrass @DanielSLew @abhiaiyer91
+/packages/evals/src/scorers/ @YujohnNattrass @wardpeet
+/packages/evals/src/scorers/llm/trajectory/ @DanielSLew @YujohnNattrass
+/packages/evals/src/scorers/code/trajectory/ @DanielSLew @YujohnNattrass
+/packages/rag/ @NikAiyer @abhiaiyer91
+/packages/mcp/ @DanielSLew @graysonhicks
+/packages/server/ @rase- @NikAiyer
+/packages/deployer/ @wardpeet @TheIsrael1 @LekoArts
+/packages/editor/ @DanielSLew @YujohnNattrass @mfrachet
+/packages/agent-builder/ @YujohnNattrass @NikAiyer @mfrachet
+/packages/auth/ @rphansen91 @wardpeet
+/packages/acp/ @wardpeet @TheIsrael1
+/packages/loggers/ @wardpeet @abhiaiyer91
+/packages/fastembed/ @TylerBarnes @abhiaiyer91
+/packages/mcp-docs-server/ @TylerBarnes @wardpeet
+/packages/mcp-registry-registry/ @abhiaiyer91 @wardpeet
+/packages/codemod/ @LekoArts @wardpeet
+/packages/schema-compat/ @wardpeet @DanielSLew @TylerBarnes
+/packages/_changeset-cli/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_config/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_external-types/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_internal-core/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_internals/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_llm-recorder/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_test-utils/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_types-builder/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_vendored/ @wardpeet @TheIsrael1 @abhiaiyer91
+
+# ============================================================================
+# Playground & UI — Marvin + Damien on all
+# ============================================================================
+/packages/playground/ @mfrachet @damien-schneider
+/packages/playground-ui/ @mfrachet @damien-schneider
+
+# ============================================================================
+# Stores — NikAiyer is primary on all stores
+# ============================================================================
+/stores/ @NikAiyer @abhiaiyer91
+
+# ============================================================================
+# Deployers
+# ============================================================================
+/deployers/ @wardpeet @TheIsrael1 @LekoArts
+
+# ============================================================================
+# Observability — Eric Pinzur primary, Anurag secondary
+# ============================================================================
+/observability/ @epinzur @intojhanurag
+
+# ============================================================================
+# Server adapters
+# ============================================================================
+/server-adapters/ @NikAiyer @rase-
+
+# ============================================================================
+# Auth
+# ============================================================================
+/auth/ @rphansen91 @wardpeet @abhiaiyer91
+
+# ============================================================================
+# Browser
+# ============================================================================
+/browser/ @NikAiyer @CalebBarnes
+
+# ============================================================================
+# Agent SDKs
+# ============================================================================
+/agent-sdks/ @TheIsrael1 @wardpeet
+
+# ============================================================================
+# Client SDKs
+# ============================================================================
+/client-sdks/ @TheIsrael1 @wardpeet @mfrachet
+
+# ============================================================================
+# PubSub
+# ============================================================================
+/pubsub/ @rase- @taofeeq-deru @abhiaiyer91
+
+# ============================================================================
+# Other satellites
+# ============================================================================
+/channels/slack/ @CalebBarnes @NikAiyer
+/signals/github/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/embedders/voyageai/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/integrations/ @abhiaiyer91 @wardpeet
+/ee/ @junydania @rphansen91 @YujohnNattrass
+
+# ============================================================================
+# Docs — Lennart, Alex, Paul
+# ============================================================================
+/docs/ @LekoArts @PaulieScanlon @bookercodes
+
+# ============================================================================
+# Voice providers
+# ============================================================================
+/voice/ @wardpeet @abhiaiyer91 @TylerBarnes
+
+# ============================================================================
+# Workflow integrations (inngest, temporal)
+# ============================================================================
+/workflows/ @taofeeq-deru @rase- @abhiaiyer91
+
+# ============================================================================
+# Workspace providers (e2b, docker, etc.)
+# ============================================================================
+/workspaces/ @NikAiyer @CalebBarnes
+
+# ============================================================================
+# Infrastructure
+# ============================================================================
+/e2e-tests/ @wardpeet @abhiaiyer91 @TylerBarnes
+/scripts/ @wardpeet @abhiaiyer91 @TylerBarnes
+/templates/ @wardpeet @abhiaiyer91 @TylerBarnes
+/examples/ @wardpeet @abhiaiyer91 @TylerBarnes
+/explorations/ @wardpeet @abhiaiyer91 @TylerBarnes
+/mastracode/ @wardpeet @abhiaiyer91 @TylerBarnes

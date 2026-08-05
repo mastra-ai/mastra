@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 
 import type { LogRecord } from '../types';
 import { useInView } from '@/hooks/use-in-view';
-import { isUnsupportedObservabilityOperationError } from '@/lib/query-utils';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@/lib/query-utils';
 
 interface UseLogsReturn {
   data: LogRecord[] | undefined;
@@ -52,7 +52,10 @@ function selectLogs(data: { pages: ListLogsResponse[] }) {
 }
 
 export function getLogsRefetchInterval(query: { state: { error: unknown } }) {
-  if (isUnsupportedObservabilityOperationError(query.state.error, 'logs')) {
+  if (
+    isUnsupportedObservabilityOperationError(query.state.error, 'logs') ||
+    isObservabilityUnavailableError(query.state.error)
+  ) {
     return false;
   }
   return LOGS_REFETCH_INTERVAL_MS;

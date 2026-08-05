@@ -1173,7 +1173,7 @@ Contains output from workflow step execution, used primarily for usage tracking 
 
 ## Background task chunks
 
-Emitted when a tool call is dispatched as a [background task](/docs/agents/background-tasks) and `streamUntilIdle()` is used.
+Emitted when a tool call is dispatched as a [background task](/docs/long-running-agents/background-tasks) and `streamUntilIdle()` is used.
 
 ### background-task-started
 
@@ -1504,9 +1504,9 @@ Emitted when the task throws or times out. Triggers a continuation turn when con
 
 ### background-task-suspended
 
-Emitted when a tool calls `suspend()` from inside its background execution. Pauses the task's workflow run with its snapshot persisted; resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)`.
+Emitted when a tool calls `suspend()` from inside its background execution. Pauses the task's workflow run with its snapshot persisted. Resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)`.
 
-When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle), this chunk drops the task from the loop's wait set without queuing a continuation — the agent's response ends, and the resumed task's eventual completion injects into the message list for the next user turn.
+When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle), this chunk drops the task from the loop's wait set without queuing a continuation. The agent's response ends, and the resumed task's eventual completion injects into the message list for the next user turn.
 
 <PropertiesTable
   content={[
@@ -1762,7 +1762,7 @@ Contains monitoring and observability data from agent execution. Can include wor
 
 ### goal
 
-Emitted on every evaluation of an agent [goal](/docs/agents/goals). Consumers use this to render judge progress and the result mid-run. A goal that has no judge model configured produces no `goal` chunk.
+Emitted on every evaluation of an agent [goal](/docs/long-running-agents/goals). Consumers use this to render judge progress and the result mid-run. A goal that has no judge model configured produces no `goal` chunk.
 
 <PropertiesTable
   content={[

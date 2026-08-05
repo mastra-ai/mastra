@@ -14,7 +14,7 @@ import {
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
+import type { Context, ExecutionContext, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 export { createAuthMiddleware } from './auth-middleware';
@@ -177,7 +177,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         const reader = readableStream.getReader();
 
         stream.onAbort(() => {
-          void reader.cancel('request aborted');
+          void reader.cancel('request aborted').catch(() => {});
         });
 
         try {
@@ -395,7 +395,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const prefix = prefixParam ?? this.prefix ?? '';
 
     // Determine if body limits should be applied
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
@@ -404,10 +405,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const middlewares: MiddlewareHandler[] = [];
 
     if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+      const { onError } = this.bodyLimitOptions;
       middlewares.push(
         bodyLimit({
           maxSize,
-          onError: this.bodyLimitOptions.onError as any,
+          // Hono's bodyLimit middleware uses this callback's return value as the response
+          // directly, so it must resolve to a Response, unlike onError's framework-agnostic
+          // (error: unknown) => unknown contract used by the other adapters.
+          onError: (c: Context) => c.json(onError({ error: 'Request body too large' }), 413),
         }),
       );
     }
@@ -718,6 +723,16 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         c.req.raw.headers.forEach((v, k) => {
           reqHeaders[k] = v;
         });
+        // Forward the platform execution context (e.g. Cloudflare Workers'
+        // `waitUntil`) so custom route handlers can keep background work alive
+        // after the response. Hono's `executionCtx` getter throws when no
+        // ExecutionContext exists (e.g. Node), so guard the access.
+        let executionCtx: ExecutionContext | undefined;
+        try {
+          executionCtx = c.executionCtx;
+        } catch {
+          executionCtx = undefined;
+        }
         const response = await this.handleCustomRouteRequest(
           c.req.url,
           c.req.method,
@@ -725,6 +740,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           c.req.raw.body,
           c.get('requestContext'),
           c.req.raw.signal,
+          executionCtx,
         );
         if (!response) {
           return c.json({ error: 'Not Found' }, 404);
@@ -739,6 +755,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
   registerContextMiddleware(): void {
     this.app.use('*', this.createContextMiddleware());
+    this.app.use('*', async (c, next) => {
+      await next();
+      this.warnIfUnregisteredChannelWebhook(c.req.path, c.req.method, c.res.status);
+    });
   }
 
   registerAuthMiddleware(): void {

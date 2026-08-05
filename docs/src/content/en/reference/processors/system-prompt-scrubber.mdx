@@ -7,7 +7,7 @@ packages:
 
 # SystemPromptScrubber
 
-The `SystemPromptScrubber` is an **output processor** that detects and handles system prompts, instructions, and other revealing information that could introduce security vulnerabilities. This processor helps maintain security by identifying various types of system prompts and providing flexible strategies for handling them, including multiple redaction methods to ensure sensitive information is properly sanitized.
+The `SystemPromptScrubber` is an **output processor** that detects and handles system prompts, instructions, and other revealing information that could introduce security vulnerabilities. This processor helps maintain security by identifying types of system prompts and providing flexible strategies for handling them, including multiple redaction methods to ensure sensitive information is properly sanitized.
 
 ## Usage example
 
@@ -141,6 +141,7 @@ import { Agent } from '@mastra/core/agent'
 import { BatchPartsProcessor, SystemPromptScrubber } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'scrubbed-agent',
   name: 'scrubbed-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',

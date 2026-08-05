@@ -1220,6 +1220,65 @@ describe('TokenCounter', () => {
     });
   });
 
+  describe('tool approval (output-denied)', () => {
+    // Regression: a declined approval persists as state 'output-denied', a tool-invocation
+    // state the counter did not handle and used to throw on ("Unhandled tool-invocation
+    // state ..."). It now counts the denial reason like a small tool result.
+    const DEFAULT_DECLINE_REASON = 'Tool call was not approved by the user';
+
+    const createDeniedMessage = (approval?: { id: string; approved: boolean; reason?: string }) =>
+      createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-denied',
+              toolCallId: 'tool-1',
+              toolName: 'findUserTool',
+              args: { name: 'Dero Israel' },
+              ...(approval ? { approval } : {}),
+            },
+          },
+        ],
+      });
+
+    it('counts a declined approval by its approval reason instead of throwing', () => {
+      const counter = new TokenCounter();
+      const reason = 'Manager rejected this lookup';
+      const message = createDeniedMessage({ id: 'tool-1', approved: false, reason });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(0);
+      expect(estimate?.key).toContain('tool-result-denied');
+      expect(estimate?.tokens).toBe(counter.countString(reason));
+    });
+
+    it('falls back to the default decline reason when approval.reason is absent', () => {
+      const counter = new TokenCounter();
+      const message = createDeniedMessage({ id: 'tool-1', approved: false });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(0);
+      expect(estimate?.key).toContain('tool-result-denied');
+      expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
+    });
+
+    it('does not throw when the output-denied invocation has no approval object at all', () => {
+      const counter = new TokenCounter();
+      const message = createDeniedMessage();
+
+      expect(() => counter.countMessage(message)).not.toThrow();
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      expect(estimate?.key).toContain('tool-result-denied');
+      expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
+    });
+  });
+
   describe('countObservations', () => {
     it('delegates to countString', () => {
       const counter = new TokenCounter();

@@ -66,5 +66,5 @@ describeForAllEngines(
       expect(schema.parse(object)).toEqual({ query: 'alpha', status: 'STATUS_OK:alpha' });
     });
   },
-  { skip: ['durable'] },
+  {},
 );

@@ -79,7 +79,9 @@ export function parseEnvFileText(text: string): EnvironmentVariableEntry[] {
   let lineIndex = 0;
 
   while (lineIndex < lines.length) {
-    const line = lines[lineIndex].trim();
+    const currentLine = lines[lineIndex];
+    if (currentLine === undefined) break;
+    const line = currentLine.trim();
     if (!line || line.startsWith('#')) {
       lineIndex++;
       continue;
@@ -113,6 +115,7 @@ export function parseEnvFileText(text: string): EnvironmentVariableEntry[] {
 
         while (lineIndex < lines.length) {
           const nextLine = lines[lineIndex];
+          if (nextLine === undefined) break;
           const endIndex = findClosingQuoteIndex(nextLine, quote);
           if (endIndex !== -1) {
             parts.push(nextLine.slice(0, endIndex));

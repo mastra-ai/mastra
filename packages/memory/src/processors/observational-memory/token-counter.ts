@@ -1759,6 +1759,17 @@ export class TokenCounter {
         return { tokens, overheadDelta, toolResultDelta };
       }
 
+      if (invocation.state === 'output-denied') {
+        // A declined approval carries no tool result; count its denial reason like a small result
+        // so token accounting stays consistent (and doesn't throw on the new state).
+        toolResultDelta++;
+        const reason =
+          (invocation as { approval?: { reason?: string } }).approval?.reason ??
+          'Tool call was not approved by the user';
+        tokens += this.readOrPersistPartEstimate(part, 'tool-result-denied', reason);
+        return { tokens, overheadDelta, toolResultDelta };
+      }
+
       throw new Error(
         `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
       );

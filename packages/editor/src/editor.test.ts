@@ -1723,6 +1723,43 @@ describe('agent.create with builder defaults', () => {
 
     const rawConfig = agent.toRawConfig?.();
     expect(rawConfig?.memory).toEqual({ observationalMemory: true });
+
+    const memory = await agent.getMemory();
+    const om = memory?.getConfig().observationalMemory;
+    expect(typeof om).not.toBe('boolean');
+    if (typeof om !== 'boolean' && om) {
+      expect(om.model).toBe('openai/gpt-5.4-mini');
+    }
+  });
+
+  it('passes an explicit observational memory model through unchanged (builder default does not override)', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: {
+          agent: { memory: { observationalMemory: { model: 'openai/gpt-4o-mini' } } },
+        },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-explicit-om-model',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.memory).toEqual({ observationalMemory: { model: 'openai/gpt-4o-mini' } });
+
+    const memory = await agent.getMemory();
+    const om = memory?.getConfig().observationalMemory;
+    expect(typeof om).not.toBe('boolean');
+    if (typeof om !== 'boolean' && om) {
+      expect(om.model).toBe('openai/gpt-4o-mini');
+    }
   });
 
   it('applies baseline observational memory when admin pinned other defaults but not memory', async () => {

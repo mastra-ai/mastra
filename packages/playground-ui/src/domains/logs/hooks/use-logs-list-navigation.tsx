@@ -57,16 +57,16 @@ export function useLogsListNavigation(
 
   const idToLog = useMemo(() => {
     const m = new Map<string, { log: LogRecord; idx: number }>();
-    for (let i = 0; i < logs.length; i++) {
-      const id = logIdMap.get(logs[i]);
-      if (id) m.set(id, { log: logs[i], idx: i });
+    for (const [i, log] of logs.entries()) {
+      const id = logIdMap.get(log);
+      if (id) m.set(id, { log, idx: i });
     }
     return m;
   }, [logs, logIdMap]);
 
   const entry = featuredLogId ? idToLog.get(featuredLogId) : undefined;
   const featuredLogIdx = entry?.idx ?? -1;
-  const featuredLog = featuredLogIdx >= 0 ? logs[featuredLogIdx] : null;
+  const featuredLog = featuredLogIdx >= 0 ? (logs[featuredLogIdx] ?? null) : null;
 
   const getLogId = useCallback((log: LogRecord) => logIdMap.get(log), [logIdMap]);
 
@@ -91,7 +91,9 @@ export function useLogsListNavigation(
     featuredLogIdx > 0
       ? () => {
           const prevLog = logs[featuredLogIdx - 1];
-          const id = logIdMap.get(prevLog)!;
+          if (!prevLog) return;
+          const id = logIdMap.get(prevLog);
+          if (!id) return;
           if (featuredTraceId) {
             onFeaturedChange({ logId: id, traceId: prevLog.traceId ?? null, spanId: null });
           } else {
@@ -104,7 +106,9 @@ export function useLogsListNavigation(
     featuredLogIdx >= 0 && featuredLogIdx < logs.length - 1
       ? () => {
           const nextLog = logs[featuredLogIdx + 1];
-          const id = logIdMap.get(nextLog)!;
+          if (!nextLog) return;
+          const id = logIdMap.get(nextLog);
+          if (!id) return;
           if (featuredTraceId) {
             onFeaturedChange({ logId: id, traceId: nextLog.traceId ?? null, spanId: null });
           } else {

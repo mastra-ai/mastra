@@ -1,4 +1,6 @@
-import { MemoryStudioPanel, useMemoryThreadMessages, useObservationalMemory } from '@mastra/playground-ui';
+import { MemoryStudioPanel } from '@mastra/playground-ui/domains/memory/components/memory-studio-panel';
+import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { useEffect } from 'react';
 
 import { getObservationWindowTokens } from './lib/observation-window';
@@ -85,7 +87,7 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   });
 
   return (
-    <div data-testid="memory-sidebar-om-detail-subpanel" className="h-full min-h-0 min-w-0 overflow-hidden bg-surface3">
+    <div data-testid="memory-sidebar-om-detail-subpanel" className="bg-surface3 h-full min-h-0 min-w-0 overflow-hidden">
       <MemoryStudioPanel
         messages={messagesData?.messages ?? []}
         omRecords={omData?.history ?? []}

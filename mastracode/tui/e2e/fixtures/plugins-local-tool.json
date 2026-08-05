@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Use the local plugin tool availability check."
+      },
+      "response": {
+        "content": "Plugin tool availability verified."
+      }
+    }
+  ]
+}

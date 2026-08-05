@@ -1,4 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
 
 /**
@@ -49,73 +50,77 @@ async function runNextStep(page: Page) {
   await expect(button).toBeEnabled({ timeout: 20000 });
 }
 
-test('runs complexWorkflow one step at a time in debug mode until it finishes', async ({ page }) => {
-  await page.goto('/workflows/complexWorkflow/graph');
+test.describe('Workflow debug "Run next step"', () => {
+  test.describe('when complexWorkflow is driven one step at a time in debug mode', () => {
+    test('advances through every topology until the run finishes', async ({ page }) => {
+      await page.goto('/workflows/complexWorkflow/graph');
 
-  // ARRANGE: put input + activate debug mode.
-  await page.getByRole('textbox', { name: 'Text' }).fill('A');
-  await page.getByRole('switch', { name: 'Debug' }).click();
-  await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      // ARRANGE: put input + activate debug mode.
+      await page.getByRole('textbox', { name: 'Text' }).fill('A');
+      await page.getByRole('switch', { name: 'Debug' }).click();
+      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
 
-  // ACT: start execution. With debug mode on this runs per-step and pauses immediately.
-  await runButton(page).click();
+      // ACT: start execution. With debug mode on this runs per-step and pauses immediately.
+      await runButton(page).click();
 
-  // The per-step controls appear once the run is paused.
-  await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
+      // The per-step controls appear once the run is paused.
+      await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
 
-  // Step 0: add-letter
-  await runNextStep(page);
-  await expectStepSuccess(page, 0);
+      // Step 0: add-letter
+      await runNextStep(page);
+      await expectStepSuccess(page, 0);
 
-  // Steps 1 & 2: the parallel block (add-letter-b, add-letter-c)
-  await runNextStep(page);
-  await expectStepSuccess(page, 1);
-  await expectStepSuccess(page, 2);
+      // Steps 1 & 2: the parallel block (add-letter-b, add-letter-c)
+      await runNextStep(page);
+      await expectStepSuccess(page, 1);
+      await expectStepSuccess(page, 2);
 
-  // Step 3: map back to single text field
-  await runNextStep(page);
-  await expectStepSuccess(page, 3);
+      // Step 3: map back to single text field
+      await runNextStep(page);
+      await expectStepSuccess(page, 3);
 
-  // Step 5: short-text branch (input "A" -> short path)
-  await runNextStep(page);
-  await expectStepSuccess(page, 5);
+      // Step 5: short-text branch (input "A" -> short path)
+      await runNextStep(page);
+      await expectStepSuccess(page, 5);
 
-  // Step 8: map back after the branch
-  await runNextStep(page);
-  await expectStepSuccess(page, 8);
+      // Step 8: map back after the branch
+      await runNextStep(page);
+      await expectStepSuccess(page, 8);
 
-  // Step 9: nested-text-processor.
-  // A nested workflow can't be paused inside per-step mode without core support, so we
-  // run it atomically. This single advance completes the nested workflow AND any following
-  // top-level steps (the doUntil body) until the run reaches the next natural pause boundary
-  // — the suspend/resume step. We therefore expect the nested step, step 10, and the suspend
-  // all to settle from one click here.
-  const button = runNextStepButton(page);
-  await expect(button).toBeEnabled({ timeout: 20000 });
-  await button.click();
+      // Step 9: nested-text-processor.
+      // A nested workflow can't be paused inside per-step mode without core support, so we
+      // run it atomically. This single advance completes the nested workflow AND any following
+      // top-level steps (the doUntil body) until the run reaches the next natural pause boundary
+      // — the suspend/resume step. We therefore expect the nested step, step 10, and the suspend
+      // all to settle from one click here.
+      const button = runNextStepButton(page);
+      await expect(button).toBeEnabled({ timeout: 20000 });
+      await button.click();
 
-  // The atomic advance runs through the nested workflow and the doUntil body...
-  await expectStepSuccess(page, 9);
-  await expectStepSuccess(page, 10);
+      // The atomic advance runs through the nested workflow and the doUntil body...
+      await expectStepSuccess(page, 9);
+      await expectStepSuccess(page, 10);
 
-  // ...and stops at suspend-resume, which suspends the run for user input.
-  await expect(nodes(page).nth(12)).toHaveAttribute('data-workflow-step-status', 'suspended', { timeout: 20000 });
+      // ...and stops at suspend-resume, which suspends the run for user input.
+      await expect(nodes(page).nth(12)).toHaveAttribute('data-workflow-step-status', 'suspended', { timeout: 20000 });
 
-  // Resume the suspended step to continue the per-step run.
-  const suspendedSteps = page.getByTestId('workflow-suspended-steps');
-  await suspendedSteps.getByRole('textbox', { name: 'User Input' }).fill('Hello');
-  await suspendedSteps.getByRole('button', { name: 'Resume' }).click();
-  await expectStepSuccess(page, 12);
+      // Resume the suspended step to continue the per-step run.
+      const suspendedSteps = page.getByTestId('workflow-suspended-steps');
+      await suspendedSteps.getByRole('textbox', { name: 'User Input' }).fill('Hello');
+      await suspendedSteps.getByRole('button', { name: 'Resume' }).click();
+      await expectStepSuccess(page, 12);
 
-  // Step 13: final-step — the very end. This is the last step, so advancing it FINISHES the
-  // whole run (rather than pausing again) so the user can see the run's end output. We click
-  // once and assert the final step succeeds.
-  const finalButton = runNextStepButton(page);
-  await expect(finalButton).toBeEnabled({ timeout: 20000 });
-  await finalButton.click();
-  await expectStepSuccess(page, 13);
+      // Step 13: final-step — the very end. This is the last step, so advancing it FINISHES the
+      // whole run (rather than pausing again) so the user can see the run's end output. We click
+      // once and assert the final step succeeds.
+      const finalButton = runNextStepButton(page);
+      await expect(finalButton).toBeEnabled({ timeout: 20000 });
+      await finalButton.click();
+      await expectStepSuccess(page, 13);
 
-  // ASSERT: the run finished end-to-end. The final step output carries the "-ENDED" suffix.
-  await page.getByRole('button', { name: 'Run output' }).click();
-  await expect(page.getByRole('dialog')).toContainText('-ENDED');
+      // ASSERT: the run finished end-to-end. The final step output carries the "-ENDED" suffix.
+      await page.getByRole('button', { name: 'Run output' }).click();
+      await expect(page.getByRole('dialog')).toContainText('-ENDED');
+    });
+  });
 });

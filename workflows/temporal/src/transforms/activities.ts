@@ -3,6 +3,7 @@ import { generate } from '@babel/generator';
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
 import { rollup } from 'rollup';
+import type { SourceMapInput } from 'rollup';
 import {
   collectCreateStepFactoryBindings,
   collectImportedNames,
@@ -35,7 +36,7 @@ export interface BuildTemporalActivitiesModuleResult {
 export function collectTemporalActivityBindings(sourceText: string, filePath: string): TemporalActivityBinding[] {
   const ast = parse(sourceText, {
     sourceType: 'module',
-    plugins: parserPlugins as any,
+    plugins: parserPlugins,
     sourceFilename: filePath,
   });
 
@@ -220,7 +221,7 @@ function createTemporalActivitiesHelperStatements(
 
   return parse(helperSource, {
     sourceType: 'module',
-    plugins: parserPlugins as any,
+    plugins: parserPlugins,
   }).program.body;
 }
 
@@ -252,7 +253,7 @@ export async function buildTemporalActivitiesModule(
         transform(code, id) {
           const ast = parse(code, {
             sourceType: 'module',
-            plugins: parserPlugins as any,
+            plugins: parserPlugins,
             sourceFilename: id,
           });
 
@@ -564,7 +565,12 @@ export async function buildTemporalActivitiesModule(
             sourceMaps: true,
           });
 
-          return transformedSource;
+          return {
+            code: transformedSource.code,
+            map: transformedSource.map
+              ? ({ ...transformedSource.map, file: transformedSource.map.file ?? undefined } as SourceMapInput)
+              : undefined,
+          };
         },
       },
     ],

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 
 import {
   BROWSER_FETCHABLE_SCHEMES,
@@ -42,7 +42,9 @@ const readCoreSupportedProtocols = (): string[] => {
 
   const protocols = new Set<string>();
   for (const match of scanRegion.matchAll(/case '([a-z0-9]+):'/g)) {
-    protocols.add(match[1]!);
+    const protocol = match[1];
+    assert(protocol !== undefined, 'Expected a protocol capture group in the core switch case');
+    protocols.add(protocol);
   }
   return [...protocols].sort();
 };

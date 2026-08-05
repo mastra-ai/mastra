@@ -16,74 +16,239 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'doc',
-      id: 'index',
-      label: 'Get Started',
-    },
-    {
       type: 'category',
-      label: 'Fundamentals',
+      label: 'Start',
       collapsed: false,
+      customProps: {
+        displayAsGroup: true,
+      },
       items: [
         {
           type: 'doc',
-          id: 'getting-started/project-structure',
-          label: 'Project Structure',
+          id: 'index',
+          label: 'Get Started',
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/build-with-ai',
-          label: 'Build with AI',
+          id: 'getting-started/develop',
+          label: 'Develop',
         },
       ],
     },
     {
       type: 'category',
-      label: 'Studio',
+      label: 'Build',
+      collapsed: false,
+      collapsible: false,
+      customProps: {
+        displayAsGroup: true,
+      },
       items: [
         {
-          type: 'doc',
-          id: 'studio/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'studio/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'studio/auth',
-          label: 'Auth',
-        },
-        {
-          type: 'doc',
-          id: 'studio/observability',
-          label: 'Observability',
-        },
-        {
           type: 'category',
-          label: 'Editor',
+          label: 'Agents',
           items: [
             {
               type: 'doc',
-              id: 'editor/overview',
+              id: 'agents/overview',
               label: 'Overview',
             },
             {
               type: 'doc',
-              id: 'editor/tools',
+              id: 'agents/using-tools',
               label: 'Tools',
             },
             {
               type: 'doc',
-              id: 'editor/prompts',
-              label: 'Prompts',
+              id: 'agents/structured-output',
+              label: 'Structured Output',
+            },
+            {
+              type: 'doc',
+              id: 'agents/agent-approval',
+              label: 'Human-in-the-Loop',
+            },
+            {
+              type: 'doc',
+              id: 'agents/guardrails',
+              label: 'Guardrails',
+            },
+            {
+              type: 'doc',
+              id: 'agents/processors',
+              label: 'Processors',
+            },
+            {
+              type: 'doc',
+              id: 'agents/code-mode',
+              label: 'Code Mode',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Workflows',
+          items: [
+            {
+              type: 'doc',
+              id: 'workflows/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/workflow-state',
+              label: 'Workflow State',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/control-flow',
+              label: 'Control Flow',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/agents-and-tools',
+              label: 'Agents and Tools',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/stored-workflows',
+              label: 'Stored Workflows',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'workflows/snapshots',
+              label: 'Snapshots',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/suspend-and-resume',
+              label: 'Suspend and Resume',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/human-in-the-loop',
+              label: 'Human-in-the-Loop',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/time-travel',
+              label: 'Time Travel',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/error-handling',
+              label: 'Error Handling',
+            },
+            {
+              type: 'doc',
+              id: 'workflows/scheduled-workflows',
+              label: 'Scheduled Workflows',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Harness',
+          items: [
+            {
+              type: 'doc',
+              id: 'long-running-agents/durable-agents',
+              label: 'Durable Agents',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/background-tasks',
+              label: 'Background Tasks',
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/goals',
+              label: 'Goals',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/schedules',
+              label: 'Schedules',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/signals',
+              label: 'Signals',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/signal-providers',
+              label: 'Signal Providers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'harness/agent-controller',
+              label: 'Agent Controller',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Memory',
+          items: [
+            {
+              type: 'doc',
+              id: 'memory/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'memory/message-history',
+              label: 'Message History',
+            },
+            {
+              type: 'doc',
+              id: 'memory/observational-memory',
+              label: 'Observational Memory',
+            },
+            {
+              type: 'doc',
+              id: 'memory/working-memory',
+              label: 'Working Memory',
+            },
+            {
+              type: 'doc',
+              id: 'memory/semantic-recall',
+              label: 'Semantic Recall',
+            },
+            {
+              type: 'doc',
+              id: 'memory/memory-processors',
+              label: 'Memory Processors',
+            },
+            {
+              type: 'doc',
+              id: 'memory/multi-user-threads',
+              label: 'Multi-User Threads',
             },
           ],
         },
@@ -91,17 +256,17 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Agents',
+      label: 'Extend',
+      collapsible: false,
+      collapsed: false,
+      customProps: {
+        displayAsGroup: true,
+      },
       items: [
         {
           type: 'doc',
-          id: 'agents/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'agents/using-tools',
-          label: 'Tools',
+          id: 'capabilities/subagents',
+          label: 'Subagents',
         },
         {
           type: 'doc',
@@ -109,409 +274,244 @@ const sidebars = {
           label: 'Skills',
         },
         {
-          type: 'html',
-          value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
+          type: 'category',
+          label: 'Sandbox',
+          items: [
+            {
+              type: 'doc',
+              id: 'workspace/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/filesystem',
+              label: 'Filesystem',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/lsp',
+              label: 'LSP Inspection',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/skills',
+              label: 'Skills',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/search',
+              label: 'Search and Indexing',
+            },
+          ],
         },
         {
-          type: 'doc',
-          id: 'agents/structured-output',
-          label: 'Structured Output',
-        },
-        {
-          type: 'doc',
-          id: 'agents/processors',
-          label: 'Processors',
-        },
-        {
-          type: 'doc',
-          id: 'agents/guardrails',
-          label: 'Guardrails',
-        },
-        {
-          type: 'doc',
-          id: 'agents/agent-approval',
-          label: 'Agent Approval',
-        },
-        {
-          type: 'doc',
-          id: 'agents/supervisor-agents',
-          label: 'Supervisor Agents',
-        },
-        {
-          type: 'doc',
-          id: 'agents/goals',
-          label: 'Goals',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'agents/background-tasks',
-          label: 'Background Tasks',
-        },
-        {
-          type: 'doc',
-          id: 'agents/durable-agents',
-          label: 'Durable Agents',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'agents/channels',
+          type: 'category',
           label: 'Channels',
+          items: [
+            {
+              type: 'doc',
+              id: 'capabilities/channels/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/slack',
+              label: 'Slack',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/teams',
+              label: 'Microsoft Teams',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/discord',
+              label: 'Discord',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/telegram',
+              label: 'Telegram',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/whatsapp',
+              label: 'WhatsApp',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/imessage',
+              label: 'iMessage',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/other-adapters',
+              label: 'Other Adapters',
+            },
+          ],
         },
         {
-          type: 'doc',
-          id: 'agents/a2a',
-          label: 'A2A',
+          type: 'category',
+          label: 'Browser',
+          items: [
+            {
+              type: 'doc',
+              id: 'browser/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'browser/agent-browser',
+              label: 'AgentBrowser',
+            },
+            {
+              type: 'doc',
+              id: 'browser/stagehand',
+              label: 'Stagehand',
+            },
+            {
+              type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
+              id: 'browser/recording',
+              label: 'Recording',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'browser/browser-viewer',
+              label: 'BrowserViewer',
+            },
+          ],
         },
         {
-          type: 'doc',
-          id: 'agents/acp',
-          label: 'ACP',
-        },
-        {
-          type: 'doc',
-          id: 'agents/sdk-agents',
-          label: 'SDK Agents',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
-        },
-        {
-          type: 'doc',
-          id: 'agents/code-mode',
-          label: 'Code Mode',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'agents/signals',
-          label: 'Signals',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'agents/signal-providers',
-          label: 'Signal Providers',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'agents/networks',
-          label: 'Networks',
-          customProps: {
-            tags: ['deprecated'],
-          },
+          type: 'category',
+          label: 'Connections',
+          items: [
+            {
+              type: 'doc',
+              id: 'agents/a2a',
+              label: 'A2A',
+            },
+            {
+              type: 'doc',
+              id: 'agents/acp',
+              label: 'ACP',
+            },
+            {
+              type: 'doc',
+              id: 'agents/sdk-agents',
+              label: 'SDK Agents',
+            },
+            {
+              type: 'doc',
+              id: 'mcp/overview',
+              label: 'MCP',
+            },
+          ],
         },
       ],
     },
     {
       type: 'category',
-      label: 'Memory',
-      collapsed: true,
+      label: 'Develop / Deploy',
+      collapsible: false,
+      collapsed: false,
+      customProps: {
+        displayAsGroup: true,
+      },
       items: [
         {
           type: 'doc',
-          id: 'memory/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'memory/storage',
+          id: 'storage/overview',
           label: 'Storage',
         },
         {
-          type: 'doc',
-          id: 'memory/message-history',
-          label: 'Message History',
+          type: 'category',
+          label: 'Studio',
+          items: [
+            {
+              type: 'doc',
+              id: 'studio/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'studio/deployment',
+              label: 'Deployment',
+            },
+            {
+              type: 'doc',
+              id: 'studio/auth',
+              label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/observability',
+              label: 'Observability',
+            },
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Editor',
+            },
+          ],
         },
         {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-        },
-        {
-          type: 'doc',
-          id: 'memory/working-memory',
-          label: 'Working Memory',
-        },
-        {
-          type: 'doc',
-          id: 'memory/semantic-recall',
-          label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/memory-processors',
-          label: 'Memory Processors',
-        },
-        {
-          type: 'doc',
-          id: 'memory/multi-user-threads',
-          label: 'Multi-user Threads',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Workflows',
-      items: [
-        {
-          type: 'doc',
-          id: 'workflows/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/workflow-state',
-          label: 'Workflow State',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/control-flow',
-          label: 'Control Flow',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/agents-and-tools',
-          label: 'Agents & Tools',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/snapshots',
-          label: 'Snapshots',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/suspend-and-resume',
-          label: 'Suspend & Resume',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/human-in-the-loop',
-          label: 'Human-in-the-loop',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/time-travel',
-          label: 'Time Travel',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/error-handling',
-          label: 'Error Handling',
-        },
-        {
-          type: 'doc',
-          id: 'workflows/scheduled-workflows',
-          label: 'Scheduled Workflows',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Agent Builder',
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-        { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-        { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-        { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-        { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-        { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-        { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-        { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-        { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-        { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-        { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'MCP',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'mcp/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mcp/mcp-apps',
-          label: 'MCP Apps',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'AgentController',
-      customProps: {
-        tags: ['beta'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'agent-controller/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'agent-controller/session',
-          label: 'Session',
-        },
-        {
-          type: 'doc',
-          id: 'agent-controller/modes',
-          label: 'Modes',
-        },
-        {
-          type: 'doc',
-          id: 'agent-controller/threads-and-state',
-          label: 'Threads and State',
-        },
-        {
-          type: 'doc',
-          id: 'agent-controller/subagents',
-          label: 'Subagents',
-        },
-        {
-          type: 'doc',
-          id: 'agent-controller/tool-approvals',
-          label: 'Tool Approvals',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Workspaces',
-      items: [
-        {
-          type: 'doc',
-          id: 'workspace/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/filesystem',
-          label: 'Filesystem',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/sandbox',
-          label: 'Sandbox',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/lsp',
-          label: 'LSP Inspection',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/skills',
-          label: 'Skills',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/search',
-          label: 'Search and Indexing',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Browser',
-      items: [
-        {
-          type: 'doc',
-          id: 'browser/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'browser/agent-browser',
-          label: 'AgentBrowser',
-        },
-        {
-          type: 'doc',
-          id: 'browser/stagehand',
-          label: 'Stagehand',
-        },
-        {
-          type: 'doc',
-          id: 'browser/recording',
-          label: 'Recording',
-        },
-        {
-          type: 'doc',
-          id: 'browser/browser-viewer',
-          label: 'BrowserViewer',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Server',
-      items: [
-        {
-          type: 'doc',
-          id: 'server/mastra-server',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'server/server-adapters',
-          label: 'Server Adapters',
-        },
-        {
-          type: 'doc',
-          id: 'server/custom-adapters',
-          label: 'Custom Adapters',
-        },
-        {
-          type: 'doc',
-          id: 'server/middleware',
-          label: 'Middleware',
-        },
-        {
-          type: 'doc',
-          id: 'server/request-context',
-          label: 'Request Context',
-        },
-        {
-          type: 'doc',
-          id: 'server/pubsub',
-          label: 'PubSub',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'server/custom-api-routes',
-          label: 'Custom API Routes',
-        },
-        {
-          type: 'doc',
-          id: 'server/mastra-client',
-          label: 'Mastra Client',
+          type: 'category',
+          label: 'Server',
+          items: [
+            {
+              type: 'doc',
+              id: 'server/mastra-server',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'server/server-adapters',
+              label: 'Server Adapters',
+            },
+            {
+              type: 'doc',
+              id: 'server/custom-adapters',
+              label: 'Custom Adapters',
+            },
+            {
+              type: 'doc',
+              id: 'server/middleware',
+              label: 'Middleware',
+            },
+            {
+              type: 'doc',
+              id: 'server/request-context',
+              label: 'Request Context',
+            },
+            {
+              type: 'doc',
+              id: 'server/pubsub',
+              label: 'PubSub',
+            },
+            {
+              type: 'doc',
+              id: 'server/custom-api-routes',
+              label: 'Custom API Routes',
+            },
+            {
+              type: 'doc',
+              id: 'server/mastra-client',
+              label: 'Mastra Client',
+            },
+          ],
         },
         {
           type: 'category',
@@ -587,70 +587,210 @@ const sidebars = {
               id: 'server/auth/workos',
               label: 'WorkOS',
             },
+            {
+              type: 'doc',
+              id: 'server/auth/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Deployment',
+          items: [
+            {
+              type: 'doc',
+              id: 'deployment/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/mastra-server',
+              label: 'Mastra Server',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/monorepo',
+              label: 'Monorepo',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/cloud-providers',
+              label: 'Cloud Providers',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/web-framework',
+              label: 'Web Framework',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workflow-runners',
+              label: 'Workflow Runners',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
           ],
         },
       ],
     },
     {
       type: 'category',
-      label: 'Deployment',
+      label: 'Observe',
+      collapsible: false,
+      collapsed: false,
+      customProps: {
+        displayAsGroup: true,
+      },
       items: [
         {
-          type: 'doc',
-          id: 'deployment/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/mastra-server',
-          label: 'Mastra Server',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/monorepo',
-          label: 'Monorepo',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/cloud-providers',
-          label: 'Cloud Providers',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/web-framework',
-          label: 'Web Framework',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/workflow-runners',
-          label: 'Workflow Runners',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Observability',
-      items: [
-        {
-          type: 'doc',
-          id: 'observability/overview',
-          key: 'observability.overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'observability/config',
-          label: 'Config',
-        },
-        {
-          type: 'doc',
-          id: 'observability/storage',
-          label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'observability/logging',
-          label: 'Logging',
+          type: 'category',
+          label: 'Traces',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/tracing/overview',
+              label: 'Traces',
+            },
+            {
+              type: 'doc',
+              id: 'observability/logging',
+              label: 'Logging',
+            },
+            {
+              type: 'doc',
+              id: 'observability/feedback',
+              label: 'Feedback',
+            },
+            {
+              type: 'category',
+              label: 'Integrations',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/overview',
+                  label: 'Overview',
+                },
+                {
+                  type: 'category',
+                  label: 'Bridges',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/bridges/datadog',
+                      label: 'Datadog',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/bridges/otel',
+                      label: 'OpenTelemetry',
+                    },
+                  ],
+                },
+                {
+                  type: 'category',
+                  label: 'Exporters',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/mastra-storage',
+                      label: 'Mastra Storage',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/mastra-platform',
+                      label: 'Mastra Platform',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/arize',
+                      label: 'Arize',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/arthur',
+                      label: 'Arthur',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/braintrust',
+                      label: 'Braintrust',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/confident-ai',
+                      label: 'Confident AI',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/datadog',
+                      label: 'Datadog',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/laminar',
+                      label: 'Laminar',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/langfuse',
+                      label: 'Langfuse',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/langsmith',
+                      label: 'LangSmith',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/otel',
+                      label: 'OpenTelemetry',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/posthog',
+                      label: 'PostHog',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/sentry',
+                      label: 'Sentry',
+                    },
+                  ],
+                },
+                {
+                  type: 'category',
+                  label: 'Processors',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/processors/sensitive-data-filter',
+                      label: 'SensitiveDataFilter',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
         {
           type: 'category',
@@ -664,166 +804,55 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/metrics/querying',
-              label: 'Querying metrics',
+              label: 'Querying Metrics',
             },
           ],
         },
         {
           type: 'category',
-          label: 'Tracing',
+          label: 'Evals',
           items: [
             {
               type: 'doc',
-              id: 'observability/tracing/overview',
-              key: 'observability.tracing.overview',
+              id: 'evals/overview',
               label: 'Overview',
             },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Integrations',
-          items: [
             {
               type: 'doc',
-              id: 'observability/integrations/overview',
-              label: 'Overview',
+              id: 'evals/built-in-scorers',
+              label: 'Built-in Scorers',
             },
             {
-              type: 'category',
-              label: 'Bridges',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/bridges/datadog',
-                  label: 'Datadog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/bridges/otel',
-                  label: 'OpenTelemetry',
-                },
-              ],
+              type: 'doc',
+              id: 'evals/quick-checks',
+              label: 'Quick Checks',
             },
             {
-              type: 'category',
-              label: 'Exporters',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/mastra-storage',
-                  label: 'Mastra Storage',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/mastra-platform',
-                  label: 'Mastra platform',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/arize',
-                  label: 'Arize',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/arthur',
-                  label: 'Arthur',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/braintrust',
-                  label: 'Braintrust',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/datadog',
-                  label: 'Datadog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/laminar',
-                  label: 'Laminar',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/langfuse',
-                  label: 'Langfuse',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/langsmith',
-                  label: 'LangSmith',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/otel',
-                  label: 'OpenTelemetry',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/posthog',
-                  label: 'PostHog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/exporters/sentry',
-                  label: 'Sentry',
-                },
-              ],
+              type: 'doc',
+              id: 'evals/gates-and-verdicts',
+              label: 'Gates and Verdicts',
             },
             {
-              type: 'category',
-              label: 'Processors',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/processors/sensitive-data-filter',
-                  label: 'SensitiveDataFilter',
-                },
-              ],
+              type: 'doc',
+              id: 'evals/multi-turn',
+              label: 'Multi-turn Evals',
+            },
+            {
+              type: 'doc',
+              id: 'evals/custom-scorers',
+              label: 'Custom Scorers',
+            },
+            {
+              type: 'doc',
+              id: 'evals/running-in-ci',
+              label: 'Running in CI',
+            },
+            {
+              type: 'doc',
+              id: 'evals/evals-with-memory',
+              label: 'Evals with Memory',
             },
           ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Evals',
-      items: [
-        {
-          type: 'doc',
-          id: 'evals/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'evals/built-in-scorers',
-          label: 'Built-in Scorers',
-        },
-        {
-          type: 'doc',
-          id: 'evals/quick-checks',
-          label: 'Quick Checks',
-        },
-        {
-          type: 'doc',
-          id: 'evals/gates-and-verdicts',
-          label: 'Gates and Verdicts',
-        },
-        {
-          type: 'doc',
-          id: 'evals/custom-scorers',
-          label: 'Custom Scorers',
-        },
-        {
-          type: 'doc',
-          id: 'evals/running-in-ci',
-          label: 'Running in CI',
-        },
-        {
-          type: 'doc',
-          id: 'evals/evals-with-memory',
-          label: 'Evals with Memory',
         },
         {
           type: 'category',
@@ -831,93 +860,15 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'evals/datasets/overview',
+              id: 'datasets/overview',
               label: 'Overview',
             },
             {
               type: 'doc',
-              id: 'evals/datasets/running-experiments',
+              id: 'datasets/running-experiments',
               label: 'Running Experiments',
             },
           ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'RAG',
-      items: [
-        {
-          type: 'doc',
-          id: 'rag/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'rag/chunking-and-embedding',
-          label: 'Chunking and Embedding',
-        },
-        {
-          type: 'doc',
-          id: 'rag/vector-databases',
-          label: 'Vector Databases',
-        },
-        {
-          type: 'doc',
-          id: 'rag/retrieval',
-          label: 'Retrieval',
-        },
-        {
-          type: 'doc',
-          id: 'rag/graph-rag',
-          label: 'GraphRAG',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Voice',
-      items: [
-        {
-          type: 'doc',
-          id: 'voice/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'voice/text-to-speech',
-          label: 'Text to Speech',
-        },
-        {
-          type: 'doc',
-          id: 'voice/speech-to-text',
-          label: 'Speech to Text',
-        },
-        {
-          type: 'doc',
-          id: 'voice/speech-to-speech',
-          label: 'Speech to Speech',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Community',
-      items: [
-        {
-          type: 'doc',
-          id: 'community/contributing-templates',
-          label: 'Contributing Templates',
-        },
-        {
-          type: 'doc',
-          id: 'community/licensing',
-          label: 'License',
-        },
-        {
-          type: 'doc',
-          id: 'community/discord',
-          label: 'Discord',
         },
       ],
     },
@@ -925,7 +876,7 @@ const sidebars = {
   platformSidebar: [
     {
       type: 'category',
-      label: 'Mastra platform',
+      label: 'Mastra Platform',
       items: [
         {
           type: 'doc',
@@ -934,8 +885,40 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/deploy',
+          label: 'Deploy',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/environments',
+          label: 'Environments',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/regions',
+          label: 'Regions',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/observability',
           label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/trace-intelligence',
+          label: 'Trace Intelligence',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -951,14 +934,19 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/github',
           label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'mastra-platform/database',
           label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/workspaces',
+          label: 'Workspaces',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',

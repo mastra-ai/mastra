@@ -2,11 +2,11 @@ import { EntityType } from '@mastra/core/observability';
 import {
   OpenErrorsInLogsButton,
   OpenInTracesButton,
-  TracesVolumeCardView,
-  useDrilldown,
-  useTraceVolumeMetrics,
-} from '@mastra/playground-ui';
-import type { VolumeTab } from '@mastra/playground-ui';
+} from '@mastra/playground-ui/domains/metrics/components/card-action-buttons';
+import { TracesVolumeCardView } from '@mastra/playground-ui/domains/metrics/components/traces-volume-card-view';
+import type { VolumeTab } from '@mastra/playground-ui/domains/metrics/components/traces-volume-card-view';
+import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
+import { useTraceVolumeMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-trace-volume-metrics';
 import { useLinkComponent } from '@/lib/framework';
 
 const TAB_TO_ROOT_ENTITY: Record<VolumeTab, EntityType> = {

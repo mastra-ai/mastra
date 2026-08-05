@@ -26,9 +26,9 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
       <Component
         ref={ref}
         className={cn(
-          'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center whitespace-nowrap text-neutral2 font-semibold tracking-tight text-ui-sm',
+          'flex h-8 max-w-full min-w-0 items-center overflow-hidden py-1 text-ui-sm font-semibold tracking-tight whitespace-nowrap text-neutral2',
           sticky === 'start' && dataListStickyStartStyles,
-          sticky === 'start' && '-ml-5 -mr-4 w-auto max-w-none rounded-tl-xl rounded-bl-md pl-5 pr-4',
+          sticky === 'start' && '-mr-4 -ml-5 w-auto max-w-none rounded-tl-xl rounded-bl-md pr-4 pl-5',
           sticky === 'start' && 'z-20 bg-[var(--data-list-sticky-header-background)]',
           className,
         )}
@@ -67,7 +67,7 @@ export type DataListTopCellSmartProps = {
   className?: string;
 };
 
-const breakpointClasses: Record<string, { show: string; hide: string }> = {
+const breakpointClasses: Record<'sm' | 'md' | 'lg' | 'xl' | '2xl', { show: string; hide: string }> = {
   sm: { show: 'hidden sm:inline-flex', hide: 'inline-flex sm:hidden' },
   md: { show: 'hidden md:inline-flex', hide: 'inline-flex md:hidden' },
   lg: { show: 'hidden lg:inline-flex', hide: 'inline-flex lg:hidden' },
@@ -94,18 +94,13 @@ export function DataListTopCellSmart({
 
   if (tooltipText) {
     return (
-      <DataListTopCellWithTooltip
-        tooltip={tooltipText}
-        className={cn('flex [&_svg]:w-[1.3em] [&_svg]:h-[1.3em]', className)}
-      >
+      <DataListTopCellWithTooltip tooltip={tooltipText} className={cn('flex [&_svg]:size-[1.3em]', className)}>
         {content}
       </DataListTopCellWithTooltip>
     );
   }
 
-  return (
-    <DataListTopCell className={cn('flex [&_svg]:w-[1.3em] [&_svg]:h-[1.3em]', className)}>{content}</DataListTopCell>
-  );
+  return <DataListTopCell className={cn('flex [&_svg]:size-[1.3em]', className)}>{content}</DataListTopCell>;
 }
 
 export interface DataListTopSelectCellProps {

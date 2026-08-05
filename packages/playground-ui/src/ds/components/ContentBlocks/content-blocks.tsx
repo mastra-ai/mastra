@@ -11,6 +11,7 @@ export interface ContentBlocksProps<T> {
 const reorder = <T,>(list: Array<T>, startIndex: number, endIndex: number): Array<T> => {
   const result = Array.from(list);
   const [removed] = result.splice(startIndex, 1);
+  if (removed === undefined) return result;
   result.splice(endIndex, 0, removed);
   return result;
 };

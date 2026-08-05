@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-const tabListVariants = cva('flex items-center relative text-ui-lg', {
+const tabListVariants = cva('relative flex items-center text-ui-lg', {
   variants: {
     variant: {
       line: 'w-max min-w-full border-b border-border1',
@@ -16,17 +16,35 @@ const tabListVariants = cva('flex items-center relative text-ui-lg', {
   },
 });
 
-export type TabListProps = {
+type TabListVariantsProps = VariantProps<typeof tabListVariants>;
+type TabListVariantValue = NonNullable<TabListVariantsProps['variant']>;
+
+/**
+ * @deprecated `line` remains the omitted fallback for backward compatibility.
+ * Pass `variant="pill"` or `variant="pill-ghost"` for new tabs.
+ */
+export type DeprecatedLineTabListVariant = Extract<TabListVariantValue, 'line'>;
+
+export type TabListVariant = DeprecatedLineTabListVariant | Exclude<TabListVariantValue, DeprecatedLineTabListVariant>;
+
+export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   children: React.ReactNode;
   className?: string;
   sticky?: boolean;
+  /**
+   * Visual treatment for the tab list.
+   *
+   * Defaults to `line` only for backward compatibility. New tabs should pass
+   * `variant="pill"` or `variant="pill-ghost"` explicitly.
+   */
+  variant?: TabListVariant | null;
   /**
    * Optional inline styles applied to the underlying tab list element.
    * To override the active tab indicator color, set the `--tab-indicator-color`
    * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}`.
    */
   style?: React.CSSProperties;
-} & VariantProps<typeof tabListVariants>;
+};
 
 export const TabList = ({ children, className, variant, sticky, style }: TabListProps) => {
   const resolvedVariant = variant ?? 'line';
@@ -43,7 +61,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
           <BaseTabs.Indicator
             className={cn(
               'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--neutral3))]',
-              'w-[var(--active-tab-width)] h-0.5',
+              'h-0.5 w-[var(--active-tab-width)]',
               'transition-all duration-200 ease-in-out',
             )}
             style={{ transform: 'translateX(var(--active-tab-left))' }}
@@ -53,7 +71,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
           <BaseTabs.Indicator
             className={cn(
               'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
-              'w-[var(--active-tab-width)] h-[calc(100%-0.5rem)]',
+              'h-[calc(100%-0.5rem)] w-[var(--active-tab-width)]',
               'transition-all duration-200 ease-in-out',
             )}
             style={{ transform: 'translateY(-50%) translateX(var(--active-tab-left))' }}

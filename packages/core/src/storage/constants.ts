@@ -41,6 +41,9 @@ export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
 export const TABLE_SCHEDULES = 'mastra_schedules';
 export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
 
+// Static workflow definitions (chat-built / studio-saved workflows)
+export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
+
 // Channel tables
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
@@ -95,7 +98,8 @@ export type TABLE_NAMES =
   | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
   | typeof TABLE_NOTIFICATIONS
   | typeof TABLE_HARNESS_SESSIONS
-  | typeof TABLE_THREAD_STATE;
+  | typeof TABLE_THREAD_STATE
+  | typeof TABLE_WORKFLOW_DEFINITIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -131,6 +135,15 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'text' },
   resourceId: { type: 'text', nullable: true },
   threadId: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
+  // Batch handle: groups all per-trace scores produced by one batch scoring call.
+  // Each score keeps its own per-execution `runId`; `batchId` is shared across the batch.
+  batchId: { type: 'text', nullable: true },
+  // Dataset provenance: which curated dataset item this score was produced against.
+  // Lets baseline scores join back to dataset items (ground truth) without re-running.
+  datasetId: { type: 'text', nullable: true },
+  datasetItemId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
 };
@@ -234,6 +247,8 @@ export const SCORER_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to scorer_definition_versions.id
   authorId: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -306,6 +321,22 @@ export const MCP_SERVER_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   changedFields: { type: 'jsonb', nullable: true },
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const WORKFLOW_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  description: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  inputSchema: { type: 'jsonb', nullable: false },
+  outputSchema: { type: 'jsonb', nullable: false },
+  stateSchema: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
+  graph: { type: 'jsonb', nullable: false },
+  status: { type: 'text', nullable: false }, // 'active' | 'archived'
+  source: { type: 'text', nullable: false }, // always 'storage' for now
+  authorId: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const WORKSPACES_SCHEMA: Record<string, StorageColumn> = {
@@ -533,6 +564,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: false },
+  externalId: { type: 'text', nullable: true },
   organizationId: { type: 'text', nullable: true },
   projectId: { type: 'text', nullable: true },
   validTo: { type: 'integer', nullable: true },
@@ -544,6 +576,8 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'jsonb', nullable: true },
   expectedTrajectory: { type: 'jsonb', nullable: true },
   toolMocks: { type: 'jsonb', nullable: true },
+  unmockedToolPolicy: { type: 'text', nullable: true },
+  scorerIds: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -594,6 +628,7 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   traceId: { type: 'text', nullable: true },
   status: { type: 'text', nullable: true },
   tags: { type: 'jsonb', nullable: true },
+  comment: { type: 'text', nullable: true },
   toolMockReport: { type: 'jsonb', nullable: true },
   organizationId: { type: 'text', nullable: true },
   projectId: { type: 'text', nullable: true },
@@ -754,6 +789,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
   [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
+  [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
 };
 
 /**

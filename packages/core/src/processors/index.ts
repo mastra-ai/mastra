@@ -1,6 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
@@ -58,6 +59,8 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
+  /** Real agent instance when processors are running inside an agent execution. Processor-only workflow contexts may omit it. */
+  agent?: Agent<any, any, any, any>;
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
@@ -506,6 +509,38 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 }
 
 /**
+ * Arguments for processToolResult method.
+ * Called after each tool's execute() returns successfully and before the
+ * result is appended to the message list / fed to the next LLM call.
+ * Symmetric with processOutputStep, which fires before tool execution.
+ */
+export interface ProcessToolResultArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** Name of the tool that was executed */
+  toolName: string;
+  /** Unique identifier for this specific tool call */
+  toolCallId: string;
+  /** Arguments the LLM passed to the tool */
+  args: unknown;
+  /**
+   * Value returned by the tool. For client-executed tools this is the output of
+   * `tool.execute()` after it has passed through `ensureSerializable`. For
+   * provider-executed tools (e.g. Anthropic `web_search`) it is the raw result
+   * from the provider stream, which is not run through `ensureSerializable`.
+   */
+  result: unknown;
+  /** Whether this result came from a provider-executed tool (e.g. Anthropic web_search) */
+  providerExecuted?: boolean;
+  /** All system messages */
+  systemMessages: CoreMessageV4[];
+  /** All completed steps so far */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+}
+
+/**
  * Arguments for processAPIError method.
  * Called when the LLM API call fails with a non-retryable error (API rejection).
  * This is distinct from network errors or retryable server errors (which are handled by p-retry).
@@ -703,6 +738,32 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult;
 
   /**
+   * Process a tool's result after tool.execute() returns successfully and before
+   * the result is added to the message list or fed to the next LLM call.
+   *
+   * Symmetric with processOutputStep (which runs before tool execution). Use this
+   * hook to scan tool output for prompt injection / sensitive data, redact fields,
+   * or abort the run with abort({ retry: true }).
+   *
+   * To replace the tool's result, mutate messageList in place via
+   * messageList.updateToolInvocation. The runtime re-reads the post-processor
+   * result from the message list and overwrites the downstream tool-result
+   * stream chunk before it's enqueued, so streaming clients see the processed
+   * value, not the raw one.
+   *
+   * Note: this hook does not fire when tool.execute() throws — it is called only
+   * for successful tool executions where a result is available.
+   *
+   * @returns Either:
+   *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
+   *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
+   *  - undefined/void: No changes (passthrough)
+   */
+  processToolResult?(
+    args: ProcessToolResultArgs<TTripwireMetadata>,
+  ): Promise<MessageList | MastraDBMessage[] | undefined | void> | MessageList | MastraDBMessage[] | void | undefined;
+
+  /**
    * Process an LLM API rejection error before it's surfaced as a final error.
    * Only called for non-retryable API rejections (e.g., 400/422 status codes),
    * NOT for network errors or retryable server errors (which are handled by p-retry).
@@ -780,13 +841,16 @@ export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMResponse'> &
       Processor<string, TTripwireMetadata>);
 
-// OutputProcessor requires either processOutputStream OR processOutputResult OR processOutputStep (or any combination)
+// OutputProcessor requires processOutputStream OR processOutputResult OR processOutputStep
+// OR processToolResult (or any combination)
 export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStream'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputResult'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processToolResult'> &
       Processor<string, TTripwireMetadata>);
 
 // ErrorProcessor requires processAPIError

@@ -1,11 +1,12 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { SearchIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
-import { AgentSearchbar } from '../agent-searchbar';
 
 export interface FilterableListItem {
   id: string;
@@ -51,26 +52,30 @@ export const FilterableList = ({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 py-6 px-6"
+      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-6 py-6"
       data-testid={`${testIdPrefix}-filter`}
     >
-      <div className="shrink-0" data-testid={`${testIdPrefix}-filter-search`}>
-        <AgentSearchbar
-          onSearch={setSearch}
-          label={`Filter ${title.toLowerCase()}`}
-          placeholder={`Filter ${title.toLowerCase()}...`}
-          size="lg"
-          debounceMs={0}
-        />
+      <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${testIdPrefix}-filter-search`}>
+        <InputGroup variant="outline" size="lg">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label={`Filter ${title.toLowerCase()}`}
+            placeholder={`Filter ${title.toLowerCase()}...`}
+            onChange={event => setSearch(event.target.value)}
+          />
+        </InputGroup>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 text-ui-xs">
+      <div className="text-ui-xs flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-select-all`}
-          className="text-neutral3 transition-colors hover:text-neutral6 disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Select all
         </button>
@@ -82,7 +87,7 @@ export const FilterableList = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-clear-all`}
-          className="text-neutral3 transition-colors hover:text-neutral6 disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear all
         </button>
@@ -90,7 +95,7 @@ export const FilterableList = ({
 
       <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
         {filteredItems.length === 0 ? (
-          <Txt variant="ui-xs" className="px-1 py-2 text-neutral3">
+          <Txt variant="ui-xs" className="text-neutral3 px-1 py-2">
             No matches
           </Txt>
         ) : (
@@ -121,7 +126,7 @@ export const FilterableList = ({
                       onCheckedChange={() => onToggle(item.id)}
                       style={checkboxStyle}
                       data-testid={`${testIdPrefix}-filter-checkbox-${item.id}`}
-                      className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
+                      className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
                     />
                     {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
                     <span className="truncate">{item.label}</span>
