@@ -88,14 +88,17 @@ describe('DurableAgent suspend metadata persistence', () => {
     });
     expect(runId).toBeDefined();
 
-    // Let the run reach the suspend and flush.
-    await new Promise(r => setTimeout(r, 2000));
+    // Poll storage until the suspend-and-flush lands, like the Inngest
+    // integration test — a fixed sleep is timing-dependent under CI load.
+    const store = await storage.getStore('memory');
+    let withSuspend: any;
+    for (let i = 0; i < 100 && !withSuspend; i++) {
+      const { messages } = await store!.listMessages({ threadId } as never);
+      withSuspend = messages.find((m: any) => (m.content?.metadata as any)?.suspendedTools);
+      if (!withSuspend) await new Promise(r => setTimeout(r, 100));
+    }
     cleanup();
 
-    const store = await storage.getStore('memory');
-    const { messages } = await store!.listMessages({ threadId } as never);
-
-    const withSuspend = messages.find((m: any) => (m.content?.metadata as any)?.suspendedTools);
     expect(withSuspend).toBeDefined();
 
     const entry = Object.values((withSuspend as any).content.metadata.suspendedTools)[0] as any;
