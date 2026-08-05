@@ -20,7 +20,7 @@ function passed(id: string, evidence: unknown) {
 
 describe('experiment worker installed artifact', () => {
   test(
-    `${minimalAgentScenario.id} builds, relocates, and executes a published-package worker`,
+    `${minimalAgentScenario.id} copied-artifact builds, relocates, and executes a published-package worker`,
     async () => {
       const startedAt = new Date();
       const resources = new OwnedResources();
