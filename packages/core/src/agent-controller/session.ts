@@ -1283,6 +1283,8 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  /** Request-scoped state staged by the signal that started this run. */
+  #requestContext: RequestContext | undefined;
   readonly #teardownWaiters = new Set<() => void>();
 
   #notifyTeardown(): void {
@@ -1327,6 +1329,25 @@ export class SessionRun {
     this.#traceId = traceId;
   }
 
+  /** Stage request-scoped state for the next run started from this idle session. */
+  stageRequestContext(requestContext: RequestContext | undefined): boolean {
+    if (!requestContext || this.#requestContext) return false;
+    this.#requestContext = requestContext;
+    return true;
+  }
+
+  /** Return the request-scoped state associated with the active run. */
+  getRequestContext(): RequestContext | undefined {
+    return this.#requestContext;
+  }
+
+  /** Clear staged request-scoped state only when it belongs to `requestContext`. */
+  clearRequestContext(requestContext?: RequestContext): void {
+    if (!requestContext || this.#requestContext === requestContext) {
+      this.#requestContext = undefined;
+    }
+  }
+
   /**
    * Clear all run state (run id, trace id, abort controller + requested flag)
    * when a run ends or is reset. Does not touch the operation counter.
@@ -1336,6 +1357,7 @@ export class SessionRun {
     this.#traceId = null;
     this.#abortController = null;
     this.#abortRequested = false;
+    this.#requestContext = undefined;
     this.#notifyTeardown();
   }
 
@@ -3127,16 +3149,33 @@ export class Session<TState = unknown> {
         tracingOptions,
       });
 
+      // The thread subscription outlives individual runs, so stage the
+      // originating request context before the wake can publish its first chunk.
+      // Keep an earlier signal's staged context if this signal is delivered to it.
+      const stagedRequestContext = this.run.stageRequestContext(requestContextInput);
+      const clearStagedRequestContext = () => {
+        if (stagedRequestContext) this.run.clearRequestContext(requestContextInput);
+      };
       const result = agent.sendSignal(signal, {
         resourceId: this.identity.getResourceId(),
         threadId,
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
+      const settleRequestContext = <T>(settled: SendAgentSignalAccepted<T>) => {
+        if (settled.action !== 'wake') clearStagedRequestContext();
+        return settled;
+      };
       if (requireDelivery) {
         // Delivery-guaranteed path: surface the real acceptance decision and
         // propagate routing/stream-setup failures to the caller.
-        const settled = await result.accepted;
+        let settled: SendAgentSignalAccepted<undefined>;
+        try {
+          settled = settleRequestContext(await result.accepted);
+        } catch (error) {
+          clearStagedRequestContext();
+          throw error;
+        }
         return {
           accepted: true as const,
           runId: 'runId' in settled ? settled.runId : undefined,
@@ -3145,13 +3184,14 @@ export class Session<TState = unknown> {
       }
       try {
         await Promise.race([
-          result.accepted.then(() => undefined),
+          result.accepted.then(settleRequestContext).then(() => undefined),
           new Promise<void>(resolve => setTimeout(resolve, 0)),
         ]);
       } catch (error) {
+        clearStagedRequestContext();
         throw error;
       }
-      void result.accepted.catch(() => {});
+      void result.accepted.then(settleRequestContext).catch(clearStagedRequestContext);
       return { accepted: true as const, runId: undefined };
     });
 
@@ -3190,12 +3230,31 @@ export class Session<TState = unknown> {
       tracingOptions,
     });
 
-    return agent.sendNotificationSignal(input, {
-      resourceId: this.identity.getResourceId(),
-      threadId,
-      ifActive,
-      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
-    });
+    const stagedRequestContext = this.run.stageRequestContext(requestContextInput);
+    const clearStagedRequestContext = () => {
+      if (stagedRequestContext) this.run.clearRequestContext(requestContextInput);
+    };
+    try {
+      const result = await agent.sendNotificationSignal<unknown>(input, {
+        resourceId: this.identity.getResourceId(),
+        threadId,
+        ifActive,
+        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+      });
+      if (result.accepted) {
+        void result.accepted
+          .then(accepted => {
+            if (accepted.action !== 'wake') clearStagedRequestContext();
+          })
+          .catch(clearStagedRequestContext);
+      } else {
+        clearStagedRequestContext();
+      }
+      return result;
+    } catch (error) {
+      clearStagedRequestContext();
+      throw error;
+    }
   }
 
   /**
