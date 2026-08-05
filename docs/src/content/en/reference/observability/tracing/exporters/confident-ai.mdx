@@ -53,7 +53,8 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'apiKey',
     type: 'string',
-    description: 'Confident AI API key. Falls back to the CONFIDENT_API_KEY env var. The exporter disables itself when no key is found.',
+    description:
+      'Confident AI API key. Falls back to the CONFIDENT_API_KEY env var. The exporter disables itself when no key is found.',
     required: false,
   },
   {
@@ -113,7 +114,8 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'traceCaptureSink',
     type: '(trace: Trace) => void',
-    description: 'Receives completed traces locally instead of posting them to Confident AI. Use for offline evaluation.',
+    description:
+      'Receives completed traces locally instead of posting them to Confident AI. Use for offline evaluation.',
     required: false,
   },
   {
@@ -175,12 +177,12 @@ const exporter = new DeepEvalExporter({
 
 ## Span type mapping
 
-| Mastra span type                                                       | Confident AI span type |
-| ---------------------------------------------------------------------- | ---------------------- |
-| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`                |
-| `MODEL_GENERATION`                                                     | `LLM`                  |
-| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`                 |
-| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`            |
-| All other exported span types                                          | `CUSTOM`               |
+| Mastra span type | Confident AI span type |
+| - | - |
+| `AGENT_RUN`, `WORKFLOW_RUN` | `AGENT` |
+| `MODEL_GENERATION` | `LLM` |
+| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL` |
+| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION` | `RETRIEVER` |
+| All other exported span types | `CUSTOM` |
 
 Event spans (for example `MODEL_CHUNK`) are dropped.

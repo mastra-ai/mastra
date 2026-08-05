@@ -86,11 +86,11 @@ Confident AI evaluates incoming traces against metric collections defined in you
 
 ```typescript title="src/mastra/index.ts"
 new DeepEvalExporter({
-  metricCollection: 'trace-metrics',      // trace-level
-  llmMetricCollection: 'llm-metrics',     // applied to LLM spans
+  metricCollection: 'trace-metrics', // trace-level
+  llmMetricCollection: 'llm-metrics', // applied to LLM spans
   agentMetricCollection: 'agent-metrics', // applied to agent spans
   toolMetricCollectionMap: {
-    search: 'search-tool-metrics',        // applied to the "search" tool
+    search: 'search-tool-metrics', // applied to the "search" tool
   },
 })
 ```
@@ -101,7 +101,7 @@ new DeepEvalExporter({
 new DeepEvalExporter({
   apiKey: process.env.CONFIDENT_API_KEY,
   environment: 'production', // Default: "development"
-  name: 'my-trace',          // Default: the Mastra serviceName
+  name: 'my-trace', // Default: the Mastra serviceName
   tags: ['production'],
   metadata: { team: 'growth' },
 })
@@ -111,14 +111,13 @@ new DeepEvalExporter({
 
 Mastra spans map to the span types shown in Confident AI:
 
-| Mastra span type                                                       | Confident AI span type |
-| ---------------------------------------------------------------------- | ---------------------- |
-| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`                |
-| `MODEL_GENERATION`                                                     | `LLM`                  |
-| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`                 |
-| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`            |
-| All other exported span types                                          | `CUSTOM`               |
-
+| Mastra span type | Confident AI span type |
+| - | - |
+| `AGENT_RUN`, `WORKFLOW_RUN` | `AGENT` |
+| `MODEL_GENERATION` | `LLM` |
+| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL` |
+| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION` | `RETRIEVER` |
+| All other exported span types | `CUSTOM` |
 
 ## Related
 
