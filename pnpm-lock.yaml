@@ -1130,6 +1130,9 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
+      '@rspack/core':
+        specifier: ^1.7.12
+        version: 1.7.12(@swc/helpers@0.5.17)
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
@@ -3791,6 +3794,9 @@ importers:
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23)(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@6.0.3)
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.1
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
