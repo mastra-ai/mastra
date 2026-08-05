@@ -26,6 +26,22 @@ Install the package:
 npm install @mastra/stagehand
 ```
 
+If you use pnpm, approve the dependency build scripts that Stagehand requires in `pnpm-workspace.yaml`:
+
+```yaml title="pnpm-workspace.yaml"
+allowBuilds:
+  '@google/genai': true
+  bufferutil: true
+  protobufjs: true
+
+onlyBuiltDependencies:
+  - '@google/genai'
+  - bufferutil
+  - protobufjs
+```
+
+Run `pnpm install` again after saving the file. pnpm blocks dependency build scripts unless the project explicitly approves them.
+
 Create a browser instance and assign it to an agent:
 
 ```typescript title="src/mastra/agents/stagehand-agent.ts"
