@@ -358,6 +358,7 @@ type Shared_Type_16 = {
     | 'processOutputStream'
     | 'processOutputResult'
     | 'processOutputStep'
+    | 'processToolResult'
   )[];
 };
 
@@ -6552,7 +6553,7 @@ export type GetProcessors_Response = {
     id: string;
     name?: string | undefined;
     description?: string | undefined;
-    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep')[];
+    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
     agentIds: string[];
     configurations: {
       agentId: string;
@@ -6589,7 +6590,7 @@ export type GetProcessorsProcessorId_Response = {
   id: string;
   name?: string | undefined;
   description?: string | undefined;
-  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep')[];
+  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
   configurations: {
     agentId: string;
     agentName: string;
@@ -6619,7 +6620,7 @@ export interface GetProcessorsProcessorId_RouteContract {
 export type PostProcessorsProcessorIdExecute_PathParams = GetProcessorsProcessorId_PathParams;
 
 export type PostProcessorsProcessorIdExecute_Body = {
-  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
   messages: Shared_Type_59[];
   agentId?: string | undefined;
   requestContext?:
@@ -17013,6 +17014,7 @@ export type GetProcessorProviders_Response = {
       | 'processOutputStream'
       | 'processOutputResult'
       | 'processOutputStep'
+      | 'processToolResult'
     )[];
   }[];
 };
@@ -17050,6 +17052,7 @@ export type GetProcessorProvidersProviderId_Response = {
     | 'processOutputStream'
     | 'processOutputResult'
     | 'processOutputStep'
+    | 'processToolResult'
   )[];
   configSchema: {
     [key: string]: unknown;
