@@ -2,4 +2,4 @@
 '@mastra/schema-compat': patch
 ---
 
-Fix supervisor agent tool schemas for Gemini via OpenRouter: optional properties with no Gemini-compatible type (e.g. z.any()) are now stripped from tool parameter schemas. This resolves the misleading 'required[N]: property is not defined' error when using openrouter/google/gemini-\* models as a supervisor agent (fixes #17325).
+Fix supervisor agent tool schemas for Gemini via OpenRouter. Properties with no Gemini-compatible type — most commonly `z.any()`, which serializes to an empty schema — are now rewritten into a permissive `anyOf` instead of being dropped. This resolves the misleading `required[N]: property is not defined` error when using `openrouter/google/gemini-*` models as a supervisor agent (fixes #17325), while keeping fields the model is expected to fill (such as `resumeData` for tool suspend/resume) present in the tool contract.
