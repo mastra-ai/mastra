@@ -645,23 +645,77 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Observability',
+          label: 'Deployment',
           items: [
             {
               type: 'doc',
-              id: 'observability/overview',
-              key: 'observability.overview',
+              id: 'deployment/overview',
               label: 'Overview',
             },
             {
               type: 'doc',
-              id: 'observability/config',
-              label: 'Config',
+              id: 'deployment/mastra-server',
+              label: 'Mastra Server',
             },
             {
               type: 'doc',
-              id: 'observability/storage',
-              label: 'Storage',
+              id: 'deployment/monorepo',
+              label: 'Monorepo',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/cloud-providers',
+              label: 'Cloud Providers',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/web-framework',
+              label: 'Web Framework',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workflow-runners',
+              label: 'Workflow Runners',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Observe',
+      collapsible: false,
+      collapsed: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
+        {
+          type: 'category',
+          label: 'Tracing',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/tracing/overview',
+              label: 'Tracing',
             },
             {
               type: 'doc',
@@ -672,34 +726,6 @@ const sidebars = {
               type: 'doc',
               id: 'observability/feedback',
               label: 'Feedback',
-            },
-            {
-              type: 'category',
-              label: 'Metrics',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/metrics/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/metrics/querying',
-                  label: 'Querying metrics',
-                },
-              ],
-            },
-            {
-              type: 'category',
-              label: 'Tracing',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/overview',
-                  key: 'observability.tracing.overview',
-                  label: 'Overview',
-                },
-              ],
             },
             {
               type: 'category',
@@ -757,6 +783,11 @@ const sidebars = {
                     },
                     {
                       type: 'doc',
+                      id: 'observability/integrations/exporters/confident-ai',
+                      label: 'Confident AI',
+                    },
+                    {
+                      type: 'doc',
                       id: 'observability/integrations/exporters/datadog',
                       label: 'Datadog',
                     },
@@ -809,6 +840,22 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Metrics',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/metrics/querying',
+              label: 'Querying metrics',
+            },
+          ],
+        },
+        {
+          type: 'category',
           label: 'Evals',
           items: [
             {
@@ -850,55 +897,6 @@ const sidebars = {
               type: 'doc',
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Deployment',
-          items: [
-            {
-              type: 'doc',
-              id: 'deployment/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/mastra-server',
-              label: 'Mastra Server',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/monorepo',
-              label: 'Monorepo',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/cloud-providers',
-              label: 'Cloud Providers',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/sandbox',
-              label: 'Sandbox',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/web-framework',
-              label: 'Web Framework',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/workflow-runners',
-              label: 'Workflow Runners',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/workers',
-              label: 'Workers',
-              customProps: {
-                tags: ['beta'],
-              },
             },
           ],
         },
