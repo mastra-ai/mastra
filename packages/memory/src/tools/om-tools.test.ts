@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -894,6 +895,44 @@ describe('om-tools', () => {
       await expect(tool.execute?.({ cursor: 'msg-2' }, { agent: { threadId, resourceId } } as any)).rejects.toThrow(
         'Memory instance is required for recall',
       );
+    });
+
+    // ── search gating ───────────────────────────────────────────────
+
+    it('should advertise mode="search" by default', () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+      const schema = standardSchemaToJSONSchema(tool.inputSchema!) as any;
+
+      expect(schema.properties.mode.enum).toContain('search');
+      expect(schema.properties.query).toBeDefined();
+      expect(tool.description).toContain('mode="search"');
+    });
+
+    it('should hide mode="search" from the schema and description when search is not enabled', () => {
+      for (const retrievalScope of ['thread', 'resource'] as const) {
+        const tool = recallTool(undefined, { retrievalScope, searchEnabled: false });
+        const schema = standardSchemaToJSONSchema(tool.inputSchema!) as any;
+
+        expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+        expect(schema.properties.query).toBeUndefined();
+        expect(tool.description).not.toContain('mode="search"');
+      }
+    });
+
+    it('should reject mode="search" with actionable feedback instead of throwing when search is not enabled', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+      // Input validation catches the out-of-enum mode before execution and
+      // returns a self-correcting message rather than throwing the
+      // "searchMessages requires a vector store" error.
+      const result = (await tool.execute?.({ mode: 'search', query: 'architecture diagram' }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any)) as { error?: boolean; message?: string };
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('allowed values');
+      expect(result.message).not.toContain('requires a vector store');
     });
   });
 

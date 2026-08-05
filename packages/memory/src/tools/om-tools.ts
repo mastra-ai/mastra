@@ -1146,14 +1146,18 @@ export async function recallThreadFromStart({
 
 export const recallTool = (
   _memoryConfig?: MemoryConfigInternal,
-  options?: { retrievalScope?: 'thread' | 'resource' },
+  options?: { retrievalScope?: 'thread' | 'resource'; searchEnabled?: boolean },
 ) => {
   const retrievalScope = options?.retrievalScope ?? 'thread';
   const isResourceScope = retrievalScope === 'resource';
+  // Semantic search requires a vector store and embedder. When they aren't
+  // configured, hide mode="search" from the schema and description so the
+  // model is never invited to call a mode that can't work.
+  const searchEnabled = options?.searchEnabled ?? true;
 
   const description = isResourceScope
-    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread. Use mode="search" to find messages by content across all threads.'
-    : 'Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor. Use mode="search" to find messages by content in this thread. Use mode="threads" to get the current thread\'s ID and title.';
+    ? `Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread.${searchEnabled ? ' Use mode="search" to find messages by content across all threads.' : ''}`
+    : `Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor.${searchEnabled ? ' Use mode="search" to find messages by content in this thread.' : ''} Use mode="threads" to get the current thread's ID and title.`;
 
   return createTool({
     id: 'recall',
@@ -1166,9 +1170,8 @@ export const recallTool = (
           ? {
               mode: {
                 type: 'string',
-                enum: ['messages', 'threads', 'search'],
-                description:
-                  'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
+                enum: searchEnabled ? ['messages', 'threads', 'search'] : ['messages', 'threads'],
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user.${searchEnabled ? ' "search" finds messages by semantic similarity across all threads.' : ''}`,
               },
               threadId: {
                 type: 'string',
@@ -1190,16 +1193,19 @@ export const recallTool = (
           : {
               mode: {
                 type: 'string',
-                enum: ['messages', 'threads', 'search'],
-                description:
-                  'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
+                enum: searchEnabled ? ['messages', 'threads', 'search'] : ['messages', 'threads'],
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread.${searchEnabled ? ' "search" finds messages by semantic similarity in this thread.' : ''}`,
               },
             }),
-        query: {
-          type: 'string',
-          minLength: 1,
-          description: 'Search query for mode="search". Finds messages semantically similar to this text.',
-        },
+        ...(searchEnabled
+          ? {
+              query: {
+                type: 'string',
+                minLength: 1,
+                description: 'Search query for mode="search". Finds messages semantically similar to this text.',
+              },
+            }
+          : {}),
         cursor: {
           type: 'string',
           minLength: 1,
@@ -1295,6 +1301,13 @@ export const recallTool = (
 
       // Search mode
       if (mode === 'search') {
+        if (!searchEnabled) {
+          return {
+            results:
+              'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and embedder on your Memory instance.',
+            count: 0,
+          };
+        }
         if (!query) {
           throw new Error('query is required for mode="search"');
         }
