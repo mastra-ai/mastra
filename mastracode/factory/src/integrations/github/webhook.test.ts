@@ -229,13 +229,19 @@ describe('dispatchGithubWebhook', () => {
     expect(sendA.mock.calls[0]).toHaveLength(1);
   });
 
-  it('recreates a session under its owner identity', async () => {
-    // No identity — workspace factory rejects the session, delivery dropped.
+  it('recreates a session as the owner recorded on its Factory session row', async () => {
+    // Not the subscription's `ownerId`: that can be a non-user id (the SDK's
+    // default owner), and the workspace guard compares against the row.
     const send = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
     const createSession = vi.fn(async (_input: { requestContext: RequestContext }) => ({
       thread: { getId: () => 'thread-a', switch: vi.fn() },
       sendNotificationSignal: send,
     }));
+    const github = {
+      sourceControlStorage: {
+        sessions: { getBySessionId: async () => ({ userId: 'user-real', orgId: 'org-real' }) },
+      },
+    } as unknown as GithubIntegration;
 
     const result = await dispatchGithubWebhook(
       parsed('issue_comment', 'created', {
@@ -245,6 +251,7 @@ describe('dispatchGithubWebhook', () => {
       }),
       {
         controller: { getSessionByResource: async () => undefined, createSession } as never,
+        github,
         listSubscriptions: async () => [subscription('a', '/worktrees/a')],
         isAuthorizedSender: async () => true,
       },
@@ -252,8 +259,8 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 1, failed: 0, ignored: false });
     expect(createSession.mock.calls[0]![0].requestContext.get('user')).toEqual({
-      workosId: 'owner-1',
-      organizationId: 'org-1',
+      workosId: 'user-real',
+      organizationId: 'org-real',
     });
   });
 
