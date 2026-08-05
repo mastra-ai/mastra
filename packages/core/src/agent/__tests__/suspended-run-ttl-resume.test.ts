@@ -26,6 +26,11 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model'
 // (asserted in `mastra/internal-workflow-registry.test.ts`), so a single advance past
 // this bound expires both halves of a suspended run's warm state.
 const SUSPENDED_RUN_TTL_MS = Mastra.INTERNAL_WORKFLOW_TTL_MS;
+// How far into the window the warm-resume test parks. Derived from the TTL rather than
+// a fixed margin: this file takes whatever `MASTRA_SUSPENDED_RUN_TTL_MS` the environment
+// configured, and a fixed subtraction would go negative — winding the clock backwards
+// instead of into the window — for any TTL at or below that margin.
+const WITHIN_TTL_MS = Math.floor(SUSPENDED_RUN_TTL_MS / 2);
 
 const RESOURCE_ID = 'resource-1';
 const SUSPENDED_THREAD_ID = 'thread-suspended';
@@ -165,7 +170,7 @@ describe('suspended agent runs are released from memory after a TTL', () => {
 
     expect(agent.getActiveThreadRunId({ threadId: SUSPENDED_THREAD_ID, resourceId: RESOURCE_ID })).toBe(runId);
 
-    await sweepAfter(SUSPENDED_RUN_TTL_MS - 60_000, sweeperAgent);
+    await sweepAfter(WITHIN_TTL_MS, sweeperAgent);
 
     // Still warm: the thread is still blocked by the suspended run, and
     // `sendStreamResume()` — which resolves the run from in-memory state only —
