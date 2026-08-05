@@ -25,7 +25,7 @@ Use the AgentController when your application needs:
 - A control layer between your UI and the agent loop (model switching, state persistence, thread management)
 - Tool approval flows and permission policies for human-in-the-loop gating
 - Subagent orchestration to delegate focused subtasks with constrained tools
-- Session continuity with persistent threads, state, and observational memory across restarts
+- Persistent threads and selected thread settings across restarts, with isolated live state for each Session
 
 You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController provides opinionated defaults for an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Reach for the Agent class directly when you want full control or a request-response call. Reach for the AgentController when you want the collaborative-session model without building the runtime around it.
 
@@ -140,7 +140,30 @@ Use [`session.thread.create()`](/reference/agent-controller/session#sessionthrea
 
 ## Switch modes and models
 
-Modes change the instructions and tools used by the shared backing agent without replacing the Session or thread. Define modes on the controller, then switch the live Session with [`session.mode.switch()`](/reference/agent-controller/session#sessionmodeswitch-modeid-). Read the active mode with [`session.mode.get()`](/reference/agent-controller/session#sessionmodeget) or [`session.mode.resolve()`](/reference/agent-controller/session#sessionmoderesolve):
+Modes change the instructions and tools used by the shared backing agent without replacing the Session or thread. Configure mode-specific tools and visibility on the controller:
+
+```typescript
+const modes = [
+  {
+    id: 'plan',
+    name: 'Plan',
+    metadata: { default: true },
+    instructions: 'Investigate the task and propose a plan.',
+    additionalTools: { searchDocs },
+    availableTools: ['searchDocs', 'submit_plan'],
+    transitionsTo: 'build',
+  },
+  {
+    id: 'build',
+    name: 'Build',
+    instructions: 'Implement the approved plan.',
+  },
+]
+```
+
+`tools` and `additionalTools` are mutually exclusive inputs for adding mode-specific tools. When the controller has a shared backing agent, either input layers those tools onto the agent's tools. Use `availableTools` to restrict the final exposed tool names for a mode. Permission denies still take precedence over this allowlist.
+
+Switch the live Session with [`session.mode.switch()`](/reference/agent-controller/session#sessionmodeswitch-modeid-). Read the active mode with [`session.mode.get()`](/reference/agent-controller/session#sessionmodeget) or [`session.mode.resolve()`](/reference/agent-controller/session#sessionmoderesolve):
 
 ```typescript
 await session.mode.switch({ modeId: 'build' })
@@ -186,7 +209,18 @@ await session.state.set({ activeProject: 'docs-site' })
 
 ## Approve tools and resume suspensions
 
-Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Configure category policies with [`session.permissions.setForCategory()`](/reference/agent-controller/session#sessionpermissionssetforcategory-category-policy-) and tool policies with [`session.permissions.setForTool()`](/reference/agent-controller/session#sessionpermissionssetfortool-toolname-policy-):
+Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Map custom tools to categories with `toolCategoryResolver` on the controller:
+
+```typescript
+const controller = new AgentController({
+  toolCategoryResolver: toolName => {
+    if (toolName === 'delete_project') return 'execute'
+    return null
+  },
+})
+```
+
+Configure category policies with [`session.permissions.setForCategory()`](/reference/agent-controller/session#sessionpermissionssetforcategory-category-policy-) and tool policies with [`session.permissions.setForTool()`](/reference/agent-controller/session#sessionpermissionssetfortool-toolname-policy-):
 
 ```typescript
 await session.permissions.setForCategory({
@@ -232,7 +266,28 @@ For `submit_plan`, resume with `{ action: 'approved' }` or `{ action: 'rejected'
 
 ## Delegate to subagents
 
-Configure available subagent types on the controller. The built-in `subagent` tool can then delegate focused tasks using those definitions.
+Configure available subagent types on the controller. The built-in `subagent` tool can then delegate focused tasks using those definitions:
+
+```typescript
+const controller = new AgentController({
+  tools: {
+    searchDocs,
+  },
+  subagents: [
+    {
+      id: 'code-reviewer',
+      name: 'Code reviewer',
+      description: 'Review a change for correctness and regressions.',
+      instructions: 'Inspect the change and report actionable findings.',
+      allowedControllerTools: ['searchDocs'],
+      allowedWorkspaceTools: ['view', 'find_files'],
+      defaultModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    },
+  ],
+})
+```
+
+A regular subagent starts with its configured instructions and constrained toolset. Set `forked: true` when the child should clone the parent thread and run with the parent agent's instructions and tools. Forked subagents preserve the parent prompt prefix, ignore the definition's instructions, tools, allowlists, and default model, and require memory on the controller.
 
 Use [`session.subagents.model.set()`](/reference/agent-controller/session#sessionsubagentsmodelset-modelid-agenttype-) to store one default subagent model or a model for a specific agent type. Read the selection with [`session.subagents.model.get()`](/reference/agent-controller/session#sessionsubagentsmodelget-agenttype-):
 
@@ -272,6 +327,10 @@ const controller = new AgentController({
     adapters: {
       slack: createSlackAdapter(),
     },
+    resolveResourceId: ({ thread, message, defaultResourceId }) => {
+      if (thread.isDM) return message.author.userId
+      return defaultResourceId
+    },
   },
 })
 
@@ -281,9 +340,17 @@ export const mastra = new Mastra({
 })
 ```
 
-Each external chat thread maps to a controller Session and Mastra thread. Controller channel sessions and auto-approval state are held in memory, so use a long-lived server. Pending approvals and live Session state don't survive process restarts.
+Point each platform webhook at the controller-specific route:
 
-See [Channels](/docs/capabilities/channels/overview) for adapter setup and webhook configuration.
+```text
+/api/agent-controllers/<CONTROLLER_ID>/channels/<PLATFORM>/webhook
+```
+
+Each external chat thread maps to one controller Session and Mastra thread. By default, new sessions use a resource ID derived from the adapter's chat-thread ID, prefixed with `channel:`. Use `resolveResourceId` to map direct messages to an existing application user or choose another memory owner. The callback only affects new threads; an existing thread keeps its stored resource ID.
+
+Controller channel sessions and auto-approval state are held in memory, so use a long-lived server. Pending approvals and live Session state don't survive process restarts. Adapters that can't render approval controls automatically run tools without an approval prompt so the run doesn't remain suspended.
+
+See [Channels](/docs/capabilities/channels/overview) for adapter setup and platform-specific webhook configuration.
 
 ## Connect a UI
 
