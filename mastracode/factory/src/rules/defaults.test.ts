@@ -91,6 +91,8 @@ function githubContext(
       state: 'open',
       draft: false,
       merged: false,
+      assignees: ['assignee'],
+      requestedReviewers: ['reviewer'],
       headBranch: 'feature',
       baseBranch: 'main',
     },
@@ -458,7 +460,7 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('records PR branches and status on Review intake', async () => {
+  it('records PR branches, status, assignments, and review requests on Review intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestOpened');
     context.pullRequest = { ...context.pullRequest!, draft: true };
@@ -467,6 +469,8 @@ describe('defaultFactoryRules', () => {
         state: 'open',
         draft: true,
         merged: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
         headBranch: 'feature',
         baseBranch: 'main',
       },

@@ -103,6 +103,7 @@ export interface IssueSummary {
   title: string;
   url: string;
   author: string | null;
+  assignees: string[];
   labels: string[];
   comments: number;
   createdAt: string;
@@ -528,7 +529,8 @@ export class GithubIntegration implements FactoryIntegration {
         state: 'open',
         stateType: 'open',
         priority: null,
-        assignee: null,
+        assignee: issue.assignees[0] ?? null,
+        assignees: issue.assignees,
         source: repoFullName,
         labels: issue.labels,
         commentCount: issue.comments,
@@ -567,6 +569,7 @@ export class GithubIntegration implements FactoryIntegration {
         stateType: issue.state,
         priority: null,
         assignee: issue.assignee?.login ?? null,
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
         source: repoFullName,
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         commentCount: issue.comments,
@@ -633,6 +636,7 @@ export class GithubIntegration implements FactoryIntegration {
         stateType: issue.state,
         priority: null,
         assignee: issue.assignee?.login ?? null,
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
         source: repoFullName,
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         commentCount: issue.comments,
@@ -1016,6 +1020,7 @@ export class GithubIntegration implements FactoryIntegration {
         title: issue.title,
         url: issue.html_url,
         author: issue.user?.login ?? null,
+        assignees: issue.assignees?.flatMap(assignee => (assignee.login ? [assignee.login] : [])) ?? [],
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         comments: issue.comments,
         createdAt: issue.created_at,
@@ -1139,6 +1144,8 @@ export class GithubIntegration implements FactoryIntegration {
         state: pullRequest.state === 'closed' ? 'closed' : 'open',
         draft: pullRequest.draft,
         merged: pullRequest.merged,
+        assignees: pullRequest.assignees ?? [],
+        requestedReviewers: pullRequest.requestedReviewers ?? [],
         headBranch: pullRequest.headBranch,
         baseBranch: pullRequest.baseBranch,
         ...(pullRequest.author ? { author: pullRequest.author } : {}),
@@ -1180,6 +1187,8 @@ interface GithubPullRequestData {
   title: string;
   html_url: string;
   user: { login?: string } | null;
+  assignees?: Array<{ login?: string }> | null;
+  requested_reviewers?: Array<{ login?: string }> | null;
   body?: string | null;
   state: string;
   draft?: boolean | null;
@@ -1225,6 +1234,8 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     title: pr.title,
     url: pr.html_url,
     author: pr.user?.login ?? null,
+    assignees: (pr.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+    requestedReviewers: (pr.requested_reviewers ?? []).flatMap(reviewer => (reviewer.login ? [reviewer.login] : [])),
     body: pr.body?.trim() ? pr.body : null,
     state: pr.state === 'closed' ? 'closed' : 'open',
     draft: pr.draft ?? false,
