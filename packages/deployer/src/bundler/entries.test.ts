@@ -1,0 +1,89 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { MastraError } from '@mastra/core/error';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { resolveExtraEntries } from './entries';
+
+let mastraDir: string;
+let mastraEntryFile: string;
+const tempDirs: string[] = [];
+
+beforeEach(async () => {
+  mastraDir = await mkdtemp(join(tmpdir(), 'mastra-extra-entries-'));
+  tempDirs.push(mastraDir);
+  mastraEntryFile = join(mastraDir, 'index.ts');
+  await writeFile(mastraEntryFile, 'export const mastra = {}');
+  await writeFile(join(mastraDir, 'voice-worker.ts'), 'export default {}');
+});
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
+
+describe('resolveExtraEntries', () => {
+  it('returns an empty map when no entries are configured', () => {
+    expect(resolveExtraEntries(undefined, mastraEntryFile)).toEqual({});
+    expect(resolveExtraEntries({}, mastraEntryFile)).toEqual({});
+  });
+
+  it('resolves paths relative to the mastra directory, not the cwd', () => {
+    const resolved = resolveExtraEntries({ 'voice-worker': './voice-worker.ts' }, mastraEntryFile);
+
+    expect(resolved).toEqual({ 'voice-worker': join(mastraDir, 'voice-worker.ts').replaceAll('\\', '/') });
+  });
+
+  it('accepts an absolute source path', () => {
+    const absolute = join(mastraDir, 'voice-worker.ts');
+    const resolved = resolveExtraEntries({ 'voice-worker': absolute }, mastraEntryFile);
+
+    expect(resolved).toEqual({ 'voice-worker': absolute.replaceAll('\\', '/') });
+  });
+
+  it('allows a nested output name', () => {
+    const resolved = resolveExtraEntries({ 'workers/voice': './voice-worker.ts' }, mastraEntryFile);
+
+    expect(Object.keys(resolved)).toEqual(['workers/voice']);
+  });
+
+  it('rejects the reserved "index" name so it cannot clobber the server bundle', () => {
+    expect(() => resolveExtraEntries({ index: './voice-worker.ts' }, mastraEntryFile)).toThrow(
+      /reserved for the Mastra server/,
+    );
+  });
+
+  it('rejects names reserved for tool bundles', () => {
+    expect(() => resolveExtraEntries({ 'tools/mine': './voice-worker.ts' }, mastraEntryFile)).toThrow(
+      /reserved for tool bundles/,
+    );
+  });
+
+  it('rejects names that would escape the output directory', () => {
+    expect(() => resolveExtraEntries({ '../escape': './voice-worker.ts' }, mastraEntryFile)).toThrow(
+      /without "\.\." segments/,
+    );
+    expect(() => resolveExtraEntries({ '/abs': './voice-worker.ts' }, mastraEntryFile)).toThrow(
+      /must be a relative name/,
+    );
+  });
+
+  it('throws a USER-category error naming the resolved path when the file is missing', () => {
+    let caught: unknown;
+    try {
+      resolveExtraEntries({ 'voice-worker': './nope.ts' }, mastraEntryFile);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(MastraError);
+    const error = caught as MastraError;
+    expect(error.id).toBe('DEPLOYER_BUNDLER_INVALID_ENTRIES');
+    expect(error.category).toBe('USER');
+    expect(error.message).toContain(join(mastraDir, 'nope.ts'));
+  });
+
+  it('rejects empty names and empty paths', () => {
+    expect(() => resolveExtraEntries({ '': './voice-worker.ts' }, mastraEntryFile)).toThrow(/empty or untrimmed/);
+    expect(() => resolveExtraEntries({ 'voice-worker': '' }, mastraEntryFile)).toThrow(/empty path/);
+  });
+});
