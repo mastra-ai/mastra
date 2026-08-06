@@ -401,6 +401,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Connections',
+          link: {
+            type: 'doc',
+            id: 'connections/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
