@@ -731,6 +731,8 @@ describe('createGithubPullRequestReconciler', () => {
       state: 'closed',
       draft: false,
       merged: true,
+      assignees: ['assignee'],
+      requestedReviewers: ['reviewer'],
       headBranch: 'feature',
       baseBranch: 'main',
       author: 'pr-author',
@@ -817,7 +819,7 @@ describe('createGithubPullRequestReconciler', () => {
     await createCard(context, {
       number: 17,
       stages: ['done'],
-      metadata: { state: 'closed', draft: false, merged: true },
+      metadata: { state: 'closed', draft: false, merged: true, assignees: [], requestedReviewers: [] },
     });
     await createCard(context, { number: 18 });
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
@@ -852,16 +854,30 @@ describe('createGithubPullRequestReconciler', () => {
 
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
-      metadata: { state: 'open', draft: true, merged: false },
+      metadata: {
+        state: 'open',
+        draft: true,
+        merged: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+      },
     });
   });
 
-  it('silently reconciles status and authors on open pull request cards', async () => {
+  it('silently reconciles status and relevance metadata on open pull request cards', async () => {
     const context = await setup('read');
     const missing = await createCard(context, { number: 18, metadata: { repository: 'acme/repo' } });
     const stale = await createCard(context, {
       number: 19,
-      metadata: { author: 'old-author', state: 'open', draft: false, merged: false, repository: 'acme/repo' },
+      metadata: {
+        author: 'old-author',
+        state: 'open',
+        draft: false,
+        merged: false,
+        assignees: ['old-assignee'],
+        requestedReviewers: ['old-reviewer'],
+        repository: 'acme/repo',
+      },
     });
     const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
       ...mergedState(input.number),
@@ -869,6 +885,8 @@ describe('createGithubPullRequestReconciler', () => {
       draft: input.number === 19,
       merged: false,
       author: `author-${input.number}`,
+      assignees: [`assignee-${input.number}`],
+      requestedReviewers: [`reviewer-${input.number}`],
     }));
 
     await expect(createReconciler(context, fetchPullRequest)([repositoryTarget])).resolves.toEqual({
@@ -886,6 +904,8 @@ describe('createGithubPullRequestReconciler', () => {
         state: 'open',
         draft: false,
         merged: false,
+        assignees: ['assignee-18'],
+        requestedReviewers: ['reviewer-18'],
         repository: 'acme/repo',
       },
     });
@@ -895,6 +915,8 @@ describe('createGithubPullRequestReconciler', () => {
         state: 'open',
         draft: true,
         merged: false,
+        assignees: ['assignee-19'],
+        requestedReviewers: ['reviewer-19'],
         repository: 'acme/repo',
       },
     });

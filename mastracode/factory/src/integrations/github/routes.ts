@@ -307,6 +307,7 @@ function polledIssueEvent(
     title: string;
     url: string;
     author: string | null;
+    assignee: string | null;
     labels: string[];
     createdAt: string;
   },
@@ -325,6 +326,7 @@ function polledIssueEvent(
         title: issue.title,
         html_url: issue.url,
         created_at: issue.createdAt,
+        assignees: issue.assignee ? [{ login: issue.assignee }] : [],
         labels: issue.labels.map(name => ({ name })),
       },
     },
@@ -338,6 +340,8 @@ function polledPullRequestEvent(
     title: string;
     url: string;
     author: string | null;
+    assignees: string[];
+    requestedReviewers: string[];
     headBranch: string;
     baseBranch: string;
     createdAt: string;
@@ -359,6 +363,8 @@ function polledPullRequestEvent(
         created_at: pullRequest.createdAt,
         state: 'open',
         merged: false,
+        assignees: pullRequest.assignees.map(login => ({ login })),
+        requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
         head: { ref: pullRequest.headBranch },
         base: { ref: pullRequest.baseBranch },
       },
@@ -792,6 +798,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             title: issue.title,
             url: issue.url,
             author: issue.author,
+            assignee: issue.assignee,
             labels: issue.labels,
             comments: issue.commentCount ?? 0,
             createdAt: issue.createdAt,
@@ -907,6 +914,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             title: pr.title,
             url: pr.url,
             author: pr.author,
+            assignees: pr.assignees ?? [],
+            requestedReviewers: pr.requestedReviewers ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
             createdAt: pr.createdAt,

@@ -33,6 +33,35 @@ const workItem = {
   updatedAt: '2026-08-05T10:00:00.000Z',
 };
 
+const relevanceWorkItems = [
+  {
+    id: 'authored',
+    title: 'Authored issue',
+    metadata: { author: 'octocat', assignees: [] },
+  },
+  {
+    id: 'assigned',
+    title: 'Assigned issue',
+    metadata: { author: 'grace', assignees: ['octocat'] },
+  },
+  {
+    id: 'unrelated',
+    title: 'Unrelated issue',
+    metadata: { author: 'grace', assignees: [] },
+  },
+].map(({ id, title, metadata }, index) => ({
+  ...workItem,
+  id: `work-relevance-${id}`,
+  createdBy: 'factory-rule-dispatcher',
+  title,
+  metadata: { number: 30 + index, ...metadata },
+  externalSource: {
+    ...workItem.externalSource,
+    externalId: `github-issue:${30 + index}`,
+    url: `https://github.com/acme/app/issues/${30 + index}`,
+  },
+}));
+
 const reviewItem = {
   ...workItem,
   id: 'review-item-1',
@@ -55,6 +84,51 @@ const reviewItem = {
     url: 'https://github.com/acme/app/pull/8',
   },
 };
+
+const relevanceReviewItems = [
+  {
+    id: 'authored',
+    title: 'Authored PR',
+    metadata: { author: 'octocat', assignees: [], requestedReviewers: [] },
+    sessions: {},
+  },
+  {
+    id: 'assigned',
+    title: 'Assigned PR',
+    metadata: { author: 'grace', assignees: ['octocat'], requestedReviewers: [] },
+    sessions: {},
+  },
+  {
+    id: 'requested',
+    title: 'Requested PR',
+    metadata: { author: 'grace', assignees: [], requestedReviewers: ['octocat'] },
+    sessions: {},
+  },
+  {
+    id: 'worked',
+    title: 'Worked PR',
+    metadata: { author: 'grace', assignees: [], requestedReviewers: [] },
+    sessions: {
+      review: {
+        sessionId: 'session-worked',
+        threadId: 'thread-worked',
+        branch: 'review/worked',
+        startedBy: 'user-ada',
+      },
+    },
+  },
+].map(({ id, title, metadata, sessions }, index) => ({
+  ...reviewItem,
+  id: `review-relevance-${id}`,
+  title,
+  sessions,
+  metadata: { number: 40 + index, ...metadata },
+  externalSource: {
+    ...reviewItem.externalSource,
+    externalId: `github-pr:${40 + index}`,
+    url: `https://github.com/acme/app/pull/${40 + index}`,
+  },
+}));
 
 const pullRequestStatusItems = [
   { id: 'draft', title: 'Draft PR', stages: ['review'], metadata: { state: 'open', draft: true, merged: false } },
@@ -225,6 +299,32 @@ describe('Board work-item activity', () => {
     expect(screen.getByLabelText('Work item activity')).toHaveTextContent('build agent · anthropic/claude-sonnet-4-5');
   });
 
+  it('filters work cards by teammate and selected relevance types', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: relevanceWorkItems }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBoard('work');
+
+    await screen.findByText('Authored issue');
+    await user.click(screen.getByLabelText('Filter by teammate'));
+    await user.click(await screen.findByRole('option', { name: /octocat/ }));
+
+    expect(screen.getByText('Authored issue')).toBeInTheDocument();
+    expect(screen.getByText('Assigned issue')).toBeInTheDocument();
+    expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Filter by relevance'));
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Authored' }));
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Review requested' })).not.toBeInTheDocument();
+
+    expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
+    expect(screen.getByText('Assigned issue')).toBeInTheDocument();
+  });
+
   it('shows the latest human worker, initial fallback, and synthetic created event on review cards', async () => {
     stubBoardEndpoints();
     renderBoard('review');
@@ -238,6 +338,49 @@ describe('Board work-item activity', () => {
     expect(popup).toHaveTextContent('octocat');
     expect(popup).not.toHaveTextContent('Created the item');
     expect(within(popup).getByText(`Created at: ${createdAt}`)).toHaveAttribute('datetime', reviewItem.createdAt);
+  });
+
+  it('filters review cards by teammate and selected relevance types', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({
+          authenticated: true,
+          authEnabled: true,
+          user: { userId: 'user-ada', name: 'Ada Lovelace' },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: relevanceReviewItems }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBoard('review');
+
+    await screen.findByText('Authored PR');
+    await user.click(screen.getByLabelText('Filter by teammate'));
+    await user.click(await screen.findByRole('option', { name: /octocat/ }));
+
+    expect(screen.getByText('Authored PR')).toBeInTheDocument();
+    expect(screen.getByText('Assigned PR')).toBeInTheDocument();
+    expect(screen.getByText('Requested PR')).toBeInTheDocument();
+    expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Filter by relevance'));
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Authored' }));
+
+    expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
+    expect(screen.getByText('Assigned PR')).toBeInTheDocument();
+    expect(screen.getByText('Requested PR')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByLabelText('Filter by teammate'));
+    await user.click(await screen.findByRole('option', { name: /Ada Lovelace/ }));
+
+    expect(screen.getByText('Worked PR')).toBeInTheDocument();
+    expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
+    expect(screen.queryByText('Assigned PR')).not.toBeInTheDocument();
+    expect(screen.queryByText('Requested PR')).not.toBeInTheDocument();
   });
 
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {

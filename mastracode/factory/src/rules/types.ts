@@ -101,7 +101,14 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   deliveryId: string;
   factory: { createdAt: string };
   repository: { id: number; fullName: string };
-  issue?: { number: number; title: string; url: string; createdAt?: string; updatedAt?: string };
+  issue?: {
+    number: number;
+    title: string;
+    url: string;
+    createdAt?: string;
+    updatedAt?: string;
+    assignees?: string[];
+  };
   issueChange?: { title: boolean; body: boolean };
   issueComment?: {
     id: number;
@@ -120,6 +127,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     state: 'open' | 'closed';
     draft: boolean;
     merged: boolean;
+    assignees?: string[];
+    requestedReviewers?: string[];
     headBranch: string;
     baseBranch: string;
   };

@@ -576,6 +576,8 @@ describe('GithubIntegration merge reconciler', () => {
       state: 'closed',
       draft: false,
       merged: true,
+      assignees: [],
+      requestedReviewers: [],
       headBranch: 'feat/intake',
       baseBranch: 'main',
       author: 'ada',
