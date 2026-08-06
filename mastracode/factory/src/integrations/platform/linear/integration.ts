@@ -367,6 +367,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
     const ingest = attachLinearRules(ctx);
     const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this as unknown as LinearIntegration, ctx) : undefined;
+    const workItems = ctx.rules?.workItems;
+    if (!workItems) return [];
     if (!ingest && !reconcile) return [];
 
     const pollIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_INTERVAL_MS');
@@ -378,6 +380,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         linear: { listWorkspaces: () => this.listWorkspaces() },
         storage: ctx.storage.generic as unknown as PlatformLinearEventStorage,
         projects: ctx.storage.projects,
+        workItems,
         ...(ingest ? { ingestFactoryIssue: ingest } : {}),
         ...(reconcile ? { reconcileFactoryState: reconcile } : {}),
         pollEventsEnabled: pollingEnabled,

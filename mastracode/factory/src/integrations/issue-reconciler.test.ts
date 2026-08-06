@@ -200,6 +200,37 @@ describe('issue reconcilers', () => {
     );
   });
 
+  it('does not clobber stored metadata when the live issue omits a field', async () => {
+    // Regression: when the live issue returns `author: undefined` we must
+    // preserve whatever was already stored on the work item rather than
+    // spreading `undefined` on top and erasing prior audit data.
+    const workItem = item('github', {
+      githubRepositoryId: 101,
+      githubIssueNumber: 42,
+      author: 'octocat',
+      assignees: ['monalisa'],
+    });
+    const intake = {
+      resolveIntakeDispatch: vi.fn(async () => ({
+        connection: { type: 'github-app' as const, installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '42',
+      })),
+      // Author disappears (e.g. deleted user); assignees change.
+      getIssue: vi.fn(async () => issue({ author: undefined as unknown as string, assignees: ['newbie'] })),
+    } as unknown as Intake;
+    const test = context(workItem, intake);
+    const reconcile = attachGithubIssueReconciler({ intake } as Pick<GithubIntegration, 'intake'>, test.context);
+    const scope = githubIssueReconcileScope([{ id: 101, fullName: 'acme/app', installationId: 7 }]);
+
+    await expect(reconcile?.(scope)).resolves.toMatchObject({ updated: 1 });
+    const patchCall = (test.update.mock.calls as unknown[][])[0]![0] as { patch: { metadata: Record<string, unknown> } };
+    // author was undefined in the desired patch and must not appear as such.
+    expect(patchCall.patch.metadata).not.toHaveProperty('author', undefined);
+    expect(patchCall.patch.metadata.author).toBe('octocat');
+    expect(patchCall.patch.metadata.assignees).toEqual(['newbie']);
+  });
+
   it('does not write already reconciled metadata and isolates fetch failures', async () => {
     const current = item('github', {
       githubRepositoryId: 101,

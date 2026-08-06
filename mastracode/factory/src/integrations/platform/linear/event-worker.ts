@@ -7,6 +7,7 @@ import type { WorkerDeps } from '@mastra/core/worker';
 
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
+import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
 import { PlatformApiClient, PlatformApiError } from '../api-client.js';
@@ -71,6 +72,15 @@ export interface PlatformLinearEventWorkerConfig {
   linear: PlatformLinearEventDispatchIntegration;
   storage: PlatformLinearEventStorage;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
+  /**
+   * Used to scope event dispatch to `(orgId, factoryProjectId)` pairs that
+   * already have a work item linked to the incoming Linear issue. Without
+   * this scoping, a workspace-scoped event would fan out to every project in
+   * every org and materialize a triage card in each — a cross-tenant leak.
+   * First-observation of a Linear issue happens through the user-authenticated
+   * `/web/linear/issues?factoryProjectId=...` intake path instead.
+   */
+  workItems: Pick<WorkItemsStorage, 'list'>;
   /** Called with a single-issue rules ingress derived from an `Issue` webhook. */
   ingestFactoryIssue?: (input: LinearRulesIngress) => Promise<unknown>;
   reconcileFactoryState?: IssueReconciler;
@@ -91,6 +101,18 @@ export interface PlatformLinearEventWorkerConfig {
  * Cursor state is persisted per workspace via the integration's generic
  * settings surface, keyed by a well-known worker identity. Cold start uses
  * `afterTimestamp: now - 1` to avoid replaying the 14-day stream backlog.
+ *
+ * ## Delivery semantics
+ *
+ * **At-most-once** per event. The cursor advances to the last event ID in a
+ * page after all dispatch attempts on that page complete, regardless of
+ * whether individual ingest calls threw. Ingest failures are logged, the
+ * offending event is not retried, and drift is caught by the folded
+ * `LinearIssueReconciler` sweep on its own cadence (default 5 minutes). This
+ * matches `PlatformGithubEventWorker` and avoids poison-pill events blocking
+ * the whole stream. Any consumer that needs exactly-once must idempotently
+ * handle the same issue arriving via both the event path and the reconcile
+ * path.
  */
 export class PlatformLinearEventWorker extends MastraWorker {
   readonly name = 'platform-linear-events';
@@ -99,6 +121,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
   readonly #linear: PlatformLinearEventDispatchIntegration;
   readonly #storage: PlatformLinearEventStorage;
   readonly #projects: Pick<FactoryProjectsStorage, 'listAll'>;
+  readonly #workItems: Pick<WorkItemsStorage, 'list'>;
   readonly #ingestFactoryIssue: ((input: LinearRulesIngress) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: IssueReconciler | undefined;
   readonly #pollEventsEnabled: boolean;
@@ -124,6 +147,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
     this.#linear = config.linear;
     this.#storage = config.storage;
     this.#projects = config.projects;
+    this.#workItems = config.workItems;
     this.#ingestFactoryIssue = config.ingestFactoryIssue;
     this.#reconcileFactoryState = config.reconcileFactoryState;
     this.#pollEventsEnabled = config.pollEventsEnabled ?? true;
@@ -352,11 +376,36 @@ export class PlatformLinearEventWorker extends MastraWorker {
       return;
     }
 
-    // The event stream is workspace-scoped, not project-scoped. Fan the
-    // observation out to every Factory project in every org — the rules
-    // ingress matches issues by source key, so unrelated projects no-op.
+    // The event stream is workspace-scoped and Platform Linear has no
+    // workspace→org mapping we can trust. To avoid cross-tenant fan-out (an
+    // Issue from org A materializing a triage card in org B via the default
+    // `linearIssueObserved` rule), only dispatch to `(orgId, factoryProjectId)`
+    // pairs that already have a persisted work item for this Linear issue.
+    // First-observation of a Linear issue happens through the
+    // user-authenticated `/web/linear/issues?factoryProjectId=...` intake path.
+    const sourceKey = `linear:${issue.identifier}`;
     const projects = await this.#projects.listAll();
+    let dispatched = 0;
     for (const project of projects) {
+      let items;
+      try {
+        items = await this.#workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
+      } catch (error) {
+        this.deps?.logger.error('Platform Linear work-item lookup failed', {
+          linearWorkspaceId,
+          eventId: event.id,
+          projectId: project.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+      const linked = items.some(
+        item =>
+          item.externalSource?.integrationId === 'linear' &&
+          item.externalSource.type === 'issue' &&
+          item.externalSource.externalId === sourceKey,
+      );
+      if (!linked) continue;
       try {
         await this.#ingestFactoryIssue({
           orgId: project.orgId,
@@ -364,6 +413,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
           factoryProjectId: project.id,
           issues: [issue],
         });
+        dispatched += 1;
       } catch (error) {
         this.deps?.logger.error('Platform Linear issue ingest failed', {
           linearWorkspaceId,
@@ -372,6 +422,13 @@ export class PlatformLinearEventWorker extends MastraWorker {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+    if (dispatched === 0) {
+      this.deps?.logger.debug('Platform Linear Issue event had no linked work items to update', {
+        linearWorkspaceId,
+        eventId: event.id,
+        sourceKey,
+      });
     }
   }
 

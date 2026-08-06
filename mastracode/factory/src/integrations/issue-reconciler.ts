@@ -50,6 +50,19 @@ function metadataMatches(current: Record<string, unknown> | null, desired: Recor
   return Object.entries(desired).every(([key, value]) => sameValue(current?.[key], value));
 }
 
+/**
+ * Drop `undefined` entries so we never spread them into stored metadata. An
+ * `undefined` field on the desired patch means "no signal from the live issue"
+ * — we must preserve whatever was already stored, not clobber it.
+ */
+function withoutUndefined(record: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
 function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId: string): WorkItemRow[] {
   return items.filter(
     item =>
@@ -103,7 +116,7 @@ export function createIssueReconciler<TScope = void>(
             summary.missing += 1;
             continue;
           }
-          const metadata = options.metadata(item, issue);
+          const metadata = withoutUndefined(options.metadata(item, issue));
           if (metadataMatches(item.metadata, metadata)) continue;
           await options.storage.update({
             orgId: project.orgId,

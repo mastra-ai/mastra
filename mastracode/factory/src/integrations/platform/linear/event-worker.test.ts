@@ -84,11 +84,37 @@ function createDeps(pubsub: unknown = {}): WorkerDeps {
   };
 }
 
+/**
+ * Build a stub `WorkItemsStorage.list` from a map of
+ * `${orgId}:${factoryProjectId}` → Linear source keys already linked. The
+ * event worker only dispatches to projects that already have a work item for
+ * the incoming Linear issue's source key, so callers seed the expected links.
+ */
+function stubWorkItems(links: Record<string, string[]> = {}): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'list'> {
+  return {
+    list: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
+      const sourceKeys = links[`${orgId}:${factoryProjectId}`] ?? [];
+      return sourceKeys.map(key => ({
+        id: `item-${key}`,
+        orgId,
+        factoryProjectId,
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: key },
+      })) as never;
+    },
+  };
+}
+
 function createWorker(input: {
   fetchImpl: typeof fetch;
   storage: PlatformLinearEventStorage;
   workspaces?: PlatformLinearWorkspace[];
   projects?: Array<{ id: string; orgId: string }>;
+  /**
+   * Source keys already linked per `${orgId}:${factoryProjectId}` pair. Default
+   * is a single link for the default project so most tests just work; scoping
+   * tests should set this explicitly.
+   */
+  linkedSourceKeys?: Record<string, string[]>;
   intervalMs?: number;
   reconcileIntervalMs?: number;
   now?: () => number;
@@ -96,6 +122,13 @@ function createWorker(input: {
   reconcileFactoryState?: IssueReconciler;
   pollEventsEnabled?: boolean;
 }) {
+  const projects = input.projects ?? [{ id: 'project-1', orgId: 'org-1' }];
+  // Default: every provided project has *every* linked identifier the tests
+  // dispatch. Behavioral scoping tests override this to prove filtering.
+  const defaultLinks: Record<string, string[]> = {};
+  for (const project of projects) {
+    defaultLinks[`${project.orgId}:${project.id}`] = ['linear:ENG-1', 'linear:ENG-2', 'linear:ENG-42', 'linear:ENG-100'];
+  }
   return new PlatformLinearEventWorker({
     client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
     linear: {
@@ -103,8 +136,9 @@ function createWorker(input: {
     },
     storage: input.storage,
     projects: {
-      listAll: async () => (input.projects ?? [{ id: 'project-1', orgId: 'org-1' }]) as never,
+      listAll: async () => projects as never,
     } as never,
+    workItems: stubWorkItems(input.linkedSourceKeys ?? defaultLinks),
     ingestFactoryIssue: input.ingestFactoryIssue,
     reconcileFactoryState: input.reconcileFactoryState,
     pollEventsEnabled: input.pollEventsEnabled,
@@ -213,13 +247,17 @@ describe('PlatformLinearEventWorker', () => {
     await worker.stop();
   });
 
-  it('fans an Issue event out to every Factory project', async () => {
+  it('only dispatches an Issue event to projects that already link that Linear issue', async () => {
+    // Cross-tenant safety: the event stream is workspace-scoped and Platform
+    // Linear has no workspace→org mapping. Dispatching to every project would
+    // materialize a triage card in orgs that never subscribed to this issue
+    // via the default `linearIssueObserved` rule.
     const settings = createSettingsStorage();
     const ingestFactoryIssue = vi.fn(async (_input: LinearRulesIngress) => ({ status: 'committed' }));
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
       if (url.searchParams.has('afterEventId')) return json({ events: [] });
-      return json({ events: [eventEntry('9', issueEnvelope())] });
+      return json({ events: [eventEntry('9', issueEnvelope({ id: 'issue-x', identifier: 'ENG-7' }))] });
     });
 
     const worker = createWorker({
@@ -229,18 +267,82 @@ describe('PlatformLinearEventWorker', () => {
       projects: [
         { id: 'project-a', orgId: 'org-1' },
         { id: 'project-b', orgId: 'org-2' },
+        { id: 'project-c', orgId: 'org-3' },
       ],
+      linkedSourceKeys: {
+        // Only org-1/project-a has a Linear work item for ENG-7. The other
+        // projects are untouched, even ones in org-3 that have unrelated
+        // Linear work items.
+        'org-1:project-a': ['linear:ENG-7', 'linear:ENG-99'],
+        'org-2:project-b': [],
+        'org-3:project-c': ['linear:ENG-100'],
+      },
     });
     await worker.init(createDeps({ getLeaseProvider: () => acquireOnlyLeaseProvider() }));
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
     await flushMicrotasks();
 
-    expect(ingestFactoryIssue).toHaveBeenCalledTimes(2);
-    expect(ingestFactoryIssue.mock.calls.map(call => call[0]!.factoryProjectId).sort()).toEqual([
-      'project-a',
-      'project-b',
-    ]);
+    expect(ingestFactoryIssue).toHaveBeenCalledTimes(1);
+    expect(ingestFactoryIssue.mock.calls[0]![0].orgId).toBe('org-1');
+    expect(ingestFactoryIssue.mock.calls[0]![0].factoryProjectId).toBe('project-a');
+
+    await worker.stop();
+  });
+
+  it('drops an Issue event when no project links it', async () => {
+    const settings = createSettingsStorage();
+    const ingestFactoryIssue = vi.fn(async (_input: LinearRulesIngress) => ({ status: 'committed' }));
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.searchParams.has('afterEventId')) return json({ events: [] });
+      return json({ events: [eventEntry('9', issueEnvelope({ id: 'unknown', identifier: 'ENG-999' }))] });
+    });
+
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      ingestFactoryIssue,
+      projects: [{ id: 'project-a', orgId: 'org-1' }],
+      linkedSourceKeys: { 'org-1:project-a': [] },
+    });
+    await worker.init(createDeps({ getLeaseProvider: () => acquireOnlyLeaseProvider() }));
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await flushMicrotasks();
+
+    expect(ingestFactoryIssue).not.toHaveBeenCalled();
+
+    await worker.stop();
+  });
+
+  it('advances the cursor past an event whose ingest threw (at-most-once, drift caught by reconciler)', async () => {
+    // Cursor must move forward past a failing ingest so a single poison event
+    // cannot block the whole workspace stream. The reconciler sweep is the
+    // backstop that reconciles drift within its interval.
+    const settings = createSettingsStorage();
+    const ingestFactoryIssue = vi.fn(async (_input: LinearRulesIngress) => {
+      throw new Error('downstream unavailable');
+    });
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.searchParams.has('afterEventId')) return json({ events: [] });
+      return json({ events: [eventEntry('42', issueEnvelope({ id: 'x', identifier: 'ENG-42' }))] });
+    });
+
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      ingestFactoryIssue,
+    });
+    await worker.init(createDeps({ getLeaseProvider: () => acquireOnlyLeaseProvider() }));
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await flushMicrotasks();
+
+    expect(ingestFactoryIssue).toHaveBeenCalledTimes(1);
+    const persisted = settings.read() as { workspaces: Record<string, { afterEventId?: string }> } | null;
+    expect(persisted?.workspaces['workspace-1']?.afterEventId).toBe('42');
 
     await worker.stop();
   });
