@@ -2299,8 +2299,11 @@ ${formattedMessages}
     messages: MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
+    /** Message ids that must never be removed (e.g. the in-flight turn's pending messages). */
+    preserveMessageIds?: string[];
   }): Promise<string[]> {
     const { threadId, resourceId, messages, observedMessageIds, retentionFloor } = opts;
+    const preserveSet = opts.preserveMessageIds?.length ? new Set(opts.preserveMessageIds) : null;
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const effectiveObservedIds =
@@ -2323,6 +2326,10 @@ ${formattedMessages}
 
     for (const msg of messages) {
       if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) continue;
+      if (preserveSet?.has(msg.id)) {
+        skipped += 1;
+        continue;
+      }
 
       const unobservedParts = getUnobservedParts(msg);
       const totalParts = msg.content?.parts?.length ?? 0;
@@ -2386,8 +2393,10 @@ ${formattedMessages}
     messages: MessageList | MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
+    /** Message ids that must never be removed (e.g. the in-flight turn's pending messages). */
+    preserveMessageIds?: string[];
   }): Promise<MastraDBMessage[]> {
-    const { threadId, resourceId, observedMessageIds, retentionFloor } = opts;
+    const { threadId, resourceId, observedMessageIds, retentionFloor, preserveMessageIds } = opts;
     const messageList = this.isMessageList(opts.messages) ? opts.messages : undefined;
     const allMsgs: MastraDBMessage[] = messageList ? messageList.get.all.db() : (opts.messages as MastraDBMessage[]);
 
@@ -2415,6 +2424,7 @@ ${formattedMessages}
         messages: allMsgs,
         observedMessageIds,
         retentionFloor,
+        preserveMessageIds,
       });
 
       if (messageList) {
@@ -2432,9 +2442,10 @@ ${formattedMessages}
       const idsToRemove: string[] = [];
       const messagesToSave: MastraDBMessage[] = [];
 
+      const preserveSet = preserveMessageIds?.length ? new Set(preserveMessageIds) : null;
       for (let i = 0; i < markerIdx; i++) {
         const msg = allMsgs[i];
-        if (msg?.id && msg.id !== 'om-continuation') {
+        if (msg?.id && msg.id !== 'om-continuation' && !preserveSet?.has(msg.id)) {
           idsToRemove.push(msg.id);
           messagesToSave.push(msg);
         }

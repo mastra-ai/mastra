@@ -698,7 +698,7 @@ describe('Mid-Loop Observation', () => {
       expect(record?.activeObservations).toBeFalsy();
     });
 
-    it('keeps the freshly observed giant message in context via the retention floor', async () => {
+    it('keeps the freshly observed giant message in context and in the input bucket', async () => {
       mockCallObserver(om);
       const messageList = new MessageList({ threadId, resourceId });
       messageList.add(createGiantMessage(), 'input');
@@ -707,8 +707,40 @@ describe('Mid-Loop Observation', () => {
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.activeObservations).toBeTruthy();
-      // Retention-floor backoff must keep the just-observed lone message in context —
+      // Step-0 cleanup must preserve the just-observed lone message by identity —
       // the model still needs it to answer the prompt that carried it.
+      const survivor = messageList.get.all.db().find(msg => msg.id === 'giant-msg');
+      expect(survivor).toBeDefined();
+      // And it must remain in the INPUT bucket: semantic recall embeds
+      // `get.input.db()` and the durable loop reads the first input message for
+      // task tracking — draining the bucket at step 0 would starve both.
+      expect(messageList.get.input.db().map(msg => msg.id)).toContain('giant-msg');
+    });
+
+    it('preserves the fresh prompt at step 0 even with an explicit bufferActivation of 1 (retention floor 0)', async () => {
+      // resolveRetentionFloor(1, threshold) === 0 — the token-based floor cannot
+      // protect anything under this config, so survival must come from identity
+      // preservation of the in-flight messages, not the floor backoff.
+      const omFloorZero = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: {
+          model: createMockObserverModel(),
+          messageTokens: 500,
+          bufferTokens: 100,
+          bufferActivation: 1,
+        },
+        reflection: { model: createMockObserverModel(), observationTokens: 50000 },
+      });
+      const procFloorZero = new ObservationalMemoryProcessor(omFloorZero, noopMemoryProvider);
+      const observerSpy = mockCallObserver(omFloorZero);
+
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(createGiantMessage(), 'input');
+
+      await procFloorZero.processInputStep(stepArgs(messageList));
+
+      expect(observerSpy).toHaveBeenCalled();
       const survivor = messageList.get.all.db().find(msg => msg.id === 'giant-msg');
       expect(survivor).toBeDefined();
     });
@@ -773,6 +805,31 @@ describe('Mid-Loop Observation', () => {
       }
     });
 
+    it('still observes at step 0 without a messageId (legacy dispatch) and never marks a user message', async () => {
+      // The legacy v1 dispatch calls runProcessInputStep without a messageId, so no
+      // response message can be seeded. Observation must still fire; markers fall back
+      // to the storage scan and must never land on a user message.
+      const observerSpy = mockCallObserver(om);
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(createGiantMessage(), 'input');
+
+      // stepArgs supplies no messageId by default — this mirrors the legacy dispatch.
+      await processor.processInputStep(stepArgs(messageList));
+
+      expect(observerSpy).toHaveBeenCalled();
+      // No seed: the live list must not contain an empty assistant message.
+      expect(messageList.get.all.db().some(msg => msg.role === 'assistant')).toBe(false);
+      // Markers never land on user messages, live or stored.
+      const stored = await storage.listMessages({ threadId });
+      for (const msg of [...messageList.get.all.db(), ...stored.messages]) {
+        if ((msg as any).role !== 'user') continue;
+        const hasMarker = ((msg as any).content?.parts ?? []).some((part: any) =>
+          String(part?.type ?? '').startsWith('data-om-'),
+        );
+        expect(hasMarker).toBe(false);
+      }
+    });
+
     it('does not prune unobserved messages when the fresh re-check declines observation at step 0', async () => {
       const observerSpy = mockCallObserver(om);
       const realGetStatus = (om as any).getStatus.bind(om);
@@ -793,8 +850,10 @@ describe('Mid-Loop Observation', () => {
 
       await processor.processInputStep(stepArgs(messageList));
 
-      // The persist block ran (input drained), but the re-check declined the observation…
-      expect(messageList.get.input.db()).toEqual([]);
+      // The persist block ran, but at step 0 the input bucket must NOT be drained —
+      // downstream consumers (semantic recall embedding, durable-loop task tracking)
+      // read `get.input.db()` after this point.
+      expect(messageList.get.input.db().map(msg => msg.id)).toEqual(['giant-msg']);
       expect(observerSpy).not.toHaveBeenCalled();
       // …and marker-boundary pruning must NOT have dropped the unobserved message
       const survivor = messageList.get.all.db().find(msg => msg.id === 'giant-msg');

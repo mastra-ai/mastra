@@ -177,4 +177,23 @@ describe('OM marker persistence plumbing', () => {
     const markerParts = liveAssistant?.content.parts.filter((p: any) => p?.type === marker.type) ?? [];
     expect(markerParts).toHaveLength(1);
   });
+
+  it('swallows a DB save failure after marking the live message and does NOT fall back to the storage scan', async () => {
+    // Pins the deliberate swallow: the marker landed on the live message (the source of
+    // truth for the in-flight turn), so a failed DB save must not trigger the storage
+    // fallback — that would double-place the marker on a DIFFERENT stored message.
+    const assistantMsg = makeAssistantMessage('assistant-db-fail');
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([assistantMsg], 'memory');
+
+    const { strategy, persistMessages, listMessages } = createHarness({ messageList });
+    persistMessages.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(strategy.testStreamMarker(marker)).resolves.toBeUndefined();
+
+    // Marker still on the live message, no storage-scan fallback attempted.
+    const liveAssistant = messageList.get.all.db().find(m => m.role === 'assistant');
+    expect(liveAssistant?.content.parts).toContainEqual(marker);
+    expect(listMessages).not.toHaveBeenCalled();
+  });
 });

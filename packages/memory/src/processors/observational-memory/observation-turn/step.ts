@@ -1,7 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
-import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
@@ -213,21 +212,41 @@ export class ObservationStep {
     // runs at step 0, but ONLY when observation is imminent, so buckets aren't drained on
     // turns where nothing will fire.
     const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
+    /** In-flight message ids the step-0 cleanup must never remove from live context. */
+    let step0PreserveIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
-      // Save messages from previous step (at step 0: persist pending input before observation
-      // so post-observation cleanup operates on stored state)
-      const newInput = messageList.clear.input.db();
-      const newOutput = messageList.clear.response.db();
-      const messagesToSave = [...newInput, ...newOutput];
-      if (messagesToSave.length > 0) {
-        await om.persistMessages(messagesToSave, threadId, resourceId);
-        for (const msg of messagesToSave) {
-          messageList.add(msg, 'memory');
+      if (this.stepNumber > 0) {
+        // Save messages from previous step
+        const newInput = messageList.clear.input.db();
+        const newOutput = messageList.clear.response.db();
+        const messagesToSave = [...newInput, ...newOutput];
+        if (messagesToSave.length > 0) {
+          await om.persistMessages(messagesToSave, threadId, resourceId);
+          for (const msg of messagesToSave) {
+            messageList.add(msg, 'memory');
+          }
         }
+      } else {
+        // Step 0: persist pending input WITHOUT draining the buckets. The input bucket is
+        // read downstream by consumers that only see single-step turns after this point —
+        // semantic recall embeds `messageList.get.input.db()` and the durable loop reads
+        // the first input message for task tracking — so draining here would silently
+        // starve them. Persisting alone is enough for post-observation cleanup to operate
+        // on stored state; persistMessages is an upsert, so the step > 0 drain re-saving
+        // these messages later is harmless.
+        const pending = [...messageList.get.input.db(), ...messageList.get.response.db()];
+        if (pending.length > 0) {
+          await om.persistMessages(pending, threadId, resourceId);
+        }
+        // The in-flight prompt was just observed, but the model still needs it to answer —
+        // protect it (and everything else pending) from cleanup by identity rather than
+        // relying on the token-based retention floor, which resolves to 0 for sync-only,
+        // resource-scope, and explicit `bufferActivation: 1` configs.
+        step0PreserveIds = pending.map(msg => msg.id).filter(Boolean);
       }
 
       // Step-0 observation: seed an empty assistant message under the active response id
-      // (after the persist drain so it isn't flushed empty). Lifecycle markers land on it
+      // (after the persist above so it isn't flushed empty). Lifecycle markers land on it
       // via streamMarker → persistMarkerToMessage (targets the last assistant message),
       // and the agent's real response streams into the same id afterwards — markers never
       // land on a user message (binding constraint from PR #16612 review).
@@ -255,20 +274,16 @@ export class ObservationStep {
           observed = true;
           didThresholdCleanup = true;
 
-          // Cleanup after observation
+          // Cleanup after observation. At step 0 the just-observed messages include the
+          // fresh prompt the model is about to answer — preserve the in-flight messages
+          // by identity (the token-based retention floor resolves to 0 for sync-only,
+          // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
+          // relied on to keep them). Step > 0 semantics are unchanged.
           const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
-          const configuredActivation = om.getObservationConfig().bufferActivation;
-          // At step 0 the just-observed messages include the fresh prompt the model is
-          // about to answer. Sync-only and resource-scope configs have no
-          // bufferActivation (retention floor 0), which would let cleanup remove that
-          // prompt entirely — fall back to the default activation ratio so the
-          // retention-floor backoff can keep it in context. Step > 0 semantics
-          // (`?? 1`, floor 0 for sync configs) are unchanged.
-          const activationForFloor =
-            this.stepNumber === 0
-              ? (configuredActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation ?? 1)
-              : (configuredActivation ?? 1);
-          const minRemaining = resolveRetentionFloor(activationForFloor, statusSnapshot.threshold);
+          const minRemaining = resolveRetentionFloor(
+            om.getObservationConfig().bufferActivation ?? 1,
+            statusSnapshot.threshold,
+          );
 
           await om.cleanupMessages({
             threadId,
@@ -276,6 +291,7 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
+            preserveMessageIds: step0PreserveIds,
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -367,23 +383,23 @@ export class ObservationStep {
     const { threadId, resourceId, messageList } = this.turn;
     const om = this.turn.om;
 
+    // Wait for any in-flight buffering to settle
+    await om.waitForBuffering(threadId, resourceId);
+
     // A step-0 seeded response message exists ONLY as a marker anchor in the live list.
     // It must never be part of the observation input: the sync strategy records
     // opts.messages ids as observed and seals the newest message — either would
     // seal/consume the active response message the agent is about to stream into.
-    const observableMessages = () =>
-      this.seededResponseMessage
-        ? messageList.get.all.db().filter(msg => msg.id !== this.turn.responseMessageId)
-        : messageList.get.all.db();
-
-    // Wait for any in-flight buffering to settle
-    await om.waitForBuffering(threadId, resourceId);
+    // (Nothing mutates the list between here and the observe call, so compute once.)
+    const observableMessages = this.seededResponseMessage
+      ? messageList.get.all.db().filter(msg => msg.id !== this.turn.responseMessageId)
+      : messageList.get.all.db();
 
     // Re-check status with fresh state
     const freshStatus = await om.getStatus({
       threadId,
       resourceId,
-      messages: observableMessages(),
+      messages: observableMessages,
     });
 
     if (!freshStatus.shouldObserve) {
@@ -395,7 +411,7 @@ export class ObservationStep {
       const activation = await om.activate({
         threadId,
         resourceId,
-        messages: observableMessages(),
+        messages: observableMessages,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
@@ -432,7 +448,7 @@ export class ObservationStep {
     const obsResult = await om.observe({
       threadId,
       resourceId,
-      messages: observableMessages(),
+      messages: observableMessages,
       messageList,
       trigger: 'turn-sync',
       requestContext: this.turn.requestContext,

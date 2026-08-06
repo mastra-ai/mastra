@@ -11129,17 +11129,36 @@ describe('Full Async Buffering Flow', () => {
 
     // Step 0: since #16523, sync observation already fires here when pending
     // tokens exceed the threshold — the messages are over-threshold from the start.
-    await step(0);
+    const listAfterStep0 = await step(0);
     await waitForAsyncOps();
+    const callsAfterStep0 = observerCalls.length;
+    expect(callsAfterStep0).toBeGreaterThan(0);
 
-    // Step 1: run another step; already-observed messages must not re-observe,
-    // but the blockAfter gate must not have silently disabled sync observation.
+    // Add FRESH over-threshold messages so step 1 has something unobserved to
+    // observe — otherwise step 0 (which now observes) leaves nothing behind and
+    // the step > 0 half of this regression guard would be unreachable.
+    const freshFiller = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 0; i < 20; i++) {
+      listAfterStep0.add(
+        {
+          id: `fresh-msg-${i}`,
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: `Fresh ${i}: ${freshFiller}` }] },
+          type: 'text',
+          createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+          threadId,
+          resourceId,
+        } as any,
+        'memory',
+      );
+    }
+
+    // Step 1: the blockAfter gate must not have silently disabled sync
+    // observation — the regression this test guards is `if (!blockAfter) return
+    // false` disabling ALL sync observation at step > 0.
     await step(1);
     await waitForAsyncOps();
-
-    // The regression this test guards: `if (!blockAfter) return false` disabled
-    // ALL sync observation. The observer MUST have fired (at step 0 or 1).
-    expect(observerCalls.length).toBeGreaterThan(0);
+    expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
 
     // Verify observations were actually persisted to the record
     const record = await storage.getObservationalMemory(threadId, resourceId);
