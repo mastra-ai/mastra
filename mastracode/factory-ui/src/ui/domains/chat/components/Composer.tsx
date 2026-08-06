@@ -311,7 +311,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   // the controller holds a message until the workspace is ready, so preparing sessions stay usable
   const disabled = status !== 'ready' && !preparingThreadId;
-  const attachDisabled = disabled;
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
@@ -392,7 +391,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                disabled={attachDisabled}
+                disabled={disabled}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach image"
               >
