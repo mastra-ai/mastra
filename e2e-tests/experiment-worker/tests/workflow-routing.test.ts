@@ -34,9 +34,10 @@ describe('experiment worker workflow routing', () => {
     expect(experimentWorkerE2eChanged(['packages/core/src/agent/index.ts'])).toBe(false);
   });
 
-  test('routes workflow_call booleans directly', () => {
-    expect(Boolean(true)).toBe(true);
-    expect(Boolean(false)).toBe(false);
+  test('routes the workflow_call experiments input directly to the experiments job', async () => {
+    const contents = await readFile(resolve(import.meta.dirname, '../../../.github/workflows/e2e-tests.yml'), 'utf8');
+    expect(contents).toContain('experiment_worker_e2e_changed:');
+    expect(contents).toContain('if: inputs.experiment_worker_e2e_changed');
   });
 
   test.each(['e2e-tests.yml', 'e2e-experiment-worker.yml'])(
