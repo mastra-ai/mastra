@@ -12,7 +12,7 @@ describe('Vitest suite selection', () => {
     const packageJson = JSON.parse(await readFile(resolve(import.meta.dirname, 'package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
-    for (const scriptName of ['test', 'test:pr', 'test:full', 'test:full:strict']) {
+    for (const scriptName of ['test', 'test:experiment', 'test:full', 'test:full:strict']) {
       expect(packageJson.scripts[scriptName]).not.toContain('.test.ts');
     }
   });

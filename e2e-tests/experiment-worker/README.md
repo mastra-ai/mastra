@@ -6,14 +6,14 @@ This suite validates the published, installed `mastra experiment build` contract
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm test:pr
+pnpm test:experiment
 pnpm test:full
 pnpm test:full:strict
 pnpm test:scenario -- minimal-agent
 pnpm test:workflow-routing
 ```
 
-`test:pr` is the deterministic credential-free pull-request gate. `test:full:strict` adds package-manager, workspace, browser, LSP, native dependency, Docker/Postgres, portability, and negative-boundary coverage. `test:scenario` selects one owning scenario, although registry publication and global setup still run.
+`test:experiment` is the deterministic credential-free experiment gate used on pull requests. `test:full:strict` adds package-manager, workspace, browser, LSP, native dependency, Docker/Postgres, portability, and negative-boundary coverage. `test:scenario` selects one owning scenario, although registry publication and global setup still run.
 
 ## Registry modes
 

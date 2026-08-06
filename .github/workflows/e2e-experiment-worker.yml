@@ -99,7 +99,7 @@ jobs:
         run: |
           mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
           set -o pipefail
-          pnpm test:pr 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
+          pnpm test:experiment 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
