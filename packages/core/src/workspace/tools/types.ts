@@ -301,6 +301,19 @@ export type WorkspaceToolsConfig = {
    * If the owning agent also defines hooks, workspace hooks run inside the agent hook wrapper.
    */
   hooks?: WorkspaceToolHooks;
+
+  /**
+   * Timeout, in milliseconds, for the per-file write lock that serializes the
+   * write tools (`write_file`, `edit_file`, `delete`, `ast_edit`). A write that
+   * does not complete within this window is rejected with a `write-lock timeout`
+   * error.
+   *
+   * Defaults to 30_000 (30s), which suits a local filesystem. Raise it for a
+   * remote or cold-starting sandbox filesystem, where the first write after the
+   * container comes up can legitimately take much longer. Leaving it `undefined`
+   * preserves the 30s default, so existing workspaces are unaffected.
+   */
+  writeLockTimeoutMs?: number;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
 } & {
