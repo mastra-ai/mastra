@@ -80,6 +80,7 @@ describe('runExperimentWorker', () => {
       stdin,
       stdout,
       stderr: new PassThrough(),
+      workerId: 'worker-1',
       createEventId: () => `event-${eventId++}`,
       now: () => new Date(fixedTimestamp),
       runExperiment: async (_mastra, config) => {
@@ -120,6 +121,12 @@ describe('runExperimentWorker', () => {
     expect(output).toBe(
       await readFile(new URL('./__fixtures__/protocol-v1-completed.ndjson', import.meta.url), 'utf8'),
     );
+    const frames = output
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line));
+    expect(frames.every(frame => frame.protocolVersion === '1')).toBe(true);
+    expect(frames[0].payload).toEqual({ workerId: 'worker-1', negotiatedProtocolVersion: '1' });
   });
 
   it.each([

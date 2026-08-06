@@ -2,4 +2,10 @@
 'mastra': patch
 ---
 
-Fixed experiment worker builds to disable worker-side persistence, resolve relative project roots, and produce reproducible manifests that safely handle pnpm symlinks while excluding installed dependencies.
+Fixed experiment workers to:
+
+- emit Platform-compatible protocol version metadata and accepted-event negotiation details
+- report a deterministic error when the customer `#mastra` module does not export `mastra`
+- install explicitly configured external dependencies that are loaded dynamically at runtime
+- disable worker-side persistence and resolve relative project roots
+- produce reproducible, relocatable manifests that exclude installed dependencies, temporary build metadata, source-machine paths, and symlinks that resolve outside the artifact
