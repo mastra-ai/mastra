@@ -85,6 +85,6 @@ export function useBoardIntake({
       (active === 'github' && issues.isPending) ||
       (active === 'github-prs' && pulls.isPending) ||
       (active === 'linear' && linearIssues.isPending),
-    isTriagePending: !review && triageIssues.isPending,
+    isTriagePending: !review && active === 'github' && triageIssues.isPending,
   };
 }

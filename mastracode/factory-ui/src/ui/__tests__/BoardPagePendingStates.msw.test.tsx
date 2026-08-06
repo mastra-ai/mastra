@@ -10,7 +10,7 @@ import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { GithubIssue } from '../domains/factory/services/factory';
 import type { LinearIssue } from '../domains/factory/services/linear';
 import { createAppRoutes } from '../router';
@@ -262,16 +262,18 @@ describe('Board card pending states', () => {
     );
 
     const user = userEvent.setup();
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
 
-    expect(await screen.findByText('Investigate GitHub intake failure')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Investigate GitHub intake failure')).toBeVisible();
     expect(screen.getByText('Persisted GitHub intake item')).toBeVisible();
     expect(screen.queryByText('Persisted Linear intake item')).not.toBeInTheDocument();
     expect(screen.getByText('Plan onboarding')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Linear' }));
 
-    expect(await screen.findByText('Fix Linear intake sync')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Fix Linear intake sync')).toBeVisible();
     expect(screen.getByText('Persisted Linear intake item')).toBeVisible();
     expect(screen.queryByText('Persisted GitHub intake item')).not.toBeInTheDocument();
     expect(screen.getByText('Plan onboarding')).toBeVisible();
