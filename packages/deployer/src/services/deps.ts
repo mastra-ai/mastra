@@ -8,7 +8,19 @@ import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
-type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
+export type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
+
+export type BundleLockfileName = 'package-lock.json' | 'pnpm-lock.yaml' | 'yarn.lock' | 'bun.lock';
+
+export type BundleDependencyInstallState = {
+  packageManager: PackageManager;
+  explicitLockfile?: {
+    sourcePath: string;
+    basename: BundleLockfileName;
+  };
+  frozen: boolean;
+  generateSecondaryNpmLockfile: boolean;
+};
 
 interface ArchitectureOptions {
   os?: string[];
@@ -105,7 +117,7 @@ export class Deps extends MastraBase {
     this.packageManager = this.getPackageManager();
   }
 
-  private findLockFile(dir: string): string | null {
+  public getLockFile(dir = this.rootDir): string | null {
     const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock'];
     for (const file of lockFiles) {
       if (fs.existsSync(path.join(dir, file))) {
@@ -114,13 +126,13 @@ export class Deps extends MastraBase {
     }
     const parentDir = path.resolve(dir, '..');
     if (parentDir !== dir) {
-      return this.findLockFile(parentDir);
+      return this.getLockFile(parentDir);
     }
     return null;
   }
 
-  private getPackageManager(): PackageManager {
-    const lockFile = this.findLockFile(this.rootDir);
+  public getPackageManager(): PackageManager {
+    const lockFile = this.getLockFile();
     switch (lockFile) {
       case 'pnpm-lock.yaml':
         return 'pnpm';
@@ -225,18 +237,18 @@ export class Deps extends MastraBase {
    * Depending on whether we want to install or add a package, this function returns the appropriate commands.
    * All package managers support both commands (e.g. npm install has an alias on "add")
    */
-  private getPackageManagerCommand(pm: PackageManager, type: 'install' | 'add'): string {
+  private getPackageManagerCommand(pm: PackageManager, type: 'install' | 'add', frozen = false): string {
     const cmd = type === 'install' ? 'install' : 'add';
 
     switch (pm) {
       case 'npm':
-        return `${cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
+        return `${frozen ? 'ci --force' : cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
-        return `${cmd}`;
+        return `${cmd}${frozen ? ' --frozen-lockfile' : ''}`;
       case 'pnpm':
-        return cmd === 'install' ? `${cmd} --loglevel=error` : `${cmd} --loglevel=error`;
+        return `${cmd}${frozen ? ' --frozen-lockfile' : ''} --loglevel=error`;
       case 'bun':
-        return cmd;
+        return `${cmd}${frozen ? ' --frozen-lockfile' : ''}`;
       default:
         return cmd;
     }
@@ -246,9 +258,15 @@ export class Deps extends MastraBase {
     dir = this.rootDir,
     architecture,
     pnpmOverrides,
-  }: { dir?: string; architecture?: ArchitectureOptions; pnpmOverrides?: Record<string, string> } = {}) {
-    const pm = this.packageManager;
-    const installCommand = this.getPackageManagerCommand(pm, 'install');
+    installState,
+  }: {
+    dir?: string;
+    architecture?: ArchitectureOptions;
+    pnpmOverrides?: Record<string, string>;
+    installState?: BundleDependencyInstallState;
+  } = {}) {
+    const pm = installState?.packageManager ?? this.packageManager;
+    const installCommand = this.getPackageManagerCommand(pm, 'install', installState?.frozen ?? false);
     let args: string[] = [];
 
     switch (pm) {
