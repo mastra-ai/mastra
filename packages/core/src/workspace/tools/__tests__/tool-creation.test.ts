@@ -480,4 +480,43 @@ describe('createWorkspaceTools', () => {
       expect(writeTool.needsApprovalFn).toBeUndefined();
     });
   });
+  describe('writeLockTimeoutMs', () => {
+    /** A filesystem whose writes never settle, so the lock timeout is what ends the call. */
+    function hangingWriteFilesystem(basePath: string) {
+      const filesystem = new LocalFilesystem({ basePath });
+      filesystem.writeFile = () => new Promise<never>(() => {});
+      return filesystem;
+    }
+
+    it('bounds a hung write by the configured timeout', async () => {
+      const workspace = new Workspace({
+        filesystem: hangingWriteFilesystem(tempDir),
+        tools: { writeLockTimeoutMs: 50 },
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      await expect(
+        tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({ path: 'hangs.txt', content: 'x' }, { workspace }),
+      ).rejects.toThrow('write-lock timeout on "hangs.txt" after 50ms');
+    });
+
+    it('falls back to the 30s default when unset', async () => {
+      const workspace = new Workspace({
+        filesystem: hangingWriteFilesystem(tempDir),
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      const write = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+        { path: 'hangs.txt', content: 'x' },
+        { workspace },
+      );
+      // Still pending well past the configured-timeout case above: the default
+      // is what is in force, not a value inherited from another test.
+      const settled = await Promise.race([
+        write.then(() => 'settled').catch(() => 'settled'),
+        new Promise<string>(resolve => setTimeout(() => resolve('pending'), 200)),
+      ]);
+      expect(settled).toBe('pending');
+    });
+  });
 });
