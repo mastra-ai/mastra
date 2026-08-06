@@ -8,6 +8,9 @@ import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 const UNPUBLISHED_REFERENCES_MESSAGE =
   'Unable to use unpublished referenced prompt blocks: {ids}. Publish these prompt blocks and try again.';
 
+/**
+ * Returns structured instruction blocks when the supplied value is an array.
+ */
 function getInstructionBlocks(instructions: unknown): AgentInstructionBlock[] | undefined {
   if (!Array.isArray(instructions)) {
     return undefined;
@@ -16,6 +19,9 @@ function getInstructionBlocks(instructions: unknown): AgentInstructionBlock[] | 
   return instructions as AgentInstructionBlock[];
 }
 
+/**
+ * Rejects agent instructions that reference unresolved or unpublished prompt blocks.
+ */
 export async function validateAgentInstructionReferences({
   instructions,
   mastra,

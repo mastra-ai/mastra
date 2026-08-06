@@ -10,6 +10,9 @@ export type UnresolvedPromptBlock = {
 
 export type RuntimeEmptyResult = { type: 'empty' } | { type: 'published' } | { type: 'unknown'; ids: string[] };
 
+/**
+ * Determines whether instruction blocks would produce runtime content.
+ */
 export function instructionsResolveEmptyDueToDrafts(
   blocks: InstructionBlock[] | undefined,
   publicationStatuses: ReadonlyMap<string, PromptBlockPublicationStatus>,
@@ -44,6 +47,9 @@ export function instructionsResolveEmptyDueToDrafts(
   return { type: 'published' };
 }
 
+/**
+ * Formats an error for prompt block references that cannot be resolved.
+ */
 export function formatUnresolvedPromptBlocksMessage(blocks: UnresolvedPromptBlock[]): string {
   const labels = blocks.map(block => (block.name ? `"${block.name}" (${block.id})` : block.id)).join(', ');
 
@@ -53,10 +59,16 @@ export function formatUnresolvedPromptBlocksMessage(blocks: UnresolvedPromptBloc
 export const EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE =
   'This agent only references unpublished prompt blocks, so it would run with an empty prompt. Publish the referenced prompt blocks or add inline instructions before continuing.';
 
+/**
+ * Formats an error for referenced prompt blocks that are not published.
+ */
 export function formatUnpublishedPromptBlocksMessage(ids: string[]): string {
   return `Unable to use unpublished referenced prompt block${ids.length === 1 ? '' : 's'}: ${ids.join(', ')}. Publish these prompt blocks and try again.`;
 }
 
+/**
+ * Formats an error when referenced prompt block publication status is unavailable.
+ */
 export function formatUnknownPromptBlocksMessage(ids: string[]): string {
   const labels = ids.join(', ');
   return `Unable to verify publication status for prompt block${ids.length === 1 ? '' : 's'}: ${labels}. The block may have been deleted or is temporarily unavailable. Please check and try again.`;
