@@ -1,6 +1,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -44,6 +45,7 @@ import type {
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubIssueTriageInput, GithubIssueTriageResult } from '../../github/issue-triage.js';
 import { runGithubIssueTriage } from '../../github/issue-triage.js';
 import { buildGithubRoutes } from '../../github/routes.js';
@@ -55,6 +57,7 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -692,11 +695,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     );
   }
 
-  workers(ctx: IntegrationContext): PlatformGithubEventWorker[] {
+  workers(ctx: IntegrationContext): MastraWorker[] {
     if (!this.#pollingEnabled && !this.#reconcileEnabled) return [];
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
+    const issues = this.#reconcileEnabled ? attachGithubIssueReconciler(this, ctx) : undefined;
     return [
       new PlatformGithubEventWorker({
         client: this.#client,
@@ -710,6 +714,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
       }),
+      ...(issues
+        ? [
+            new IssueReconcileWorker({
+              integrationId: this.id,
+              reconcile: issues,
+              ...(this.#pollingIntervalMs ? { intervalMs: this.#pollingIntervalMs } : {}),
+            }),
+          ]
+        : []),
     ];
   }
 
