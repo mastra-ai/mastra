@@ -115,20 +115,27 @@ describe('TracesListView — status column', () => {
     expect(statuses).toEqual(['ERR', 'OK', 'RUN']);
   });
 
-  it('prefers the computed status over attributes.status', () => {
+  it('renders a dash when a row carries no status', () => {
+    render(<TracesListView traces={[makeTrace({ traceId: 'trace-unknown' })]} onTraceClick={vi.fn()} />);
+
+    const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
+    expect(statuses).toEqual(['-']);
+  });
+});
+
+describe('TracesListView — entity column', () => {
+  it('names the entity from entityName, falling back to entityId', () => {
     render(
       <TracesListView
         traces={[
-          makeTrace({
-            traceId: 'trace-workflow',
-            status: 'error',
-            attributes: { status: 'completed' },
-          }),
+          makeTrace({ traceId: 'trace-named', entityType: 'agent', entityName: 'weatherAgent' }),
+          makeTrace({ traceId: 'trace-unnamed', entityType: 'agent', entityId: 'agent-42' }),
         ]}
         onTraceClick={vi.fn()}
       />,
     );
 
-    expect(screen.getByText('ERR')).not.toBeNull();
+    expect(screen.getByText('weatherAgent')).not.toBeNull();
+    expect(screen.getByText('agent-42')).not.toBeNull();
   });
 });
