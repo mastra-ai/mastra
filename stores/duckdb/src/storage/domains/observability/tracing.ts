@@ -260,7 +260,7 @@ function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpa
     ...record,
     status: computeTraceStatus(record),
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
-    inputPreview: buildInputPreview(row.input) ?? null,
+    inputPreview: buildInputPreview(row.input),
   };
 }
 

@@ -561,20 +561,23 @@ export const lightSpanRecordSchema = z
     error: errorField.nullish(),
 
     // Computed status, so trace lists can render their status column.
-    // Nullish so rows from stores/APIs that predate the field still validate.
-    status: traceStatusField.nullish(),
+    // Nullable AND optional: rows from stores/APIs that predate the field
+    // may omit it entirely, and they must still validate.
+    status: traceStatusField.nullable().optional(),
 
     // Entity context (needed by TraceKeysAndValues on root span)
     entityType: spanContextFields.entityType,
     entityId: spanContextFields.entityId,
     entityName: spanContextFields.entityName,
 
-    // Span metadata, so user-configured metadata columns can render on the light list
-    metadata: metadataField.nullish(),
+    // Span metadata, so user-configured metadata columns can render on the light list.
+    // Nullable and optional for rows that predate the field.
+    metadata: metadataField.nullable().optional(),
 
     // Short text preview of `input`, so trace lists can render their preview column
-    // without transferring the whole prompt. See `buildInputPreview`.
-    inputPreview: inputPreviewField.nullish(),
+    // without transferring the whole prompt. See `buildInputPreview`. Nullable and
+    // optional for rows that predate the field.
+    inputPreview: inputPreviewField.nullable().optional(),
 
     // Database timestamps
     ...dbTimestamps,
