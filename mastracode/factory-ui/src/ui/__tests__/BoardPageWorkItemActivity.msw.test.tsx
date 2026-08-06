@@ -347,7 +347,8 @@ describe('Board work-item activity', () => {
       ),
     );
     const user = userEvent.setup();
-    const { router } = renderBoard('work');
+    const { router, client } = renderBoard('work');
+    await waitForMutationsIdle(client);
 
     await screen.findByText('Authored issue');
     await user.click(screen.getByRole('combobox'));
@@ -393,7 +394,8 @@ describe('Board work-item activity', () => {
       ),
     );
 
-    renderBoard('work', '?teammate=github%3Aoctocat&relevance=assigned');
+    const { client } = renderBoard('work', '?teammate=github%3Aoctocat&relevance=assigned');
+    await waitForMutationsIdle(client);
 
     expect(await screen.findByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
@@ -445,7 +447,8 @@ describe('Board work-item activity', () => {
       ),
     );
     const user = userEvent.setup();
-    renderBoard('work');
+    const { client } = renderBoard('work');
+    await waitForMutationsIdle(client);
 
     await screen.findByText('Linear planning item');
     await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
@@ -464,7 +467,8 @@ describe('Board work-item activity', () => {
       ),
     );
 
-    renderBoard('work', '?teammate=github%3Anobody');
+    const { client } = renderBoard('work', '?teammate=github%3Anobody');
+    await waitForMutationsIdle(client);
 
     expect(await screen.findByText('No work items match filters')).toBeInTheDocument();
     expect(screen.queryByLabelText(/visible board tasks in Intake/)).not.toBeInTheDocument();
@@ -500,7 +504,8 @@ describe('Board work-item activity', () => {
       ),
     );
     const user = userEvent.setup();
-    renderBoard('review');
+    const { client } = renderBoard('review');
+    await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
     await user.click(screen.getByRole('combobox'));
@@ -536,7 +541,8 @@ describe('Board work-item activity', () => {
       ),
     );
 
-    renderBoard('review', '?teammate=github%3Anobody');
+    const { client } = renderBoard('review', '?teammate=github%3Anobody');
+    await waitForMutationsIdle(client);
 
     expect(await screen.findByText('No pull requests match filters')).toBeInTheDocument();
   });
