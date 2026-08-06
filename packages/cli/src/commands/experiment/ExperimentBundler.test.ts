@@ -189,14 +189,15 @@ describe('ExperimentBundler', () => {
     expect(secondManifest.artifact.contentDigest).toBe(firstManifest.artifact.contentDigest);
   });
 
-  it('hashes symlink targets outside excluded directories without traversing them', async () => {
+  it('hashes relative symlink targets outside excluded directories without traversing them', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');
-    const linkedDirectory = await createTemporaryDirectory('mastra-experiment-linked-directory-');
+    const linkedDirectory = join(output, 'linked-directory-target');
+    await mkdir(linkedDirectory);
     await writeFile(join(output, 'index.mjs'), '');
     await writeFile(join(output, 'package.json'), '{}');
     await writeFile(join(linkedDirectory, 'nested.txt'), 'not traversed');
-    await symlink(linkedDirectory, join(output, 'linked-directory'));
+    await symlink('linked-directory-target', join(output, 'linked-directory'));
 
     await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
 
@@ -204,10 +205,23 @@ describe('ExperimentBundler', () => {
     expect(manifest.files).toContainEqual({
       path: 'linked-directory',
       type: 'symlink',
-      target: linkedDirectory,
-      sha256: createHash('sha256').update(linkedDirectory).digest('hex'),
+      target: 'linked-directory-target',
+      sha256: createHash('sha256').update('linked-directory-target').digest('hex'),
     });
-    expect(manifest.files).not.toContainEqual(expect.objectContaining({ path: 'linked-directory/nested.txt' }));
+    expect(manifest.files).toContainEqual(expect.objectContaining({ path: 'linked-directory-target/nested.txt' }));
+  });
+
+  it('rejects absolute symlink targets in relocatable artifacts', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const linkedDirectory = await createTemporaryDirectory('mastra-experiment-linked-directory-');
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await symlink(linkedDirectory, join(output, 'linked-directory'));
+
+    await expect(new ExperimentBundler().writeArtifactManifest(output, '1.2.3')).rejects.toThrow(
+      'Experiment worker artifacts cannot contain absolute symlinks: linked-directory',
+    );
   });
 
   it('excludes only the root artifact manifest from digests', async () => {

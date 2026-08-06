@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile, readlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export interface ExperimentWorkerManifest {
   artifactVersion: 1;
@@ -40,7 +40,11 @@ export async function inspectManifest(artifactRoot: string) {
     if (file.path === 'experiment-worker-manifest.json' || file.path.startsWith('node_modules/')) {
       throw new Error(`Manifest contains excluded path ${file.path}`);
     }
-    const absolutePath = join(artifactRoot, file.path);
+    const absolutePath = resolve(artifactRoot, file.path);
+    const artifactRelativePath = relative(resolve(artifactRoot), absolutePath);
+    if (isAbsolute(file.path) || artifactRelativePath === '..' || artifactRelativePath.startsWith(`..${sep}`)) {
+      throw new Error(`Manifest path escapes artifact root: ${file.path}`);
+    }
     const stats = await lstat(absolutePath);
     const digest = stats.isSymbolicLink() ? sha256(await readlink(absolutePath)) : sha256(await readFile(absolutePath));
     if (digest !== file.sha256) throw new Error(`Manifest digest mismatch for ${file.path}`);

@@ -30,18 +30,24 @@ export async function runCommand(
   child.stdin.end(options.stdin);
 
   let timedOut = false;
+  let forceKillTimeout: NodeJS.Timeout | undefined;
   const timeout = setTimeout(() => {
     timedOut = true;
     killProcessGroup(child.pid);
+    forceKillTimeout = setTimeout(() => killProcessGroup(child.pid, 'SIGKILL'), 5_000);
+    forceKillTimeout.unref();
   }, options.timeoutMs ?? 90_000);
   timeout.unref();
 
   const { exitCode, signal } = await new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>(
-    resolve => {
+    (resolve, reject) => {
+      child.once('error', reject);
       child.once('close', (exitCode, signal) => resolve({ exitCode, signal }));
     },
-  );
-  clearTimeout(timeout);
+  ).finally(() => {
+    clearTimeout(timeout);
+    if (forceKillTimeout) clearTimeout(forceKillTimeout);
+  });
 
   return {
     command: [command, ...args],

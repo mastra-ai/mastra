@@ -1,5 +1,5 @@
 import { cp, lstat, mkdir, readFile, readlink, readdir, rm } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 function pathVariants(path: string) {
   const posix = path.replaceAll('\\', '/');
@@ -34,8 +34,10 @@ async function assertNoSourceReferences(root: string, sourceRoots: string[]) {
       }
       if (stats.isSymbolicLink()) {
         const target = await readlink(path);
-        if (needles.some(needle => target.includes(needle)))
+        const resolvedTarget = resolve(dirname(path), target);
+        if (needles.some(needle => target.includes(needle) || resolvedTarget.includes(needle))) {
           throw new Error(`Source path found in symlink ${relativePath}`);
+        }
         continue;
       }
       const content = await readFile(path);

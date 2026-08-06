@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { lstat, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
@@ -201,6 +201,9 @@ async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
         });
       } else if (stats.isSymbolicLink()) {
         const target = await readlink(fullPath);
+        if (isAbsolute(target)) {
+          throw new Error(`Experiment worker artifacts cannot contain absolute symlinks: ${artifactPath}`);
+        }
         files.push({
           path: artifactPath,
           type: 'symlink',

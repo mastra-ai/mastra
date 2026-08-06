@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: [
+      'helpers/command.test.ts',
+      'helpers/copy-artifact.test.ts',
       'tests/assertion-evidence-drift.test.ts',
       'tests/workflow-routing.test.ts',
       'tests/materialize-project.test.ts',
