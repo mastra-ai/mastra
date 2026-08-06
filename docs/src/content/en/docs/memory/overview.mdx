@@ -9,6 +9,7 @@ packages:
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import MemoryContextWindowImage from "@site/src/components/MemoryContextWindowImage";
 
 # Memory
 
@@ -167,9 +168,23 @@ export const memoryAgent = new Agent({
 
 See [Observational Memory](../memory/observational-memory) for details on how observations and reflections work, and [the reference](/reference/memory/observational-memory) for all configuration options.
 
+## What the model sees
+
+Each memory feature is added to either the system messages or the conversation messages in the request sent to the model. The layers depend on the features you've enabled. Working memory and semantic recall only appear when configured. The same applies to Observational Memory, while message history is on by default. The diagram shows where each enabled layer is placed in the request. The list below describes what each layer contributes:
+
+<MemoryContextWindowImage />
+
+- [Working memory](../memory/working-memory) is injected as a system message containing the template and the stored data. With `useStateSignals`, it's delivered as a state signal instead.
+- [Semantic recall](../memory/semantic-recall) matches from the current thread are inserted as regular messages and interleave with message history by timestamp. Matches from other threads are formatted into a system message instead.
+- [Message history](../memory/message-history) adds the last N messages in chronological order. Your new message always comes last.
+- [Observational Memory](../memory/observational-memory) replaces old raw history: reflections and observations live in a system message, and only messages that haven't been observed yet remain in the conversation. A short continuation reminder is placed at the start of the conversation messages.
+- Context messages are the optional `context` array passed on a call, for example `agent.generate(msg, { context: [...] })`. Use them for one-off background such as app state or your own RAG results. They appear as regular conversation messages for that request only and are never saved to memory.
+
+Conversation messages are ordered by timestamp and deduplicated by message ID, so recalled older messages appear before recent history. Context messages passed at call time are stamped with the current time, which places them after history and recall but before your new message. To inspect the exact context for a real request, use [Tracing](/docs/observability/tracing/overview) and open the LLM call spans, see [Observability](#observability) below.
+
 ## Memory in multi-agent systems
 
-When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
+When a [supervisor agent](/docs/capabilities/subagents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
 
 ### How delegation scopes memory
 
@@ -185,7 +200,7 @@ Title generation (`generateTitle`) is a top-level thread concern and **isn't** a
 
 :::
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved, the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved, the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/capabilities/subagents#message-filtering) callback.
 
 :::note
 

@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/di';
 import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
 import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -304,6 +305,34 @@ describe('Span Filtering', () => {
       expect((chunk as any).requestContext).toBeUndefined();
       // attributes shape is kept stable for live-span readers.
       expect((chunk as any).attributes).toEqual({});
+
+      parent.end();
+    });
+
+    it('should not read requestContext on excluded span types', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      const sizeSpy = vi.spyOn(requestContext, 'size');
+      const serializeSpy = vi.spyOn(requestContext, 'serializeForSpan');
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+        requestContext,
+      });
+
+      expect(sizeSpy).not.toHaveBeenCalled();
+      expect(serializeSpy).not.toHaveBeenCalled();
+      expect(chunk.requestContext).toBeUndefined();
 
       parent.end();
     });
@@ -637,12 +666,13 @@ describe('Span Filtering', () => {
           attributes: {
             provider: 'mock-provider',
             model: 'mock-model-id',
+            responseModel: '   ',
           },
         });
         // end() only passes responseModel + usage (not provider/model)
         modelSpan.end({
           attributes: {
-            responseModel: 'mock-model-id',
+            responseModel: '',
             usage: { inputTokens: 20, outputTokens: 15 },
           },
         });
@@ -722,6 +752,7 @@ describe('Span Filtering', () => {
         attributes: {
           provider: 'mock-provider',
           model: 'mock-model-id',
+          responseModel: '   ',
           usage: { inputTokens: 50, outputTokens: 10 },
         },
       });

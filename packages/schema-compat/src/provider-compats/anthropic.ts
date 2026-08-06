@@ -1,4 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
@@ -27,6 +27,54 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
   getSchemaTarget(): Targets | undefined {
     return 'jsonSchema7';
+  }
+
+  override processToJSONSchema(schema: PublicSchema<any>, io: 'input' | 'output' = 'input'): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(schema, io);
+    const union = jsonSchema.anyOf ?? jsonSchema.oneOf;
+
+    if (io !== 'input' || !Array.isArray(union)) {
+      return jsonSchema;
+    }
+
+    const objectSchemas = union.filter(
+      (subSchema): subSchema is JSONSchema7 =>
+        typeof subSchema === 'object' && subSchema !== null && subSchema.type === 'object',
+    );
+
+    if (objectSchemas.length === 0 || objectSchemas.length !== union.length) {
+      return jsonSchema;
+    }
+
+    delete jsonSchema.anyOf;
+    delete jsonSchema.oneOf;
+    jsonSchema.type = 'object';
+
+    // Merge branch properties. When the same key appears in multiple branches with
+    // differing schemas, preserve every variant via a property-level anyOf instead
+    // of letting later branches overwrite earlier ones.
+    const mergedProperties: Record<string, JSONSchema7Definition[]> = {};
+    for (const subSchema of objectSchemas) {
+      for (const [key, propSchema] of Object.entries(subSchema.properties ?? {})) {
+        const variants = (mergedProperties[key] ??= []);
+        if (!variants.some(existing => JSON.stringify(existing) === JSON.stringify(propSchema))) {
+          variants.push(propSchema);
+        }
+      }
+    }
+    jsonSchema.properties = Object.fromEntries(
+      Object.entries(mergedProperties).map(([key, variants]) => [
+        key,
+        variants.length === 1 ? variants[0]! : { anyOf: variants },
+      ]),
+    );
+
+    jsonSchema.required = objectSchemas
+      .map(subSchema => subSchema.required ?? [])
+      .reduce((required, branchRequired) => required.filter(key => branchRequired.includes(key)));
+    jsonSchema.additionalProperties = false;
+
+    return jsonSchema;
   }
 
   shouldApply(): boolean {

@@ -18,7 +18,11 @@ import type { BundlerPlatform } from '../build/utils';
 import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { getWorkspaceInformation } from './workspaceDependencies';
+import {
+  collectTransitiveWorkspaceDependencies,
+  getWorkspaceInformation,
+  packWorkspaceDependencies,
+} from './workspaceDependencies';
 
 export type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 export type { BundlerPlatform } from '../build/utils';
@@ -379,11 +383,15 @@ export abstract class Bundler extends MastraBundler {
     );
   }
 
-  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+  protected async installDependencies(
+    outputDirectory: string,
+    rootDir = process.cwd(),
+    pnpmOverrides?: Record<string, string>,
+  ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    await deps.install({ dir: join(outputDirectory, this.outputDir) });
+    await deps.install({ dir: join(outputDirectory, this.outputDir), pnpmOverrides });
   }
 
   /**
@@ -644,8 +652,41 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
     }
 
+    const initialWorkspaceDependencies = new Set<string>();
+    for (const dep of analyzedBundleInfo.dependencies.keys()) {
+      const pkgName = getPackageName(dep);
+      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
+        initialWorkspaceDependencies.add(pkgName);
+      }
+    }
+
+    const transitiveWorkspaceDependencies = collectTransitiveWorkspaceDependencies({
+      workspaceMap: analyzedBundleInfo.workspaceMap,
+      initialDependencies: initialWorkspaceDependencies,
+      logger: this.logger,
+    });
+
+    for (const [dep, packageSpec] of Object.entries(transitiveWorkspaceDependencies.resolutions)) {
+      dependenciesToInstall.set(dep, {
+        version: analyzedBundleInfo.workspaceMap.get(dep)?.version,
+        packageSpec,
+      });
+    }
+
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+      await this.writePackageJson(
+        join(outputDirectory, this.outputDir),
+        dependenciesToInstall,
+        transitiveWorkspaceDependencies.resolutions,
+      );
+      if (transitiveWorkspaceDependencies.usedWorkspacePackages.size > 0) {
+        await packWorkspaceDependencies({
+          workspaceMap: analyzedBundleInfo.workspaceMap,
+          usedWorkspacePackages: transitiveWorkspaceDependencies.usedWorkspacePackages,
+          bundleOutputDir: join(outputDirectory, this.outputDir),
+          logger: this.logger,
+        });
+      }
 
       this.logger.info('Bundling Mastra application');
 
@@ -717,12 +758,18 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Done copying .npmrc file');
 
       this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory, projectRoot);
+      await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
       this.logger.info('Done installing dependencies');
 
-      this.logger.info('Generating package-lock.json for deploy');
-      await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
-      this.logger.info('Done generating package-lock.json');
+      if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
+        this.logger.info('Generating package-lock.json for deploy');
+        await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+        this.logger.info('Done generating package-lock.json');
+      } else {
+        this.logger.warn(
+          'Skipping package-lock.json generation because the output contains packed workspace dependencies',
+        );
+      }
     } catch (error) {
       if (error instanceof MastraError && error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING') {
         throw error;

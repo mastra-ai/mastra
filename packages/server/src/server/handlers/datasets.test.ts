@@ -1,14 +1,20 @@
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { listExperimentsQuerySchema, triggerExperimentBodySchema } from '../schemas/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
   DELETE_DATASET_ROUTE,
   GET_DATASET_ROUTE,
   GET_ITEM_ROUTE,
+  GET_ITEM_VERSION_ROUTE,
+  LIST_ALL_EXPERIMENTS_ROUTE,
   LIST_DATASETS_ROUTE,
+  LIST_EXPERIMENTS_ROUTE,
+  LIST_ITEM_VERSIONS_ROUTE,
+  TRIGGER_EXPERIMENT_ROUTE,
   UPDATE_DATASET_ROUTE,
   UPDATE_ITEM_ROUTE,
 } from './datasets';
@@ -25,6 +31,105 @@ describe('Datasets Handlers', () => {
     mastra = new Mastra({
       logger: false,
       storage: mockStorage,
+    });
+  });
+
+  describe('Experiment routes', () => {
+    const grouping = {
+      experimentSetId: 'set-1',
+      comparisonId: 'comparison-1',
+      variantId: 'variant-1',
+      trialIndex: 0,
+    };
+
+    it('forwards grouping filters when listing all experiments', async () => {
+      const experimentsStore = await mockStorage.getStore('experiments');
+      const listExperiments = vi.spyOn(experimentsStore!, 'listExperiments');
+
+      await LIST_ALL_EXPERIMENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        page: 2,
+        perPage: 15,
+        ...grouping,
+      } as any);
+
+      expect(listExperiments).toHaveBeenCalledWith({
+        ...grouping,
+        pagination: { page: 2, perPage: 15 },
+      });
+    });
+
+    it('forwards grouping filters when listing dataset experiments', async () => {
+      const listExperiments = vi.fn().mockResolvedValue({
+        experiments: [],
+        pagination: { total: 0, page: 1, perPage: 12, hasMore: false },
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ listExperiments } as any);
+
+      await LIST_EXPERIMENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: 'dataset-1',
+        page: 1,
+        perPage: 12,
+        ...grouping,
+      } as any);
+
+      expect(listExperiments).toHaveBeenCalledWith({ page: 1, perPage: 12, ...grouping });
+    });
+
+    it('forwards provenance and grouping when triggering an experiment', async () => {
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 3,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+      const provenance = {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+        metadata: { pullRequest: 20645 },
+      };
+
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: 'dataset-1',
+        targetType: 'agent',
+        targetId: 'agent-1',
+        provenance,
+        grouping,
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          provenance,
+          grouping,
+        }),
+      );
+    });
+
+    it('accepts trial index 0', () => {
+      expect(listExperimentsQuerySchema.safeParse({ trialIndex: 0 }).success).toBe(true);
+      expect(
+        triggerExperimentBodySchema.safeParse({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          grouping: { trialIndex: 0 },
+        }).success,
+      ).toBe(true);
+    });
+
+    it.each([-1, 1.5])('rejects invalid trial index %s', trialIndex => {
+      expect(listExperimentsQuerySchema.safeParse({ trialIndex }).success).toBe(false);
+      expect(
+        triggerExperimentBodySchema.safeParse({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          grouping: { trialIndex },
+        }).success,
+      ).toBe(false);
     });
   });
 
@@ -471,7 +576,7 @@ describe('Datasets Handlers', () => {
   });
 
   describe('item tool mocks', () => {
-    it('round-trips toolMocks through add, get, and update', async () => {
+    it('round-trips toolMocks and unmockedToolPolicy through add, get, and update', async () => {
       const dataset = await mastra.datasets.create({ name: 'Mocks DS' });
       const toolMocks = [
         { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
@@ -483,9 +588,11 @@ describe('Datasets Handlers', () => {
         datasetId: dataset.id,
         input: { q: 'weather' },
         toolMocks,
+        unmockedToolPolicy: 'deny',
       } as any)) as any;
 
       expect(added.toolMocks).toEqual(toolMocks);
+      expect(added.unmockedToolPolicy).toBe('deny');
 
       const fetched = (await GET_ITEM_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -494,8 +601,9 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
 
       expect(fetched.toolMocks).toEqual(toolMocks);
+      expect(fetched.unmockedToolPolicy).toBe('deny');
 
-      // SCD-2: updating an unrelated field preserves toolMocks
+      // SCD-2: updating an unrelated field preserves tool mock settings
       const updated = (await UPDATE_ITEM_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         datasetId: dataset.id,
@@ -504,6 +612,122 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
 
       expect(updated.toolMocks).toEqual(toolMocks);
+      expect(updated.unmockedToolPolicy).toBe('deny');
+
+      const replaced = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        unmockedToolPolicy: 'allow',
+      } as any)) as any;
+
+      expect(replaced.unmockedToolPolicy).toBe('allow');
+    });
+
+    it('forwards unmockedToolPolicy through batch insertion', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Batch Policy DS' });
+
+      const batch = (await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ input: { q: 'strict' }, unmockedToolPolicy: 'deny' }, { input: { q: 'default' } }],
+      } as any)) as any;
+
+      expect(batch.items[0]?.unmockedToolPolicy).toBe('deny');
+      expect(batch.items[1]?.unmockedToolPolicy).toBeUndefined();
+
+      const fetched = (await GET_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: batch.items[0].id,
+      } as any)) as any;
+
+      expect(fetched.unmockedToolPolicy).toBe('deny');
+    });
+  });
+
+  describe('item scorer IDs', () => {
+    it('round-trips scorerIds through single, batch, update, and version routes', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Scorer IDs DS' });
+      const added = (await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'score me' },
+        scorerIds: ['quality', 'safety'],
+      } as any)) as any;
+      expect(added.scorerIds).toEqual(['quality', 'safety']);
+
+      const fetched = (await GET_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+      } as any)) as any;
+      expect(fetched.scorerIds).toEqual(['quality', 'safety']);
+
+      const preserved = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        input: { q: 'updated' },
+      } as any)) as any;
+      expect(preserved.scorerIds).toEqual(['quality', 'safety']);
+
+      const replaced = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        scorerIds: ['relevance'],
+      } as any)) as any;
+      expect(replaced.scorerIds).toEqual(['relevance']);
+
+      const disabled = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        scorerIds: [],
+      } as any)) as any;
+      expect(disabled.scorerIds).toEqual([]);
+
+      const cleared = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        scorerIds: null,
+      } as any)) as any;
+      expect(cleared.scorerIds).toBeUndefined();
+
+      const history = (await LIST_ITEM_VERSIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+      } as any)) as any;
+      expect(history.history.find((row: any) => row.datasetVersion === 1)?.scorerIds).toEqual(['quality', 'safety']);
+      expect(history.history.find((row: any) => row.datasetVersion === 2)?.scorerIds).toEqual(['quality', 'safety']);
+      expect(history.history.find((row: any) => row.datasetVersion === 3)?.scorerIds).toEqual(['relevance']);
+      expect(history.history.find((row: any) => row.datasetVersion === 4)?.scorerIds).toEqual([]);
+      expect(history.history.find((row: any) => row.datasetVersion === 5)?.scorerIds).toBeUndefined();
+
+      const versionOne = (await GET_ITEM_VERSION_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        datasetVersion: 1,
+      } as any)) as any;
+      expect(versionOne.scorerIds).toEqual(['quality', 'safety']);
+
+      const batch = (await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [
+          { input: { q: 'selected' }, scorerIds: ['quality'] },
+          { input: { q: 'disabled' }, scorerIds: [] },
+          { input: { q: 'inherited' } },
+        ],
+      } as any)) as any;
+      const byInput = new Map(batch.items.map((item: any) => [item.input.q, item]));
+      expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
+      expect(byInput.get('disabled')?.scorerIds).toEqual([]);
+      expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
     });
   });
 });

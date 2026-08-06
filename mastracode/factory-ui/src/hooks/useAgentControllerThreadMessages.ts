@@ -73,6 +73,10 @@ export function useAgentControllerThreadMessages({
     queryFn: () => session!.listMessages(threadId!, limit),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
+    // Live stream only reaches a mounted transcript — re-entering the route must
+    // re-read the window, not serve the snapshot from when it was first opened.
+    staleTime: 0,
+    refetchOnMount: 'always',
     // Growing the limit changes the query key, which would otherwise flip the
     // query back to `pending` and blank the transcript to a skeleton on every
     // load-more. That blank also collapses the scroll container to the top,

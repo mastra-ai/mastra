@@ -101,6 +101,7 @@ export type ScenarioName =
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
   | 'notification-signal-rendering'
+  | 'notify-input-request-hook'
   | 'om-settings'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
