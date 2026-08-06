@@ -118,3 +118,36 @@ export function notify(state: TUIState, reason: NotificationReason, message?: st
     hookManager: state.hookManager,
   });
 }
+
+/**
+ * Fire the notification for an input-request event the moment it is received,
+ * before the event enters the TUI's serialized dispatch queue. A pending prompt
+ * blocks that queue until the user answers, so any notify call living inside a
+ * queued handler is starved exactly when the user has walked away. This helper
+ * runs synchronously in the controller subscription listener instead.
+ *
+ * Non-input-request events are a no-op. Never throws: a notification failure
+ * must not break event delivery.
+ */
+export function notifyForInputRequest(state: TUIState, event: any): void {
+  try {
+    if (event?.type === 'tool_approval_required') {
+      notify(state, 'tool_approval', `Approve ${event.toolName}?`);
+      return;
+    }
+    if (event?.type === 'tool_suspended') {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      // Sandbox check first, mirroring the dispatch routing order.
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        notify(state, 'sandbox_access', `Sandbox access requested: ${String(payload.path ?? '')}`);
+      } else if (event.toolName === 'ask_user') {
+        notify(state, 'ask_question', String(payload.question ?? ''));
+      } else if (event.toolName === 'submit_plan') {
+        notify(state, 'plan_approval', 'Plan requires your approval');
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[notify error] ${msg}\n`);
+  }
+}
