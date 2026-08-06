@@ -62,11 +62,15 @@ describe('issue reconciler worker wiring', () => {
     expect(platform.workers(context()).map(worker => worker.name)).toContain('github-issue-reconcile');
   });
 
-  it('registers Linear issue reconciliation in direct and Platform modes', () => {
+  it('registers direct Linear issue reconciliation as a standalone worker', () => {
     const direct = new LinearIntegration({ clientId: 'client', clientSecret: 'secret' });
-    const platform = new PlatformLinearIntegration();
 
     expect(direct.workers(context()).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
-    expect(platform.workers(context()).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
+  });
+
+  it('registers Platform Linear event polling with issue reconciliation folded in', () => {
+    const platform = new PlatformLinearIntegration();
+
+    expect(platform.workers(context()).map(worker => worker.name)).toEqual(['platform-linear-events']);
   });
 });
