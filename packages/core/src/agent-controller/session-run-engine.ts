@@ -307,6 +307,61 @@ export class SessionRunEngine {
     };
   }
 
+  /**
+   * Fold a tool outcome (`tool-result` or `tool-error` chunk) into the current
+   * message's invocation part and notify subscribers. Shared so an errored tool
+   * reaches a terminal part state too — leaving it at `call` kept clients
+   * spinning on a tool that already failed.
+   */
+  private applyToolOutcome(
+    state: StreamState,
+    outcome: {
+      toolCallId: string;
+      toolName: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: MastraProviderMetadata;
+    },
+  ): void {
+    const { toolCallId, toolName, result, isError, providerMetadata } = outcome;
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    if (existing && existing.type === 'tool-invocation') {
+      existing.toolInvocation = Object.assign(existing.toolInvocation, {
+        state: 'result' as const,
+        result,
+        isError,
+      });
+      if (providerMetadata) {
+        existing.providerMetadata = providerMetadata;
+      }
+    } else {
+      const toolInvocationPart: MastraToolInvocationPart = {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId,
+          toolName,
+          args: {},
+          result,
+          isError,
+        },
+      };
+      if (providerMetadata) {
+        toolInvocationPart.providerMetadata = providerMetadata;
+      }
+      state.currentMessage.content.parts.push(toolInvocationPart);
+    }
+    this.#session.emit({
+      type: 'tool_end',
+      toolCallId,
+      result,
+      isError,
+      ...(providerMetadata ? { providerMetadata } : {}),
+    });
+    this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+  }
+
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
     this.#session.emit({
       type: 'error',
@@ -491,62 +546,24 @@ export class SessionRunEngine {
 
       case 'tool-result': {
         const toolResult = getPayload(chunk);
-        const toolCallId = getString(toolResult.toolCallId) ?? '';
-        const toolName = getString(toolResult.toolName) ?? '';
-        const providerMetadata = isProviderMetadata(toolResult.providerMetadata)
-          ? toolResult.providerMetadata
-          : undefined;
-        const result = getDisplayTransform(chunk.metadata, 'output-available', toolResult.result);
-        const isError = getBoolean(toolResult.isError, false);
-        const toolIndex = state.toolPartById.get(toolCallId);
-        const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
-        if (existing && existing.type === 'tool-invocation') {
-          existing.toolInvocation = Object.assign(existing.toolInvocation, {
-            state: 'result' as const,
-            result,
-            isError,
-          });
-          if (providerMetadata) {
-            existing.providerMetadata = providerMetadata;
-          }
-        } else {
-          const toolInvocationPart: MastraToolInvocationPart = {
-            type: 'tool-invocation',
-            toolInvocation: Object.assign(
-              {
-                state: 'result' as const,
-                toolCallId,
-                toolName,
-                args: {},
-                result,
-              },
-              { isError },
-            ),
-          };
-          if (providerMetadata) {
-            toolInvocationPart.providerMetadata = providerMetadata;
-          }
-          state.currentMessage.content.parts.push(toolInvocationPart);
-        }
-        this.#session.emit({
-          type: 'tool_end',
-          toolCallId,
-          result,
-          isError,
-          ...(providerMetadata ? { providerMetadata } : {}),
+        this.applyToolOutcome(state, {
+          toolCallId: getString(toolResult.toolCallId) ?? '',
+          toolName: getString(toolResult.toolName) ?? '',
+          result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
+          isError: getBoolean(toolResult.isError, false),
+          providerMetadata: isProviderMetadata(toolResult.providerMetadata) ? toolResult.providerMetadata : undefined,
         });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
       case 'tool-error': {
         const toolError = getPayload(chunk);
-        const toolCallId = getString(toolError.toolCallId) ?? '';
-        this.#session.emit({
-          type: 'tool_end',
-          toolCallId,
+        this.applyToolOutcome(state, {
+          toolCallId: getString(toolError.toolCallId) ?? '',
+          toolName: getString(toolError.toolName) ?? '',
           result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
           isError: true,
+          providerMetadata: isProviderMetadata(toolError.providerMetadata) ? toolError.providerMetadata : undefined,
         });
         break;
       }

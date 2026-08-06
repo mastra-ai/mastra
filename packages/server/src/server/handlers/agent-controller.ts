@@ -380,16 +380,27 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
  * non-enumerable, so JSON serialization in the SSE adapter would send
  * `"error": {}` and clients could only render a generic "Error". Flatten the
  * Error into a plain object so the actual failure reaches the client.
+ *
+ * `display_state_changed` events carry Maps (activeTools, pendingSuspensions,
+ * activeSubagents, …) that JSON-serialize to `{}`, so wire clients received
+ * empty objects where the TUI sees live tool state. Convert them to plain
+ * records keyed the same way.
  */
 function toWireEvent(event: unknown): unknown {
-  if (
-    typeof event === 'object' &&
-    event !== null &&
-    (event as { type?: unknown }).type === 'error' &&
-    (event as { error?: unknown }).error instanceof Error
-  ) {
+  if (typeof event !== 'object' || event === null) return event;
+  const { type } = event as { type?: unknown };
+  if (type === 'error' && (event as { error?: unknown }).error instanceof Error) {
     const error = (event as { error: Error }).error;
     return { ...event, error: { name: error.name, message: error.message } };
+  }
+  if (type === 'display_state_changed') {
+    const { displayState } = event as { displayState?: unknown };
+    if (typeof displayState !== 'object' || displayState === null) return event;
+    const wireDisplayState: Record<string, unknown> = { ...displayState };
+    for (const [key, value] of Object.entries(wireDisplayState)) {
+      if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
+    }
+    return { ...event, displayState: wireDisplayState };
   }
   return event;
 }
