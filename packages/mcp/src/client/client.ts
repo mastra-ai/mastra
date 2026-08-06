@@ -420,13 +420,30 @@ export class InternalMastraMCPClient extends MastraBase {
     await this.client.notification({ method: 'notifications/roots/list_changed' });
   }
 
+  private buildStdioEnv(): Record<string, string> {
+    const configured = this.serverConfig.env || {};
+    if (this.serverConfig.inheritDefaultEnv === false) {
+      // The SDK's StdioClientTransport unconditionally spreads getDefaultEnvironment()
+      // under the env we pass it, so an empty base alone cannot suppress the curated
+      // defaults. Explicitly override each curated key with undefined — Node's spawn
+      // drops env entries whose value is undefined — so only configured entries reach
+      // the subprocess.
+      const suppressed: Record<string, string | undefined> = {};
+      for (const key of Object.keys(getDefaultEnvironment())) {
+        suppressed[key] = undefined;
+      }
+      return { ...suppressed, ...configured } as Record<string, string>;
+    }
+    return { ...getDefaultEnvironment(), ...configured };
+  }
+
   private async connectStdio(command: string) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
     try {
       this.transport = new StdioClientTransport({
         command,
         args: this.serverConfig.args,
-        env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
+        env: this.buildStdioEnv(),
         stderr: this.serverConfig.stderr,
         cwd: this.serverConfig.cwd,
       });

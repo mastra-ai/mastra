@@ -305,6 +305,23 @@ export type StdioServerDefinition = BaseServerOptions & {
   /** Optional environment variables for the subprocess */
   env?: Record<string, string>;
   /**
+   * Whether the subprocess environment starts from the MCP SDK's default
+   * inherited environment. Defaults to `true`.
+   *
+   * The default is NOT the full `process.env`: the SDK's
+   * `getDefaultEnvironment()` inherits only a curated platform whitelist —
+   * on POSIX: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`; on Windows:
+   * `APPDATA`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `PATH`,
+   * `PROCESSOR_ARCHITECTURE`, `SYSTEMDRIVE`, `SYSTEMROOT`, `TEMP`, `USERNAME`,
+   * `USERPROFILE` — and skips functions and variables starting with `()`.
+   *
+   * When `false`, the subprocess environment base is empty (`{}`) and only the
+   * variables explicitly listed in `env` are passed to the subprocess. Note
+   * that a subprocess without `PATH` may fail to spawn commands that are not
+   * absolute paths.
+   */
+  inheritDefaultEnv?: boolean;
+  /**
    * How to handle stderr of the child process. Matches the semantics of Node's `child_process.spawn`.
    *
    * - `"inherit"` (default): stderr is printed to the parent process's stderr
@@ -346,6 +363,7 @@ export type HttpServerDefinition = BaseServerOptions & {
   command?: never;
   args?: never;
   env?: never;
+  inheritDefaultEnv?: never;
   stderr?: never;
   cwd?: never;
 
