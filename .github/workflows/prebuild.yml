@@ -105,9 +105,12 @@ jobs:
 
       - name: Compute affected test files
         id: compute
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA...$HEAD_SHA" \
             > /tmp/changed-files.txt
 
           CHANGED=$(grep -E '/src/.*\.(ts|tsx)$' /tmp/changed-files.txt \
@@ -201,7 +204,7 @@ jobs:
           const experimentEntryDiff = changedEntryFiles.length
             ? require('child_process').execFileSync(
                 'git',
-                ['diff', '--unified=0', '${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}', '--', ...changedEntryFiles],
+                ['diff', '--unified=0', `${process.env.BASE_SHA}...${process.env.HEAD_SHA}`, '--', ...changedEntryFiles],
                 { encoding: 'utf8' },
               )
             : '';
