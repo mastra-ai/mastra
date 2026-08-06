@@ -39,6 +39,17 @@ describe('experiment worker workflow routing', () => {
     expect(Boolean(false)).toBe(false);
   });
 
+  test('uses physical paths for explicit Vitest filters', async () => {
+    const packageJson = JSON.parse(await readFile(resolve(import.meta.dirname, '../package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+
+    for (const scriptName of ['test', 'test:pr', 'test:full', 'test:full:strict']) {
+      expect(packageJson.scripts[scriptName]).toContain('$(pwd -P)/tests/');
+      expect(packageJson.scripts[scriptName]).not.toContain('$PWD/tests/');
+    }
+  });
+
   test.each(['e2e-tests.yml', 'e2e-experiment-worker.yml'])(
     '%s verifies the canonical registry digest at the consumer boundary',
     async workflow => {
