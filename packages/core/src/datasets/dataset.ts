@@ -407,6 +407,11 @@ export class Dataset {
         name: config.name,
         description: config.description,
         metadata: config.metadata,
+        provenance: config.provenance,
+        experimentSetId: config.grouping?.experimentSetId,
+        comparisonId: config.grouping?.comparisonId,
+        variantId: config.grouping?.variantId,
+        trialIndex: config.grouping?.trialIndex,
         agentVersion: config.agentVersion,
         organizationId: dataset.organizationId ?? null,
         projectId: dataset.projectId ?? null,
@@ -454,6 +459,10 @@ export class Dataset {
     targetId?: string;
     agentVersion?: string;
     status?: ExperimentStatus;
+    experimentSetId?: string;
+    comparisonId?: string;
+    variantId?: string;
+    trialIndex?: number;
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
@@ -466,6 +475,10 @@ export class Dataset {
       ...(args?.targetId !== undefined ? { targetId: args.targetId } : {}),
       ...(args?.agentVersion !== undefined ? { agentVersion: args.agentVersion } : {}),
       ...(args?.status !== undefined ? { status: args.status } : {}),
+      ...(args?.experimentSetId !== undefined ? { experimentSetId: args.experimentSetId } : {}),
+      ...(args?.comparisonId !== undefined ? { comparisonId: args.comparisonId } : {}),
+      ...(args?.variantId !== undefined ? { variantId: args.variantId } : {}),
+      ...(args?.trialIndex !== undefined ? { trialIndex: args.trialIndex } : {}),
       ...(args?.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
