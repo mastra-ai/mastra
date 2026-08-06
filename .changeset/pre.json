@@ -175,5 +175,11 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260806-004521",
+    "fix-stream-json-fallback-falsy-object",
+    "green-birds-knock",
+    "lucky-years-poke",
+    "small-pianos-judge"
+  ]
 }

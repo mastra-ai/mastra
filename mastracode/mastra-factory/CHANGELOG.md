@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- Use the same PostHog analytics as create-mastra in the create-factory CLI, including the MASTRA_TELEMETRY_DISABLED opt-out and shared anonymous distinct id. ([#20073](https://github.com/mastra-ai/mastra/pull/20073))
+
+- Updated dependencies [[`ed5d606`](https://github.com/mastra-ai/mastra/commit/ed5d606739c5e3fbdfa9f272df7809aa5ab43b1d)]:
+  - mastra@1.23.1-alpha.0
+
 ## 0.1.6
 
 ### Patch Changes
