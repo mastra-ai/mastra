@@ -38,6 +38,7 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { isTerminalInvocationState } from '../services/transcript';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { Markdown } from '../../../ui/Markdown';
 
@@ -998,8 +999,8 @@ function FileAttachment({ part }: { part: FilePart }) {
 
 /** Terminal status carried by the persisted part, if it reached one. */
 function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation']): 'done' | 'error' | undefined {
-  if (invocation.state === 'output-error' || invocation.state === 'output-denied') return 'error';
-  if (invocation.state !== 'result') return undefined;
+  if (!isTerminalInvocationState(invocation.state)) return undefined;
+  if (invocation.state !== 'result') return 'error';
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
 }
 
