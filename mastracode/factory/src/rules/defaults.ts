@@ -157,6 +157,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
       githubIssueNumber: context.issue.number,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
       assignees: context.issue.assignees ?? [],
+      labels: context.issue.labels ?? [],
     },
   } as const;
 }
@@ -184,6 +185,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       merged: context.pullRequest.merged,
       assignees: context.pullRequest.assignees ?? [],
       requestedReviewers: context.pullRequest.requestedReviewers ?? [],
+      labels: context.pullRequest.labels ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
@@ -280,6 +282,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
       linearAssignee: context.issue.assignee,
       linearCreator: context.issue.creator,
       linearTeam: context.issue.team,
+      labels: [...context.issue.labels] as string[],
       ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
       ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
     },

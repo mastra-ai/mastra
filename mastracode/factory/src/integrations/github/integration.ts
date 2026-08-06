@@ -1154,6 +1154,7 @@ export class GithubIntegration implements FactoryIntegration {
         merged: pullRequest.merged,
         assignees: pullRequest.assignees ?? [],
         requestedReviewers: pullRequest.requestedReviewers ?? [],
+        labels: pullRequest.labels ?? [],
         headBranch: pullRequest.headBranch,
         baseBranch: pullRequest.baseBranch,
         ...(pullRequest.author ? { author: pullRequest.author } : {}),
@@ -1197,6 +1198,7 @@ interface GithubPullRequestData {
   user: { login?: string } | null;
   assignees?: Array<{ login?: string }> | null;
   requested_reviewers?: Array<{ login?: string }> | null;
+  labels?: Array<{ name?: string } | string> | null;
   body?: string | null;
   state: string;
   draft?: boolean | null;
@@ -1244,6 +1246,9 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     author: pr.user?.login ?? null,
     assignees: (pr.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
     requestedReviewers: (pr.requested_reviewers ?? []).flatMap(reviewer => (reviewer.login ? [reviewer.login] : [])),
+    labels: (pr.labels ?? []).flatMap(label =>
+      typeof label === 'string' ? [label] : label.name ? [label.name] : [],
+    ),
     body: pr.body?.trim() ? pr.body : null,
     state: pr.state === 'closed' ? 'closed' : 'open',
     draft: pr.draft ?? false,

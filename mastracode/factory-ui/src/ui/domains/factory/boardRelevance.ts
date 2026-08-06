@@ -254,3 +254,59 @@ export function boardRelevanceOptions(kind: BoardKind): Array<{ id: BoardRelevan
   if (kind === 'review') options.push({ id: 'review-requested', label: 'Review requested' });
   return options;
 }
+
+function targetLabels(target: RelevanceTarget): string[] {
+  return metadataStrings(target.metadata, 'labels');
+}
+
+export function workItemLabels(item: WorkItem): string[] {
+  return targetLabels(item);
+}
+
+export function candidateLabels(candidate: BoardCandidate): string[] {
+  return targetLabels(candidate);
+}
+
+export function boardLabels({
+  items,
+  candidates,
+}: {
+  items: readonly WorkItem[];
+  candidates: readonly BoardCandidate[];
+}): string[] {
+  const labels = new Set<string>();
+  for (const item of items) for (const label of targetLabels(item)) labels.add(label);
+  for (const candidate of candidates) for (const label of targetLabels(candidate)) labels.add(label);
+  return [...labels].sort((left, right) => left.localeCompare(right));
+}
+
+export function boardLabelsFromQuery(value: string | null): ReadonlySet<string> {
+  if (!value) return new Set();
+  const parts = value
+    .split(',')
+    .map(part => part.trim())
+    .filter(part => part.length > 0);
+  return new Set(parts);
+}
+
+export function boardLabelsQueryValue(selectedLabels: ReadonlySet<string>): string | undefined {
+  if (selectedLabels.size === 0) return undefined;
+  return [...selectedLabels].sort((left, right) => left.localeCompare(right)).join(',');
+}
+
+export function workItemMatchesLabels(
+  item: WorkItem,
+  selectedLabels: ReadonlySet<string>,
+  liveCandidate?: BoardCandidate,
+): boolean {
+  if (selectedLabels.size === 0) return true;
+  const itemLabels = new Set(targetLabels(item));
+  if (liveCandidate) for (const label of targetLabels(liveCandidate)) itemLabels.add(label);
+  return [...selectedLabels].every(label => itemLabels.has(label));
+}
+
+export function candidateMatchesLabels(candidate: BoardCandidate, selectedLabels: ReadonlySet<string>): boolean {
+  if (selectedLabels.size === 0) return true;
+  const labels = new Set(targetLabels(candidate));
+  return [...selectedLabels].every(label => labels.has(label));
+}

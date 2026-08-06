@@ -108,6 +108,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     createdAt?: string;
     updatedAt?: string;
     assignees?: string[];
+    labels?: string[];
   };
   issueChange?: { title: boolean; body: boolean };
   issueComment?: {
@@ -129,6 +130,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     merged: boolean;
     assignees?: string[];
     requestedReviewers?: string[];
+    labels?: string[];
     headBranch: string;
     baseBranch: string;
   };
