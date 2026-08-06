@@ -148,7 +148,10 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
   ) {
     return `factory/pr-${pullRequestNumber}`;
   }
-  throw new Error('Factory skill invocation requires a GitHub issue or pull request number.');
+  if (item.externalSource?.integrationId === 'linear' && typeof metadata.identifier === 'string') {
+    return `factory/linear-${metadata.identifier.toLowerCase()}`;
+  }
+  throw new Error('Factory skill invocation requires a supported issue or pull request identifier.');
 }
 
 async function prepareFactoryRuleBinding(

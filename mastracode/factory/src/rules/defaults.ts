@@ -241,7 +241,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     stage: 'triage',
     metadata: {
       linearIssueId: context.issue.id,
-      linearIssueIdentifier: context.issue.identifier,
+      identifier: context.issue.identifier,
       linearState: context.issue.state,
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,
