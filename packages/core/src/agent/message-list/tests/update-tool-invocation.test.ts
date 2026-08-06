@@ -703,4 +703,159 @@ describe('MessageList.updateToolInvocation', () => {
       mastra: { modelOutput: true },
     });
   });
+
+  it('should match a provider-executed call by toolName when the result toolCallId differs', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'call-id-from-provider',
+          toolName: 'file_search',
+          args: { query: 'spec' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'result-id-from-provider',
+        toolName: 'file_search',
+        args: {},
+        result: { documents: ['doc1'] },
+      },
+      providerExecuted: true,
+    } as any);
+
+    expect(updated).toBe(true);
+    const part = messageList.get.all.db()[0]?.content?.parts?.[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.toolInvocation.args).toEqual({ query: 'spec' });
+    expect(part.toolInvocation.result).toEqual({ documents: ['doc1'] });
+    // The stored id is reconciled to the result's id for consistent replay.
+    expect(part.toolInvocation.toolCallId).toBe('result-id-from-provider');
+  });
+
+  it('should NOT use the toolName fallback for a non-provider-executed (client) tool', () => {
+    const warnFn = vi.fn();
+    const messageList = new MessageList({ logger: { warn: warnFn } as any });
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'tc-client', toolName: 'get_weather', args: { city: 'SF' } },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    const result = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-mismatch',
+        toolName: 'get_weather',
+        args: {},
+        result: { temp: 70 },
+      },
+    });
+
+    expect(result).toBe(false);
+    expect(warnFn).toHaveBeenCalledWith(expect.stringContaining('tc-mismatch'));
+    // The client call part is left untouched (no fallback merge).
+    const part = messageList.get.all.db()[0]?.content?.parts?.[0] as any;
+    expect(part.toolInvocation.state).toBe('call');
+    expect(part.toolInvocation.toolCallId).toBe('tc-client');
+  });
+
+  it('should only fall back for provider-executed calls, leaving a pending client call of the same name untouched', () => {
+    const messageList = new MessageList();
+
+    // A pending client tool call and a pending provider-executed call share a toolName.
+    // The provider result (with a mismatched id) must reconcile against the
+    // provider-executed part only, never the client one.
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'client-call', toolName: 'search', args: { who: 'client' } },
+      },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'provider-call', toolName: 'search', args: { who: 'provider' } },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'mismatched-result-id',
+        toolName: 'search',
+        args: {},
+        result: { ok: true },
+      },
+      providerExecuted: true,
+    } as any);
+
+    expect(updated).toBe(true);
+    const parts = messageList.get.all.db()[0]?.content?.parts ?? [];
+    const clientPart = parts.find((p: any) => p.toolInvocation?.args?.who === 'client') as any;
+    const providerPart = parts.find((p: any) => p.toolInvocation?.toolCallId === 'mismatched-result-id') as any;
+    // Client call is untouched (still pending, original id).
+    expect(clientPart.toolInvocation.state).toBe('call');
+    expect(clientPart.toolInvocation.toolCallId).toBe('client-call');
+    // Provider call received the result and its id was reconciled.
+    expect(providerPart.toolInvocation.state).toBe('result');
+    expect(providerPart.toolInvocation.args).toEqual({ who: 'provider' });
+  });
+
+  it('should keep the legacy toolInvocations array in sync when the toolCallId is reconciled', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'provider-call',
+          toolName: 'file_search',
+          args: { query: 'spec' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    // Legacy AIV4 array, keyed by the original id the part had before reconciliation.
+    (msg.content as any).toolInvocations = [
+      { state: 'call', toolCallId: 'provider-call', toolName: 'file_search', args: { query: 'spec' } },
+    ];
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'result-id',
+        toolName: 'file_search',
+        args: {},
+        result: { documents: ['doc1'] },
+      },
+      providerExecuted: true,
+    } as any);
+
+    expect(updated).toBe(true);
+    const content = messageList.get.all.db()[0]?.content as any;
+    // The legacy array entry is resynced: reconciled id, result state, preserved args.
+    const legacy = content.toolInvocations?.[0];
+    expect(legacy.toolCallId).toBe('result-id');
+    expect(legacy.state).toBe('result');
+    expect(legacy.args).toEqual({ query: 'spec' });
+    expect(legacy.result).toEqual({ documents: ['doc1'] });
+  });
 });

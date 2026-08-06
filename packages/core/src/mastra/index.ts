@@ -48,6 +48,8 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
+import type { AgentScheduleHandler } from '../schedules/define';
+import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
@@ -83,6 +85,12 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/stored';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
+import {
+  declaredSchedulesOf,
+  findFsAgentScheduleHandler,
+  hasFsAgentSchedule,
+  syncFsAgentSchedules,
+} from './fs-agent-schedules';
 import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
@@ -118,19 +126,6 @@ function createUndefinedPrimitiveError(
     text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
     details: { status: 400, ...(key && { key }) },
   });
-}
-
-/**
- * Stable JSON-shape comparison for two `Schedule.target` values. Uses
- * JSON.stringify because targets are plain JSON-serializable objects (the
- * storage layer round-trips them through the same encoding). Covers the
- * `inputData` / `initialState` / `requestContext` payload fields that we
- * want to detect changes on across redeploys.
- */
-function targetsEqual(a: Schedule['target'] | undefined, b: Schedule['target']): boolean {
-  if (a === b) return true;
-  if (!a) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**
@@ -200,15 +195,6 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/** See {@link targetsEqual}. Same approach for free-form metadata. */
-function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | undefined): boolean {
-  const aNorm = a ?? undefined;
-  const bNorm = b ?? undefined;
-  if (aNorm === bNorm) return true;
-  if (!aNorm || !bNorm) return false;
-  return JSON.stringify(aNorm) === JSON.stringify(bNorm);
 }
 
 /**
@@ -728,6 +714,17 @@ export class Mastra<
    * zero cost beyond a boolean check.
    */
   #hasScheduledWorkflow = false;
+  /**
+   * Set while a file-based agent schedule sync is queued, so registering a
+   * batch of agents after startup triggers one sweep rather than one per agent.
+   */
+  #fsScheduleSyncPending = false;
+  /**
+   * Set when an agent registers while a sweep is already in flight. That sweep
+   * may have read the agent map before the agent landed, so it runs one more
+   * pass instead of dropping the registration.
+   */
+  #fsScheduleSyncRerun = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
   #schedules?: Schedules;
@@ -1842,6 +1839,17 @@ export class Mastra<
     return out;
   }
 
+  /**
+   * Resolve the handler for a handler-mode file-based schedule. Handlers are
+   * functions and therefore cannot be persisted on the JSON schedule row, so
+   * the agent-schedule worker looks them up in-process by row id at fire time.
+   *
+   * @internal — public so the agent-schedule worker can call it.
+   */
+  __getFsAgentScheduleHandler(scheduleId: string): AgentScheduleHandler<Mastra> | undefined {
+    return findFsAgentScheduleHandler<Mastra>(this.#agents as Record<string, Agent<any>>, scheduleId);
+  }
+
   #shouldEnableScheduler(): boolean {
     // Honour an explicit `workers: false` opt-out — the user disabled all
     // event processing in this instance, so never auto-inject scheduler /
@@ -1851,7 +1859,11 @@ export class Mastra<
     if (this.#workersDisabled) return false;
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
-    return this.#hasScheduledWorkflow || this.#schedulerRequested;
+    return (
+      this.#hasScheduledWorkflow ||
+      this.#schedulerRequested ||
+      hasFsAgentSchedule(this.#agents as Record<string, Agent<any>>)
+    );
   }
 
   /**
@@ -1972,6 +1984,27 @@ export class Mastra<
         });
       }
     }
+
+    await this.#registerFsAgentSchedules(schedulesStore, allRows);
+  }
+
+  /**
+   * Sync schedules declared by file-based agents' `schedules/` directories into
+   * schedule storage. Runs as part of {@link registerDeclarativeSchedules}, so
+   * it happens on scheduler init and on late agent registration.
+   *
+   * The sync itself lives in `mastra/fs-agent-schedules.ts` — it needs only the
+   * agent map, the store and a logger, so keeping it out of this file keeps the
+   * upsert/diff/sweep policy readable on its own. Row equality goes through the
+   * same `schedules/row-diff` comparators as the workflow sync above.
+   */
+  async #registerFsAgentSchedules(schedulesStore: SchedulesStorage, knownRows?: Schedule[]): Promise<void> {
+    await syncFsAgentSchedules({
+      agents: this.#agents as Record<string, Agent<any>>,
+      store: schedulesStore,
+      logger: this.#logger as IMastraLogger | undefined,
+      knownRows,
+    });
   }
 
   /**
@@ -2485,6 +2518,8 @@ export class Mastra<
         });
       }
 
+      this.#syncLateRegisteredAgentSchedules(underlyingAgent);
+
       return;
     }
 
@@ -2602,6 +2637,60 @@ export class Mastra<
         this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
       });
     }
+
+    this.#syncLateRegisteredAgentSchedules(mastraAgent);
+  }
+
+  /**
+   * Push an agent's declared schedules into an already-running scheduler.
+   *
+   * Agents registered before `startWorkers()` are picked up by
+   * `SchedulerWorker.init()`, which calls {@link registerDeclarativeSchedules}.
+   * An agent added afterwards would otherwise never have its rows written, so
+   * mirror what `addWorkflow` does for declarative workflow schedules.
+   *
+   * The sync covers every registered agent, so registering a batch (e.g.
+   * `__registerFsAgents`) coalesces into a single sweep instead of one full
+   * `listSchedules()` pass per agent.
+   */
+  #syncLateRegisteredAgentSchedules(agent: Agent<any>): void {
+    if (declaredSchedulesOf(agent).length === 0) return;
+
+    const worker = this.#findSchedulerWorker();
+    // Workers not started yet — SchedulerWorker.init() will sync these.
+    if (!worker?.scheduler) return;
+
+    // A sweep is already in flight. It may already have read the agent map, so
+    // ask it to run once more rather than dropping this registration — but do
+    // not start a second sweep, which would race the first on `createSchedule`
+    // for the same row.
+    if (this.#fsScheduleSyncPending) {
+      this.#fsScheduleSyncRerun = true;
+      return;
+    }
+    this.#fsScheduleSyncPending = true;
+
+    void (async () => {
+      try {
+        do {
+          this.#fsScheduleSyncRerun = false;
+          // Yield first so agents registered in the same synchronous batch are
+          // all present before the sweep computes what is declared.
+          await Promise.resolve();
+          const schedulesStore = await this.#storage?.getStore('schedules');
+          if (!schedulesStore) return;
+          await this.registerDeclarativeSchedules(schedulesStore);
+        } while (this.#fsScheduleSyncRerun);
+      } catch (error) {
+        this.#logger?.error('Failed to register schedules for late-registered agent', {
+          agentId: agent.id,
+          error,
+        });
+      } finally {
+        this.#fsScheduleSyncPending = false;
+        this.#fsScheduleSyncRerun = false;
+      }
+    })();
   }
 
   /**

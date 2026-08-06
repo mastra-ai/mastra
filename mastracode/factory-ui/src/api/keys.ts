@@ -118,6 +118,10 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'threads'] as const,
+  // Prefix over every thread's messages for a resource — invalidation target
+  // when an SSE gap may have dropped events for any thread of the session.
+  agentControllerResourceThreadMessages: (agentControllerId: string | undefined, resourceId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, 'threads'] as const,
   // Thread ids are unique across the resource, so messages are keyed by threadId
   // alone (no projectPath) — caches survive worktree switches and seeding does
   // not need to know the thread's scope.
@@ -133,11 +137,7 @@ export const queryKeys = {
     limit?: number,
   ) =>
     [
-      'agent-controller',
-      agentControllerId ?? null,
-      'sessions',
-      resourceId ?? null,
-      'threads',
+      ...queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
       threadId ?? null,
       'messages',
       ...(limit === undefined ? [] : [limit]),
