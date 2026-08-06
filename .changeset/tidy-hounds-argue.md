@@ -2,9 +2,7 @@
 '@mastra/core': minor
 ---
 
-Made the workspace write-lock timeout configurable via `tools.writeLockTimeoutMs`.
-
-`InMemoryFileWriteLock` already accepted a `timeoutMs` option, but `createWorkspaceTools` constructed it with no arguments, so the 30-second default was unreachable from user code. That default suits a local filesystem, where a write is a sub-second operation. It does not suit a remote or cold-starting sandbox filesystem, where the first write can legitimately take minutes — the lock rejected those writes with `write-lock timeout` before they ever landed, and there was no supported way to widen it.
+Set `tools.writeLockTimeoutMs` when a remote or cold-starting filesystem needs more than 30 seconds to accept a write. The write tool waits for the configured timeout before returning a `write-lock timeout` error.
 
 ```typescript
 const workspace = new Workspace({
@@ -16,4 +14,4 @@ const workspace = new Workspace({
 });
 ```
 
-The default is unchanged at 30 000 ms, so existing workspaces behave exactly as before.
+The default is unchanged at 30 000 ms.

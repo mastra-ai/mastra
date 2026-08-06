@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
 import { LocalFilesystem } from '../../filesystem';
@@ -506,17 +506,21 @@ describe('createWorkspaceTools', () => {
       });
       const tools = await createWorkspaceTools(workspace);
 
-      const write = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
-        { path: 'hangs.txt', content: 'x' },
-        { workspace },
-      );
-      // Still pending well past the configured-timeout case above: the default
-      // is what is in force, not a value inherited from another test.
-      const settled = await Promise.race([
-        write.then(() => 'settled').catch(() => 'settled'),
-        new Promise<string>(resolve => setTimeout(() => resolve('pending'), 200)),
-      ]);
-      expect(settled).toBe('pending');
+      // Fake timers so the 30s default can be asserted exactly without waiting
+      // it out, and so the test leaves no pending lock timer behind.
+      vi.useFakeTimers();
+      try {
+        const write = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+          { path: 'hangs.txt', content: 'x' },
+          { workspace },
+        );
+        const rejected = expect(write).rejects.toThrow('write-lock timeout on "hangs.txt" after 30000ms');
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        await rejected;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
