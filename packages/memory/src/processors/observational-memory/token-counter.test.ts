@@ -1,7 +1,7 @@
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { TokenCounter } from '../token-counter';
+import { TokenCounter } from './token-counter';
 
 vi.mock('probe-image-size', () => ({
   default: vi.fn(),
