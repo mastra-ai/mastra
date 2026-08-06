@@ -122,8 +122,17 @@ function BoardContent({
     );
   }
 
+  const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
+    items.visible.filter(item => {
+      if (!itemAppearsInStage(item, stage, stages)) return false;
+      if (stage !== 'intake' || review || item.source === 'manual') return true;
+      if (intake.active === 'github') return item.source === 'github-issue';
+      if (intake.active === 'linear') return item.source === 'linear-issue';
+      return false;
+    });
   const mutationError = runs.error ?? items.mutationError;
-  const totalTaskCount = items.visible.length + intake.candidates.length;
+  const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
+  const totalTaskCount = visibleWorkItems.size + intake.candidates.length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -144,7 +153,8 @@ function BoardContent({
         <div className="flex h-full min-h-0 gap-3">
           {stages.map(stage => {
             const loading = loadingStages.has(stage.id);
-            const taskCount = stageContentCount(stage.id, stages, items.visible, intake.candidates);
+            const stageWorkItems = workItemsForStage(stage.id);
+            const taskCount = stageContentCount(stage.id, stages, stageWorkItems, intake.candidates);
             const composerOpen = composer.stage === stage.id;
             return (
               <BoardColumn
@@ -192,29 +202,27 @@ function BoardContent({
                     onClose={() => composer.close(stage.id)}
                   />
                 ) : null}
-                {items.visible
-                  .filter(item => itemAppearsInStage(item, stage.id, stages))
-                  .map(item => (
-                    <WorkItemCard
-                      key={`${item.id}:${stage.id}`}
-                      item={item}
-                      columnStage={stage.id}
-                      allItems={items.all}
-                      liveWorktreePaths={runs.liveWorktreePaths}
-                      runDisabled={runs.disabled}
-                      preparing={runs.preparingFor(item.id)}
-                      evaluatingStage={items.evaluatingStages.get(item.id)}
-                      transitionReason={items.transitionReasons[item.id]}
-                      decision={decisions.byItem.get(item.id)}
-                      retryingDecisionId={decisions.retryingId}
-                      onRetryDecision={decisions.retry}
-                      pendingRunRoles={runs.pendingRolesFor(item.id)}
-                      onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
-                      onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
-                      onMove={toStage => items.move(item.id, toStage)}
-                      onRemove={() => items.remove(item.id)}
-                    />
-                  ))}
+                {stageWorkItems.map(item => (
+                  <WorkItemCard
+                    key={`${item.id}:${stage.id}`}
+                    item={item}
+                    columnStage={stage.id}
+                    allItems={items.all}
+                    liveWorktreePaths={runs.liveWorktreePaths}
+                    runDisabled={runs.disabled}
+                    preparing={runs.preparingFor(item.id)}
+                    evaluatingStage={items.evaluatingStages.get(item.id)}
+                    transitionReason={items.transitionReasons[item.id]}
+                    decision={decisions.byItem.get(item.id)}
+                    retryingDecisionId={decisions.retryingId}
+                    onRetryDecision={decisions.retry}
+                    pendingRunRoles={runs.pendingRolesFor(item.id)}
+                    onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
+                    onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
+                    onMove={toStage => items.move(item.id, toStage)}
+                    onRemove={() => items.remove(item.id)}
+                  />
+                ))}
                 {intake.candidates
                   .filter(candidate => candidate.column === stage.id)
                   .map(candidate => {
