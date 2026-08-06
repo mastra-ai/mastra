@@ -8,7 +8,7 @@ import type { InlineSkill } from '../../skills/types';
 import { createTool } from '../../tools';
 import { Workspace, LocalFilesystem } from '../../workspace';
 import { Agent } from '../agent';
-import { assembleAgentFromFsEntry, agentConfig, MAX_FS_SUBAGENT_DEPTH } from './index';
+import { assembleAgentFromFsEntry, agentConfig, agentInstructions, MAX_FS_SUBAGENT_DEPTH } from './index';
 import type { FsAgentToolEntry, FsAgentEntry } from './index';
 
 function makeTool(id: string): FsAgentToolEntry {
@@ -38,6 +38,17 @@ describe('agentConfig', () => {
   it('returns the config unchanged (identity)', () => {
     const config = { model: 'openai/gpt-4o' as const };
     expect(agentConfig(config)).toBe(config);
+  });
+});
+
+describe('agentInstructions', () => {
+  it('returns a static value unchanged (identity)', () => {
+    expect(agentInstructions('be helpful')).toBe('be helpful');
+  });
+
+  it('returns a dynamic value unchanged (identity)', () => {
+    const instructions = () => 'be helpful';
+    expect(agentInstructions(instructions)).toBe(instructions);
   });
 });
 
@@ -100,13 +111,120 @@ describe('assembleAgentFromFsEntry', () => {
     expect(await agent.getInstructions()).toBe('only config');
   });
 
-  it('throws when neither instructions.md nor config.instructions present', () => {
+  it('throws when neither instructions file nor config.instructions present', () => {
     expect(() =>
       assembleAgentFromFsEntry({
         name: 'broken',
         config: { model: 'openai/gpt-4o' },
       }),
     ).toThrow(/missing instructions/i);
+  });
+
+  describe('instructions.ts', () => {
+    it('uses a static instructions.ts export', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: 'from module',
+      });
+      expect(await agent.getInstructions()).toBe('from module');
+    });
+
+    it('resolves a dynamic instructions.ts export per request', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: ({ requestContext }) => `tier: ${requestContext.get('tier') ?? 'standard'}`,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('tier', 'premium');
+
+      expect(await agent.getInstructions({ requestContext })).toBe('tier: premium');
+      expect(await agent.getInstructions({ requestContext: new RequestContext() })).toBe('tier: standard');
+    });
+
+    it('accepts a system message object', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: { role: 'system', content: 'from message' },
+      });
+      expect(await agent.getInstructions()).toEqual({ role: 'system', content: 'from message' });
+    });
+
+    it('lets instructions.ts win over instructions.md, with a warning', async () => {
+      const onWarn = vi.fn();
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'a',
+          config: { model: 'openai/gpt-4o' },
+          instructions: 'from module',
+          instructionsMd: 'from md',
+        },
+        { onWarn },
+      );
+
+      expect(await agent.getInstructions()).toBe('from module');
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('instructions.ts wins'));
+    });
+
+    it('lets instructions.ts win over a static config.instructions', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o', instructions: 'from config' },
+        instructions: 'from module',
+      });
+      expect(await agent.getInstructions()).toBe('from module');
+    });
+
+    it('lets a dynamic config.instructions win over instructions.ts, with a warning', async () => {
+      const onWarn = vi.fn();
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'a',
+          config: { model: 'openai/gpt-4o', instructions: () => 'dynamic config' },
+          instructions: 'from module',
+        },
+        { onWarn },
+      );
+
+      expect(await agent.getInstructions()).toBe('dynamic config');
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('defined in both config.ts and instructions.ts'));
+    });
+
+    it('satisfies the instructions requirement on its own', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: 'only module',
+      });
+      expect(await agent.getInstructions()).toBe('only module');
+    });
+
+    it('throws when the default export is not a usable instructions value', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: { prompt: 'wrong shape' } as never,
+        }),
+      ).toThrow(/must default-export a string, a system message, or a function/i);
+    });
+
+    // A null default export is a mistake in a file whose only job is to export
+    // instructions, so it must not read as "no instructions.ts here" and send
+    // the author chasing the missing-instructions error instead.
+    it('rejects a null default export rather than falling back', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: null as never,
+          instructionsMd: 'from md',
+        }),
+      ).toThrow(/but got null/i);
+    });
   });
 
   it('throws when model is missing', () => {
@@ -201,6 +319,21 @@ describe('assembleAgentFromFsEntry', () => {
 
     expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('instructions.md'));
     expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('tools'));
+  });
+
+  it('warns that instructions.ts is ignored when config.ts exports a code-defined Agent', () => {
+    const onWarn = vi.fn();
+    const coded = new Agent({
+      id: 'weather',
+      name: 'weather',
+      instructions: 'Code-defined.',
+      model: 'openai/gpt-4o',
+    });
+
+    const result = assembleAgentFromFsEntry({ name: 'weather', config: coded, instructions: 'ignored' }, { onWarn });
+
+    expect(result).toBe(coded);
+    expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('instructions.ts is ignored'));
   });
 
   it('merges discovered skills into the agent', async () => {
