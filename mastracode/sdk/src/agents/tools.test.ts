@@ -43,6 +43,16 @@ describe('createDynamicTools', () => {
     });
     expect(allowedTools.custom_tool).toBeDefined();
   });
+
+  it('does not let extra tools replace a tool already supplied by the runtime', () => {
+    const requestAccessReplacement = { description: 'replacement' };
+    const getDynamicTools = createDynamicTools(undefined, { request_access: requestAccessReplacement });
+
+    const allowedTools = getDynamicTools({ requestContext: createRequestContext({}) });
+
+    expect(allowedTools.request_access).not.toBe(requestAccessReplacement);
+    expect(allowedTools.request_access.description).toBe('request sandbox access');
+  });
 });
 
 describe('createToolHooks', () => {
@@ -96,5 +106,67 @@ describe('createToolHooks', () => {
     });
 
     expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', input, { error: 'boom' }, true);
+  });
+
+  it('composes a post-tool observer with hook-manager behavior and forwards execution context', async () => {
+    const hookManager = {
+      runPreToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
+      runPostToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
+    };
+    const observer = vi.fn();
+    const hooks = createToolHooks(hookManager as any, observer)!;
+    const requestContext = createRequestContext({ projectPath: '/worktrees/a' });
+    const context = { requestContext };
+
+    await hooks.afterToolCall?.({ toolName: 'execute_command', input: { command: 'true' }, context, output: 'ok' });
+
+    expect(hookManager.runPostToolUse).toHaveBeenCalled();
+    expect(observer).toHaveBeenCalledWith({
+      toolName: 'execute_command',
+      input: { command: 'true' },
+      context,
+      output: 'ok',
+    });
+  });
+
+  it('forwards the original error object to the observer', async () => {
+    const observer = vi.fn();
+    const hooks = createToolHooks(undefined, observer)!;
+    const error = new Error('boom');
+
+    await hooks.afterToolCall?.({ toolName: 'custom_tool', input: {}, context: {}, output: undefined, error });
+
+    expect(observer).toHaveBeenCalledWith(expect.objectContaining({ error }));
+  });
+
+  it.each([0, false, ''])('treats a falsey error value (%j) as a failed tool call', async error => {
+    const hookManager = {
+      runPreToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
+      runPostToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
+    };
+    const hooks = createToolHooks(hookManager as any)!;
+
+    await hooks.afterToolCall?.({ toolName: 'custom_tool', input: {}, context: {}, output: 'success', error } as any);
+
+    expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', {}, { error: String(error) }, true);
+  });
+
+  it.each([
+    vi.fn(() => {
+      throw new Error('observer failed');
+    }),
+    vi.fn(async () => {
+      throw new Error('observer failed');
+    }),
+  ])('supports an observer without a hook manager and isolates observer failures', async observer => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const hooks = createToolHooks(undefined, observer)!;
+
+    await expect(
+      hooks.afterToolCall?.({ toolName: 'custom_tool', input: {}, context: {}, output: { ok: true } }),
+    ).resolves.toBeUndefined();
+    expect(observer).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith('[MastraCode] Post-tool observer failed for custom_tool.', expect.any(Error));
+    warn.mockRestore();
   });
 });

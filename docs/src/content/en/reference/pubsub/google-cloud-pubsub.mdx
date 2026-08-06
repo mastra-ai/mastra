@@ -12,7 +12,7 @@ packages:
 
 Use it for distributed deployments on Google Cloud. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Redis, use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams).
 
-Each topic maps to a Google Cloud topic. Subscriptions with a group share a named subscription, so members compete for events. Subscriptions without a group create a per-instance subscription, so every instance receives every event.
+Each topic maps to a Google Cloud topic. Subscriptions with a group share a subscription, so members compete for events. Subscriptions without a group create a per-instance subscription, so every instance receives every event.
 
 ## Installation
 
@@ -81,7 +81,7 @@ await pubsub.flush()
 
 ### `destroy(topicName)`
 
-Removes the subscription and topic for a given topic name. Use this to clean up Google Cloud resources.
+Removes the subscription and topic for a topic name. Use this to clean up Google Cloud resources.
 
 ```typescript
 await pubsub.destroy('workflow.events')

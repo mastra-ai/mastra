@@ -35,6 +35,27 @@ export abstract class PubSub {
   abstract flush(): Promise<void>;
 
   /**
+   * Delete all retained state for a topic (cached history, persistent stream
+   * entries, consumer groups) once no more events will be published to it.
+   *
+   * Called by run lifecycles (durable agents, the evented workflow engine)
+   * when a run reaches a terminal state, so per-run topics don't accumulate
+   * forever on transports that retain messages (e.g. Redis Streams).
+   *
+   * Default implementation is a no-op: transports that don't retain anything
+   * per topic (e.g. plain EventEmitter delivery) have nothing to clear.
+   *
+   * Best-effort contract: implementations should not throw — callers invoke
+   * this fire-and-forget at cleanup boundaries, so failures should be logged
+   * by the implementation rather than rejected.
+   *
+   * @param topic - The topic whose retained state should be deleted
+   */
+  clearTopic(_topic: string): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
    * Delivery modes this PubSub implementation supports.
    *
    * Defaults to `['pull']` for backward compatibility — third-party

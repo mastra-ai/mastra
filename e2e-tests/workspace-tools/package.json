@@ -11,11 +11,11 @@
   },
   "devDependencies": {
     "execa": "^9.6.1",
-    "get-port": "^7.1.0",
-    "tinyglobby": "^0.2.16",
-    "verdaccio": "^6.2.5",
-    "verdaccio-auth-memory": "^10.3.1",
-    "vitest": "4.1.8",
-    "typescript": "^6.0.3"
+    "get-port": "^7.2.0",
+    "tinyglobby": "^0.2.17",
+    "verdaccio": "^6.7.4",
+    "verdaccio-auth-memory": "^13.0.3",
+    "vitest": "4.1.10",
+    "typescript": "^7.0.2"
   }
 }

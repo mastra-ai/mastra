@@ -4,11 +4,16 @@ import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
+import { ConsoleLogger } from '../../../../logger';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
+import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
+import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
+import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
+import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
 import type {
   SpanType,
@@ -24,14 +29,16 @@ import { PrepareStepProcessor } from '../../../../processors/processors/prepare-
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
-import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
+import type { ToolToConvert } from '../../../../tools/tool-builder/builder';
+import { isMastraTool } from '../../../../tools/toolchecks';
 import type { CoreTool } from '../../../../tools/types';
+import { createMastraProxy, makeCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
-import type { MastraDBMessage } from '../../../message-list';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
@@ -419,6 +426,66 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 currentProviderOptions = merged.providerOptions;
                 currentModelSettings = merged.modelSettings ?? {};
                 structuredOutput = merged.structuredOutput;
+
+                // Processors (e.g. ToolSearchProcessor) can inject per-step meta-tools
+                // like `search_tools` / `load_tool`. In the non-durable Agent the same
+                // step that shows these tools to the model also executes them, so a
+                // per-step tool map is enough. The DurableAgent instead runs tool calls
+                // in a SEPARATE workflow step that resolves tools from the run registry
+                // (see tool-call.ts). Without a write-back, those processor-injected
+                // tools are missing there and the call fails with ToolNotFoundError
+                // (issue #19571).
+                //
+                // Convert any raw Mastra tools the processor returned into CoreTool form
+                // (mirroring the non-durable llm-execution-step) and merge them into the
+                // run registry so the durable tool-call step can resolve and execute them.
+                if (processInputStepResult.tools) {
+                  const boundLogger = logger || new ConsoleLogger({ level: 'error' });
+                  const convertedTools: Record<string, CoreTool> = {};
+                  for (const [name, tool] of Object.entries(currentTools as Record<string, unknown>)) {
+                    if (isMastraTool(tool)) {
+                      convertedTools[name] = makeCoreTool(
+                        tool as unknown as ToolToConvert,
+                        {
+                          name,
+                          runId,
+                          threadId: typedInput.state?.threadId,
+                          resourceId: typedInput.state?.resourceId,
+                          logger: boundLogger,
+                          mastra: mastra ? createMastraProxy({ mastra, logger: boundLogger }) : undefined,
+                          memory: registryEntry?.memory,
+                          agentName: typedInput.agentName ?? agentId,
+                          requestContext,
+                          workspace: registryEntry?.workspace,
+                          requireApproval: (tool as any).requireApproval,
+                          backgroundConfig: (tool as any).background,
+                          // Emit context.writer.write() / .custom() output through pubsub,
+                          // matching how the durable tool-call step builds its writer.
+                          outputWriter: pubsub
+                            ? async (chunk: any) => {
+                                await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+                              }
+                            : undefined,
+                        },
+                        undefined,
+                        execOptions.autoResumeSuspendedTools,
+                      );
+                    } else {
+                      convertedTools[name] = tool as CoreTool;
+                    }
+                  }
+                  currentTools = convertedTools as unknown as ToolSet;
+                  if (registryEntry) {
+                    // Store the exact per-step snapshot rather than merging onto the
+                    // previous step's set. `currentTools` already starts from the full
+                    // toolset resolved at the top of this step, so a snapshot keeps the
+                    // static tools while dropping processor-injected tools the current
+                    // step no longer exposes (e.g. a ToolSearchProcessor entry that hit
+                    // its TTL). Merging would leave those stale tools executable by the
+                    // tool-call step even though the model was never shown them.
+                    registryEntry.tools = convertedTools;
+                  }
+                }
               } catch (error) {
                 // Handle TripWire from processInputStep — emit tripwire chunk and
                 // bail the step, mirroring the regular agent's buildTripWireBailResponse.
@@ -501,9 +568,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               model: currentModel,
             });
             const llmPromptForModel =
-              currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
-                ? messageList.get.all.aiV6.llmPrompt
-                : messageList.get.all.aiV5.llmPrompt;
+              currentModel.specificationVersion === 'v4'
+                ? messageList.get.all.aiV7.llmPrompt
+                : currentModel.specificationVersion === 'v3'
+                  ? messageList.get.all.aiV6.llmPrompt
+                  : messageList.get.all.aiV5.llmPrompt;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
 
             // Inject the auto-resume directive into the leading system message when
@@ -647,7 +716,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // (which may carry only a toolCallId, no toolName) can still find the
             // tool resolved during the preceding `tool-call-input-streaming-start`.
             const resolvedToolByCallId = new Map<string, CoreTool>();
-            const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
+            const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+            // Guards against a re-delivered tool-result minting a second span for the same call.
+            const materializedProviderToolCallIds = new Set<string>();
 
             const resolveToolDef = (toolName: string): CoreTool | undefined => {
               const directTool = (currentTools as unknown as Record<string, CoreTool> | undefined)?.[toolName];
@@ -754,7 +825,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               return { toolDef };
             };
 
-            const injectProviderToolObservability = ({
+            const resolveAgentRunFallback = (span: AnySpan): AnySpan =>
+              span.type === ('agent_run' as string)
+                ? span
+                : (((span as any).findParent?.('agent_run') ?? span) as AnySpan);
+
+            const recordProviderToolCall = ({
               toolCallId,
               toolName,
               args,
@@ -770,47 +846,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const toolDef = resolveToolDef(toolName);
               const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
               if (!inferredProviderExecuted) return;
-              const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+              const existingEntry = pendingProviderToolCallsByToolCallId.get(toolCallId);
               if (existingEntry) {
-                if (args !== undefined && existingEntry.span.input === undefined) {
-                  (existingEntry.span as any).update?.({ input: args });
+                if (args !== undefined && existingEntry.args === undefined) {
+                  existingEntry.args = args;
                 }
                 return;
               }
 
-              try {
-                const parentSpan =
-                  tracingContext.currentSpan.type === ('agent_run' as string)
-                    ? tracingContext.currentSpan
-                    : ((tracingContext.currentSpan as any).findParent?.('agent_run') ?? tracingContext.currentSpan);
-
-                const span = (parentSpan as any).createChildSpan?.({
-                  type: 'provider_tool_call',
-                  name: `provider_tool: '${toolName}'`,
-                  entityType: EntityType.TOOL,
-                  entityId: toolName,
-                  entityName: toolName,
-                  attributes: {
-                    toolType: 'provider-tool',
-                    toolDescription: (toolDef as { description?: string } | undefined)?.description,
-                    toolCallId,
-                  },
-                  metadata: { toolCallId },
-                  ...(args !== undefined ? { input: args } : {}),
-                });
-
-                if (span) {
-                  providerToolSpansByToolCallId.set(toolCallId, { span: span as AnySpan, ended: false });
-                }
-              } catch (err) {
-                logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
-                  error: err instanceof Error ? err.message : String(err),
-                  toolName,
-                });
-              }
+              pendingProviderToolCallsByToolCallId.set(toolCallId, {
+                toolName,
+                args,
+                startTime: new Date(),
+                toolDescription: (toolDef as { description?: string } | undefined)?.description,
+                fallbackParentSpan: resolveAgentRunFallback(tracingContext.currentSpan),
+              });
             };
 
-            const cleanupToolObservabilitySpans = () => {
+            const cleanupToolObservabilitySpans = (flushPendingProviderToolCalls: boolean) => {
               for (const [toolCallId, entry] of clientToolObservabilityByToolCallId.entries()) {
                 if (!entry.ended) {
                   const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
@@ -820,13 +873,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
               clientToolArgsTextByToolCallId.clear();
 
-              for (const [, entry] of providerToolSpansByToolCallId.entries()) {
-                if (!entry.ended) {
-                  entry.span.end();
-                  entry.ended = true;
+              if (flushPendingProviderToolCalls) {
+                for (const [toolCallId, pending] of pendingProviderToolCallsByToolCallId.entries()) {
+                  endPendingProviderToolSpan({ toolCallId, pending, parentSpan: pending.fallbackParentSpan, logger });
                 }
               }
-              providerToolSpansByToolCallId.clear();
+              pendingProviderToolCallsByToolCallId.clear();
             };
 
             // 8. Start MODEL_STEP span at the beginning of LLM execution
@@ -851,10 +903,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             });
             modelSpanTracker?.startInference?.();
 
-            // Collect chunks for the processLLMResponse hook (pairs with
-            // processLLMRequest — lets processors like ResponseCache persist
-            // the model's response). Only populated when there's no cache hit.
-            const collectedChunks: Array<{ type: string; payload: unknown }> = [];
+            // Collect chunks for post-stream message building (via
+            // buildMessagesFromChunks) and for the processLLMResponse hook
+            // (pairs with processLLMRequest — lets processors like
+            // ResponseCache persist the model's response). Always populated
+            // so reasoning/text/tool parts are reconstructed in stream order,
+            // including empty reasoning spans that carry providerMetadata
+            // (e.g. OpenAI itemId) required by subsequent turns (#19365).
+            const collectedChunks: CollectedChunk[] = [];
 
             // 10. Execute LLM call (or replay cached response)
             let modelResult: ReturnType<typeof execute>;
@@ -1032,7 +1088,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (toolInputStartToolDef) {
                     resolvedToolByCallId.set(rawChunk.payload.toolCallId, toolInputStartToolDef);
                   }
-                  injectProviderToolObservability({
+                  recordProviderToolCall({
                     toolCallId: rawChunk.payload.toolCallId,
                     toolName: rawChunk.payload.toolName,
                     providerExecuted: rawChunk.payload.providerExecuted,
@@ -1057,7 +1113,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     providerExecuted: rawChunk.payload.providerExecuted,
                     payload: (clientChunk as any).payload as Record<string, unknown> & { observability?: unknown },
                   });
-                  injectProviderToolObservability({
+                  recordProviderToolCall({
                     toolCallId: rawChunk.payload.toolCallId,
                     toolName: rawChunk.payload.toolName,
                     args: rawChunk.payload.args,
@@ -1084,16 +1140,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 }
 
-                // Collect every chunk for post-stream processLLMResponse hook.
-                // Skipped on cache hit because the processor already handled
-                // the original response, and skipped when no request/response
-                // processors exist to avoid buffering the entire stream in memory.
-                if (!cachedResponse && requestStepRunner) {
-                  collectedChunks.push({
-                    type: rawChunk.type,
-                    payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
-                  });
-                }
+                // Collect every chunk for post-stream message building and the
+                // processLLMResponse hook. Always collect — reasoning parts
+                // (including empty spans with providerMetadata carrying
+                // OpenAI itemIds) are required to correctly reconstruct the
+                // assistant message and preserve pairing with subsequent
+                // tool-calls (#19365).
+                collectedChunks.push({
+                  type: rawChunk.type,
+                  payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
+                  metadata: (rawChunk as { metadata?: Record<string, unknown> }).metadata,
+                });
 
                 // Process different chunk types — always from the raw chunk so
                 // internal state (tool args, finish reason, usage, metadata) is
@@ -1161,16 +1218,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-result': {
                     const payload = rawChunk.payload as any;
-                    // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
-                    const providerEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
-                    if (providerEntry && !providerEntry.ended) {
-                      providerEntry.span.end({
-                        output: payload.result,
-                        attributes: { success: !payload.isError },
+                    // The result determines which MODEL_STEP owns the provider tool call, so
+                    // the PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
+                    const pending = pendingProviderToolCallsByToolCallId.get(payload.toolCallId);
+                    if (pending) {
+                      endPendingProviderToolSpan({
+                        toolCallId: payload.toolCallId,
+                        pending,
+                        parentSpan: modelSpanTracker?.getTracingContext()?.currentSpan ?? pending.fallbackParentSpan,
+                        result: { output: payload.result, isError: payload.isError },
+                        logger,
                       });
-                      providerEntry.ended = true;
-                    } else if (!providerEntry && tracingContext?.currentSpan) {
-                      // Deferred result: no span was opened in this step invocation.
+                      pendingProviderToolCallsByToolCallId.delete(payload.toolCallId);
+                      materializedProviderToolCallIds.add(payload.toolCallId);
+                    } else if (
+                      tracingContext?.currentSpan &&
+                      !materializedProviderToolCallIds.has(payload.toolCallId)
+                    ) {
+                      // Deferred result: the call arrived in a previous step invocation.
                       // Only create a synthetic span if this is actually a provider-executed tool.
                       const resultToolDef2 = resolveToolDef(payload.toolName);
                       const isProviderExec = inferProviderExecuted(payload.providerExecuted, resultToolDef2);
@@ -1194,20 +1259,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           if (spanInput !== undefined) break;
                         }
                       }
-                      injectProviderToolObservability({
+                      // startTime is result time, not the call time: the call was observed in a
+                      // previous invocation whose in-memory state (including its timestamp) does
+                      // not survive the invocation boundary.
+                      endPendingProviderToolSpan({
                         toolCallId: payload.toolCallId,
-                        toolName: payload.toolName,
-                        args: spanInput,
-                        providerExecuted: true,
+                        pending: {
+                          toolName: payload.toolName,
+                          args: spanInput,
+                          startTime: new Date(),
+                          toolDescription: (resultToolDef2 as { description?: string } | undefined)?.description,
+                        },
+                        parentSpan:
+                          modelSpanTracker?.getTracingContext()?.currentSpan ??
+                          resolveAgentRunFallback(tracingContext.currentSpan),
+                        result: { output: payload.result, isError: payload.isError },
+                        logger,
                       });
-                      const deferredEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
-                      if (deferredEntry && !deferredEntry.ended) {
-                        deferredEntry.span.end({
-                          output: payload.result,
-                          attributes: { success: !payload.isError },
-                        });
-                        deferredEntry.ended = true;
-                      }
+                      materializedProviderToolCallIds.add(payload.toolCallId);
                     }
                     break;
                   }
@@ -1242,10 +1311,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 }
               }
-              // Clean up any unclosed observability spans after successful stream completion
-              cleanupToolObservabilitySpans();
+              // Clean up any unclosed observability spans after successful stream completion.
+              // Pending provider tool calls are only flushed on terminal steps — when the loop
+              // continues, the deferred result creates the real span in a later invocation.
+              cleanupToolObservabilitySpans(!(toolCalls.length > 0 && finishReason !== 'stop'));
             } catch (error) {
-              cleanupToolObservabilitySpans();
+              cleanupToolObservabilitySpans(true);
               logger?.error?.('Error processing LLM stream', { error, runId });
 
               const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1423,40 +1494,39 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
             }
 
-            // 12. Add assistant response to message list
-            if (textDeltas.length > 0 || toolCalls.length > 0) {
-              const parts: any[] = [];
-
-              if (textDeltas.length > 0) {
-                parts.push({
-                  type: 'text' as const,
-                  text: textDeltas.join(''),
-                });
+            // 12. Add assistant response to message list.
+            // Build parts from the full chunk sequence via the same helper
+            // the regular Agent uses, so reasoning spans (including empty
+            // reasoning with providerMetadata.openai.itemId) are preserved
+            // alongside text and tool-calls in stream order. Without this
+            // OpenAI reasoning models fail on the next turn with
+            // "Item 'fc_...' of type 'function_call' was provided without
+            // its required 'reasoning' item" (#19365).
+            //
+            // Mirror the regular Agent's buildResponseModelMetadata so the
+            // persisted assistant message carries the same content.metadata
+            // (modelId/provider): prefer the static model, fall back to the
+            // response-metadata chunk.
+            const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
+            const responseModelMetadata =
+              responseModelId || currentModel.provider
+                ? {
+                    metadata: {
+                      ...(responseModelId ? { modelId: responseModelId } : {}),
+                      ...(currentModel.provider ? { provider: currentModel.provider } : {}),
+                    },
+                  }
+                : undefined;
+            const builtMessages = buildMessagesFromChunks({
+              chunks: collectedChunks,
+              messageId: currentMessageId,
+              tools: currentTools,
+              responseModelMetadata,
+            });
+            if (builtMessages.length > 0) {
+              for (const msg of builtMessages) {
+                messageList.add(msg, 'response');
               }
-
-              for (const tc of toolCalls) {
-                parts.push({
-                  type: 'tool-invocation' as const,
-                  toolInvocation: {
-                    state: 'call' as const,
-                    toolCallId: tc.toolCallId,
-                    toolName: tc.toolName,
-                    args: tc.args,
-                  },
-                });
-              }
-
-              const assistantMessage: MastraDBMessage = {
-                id: currentMessageId,
-                role: 'assistant' as const,
-                content: {
-                  format: 2,
-                  parts,
-                },
-                createdAt: new Date(),
-              };
-
-              messageList.add(assistantMessage, 'response');
 
               // Sync the updated messageList to the in-process registry so
               // downstream steps (e.g. tool-call.ts's doFlush()) see the

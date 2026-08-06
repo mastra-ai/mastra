@@ -20,6 +20,7 @@ import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
 import { WorkflowDebugStepControls } from './workflow-debug-step-controls';
 import { WorkflowJsonDialog } from './workflow-json-dialog';
+import { WorkflowRunError } from './workflow-run-error';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
@@ -76,7 +77,7 @@ export interface WorkflowTriggerProps {
 function DebugModeSwitch() {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
   return (
-    <label className="flex shrink-0 items-center gap-2 cursor-pointer">
+    <label className="flex shrink-0 cursor-pointer items-center gap-2">
       <Switch checked={debugMode} onCheckedChange={setDebugMode} aria-label="Debug" />
       <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
         Debug
@@ -149,10 +150,10 @@ function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetWorkflow
 
   return (
     <div className="flex w-full items-center gap-2 px-5">
-      <Icon className="shrink-0 text-neutral4">
+      <Icon className="text-neutral4 shrink-0">
         <WorkflowIcon />
       </Icon>
-      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate">
+      <Txt as="span" variant="ui-md" className="text-neutral5 truncate font-semibold">
         {workflow.name ?? workflowId}
       </Txt>
       <CopyButton content={workflow.name ?? workflowId} variant="ghost" className="shrink-0" />
@@ -184,18 +185,18 @@ function RunWorkflowHeader({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <Txt as="span" variant="ui-md" className="block truncate font-semibold text-neutral5">
+        <Txt as="span" variant="ui-md" className="text-neutral5 block truncate font-semibold">
           {formatRunStatus(status)}
         </Txt>
-        <Txt as="span" variant="ui-xs" className="block truncate text-neutral3" title={runId}>
+        <Txt as="span" variant="ui-xs" className="text-neutral3 block truncate" title={runId}>
           {runId}
         </Txt>
       </div>
       <div className="shrink-0 text-right">
-        <Txt as="span" variant="ui-xs" className="block font-medium text-neutral5">
+        <Txt as="span" variant="ui-xs" className="text-neutral5 block font-medium">
           {formatRunDuration(runDuration)}
         </Txt>
-        <Txt as="span" variant="ui-xs" className="block text-neutral3">
+        <Txt as="span" variant="ui-xs" className="text-neutral3 block">
           {formatRelativeTime(timestamp)}
         </Txt>
       </div>
@@ -228,6 +229,7 @@ export function WorkflowTrigger({
     setRunId: setContextRunId,
     runId: contextRunId,
     runSnapshot,
+    workflowError,
   } = useContext(WorkflowRunContext);
   useSyncStreamResultToWorkflowRunContext(streamResult);
   const { canExecute } = usePermissions();
@@ -266,9 +268,9 @@ export function WorkflowTrigger({
       const { initialState, inputData: dataInputData } = data ?? {};
       const inputData = hasStateSchema ? dataInputData : data;
 
-      void streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
-    } catch {
-      toast.error('Error executing workflow');
+      await streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error executing workflow');
     }
   };
 
@@ -302,7 +304,7 @@ export function WorkflowTrigger({
 
   if (isLoading) {
     return (
-      <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs">
+      <ScrollArea className="h-[calc(100vh-126px)] px-4 pt-2 pb-4 text-xs">
         <div className="space-y-4">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />
@@ -329,12 +331,12 @@ export function WorkflowTrigger({
   );
 
   return (
-    <div className="h-full pt-3 overflow-y-auto">
-      <div className={`border-b border-border1/50`}>
+    <div className="h-full overflow-y-auto pt-3">
+      <div className={`border-border1/50 border-b`}>
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
+          <div className="bg-surface5 border-border1 -mt-5 flex items-center gap-2 border-b px-5 py-2">
             <Icon>
-              <Loader2 className="animate-spin text-neutral6" />
+              <Loader2 className="text-neutral6 animate-spin" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>
@@ -370,28 +372,29 @@ export function WorkflowTrigger({
         )}
 
         {!canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-neutral3 py-2 px-5">
+          <Txt variant="ui-sm" className="text-neutral3 px-5 py-2">
             You don't have permission to execute workflows.
           </Txt>
         )}
 
-        {hasFinished && result && (
+        {hasFinished && streamResultToUse && (
           <div className="px-5 pb-4">
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-3">
+              <WorkflowRunError result={streamResultToUse} workflowError={workflowError} />
               <WorkflowJsonDialog
                 className="w-full justify-start"
                 variant="ghost"
                 size="sm"
-                data={result}
+                data={streamResultToUse}
                 triggerLabel="Entire workflow execution (JSON)"
                 title="Entire workflow execution (JSON)"
               />
-              {'result' in result && result.result !== undefined && (
+              {'result' in streamResultToUse && streamResultToUse.result !== undefined && (
                 <WorkflowJsonDialog
                   className="w-full justify-start"
                   variant="ghost"
                   size="sm"
-                  data={{ result: result.result }}
+                  data={{ result: streamResultToUse.result }}
                   triggerLabel="Run output"
                   title="Run output (JSON)"
                 />
@@ -401,13 +404,13 @@ export function WorkflowTrigger({
         )}
 
         {isPausedDebug && (
-          <div className="px-5 pb-4 pt-3">
+          <div className="px-5 pt-3 pb-4">
             <WorkflowDebugStepControls isStreaming={isStreamingWorkflow} />
           </div>
         )}
 
         {(streamResultToUse?.status === 'running' || isSuspendedSteps || isPausedDebug) && (
-          <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
+          <div data-testid="workflow-cancel-action" className="px-5 pt-3 pb-4">
             <WorkflowCancelButton
               status={isSuspendedSteps ? 'suspended' : streamResultToUse?.status}
               cancelMessage={cancelResponse?.message ?? null}

@@ -1,9 +1,11 @@
 import { Container, Text } from '@earendil-works/pi-tui';
-import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
 import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { JudgeDisplayComponent } from '../../components/judge-display.js';
 import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { NotificationComponent } from '../../components/notification.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
@@ -13,24 +15,99 @@ import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../../components/user-message.js';
-import { addPendingUserMessage, addUserMessage } from '../../render-messages.js';
+import { addPendingUserMessage, addUserMessage as renderUserMessage } from '../../render-messages.js';
 import type { TUIState } from '../../state.js';
-import { handleMessageEnd, handleMessageUpdate } from '../message.js';
+import { handleGoalEvaluation } from '../agent-lifecycle.js';
+import { handleMessageEnd, handleMessageStart, handleMessageUpdate } from '../message.js';
 import type { EventHandlerContext } from '../types.js';
 
 function visibleChildren(state: TUIState) {
   return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
 }
 
-function createAssistantMessage(content: AgentControllerMessage['content']): AgentControllerMessage {
-  return {
-    id: 'msg-1',
-    role: 'assistant',
-    content,
-  } as AgentControllerMessage;
+function addUserMessage(state: TUIState, message: MastraDBMessage): void {
+  renderUserMessage(state, message);
 }
 
-describe('handleMessageUpdate system reminders', () => {
+type Part = Exclude<MastraDBMessage['content'], string>['parts'][number];
+
+function assistantMessage(parts: Part[], id = 'msg-1'): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    content: { format: 2, parts },
+  } as MastraDBMessage;
+}
+
+function terminalMessage(
+  parts: Part[],
+  metadata: { stopReason?: string; errorMessage?: string },
+  id = 'msg-1',
+): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    content: { format: 2, parts, metadata },
+  } as MastraDBMessage;
+}
+
+function userMessage(text: string, id = 'user-1'): MastraDBMessage {
+  return {
+    id,
+    role: 'user',
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    content: { format: 2, parts: [{ type: 'text', text }] },
+  } as MastraDBMessage;
+}
+
+function toolPart(input: {
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  result?: unknown;
+}): Part {
+  const hasResult = input.result !== undefined;
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      args: input.args ?? {},
+      state: hasResult ? 'result' : 'call',
+      ...(hasResult ? { result: input.result } : {}),
+    },
+  } as Part;
+}
+
+function signalMessage(input: Parameters<typeof createSignal>[0], id?: string): MastraDBMessage {
+  const message = createSignal(input).toDBMessage();
+  return id ? ({ ...message, id } as MastraDBMessage) : message;
+}
+
+function reminderSignal(
+  attributes: {
+    type?: string;
+    path?: string;
+    gapText?: string;
+    precedesMessageId?: string;
+  },
+  contents = '',
+  id?: string,
+): MastraDBMessage {
+  return signalMessage(
+    {
+      type: 'reactive',
+      tagName: 'system-reminder',
+      contents,
+      attributes,
+    } as Parameters<typeof createSignal>[0],
+    id,
+  );
+}
+
+describe('handleMessageStart signals', () => {
   let state: TUIState;
   let ctx: EventHandlerContext;
 
@@ -58,197 +135,142 @@ describe('handleMessageUpdate system reminders', () => {
 
     ctx = {
       state,
+      addUserMessage: message => renderUserMessage(state, message),
       addChildBeforeFollowUps: (child: any) => {
         state.chatContainer.addChild(child);
       },
     } as EventHandlerContext;
   });
 
-  it('adds spacing as soon as assistant text starts after a user message', () => {
-    addUserMessage(state, {
-      id: 'user-1',
-      role: 'user',
-      content: [{ type: 'text', text: 'hello' }],
-    } as AgentControllerMessage);
-
-    handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'assistant text' }]));
-
-    const rendered = state.chatContainer.render(100);
-    expect(rendered).toContain('');
-  });
-
   it('renders a streamed loaded instruction path reminder', () => {
-    handleMessageUpdate(
-      ctx,
-      createAssistantMessage([
-        {
-          type: 'system_reminder',
-          reminderType: 'dynamic-agents-md',
-          path: '/repo/src/agents/nested/AGENTS.md',
-        } as never,
-      ]),
-    );
+    handleMessageStart(ctx, reminderSignal({ type: 'dynamic-agents-md', path: '/repo/src/agents/nested/AGENTS.md' }));
 
-    expect(state.chatContainer.children).toHaveLength(1);
+    expect(visibleChildren(state)).toHaveLength(1);
     expect(state.allSystemReminderComponents).toHaveLength(1);
-    const component = state.chatContainer.children[0];
+    const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(SystemReminderComponent);
     expect(state.allSystemReminderComponents[0]).toBe(component);
 
     const rendered = stripAnsi((component as SystemReminderComponent).render(80).join('\n'));
-
     expect(rendered).toContain('  loaded /repo/src/agents/nested/AGENTS.md');
     expect(rendered).not.toContain('Loading instruction file contents');
   });
 
   it('renders streamed generic reactive signals', () => {
-    handleMessageUpdate(
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'reactive_signal',
-          tagName: 'build-status',
-          message: 'Build is still running',
-        } as never,
-      ]),
+      signalMessage({ type: 'reactive', tagName: 'build-status', contents: 'Build is still running' }),
     );
 
-    expect(state.chatContainer.children).toHaveLength(1);
-    expect(state.chatContainer.children[0]).toBeInstanceOf(ReactiveSignalComponent);
+    expect(visibleChildren(state)).toHaveLength(1);
+    expect(visibleChildren(state)[0]).toBeInstanceOf(ReactiveSignalComponent);
 
-    const rendered = stripAnsi((state.chatContainer.children[0] as ReactiveSignalComponent).render(80).join('\n'));
+    const rendered = stripAnsi((visibleChildren(state)[0] as ReactiveSignalComponent).render(80).join('\n'));
     expect(rendered).toContain('Signal: build-status');
     expect(rendered).toContain('Build is still running');
   });
 
-  it('does not render streamed GitHub subscribe operation signals', () => {
-    handleMessageUpdate(
+  it('confirms pending steering from the delivered DB-native user signal', () => {
+    addPendingUserMessage(state, 'steer-1', 'Change direction', [{ data: 'image-data', mimeType: 'image/png' }], {
+      isInterjection: true,
+    });
+
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
+      signalMessage(
         {
-          type: 'reactive_signal',
-          tagName: 'github-subscribe-pr',
-          message: 'Subscribe to GitHub PR #17241',
-        } as never,
-      ]),
+          id: 'steer-1',
+          type: 'user',
+          contents: [
+            { type: 'text', text: 'Change direction' },
+            { type: 'file', data: 'image-data', mediaType: 'image/png' },
+          ],
+          attributes: { delivery: 'while-active' },
+        },
+        'steer-1',
+      ),
     );
 
-    expect(state.chatContainer.children).toHaveLength(0);
+    expect(state.pendingSignalMessageComponentsById.has('steer-1')).toBe(false);
+    const component = state.messageComponentsById.get('steer-1');
+    expect(component).toBeInstanceOf(UserMessageComponent);
+    const rendered = stripAnsi((component as UserMessageComponent).render(100).join('\n'));
+    expect(rendered).toContain('steer');
+    expect(rendered).toContain('[1 image] Change direction');
   });
 
-  it('keeps spacing when a streamed reminder is inserted before pending assistant text', () => {
-    addUserMessage(state, {
-      id: 'user-1',
-      role: 'user',
-      content: [{ type: 'text', text: 'hello' }],
-    } as AgentControllerMessage);
-    state.streamingComponent = new AssistantMessageComponent(undefined, false);
-    state.chatContainer.addChild(state.streamingComponent);
-
-    handleMessageUpdate(
+  it('does not render streamed GitHub subscribe operation signals', () => {
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'system_reminder',
-          reminderType: 'dynamic-agents-md',
-          path: '/repo/src/agents/nested/AGENTS.md',
-        } as never,
-      ]),
+      signalMessage({ type: 'reactive', tagName: 'github-subscribe-pr', contents: 'Subscribe to GitHub PR #17241' }),
     );
 
-    expect(visibleChildren(state)).toEqual([
-      state.messageComponentsById.get('user-1'),
-      state.allSystemReminderComponents[0],
-      state.streamingComponent,
-    ]);
-    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
-    expect(state.chatContainer.children).toHaveLength(4);
+    expect(visibleChildren(state)).toHaveLength(0);
   });
 
   it('anchors a streamed state signal before pending assistant text', () => {
-    addUserMessage(state, {
-      id: 'user-1',
-      role: 'user',
-      content: [{ type: 'text', text: 'open the browser' }],
-    } as AgentControllerMessage);
+    addUserMessage(state, userMessage('open the browser'));
     state.streamingComponent = new AssistantMessageComponent(undefined, false);
     state.chatContainer.addChild(state.streamingComponent);
 
-    handleMessageUpdate(
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'state_signal',
-          stateId: 'browser',
-          mode: 'delta',
-          cacheKey: 'browser:v1',
-          message: 'changed: browser opened',
-        } as never,
-        { type: 'text', text: 'Done.' },
-      ]),
+      signalMessage({
+        type: 'state',
+        tagName: 'browser',
+        contents: 'changed: browser opened',
+        metadata: { state: { id: 'browser', mode: 'delta' } },
+      } as Parameters<typeof createSignal>[0]),
     );
 
-    const stateSignal = state.chatContainer.children.find(child => child instanceof StateSignalComponent);
-    expect(visibleChildren(state)).toEqual([
-      state.messageComponentsById.get('user-1'),
-      stateSignal,
-      state.streamingComponent,
-    ]);
-    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
-    expect(stripAnsi(state.streamingComponent!.render(80).join('\n'))).toContain('Done.');
+    const stateSignal = visibleChildren(state).find(child => child instanceof StateSignalComponent);
+    expect(stateSignal).toBeInstanceOf(StateSignalComponent);
+    const rendered = stripAnsi((stateSignal as StateSignalComponent).render(80).join('\n'));
+    expect(rendered).toContain('browser');
+    expect(rendered).toContain('changed: browser opened');
   });
 
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
-    handleMessageUpdate(
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'state_signal',
-          stateId: 'tasks',
-          mode: 'snapshot',
-          cacheKey: 'tasks:v1',
-          message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
-        } as never,
-        { type: 'text', text: 'Tasks created.' },
-      ]),
+      signalMessage({
+        type: 'state',
+        tagName: 'tasks',
+        contents: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
+        metadata: { state: { id: 'tasks', mode: 'snapshot' } },
+      } as Parameters<typeof createSignal>[0]),
     );
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
   });
 
   it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
-    handleMessageUpdate(
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'state_signal',
-          stateId: 'goal',
-          mode: 'snapshot',
-          cacheKey: 'goal:v1',
-          message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
-        } as never,
-        { type: 'text', text: 'Goal set.' },
-      ]),
+      signalMessage({
+        type: 'state',
+        tagName: 'goal',
+        contents: '<current-objective>\n  Ship the goal feature\n</current-objective>',
+        metadata: { state: { id: 'goal', mode: 'snapshot' } },
+      } as Parameters<typeof createSignal>[0]),
     );
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
   });
 
   it('renders a streamed notification summary as an inline component', () => {
-    handleMessageUpdate(
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'notification_summary',
-          message: 'mastracode: 1',
-          pending: 1,
-          bySource: { mastracode: 1 },
-        } as never,
-      ]),
+      signalMessage({
+        type: 'notification',
+        tagName: 'notification-summary',
+        contents: 'mastracode: 1',
+        metadata: { notificationSummary: { pending: 1, bySource: { mastracode: 1 } } },
+      } as Parameters<typeof createSignal>[0]),
     );
 
-    expect(state.chatContainer.children).toHaveLength(1);
-    const component = state.chatContainer.children[0];
+    expect(visibleChildren(state)).toHaveLength(1);
+    const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationSummaryComponent);
     const rendered = stripAnsi((component as NotificationSummaryComponent).render(80).join('\n'));
     expect(rendered).toContain('Notification summary: 1 pending');
@@ -256,22 +278,18 @@ describe('handleMessageUpdate system reminders', () => {
   });
 
   it('renders a streamed full notification as an inline component', () => {
-    handleMessageUpdate(
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'notification',
-          message: 'CI failed on main',
-          source: 'github',
-          kind: 'ci-status',
-          priority: 'high',
-          status: 'delivered',
-        } as never,
-      ]),
+      signalMessage({
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'CI failed on main',
+        attributes: { source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+      } as Parameters<typeof createSignal>[0]),
     );
 
-    expect(state.chatContainer.children).toHaveLength(1);
-    const component = state.chatContainer.children[0];
+    expect(visibleChildren(state)).toHaveLength(1);
+    const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationComponent);
     const rendered = stripAnsi((component as NotificationComponent).render(100).join('\n'));
     expect(rendered).toContain('notification from github');
@@ -286,25 +304,21 @@ describe('handleMessageUpdate system reminders', () => {
     process.stdout.columns = 80;
 
     try {
-      handleMessageUpdate(
+      handleMessageStart(
         ctx,
-        createAssistantMessage([
-          {
-            type: 'notification',
-            message:
-              'mastra-ai/mastra#17449: feat(storage): add notification storage adapters was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
-            source: 'github',
-            kind: 'pull-request-merged',
-            priority: 'high',
-            status: 'delivered',
-          } as never,
-        ]),
+        signalMessage({
+          type: 'notification',
+          tagName: 'notification',
+          contents:
+            'mastra-ai/mastra#17449: feat(storage): add notification storage adapters was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
+          attributes: { source: 'github', kind: 'pull-request-merged', priority: 'high', status: 'delivered' },
+        } as Parameters<typeof createSignal>[0]),
       );
     } finally {
       process.stdout.columns = originalColumns;
     }
 
-    const component = state.chatContainer.children[0];
+    const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationComponent);
     const renderedLines = stripAnsi((component as NotificationComponent).render(80).join('\n')).split('\n');
     expect(renderedLines.some(line => line.includes('automatically unsubscribed'))).toBe(true);
@@ -318,15 +332,10 @@ describe('handleMessageUpdate system reminders', () => {
 
     handleMessageUpdate(
       ctx,
-      createAssistantMessage([
-        { type: 'text', text: 'before plugin' },
-        {
-          type: 'tool_call',
-          id: 'tool-1',
-          name: 'mastra_expert',
-          args: { question: 'Explain the agent loop' },
-        } as never,
-        { type: 'text', text: 'after plugin' },
+      assistantMessage([
+        { type: 'text', text: 'before plugin' } as Part,
+        toolPart({ toolCallId: 'tool-1', toolName: 'mastra_expert', args: { question: 'Explain the agent loop' } }),
+        { type: 'text', text: 'after plugin' } as Part,
       ]),
     );
 
@@ -343,75 +352,253 @@ describe('handleMessageUpdate system reminders', () => {
     expect(state.streamingComponent).toBe(children[2]);
   });
 
-  it('deduplicates repeated streamed reminders within the same assistant run', () => {
-    const message = createAssistantMessage([
-      {
-        type: 'system_reminder',
-        reminderType: 'dynamic-agents-md',
-        path: '/repo/src/agents/nested/AGENTS.md',
-      } as never,
-    ]);
+  it('deduplicates repeated streamed reminders by message id', () => {
+    const message = reminderSignal(
+      { type: 'dynamic-agents-md', path: '/repo/src/agents/nested/AGENTS.md' },
+      '',
+      'rem-1',
+    );
 
-    handleMessageUpdate(ctx, message);
-    handleMessageUpdate(ctx, message);
+    handleMessageStart(ctx, message);
+    handleMessageStart(ctx, message);
 
-    expect(state.chatContainer.children).toHaveLength(1);
+    expect(visibleChildren(state)).toHaveLength(1);
   });
 
   it('does not render streamed goal-judge continuation signals because the judge result is already shown', () => {
-    handleMessageUpdate(
-      ctx,
-      createAssistantMessage([
-        {
-          type: 'system_reminder',
-          reminderType: 'goal-judge',
-          message: '[Goal attempt 1/500] Continue with Fact 2.',
-        } as never,
-      ]),
-    );
+    handleMessageStart(ctx, reminderSignal({ type: 'goal-judge' }, '[Goal attempt 1/500] Continue with Fact 2.'));
 
-    expect(state.chatContainer.children).toHaveLength(0);
+    expect(visibleChildren(state)).toHaveLength(0);
     expect(state.allSystemReminderComponents).toHaveLength(0);
-    expect(state.currentRunSystemReminderKeys.size).toBe(0);
   });
 
-  it('allows the same reminder to render again in a later assistant run', () => {
-    const firstMessage = createAssistantMessage([
-      {
-        type: 'system_reminder',
-        reminderType: 'dynamic-agents-md',
-        path: '/repo/src/agents/nested/AGENTS.md',
-      } as never,
-    ]);
+  it('allows two distinct reminders to render', () => {
+    handleMessageStart(
+      ctx,
+      reminderSignal({ type: 'dynamic-agents-md', path: '/repo/src/agents/nested/AGENTS.md' }, '', 'rem-1'),
+    );
+    expect(visibleChildren(state)).toHaveLength(1);
 
-    const secondMessage = {
-      ...firstMessage,
-      id: 'msg-2',
-    } as AgentControllerMessage;
-
-    handleMessageUpdate(ctx, firstMessage);
-    expect(state.chatContainer.children).toHaveLength(1);
-
-    state.currentRunSystemReminderKeys.clear();
-
-    handleMessageUpdate(ctx, secondMessage);
+    handleMessageStart(
+      ctx,
+      reminderSignal({ type: 'dynamic-agents-md', path: '/repo/src/agents/nested/AGENTS.md' }, '', 'rem-2'),
+    );
     expect(visibleChildren(state)).toHaveLength(2);
+  });
+
+  it('inserts temporal-gap reminders before the preceded user message', () => {
+    const previousMessage = new Text('previous', 0, 0);
+    const userComponent = new Text('user', 0, 0);
+    const streamingMessage = new Text('streaming', 0, 0);
+
+    state.chatContainer.addChild(previousMessage);
+    state.chatContainer.addChild(userComponent);
+    state.chatContainer.addChild(streamingMessage);
+    state.messageComponentsById.set('user-1', userComponent);
+    state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
+
+    handleMessageStart(
+      ctx,
+      reminderSignal(
+        {
+          type: 'temporal-gap',
+          gapText: '1 hour later',
+          precedesMessageId: 'user-1',
+        },
+        '1 hour later — 04/20/2026, 03:35 PM PDT',
+      ),
+    );
+
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(4);
+    expect(children[1]).toBeInstanceOf(TemporalGapComponent);
+    expect((children[1] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 1 hour later');
+    expect(children[2]).toBe(userComponent);
+    expect(children[3]).toBe(streamingMessage);
+  });
+
+  it('falls back to the latest rendered user message when a streamed temporal-gap anchor id is not mapped yet', () => {
+    const earlierUserMessage = new UserMessageComponent('earlier user');
+    const optimisticUserMessage = new UserMessageComponent('optimistic user');
+    const streamingMessage = new Text('streaming', 0, 0);
+
+    state.chatContainer.addChild(earlierUserMessage);
+    state.chatContainer.addChild(optimisticUserMessage);
+    state.chatContainer.addChild(streamingMessage);
+    state.messageComponentsById.set('older-user-id', earlierUserMessage);
+    state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
+
+    handleMessageStart(
+      ctx,
+      reminderSignal(
+        {
+          type: 'temporal-gap',
+          gapText: '30 minutes later',
+          precedesMessageId: 'actual-user-id-from-core',
+        },
+        '30 minutes later — 04/20/2026, 03:35 PM PDT',
+      ),
+    );
+
+    expect(visibleChildren(state)).toEqual([
+      earlierUserMessage,
+      state.allSystemReminderComponents[0],
+      optimisticUserMessage,
+      streamingMessage,
+    ]);
+    expect(state.allSystemReminderComponents[0]).toBeInstanceOf(TemporalGapComponent);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(isChatBoundarySpacer(state.chatContainer.children[3]!)).toBe(true);
+  });
+});
+
+describe('goal evaluation live rendering ownership', () => {
+  const evaluation = {
+    objective: 'List whale facts',
+    iteration: 2,
+    maxRuns: 20,
+    passed: false,
+    status: 'active',
+    results: [],
+    reason: 'Need another fact.',
+    duration: 0,
+    timedOut: false,
+    maxRunsReached: false,
+    suppressFeedback: false,
+  } as Parameters<typeof handleGoalEvaluation>[1];
+
+  function createGoalJudgeSignal(): MastraDBMessage {
+    return signalMessage(
+      {
+        type: 'reactive',
+        tagName: 'system-reminder',
+        contents: '[Goal attempt 2/20] Continue.',
+        attributes: { type: 'goal-judge' },
+        metadata: { goalEvaluation: evaluation },
+      } as Parameters<typeof createSignal>[0],
+      'goal-judge-signal',
+    );
+  }
+
+  function createContext(): EventHandlerContext {
+    const state = {
+      chatContainer: new Container(),
+      followUpComponents: [],
+      ui: { requestRender: vi.fn() },
+      currentRunSystemReminderKeys: new Set(),
+      pendingTools: new Map(),
+      seenToolCallIds: new Set(),
+      subagentToolCallIds: new Set(),
+      allToolComponents: [],
+      allSlashCommandComponents: [],
+      allSystemReminderComponents: [],
+      messageComponentsById: new Map(),
+      pendingSubagents: new Map(),
+      hideThinkingBlock: false,
+      toolOutputExpanded: false,
+      pendingSignalMessageComponentsById: new Map(),
+      goalManager: {
+        getGoal: vi.fn(() => ({ id: 'goal-1', judgeModelId: 'openai/gpt-5.4-mini' })),
+        applyEvaluation: vi.fn(),
+      },
+      session: { displayState: { get: () => ({ isRunning: true }) } },
+      controller: { session: { displayState: { get: () => ({ isRunning: true }) } } },
+    } as unknown as TUIState;
+
+    return {
+      state,
+      addUserMessage: (message: MastraDBMessage) => renderUserMessage(state, message),
+      updateStatusLine: vi.fn(),
+      addChildBeforeFollowUps: (child: any) => state.chatContainer.addChild(child),
+    } as unknown as EventHandlerContext;
+  }
+
+  it.each([
+    ['goal_evaluation then live signal', true],
+    ['live signal then goal_evaluation', false],
+  ])('renders one judge component when delivery order is %s', (_label, lifecycleFirst) => {
+    const ctx = createContext();
+    const renderLifecycle = () => {
+      handleGoalEvaluation(ctx, evaluation);
+    };
+    const renderSignal = () => {
+      const signal = createGoalJudgeSignal();
+      handleMessageStart(ctx, signal);
+      handleMessageUpdate(ctx, signal);
+      handleMessageEnd(ctx, signal);
+    };
+
+    if (lifecycleFirst) {
+      renderLifecycle();
+      renderSignal();
+    } else {
+      renderSignal();
+      renderLifecycle();
+    }
+
+    const children = visibleChildren(ctx.state);
+    expect(children).toHaveLength(1);
+    expect(children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(ctx.state.messageComponentsById.has('goal-judge-signal')).toBe(false);
+    expect(ctx.state.goalManager.applyEvaluation).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('handleMessageUpdate assistant streaming', () => {
+  let state: TUIState;
+  let ctx: EventHandlerContext;
+
+  beforeEach(() => {
+    const chatContainer = new Container();
+    state = {
+      chatContainer,
+      followUpComponents: [],
+      ui: { requestRender: vi.fn() },
+      currentRunSystemReminderKeys: new Set(),
+      pendingTools: new Map(),
+      pendingTaskToolIds: new Set(),
+      seenToolCallIds: new Set(),
+      subagentToolCallIds: new Set(),
+      allToolComponents: [],
+      allSlashCommandComponents: [],
+      allSystemReminderComponents: [],
+      messageComponentsById: new Map(),
+      pendingSubagents: new Map(),
+      hideThinkingBlock: false,
+      toolOutputExpanded: false,
+      pendingSignalMessageComponentsById: new Map(),
+      session: { displayState: { get: () => ({ isRunning: true }) } },
+      controller: { session: { displayState: { get: () => ({ isRunning: true }) } } },
+    } as unknown as TUIState;
+
+    ctx = {
+      state,
+      addUserMessage: message => renderUserMessage(state, message),
+      addChildBeforeFollowUps: (child: any) => {
+        state.chatContainer.addChild(child);
+      },
+    } as EventHandlerContext;
+  });
+
+  it('adds spacing as soon as assistant text starts after a user message', () => {
+    addUserMessage(state, userMessage('hello'));
+
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'assistant text' }]));
+
+    const rendered = state.chatContainer.render(100);
+    expect(rendered).toContain('');
   });
 
   it('starts a new assistant component below an echoed signal user message', () => {
     const streamingMessage = new Text('streaming', 0, 0);
     state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
-    state.streamingMessage = createAssistantMessage([{ type: 'text', text: 'first assistant text' }]);
+    state.streamingMessage = assistantMessage([{ type: 'text', text: 'first assistant text' }]);
     state.chatContainer.addChild(streamingMessage);
 
     addPendingUserMessage(state, 'signal-1', 'follow up');
     const pending = visibleChildren(state)[1];
 
-    addUserMessage(state, {
-      id: 'signal-1',
-      role: 'user',
-      content: [{ type: 'text', text: 'follow up' }],
-    } as AgentControllerMessage);
+    addUserMessage(state, userMessage('follow up', 'signal-1'));
 
     let children = visibleChildren(state);
     expect(children[0]).toBe(streamingMessage);
@@ -419,7 +606,7 @@ describe('handleMessageUpdate system reminders', () => {
     expect(children[1]).not.toBe(pending);
     expect(state.streamingComponent).toBeUndefined();
 
-    handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'second assistant text' }]));
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'second assistant text' }]));
 
     children = visibleChildren(state);
     expect(children).toHaveLength(3);
@@ -427,38 +614,6 @@ describe('handleMessageUpdate system reminders', () => {
     expect(children[1]).toBeInstanceOf(UserMessageComponent);
     expect(children[2]).toBeInstanceOf(AssistantMessageComponent);
     expect(state.streamingComponent).toBe(children[2]);
-  });
-
-  it('inserts temporal-gap reminders before the preceded user message', () => {
-    const previousMessage = new Text('previous', 0, 0);
-    const userMessage = new Text('user', 0, 0);
-    const streamingMessage = new Text('streaming', 0, 0);
-
-    state.chatContainer.addChild(previousMessage);
-    state.chatContainer.addChild(userMessage);
-    state.chatContainer.addChild(streamingMessage);
-    state.messageComponentsById.set('user-1', userMessage);
-    state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
-
-    handleMessageUpdate(
-      ctx,
-      createAssistantMessage([
-        {
-          type: 'system_reminder',
-          reminderType: 'temporal-gap',
-          message: '1 hour later — 04/20/2026, 03:35 PM PDT',
-          gapText: '1 hour later',
-          precedesMessageId: 'user-1',
-        } as never,
-      ]),
-    );
-
-    const children = visibleChildren(state);
-    expect(children).toHaveLength(4);
-    expect(children[1]).toBeInstanceOf(TemporalGapComponent);
-    expect((children[1] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 1 hour later');
-    expect(children[2]).toBe(userMessage);
-    expect(children[3]).toBe(streamingMessage);
   });
 
   it('adds boundary spacing between a quiet tool preview and assistant text', () => {
@@ -476,49 +631,12 @@ describe('handleMessageUpdate system reminders', () => {
     state.chatContainer.addChild(assistant);
     state.streamingComponent = assistant;
 
-    handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'assistant text' }]));
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'assistant text' }]));
 
     const rendered = state.chatContainer.render(100);
     const toolLineIndex = rendered.findIndex(line => line.includes('write'));
     const textLineIndex = rendered.findIndex(line => line.includes('assistant text'));
     expect(rendered.slice(toolLineIndex + 1, textLineIndex)).toContain('');
-  });
-
-  it('falls back to the latest rendered user message when a streamed temporal-gap anchor id is not mapped yet', () => {
-    const earlierUserMessage = new UserMessageComponent('earlier user');
-    const optimisticUserMessage = new UserMessageComponent('optimistic user');
-    const streamingMessage = new Text('streaming', 0, 0);
-
-    state.chatContainer.addChild(earlierUserMessage);
-    state.chatContainer.addChild(optimisticUserMessage);
-    state.chatContainer.addChild(streamingMessage);
-    state.messageComponentsById.set('older-user-id', earlierUserMessage);
-    state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
-
-    handleMessageUpdate(
-      ctx,
-      createAssistantMessage([
-        {
-          type: 'system_reminder',
-          reminderType: 'temporal-gap',
-          message: '30 minutes later — 04/20/2026, 03:35 PM PDT',
-          gapText: '30 minutes later',
-          precedesMessageId: 'actual-user-id-from-core',
-        } as never,
-      ]),
-    );
-
-    expect(visibleChildren(state)).toEqual([
-      earlierUserMessage,
-      state.allSystemReminderComponents[0],
-      optimisticUserMessage,
-      streamingMessage,
-    ]);
-    expect(state.allSystemReminderComponents[0]).toBeInstanceOf(TemporalGapComponent);
-    // TemporalGapComponent now participates in spacing, so boundary spacers
-    // are placed above both the temporal gap and the optimistic user message.
-    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
-    expect(isChatBoundarySpacer(state.chatContainer.children[3]!)).toBe(true);
   });
 
   it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {
@@ -527,27 +645,16 @@ describe('handleMessageUpdate system reminders', () => {
 
     handleMessageUpdate(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'tool_call',
-          id: 'tool-1',
-          name: 'ask_user',
-          args: { question: 'Deploy now?' },
-        } as never,
-      ]),
+      assistantMessage([toolPart({ toolCallId: 'tool-1', toolName: 'ask_user', args: { question: 'Deploy now?' } })]),
     );
 
     const tool = state.pendingTools.get('tool-1');
     expect(tool).toBeInstanceOf(ToolExecutionComponentEnhanced);
 
-    handleMessageEnd(ctx, {
-      id: 'msg-1',
-      role: 'assistant',
-      content: [],
-      stopReason: 'error',
-      errorMessage: 'Tool execution failed: permission denied',
-      createdAt: new Date(),
-    } as AgentControllerMessage);
+    handleMessageEnd(
+      ctx,
+      terminalMessage([], { stopReason: 'error', errorMessage: 'Tool execution failed: permission denied' }),
+    );
 
     expect(state.pendingTools.size).toBe(0);
     const output = stripAnsi((tool as ToolExecutionComponentEnhanced).render(100).join('\n'));
@@ -555,59 +662,5 @@ describe('handleMessageUpdate system reminders', () => {
     expect(output).toContain('✗');
     expect(output).toContain('Tool execution failed: permission denied');
     expect(output).not.toContain('╭──');
-  });
-
-  it('dedupes state signals with same stateId but different cacheKey/mode', () => {
-    const assistant = new AssistantMessageComponent(undefined, false);
-    state.chatContainer.addChild(assistant);
-    state.streamingComponent = assistant;
-
-    // First state signal with cacheKey 'a'
-    handleMessageUpdate(
-      ctx,
-      createAssistantMessage([
-        {
-          type: 'state_signal',
-          stateId: 'browser',
-          mode: 'snapshot',
-          cacheKey: 'session-a',
-          message: 'Page A',
-        } as never,
-      ]),
-    );
-    const firstStateComponents = state.chatContainer.children.filter(c => c instanceof StateSignalComponent);
-    expect(firstStateComponents).toHaveLength(1);
-
-    // Same stateId + cacheKey + mode → deduped
-    handleMessageUpdate(
-      ctx,
-      createAssistantMessage([
-        {
-          type: 'state_signal',
-          stateId: 'browser',
-          mode: 'snapshot',
-          cacheKey: 'session-a',
-          message: 'Page A',
-        } as never,
-      ]),
-    );
-    const afterDupe = state.chatContainer.children.filter(c => c instanceof StateSignalComponent);
-    expect(afterDupe).toHaveLength(1);
-
-    // Same stateId but different cacheKey → NOT deduped
-    handleMessageUpdate(
-      ctx,
-      createAssistantMessage([
-        {
-          type: 'state_signal',
-          stateId: 'browser',
-          mode: 'snapshot',
-          cacheKey: 'session-b',
-          message: 'Page B',
-        } as never,
-      ]),
-    );
-    const afterDifferentCacheKey = state.chatContainer.children.filter(c => c instanceof StateSignalComponent);
-    expect(afterDifferentCacheKey).toHaveLength(2);
   });
 });

@@ -302,7 +302,7 @@ Bind mounts are applied at container creation time. The host paths must exist be
 
 ## Hardening
 
-Use Docker-specific resource and hardening options to limit a sandbox container. The following example caps memory and process count, limits CPU to a single core with matching `cpuPeriod` and `cpuQuota` values, drops Linux capabilities, makes the root filesystem read-only, and mounts `/tmp` as writable scratch space:
+Use Docker-specific resource and hardening options to limit a sandbox container. The following example caps memory and process count while limiting CPU to a single core with matching `cpuPeriod` and `cpuQuota` values. It drops Linux capabilities and makes the root filesystem read-only, with `/tmp` mounted as writable scratch space:
 
 ```typescript
 const sandbox = new DockerSandbox({
@@ -328,7 +328,7 @@ These options map directly to Docker `HostConfig` fields and aren't set unless y
 Review these trade-offs before enabling hardening:
 
 - `readonlyRootfs`: In-container package installs and tools that write outside mounted paths can fail. Add `tmpfs` entries for writable scratch paths such as `/tmp`, and mount tmpfs or volumes for package-manager caches such as `~/.npm` when needed.
-- `capDrop`: Dropping all capabilities disables commands that need Linux capabilities, including `ping`, mount operations, and FUSE-backed tools. Add back only the capabilities your workload needs.
+- `capDrop`: Dropping all capabilities disables commands that need Linux capabilities, including `ping` and mount operations. FUSE-backed tools are also disabled. Add back only the capabilities your workload needs.
 - `memory`: Docker treats `0` as unlimited. Omit `memory` or pass `0` only when you don't want a memory cap.
 - `memorySwap`: Docker memory and swap behavior depends on the host and Docker daemon configuration. When you set `memory` without `memorySwap`, Docker allows swap up to twice the memory limit by default. Set `memorySwap` equal to `memory` when you want to disable swap for the container; Docker also accepts `-1` for unlimited swap.
 - `pidsLimit`: Very low values can break `docker exec` workloads because each command starts additional processes inside the long-lived container.

@@ -59,7 +59,7 @@ const webSearchTool = createTool({
 
 // Base agent configuration (shared across all patterns)
 const baseAgentConfig = {
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.5',
   instructions: `You are a research assistant that helps users find and summarize information.
 
 When given a research topic:

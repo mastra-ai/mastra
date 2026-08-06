@@ -14,6 +14,16 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
   },
 }));
 
+vi.mock('@mastra/core/tools', () => ({
+  createTool: (config: any) => ({
+    id: config.id,
+    description: config.description,
+    inputSchema: config.inputSchema,
+    outputSchema: config.outputSchema,
+    execute: async (input: any) => config.execute(input),
+  }),
+}));
+
 import { createBedrockKBTool } from './bedrock-knowledge-base';
 
 describe('createBedrockKBTool', () => {

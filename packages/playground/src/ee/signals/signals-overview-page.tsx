@@ -1,55 +1,71 @@
-import { SignalsOverviewPage as SignalsOverviewPageContent } from '@mastra/playground-ui/ee/signals/components/signals-overview-page';
-import type { SignalsOverviewPageProps } from '@mastra/playground-ui/ee/signals/components/signals-overview-page';
-import { useCallback, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
+import { useState } from 'react';
+
+import { Link } from '../../lib/link';
+import { useEntityLearningProgress } from './hooks';
+import { SankeySignals } from './sankey-signals';
+import { SignalsErrorState } from './signals-error-state';
+import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import type { TraceSignalName } from './types';
+import { useSelectedThemeEntity } from './use-selected-theme-entity';
+
+const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
 
 export function SignalsOverviewPage() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const entityId = searchParams.get('entityId');
-  const selectedEntity = useMemo(() => (entityId ? { entityType: 'agent', entityId } : null), [entityId]);
-
-  const handleEntityChange = useCallback<SignalsOverviewPageProps['onEntityChange']>(
-    selected => {
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (selected) {
-            next.set('entityId', selected.entityId);
-          } else {
-            next.delete('entityId');
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
+  const { entitiesQuery, entity } = useSelectedThemeEntity();
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('last-7d');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+  const [dateTo, setDateTo] = useState<Date>();
+  const handleDateChange = (value: Date | undefined, type: 'from' | 'to') => {
+    if (type === 'from') setDateFrom(value);
+    else setDateTo(value);
+  };
+  const signalNames = entity ? SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName)) : [];
+  const progressQuery = useEntityLearningProgress(
+    entity?.entityId,
+    entity?.entityType ?? 'agent',
+    !entitiesQuery.isPending && !entitiesQuery.isError && signalNames.length < 2,
   );
 
-  const handleSignalSelect = useCallback<SignalsOverviewPageProps['onSignalSelect']>(
-    (signalName, topicId) => {
-      const params = new URLSearchParams();
-      if (selectedEntity) {
-        params.set('entityId', selectedEntity.entityId);
-      }
-      if (topicId) {
-        params.set('topicId', topicId);
-      }
-      const query = params.toString();
-      void navigate(`/signals/${signalName}${query ? `?${query}` : ''}`, { viewTransition: true });
-    },
-    [navigate, selectedEntity],
-  );
+  if (entitiesQuery.isPending) {
+    return <SignalsLoadingSkeleton />;
+  }
+
+  if (entitiesQuery.isError) {
+    return (
+      <SignalsErrorState message="Unable to load trace signal entities." onRetry={() => void entitiesQuery.refetch()} />
+    );
+  }
+
+  if (!entity) {
+    return <SignalsEmptyState LinkComponent={Link} />;
+  }
+
+  if (signalNames.length < 2) {
+    return <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />;
+  }
 
   return (
-    <SignalsOverviewPageContent
-      selectedEntity={selectedEntity}
-      onEntityChange={handleEntityChange}
-      onSignalSelect={handleSignalSelect}
+    <SankeySignals
+      key={`${entity.entityId}:${signalNames.join(',')}:${dateFrom?.toISOString() ?? 'open'}:${dateTo?.toISOString() ?? 'open'}`}
+      entityId={entity.entityId}
+      entityType="agent"
+      signalNames={signalNames}
+      dateFrom={dateFrom}
+      dateTo={dateTo}
+      dateRangePicker={
+        <DateTimeRangePicker
+          preset={datePreset}
+          onPresetChange={setDatePreset}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateChange={handleDateChange}
+          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+          size="sm"
+        />
+      }
     />
   );
 }
-
-export default SignalsOverviewPage;

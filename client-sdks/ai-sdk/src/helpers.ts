@@ -157,13 +157,14 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         // Preserve messageId from the payload so it can be sent to useChat
         ...(chunk.payload?.messageId ? { messageId: chunk.payload.messageId } : {}),
       };
-    case 'step-start':
-      const { messageId: _messageId, ...rest } = chunk.payload;
+    case 'step-start': {
+      const { messageId: _messageId, ...rest } = chunk.payload ?? {};
       return {
         type: 'start-step',
         request: rest.request,
         warnings: normalizeWarnings(rest.warnings),
       };
+    }
     case 'raw':
       return {
         type: 'raw',
@@ -175,7 +176,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         type: 'finish',
         finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
         ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
-        totalUsage: normalizeUsage(chunk.payload.output.usage),
+        totalUsage: normalizeUsage(chunk.payload.output?.usage ?? (chunk.payload as any).usage),
       };
     }
     case 'reasoning-start':

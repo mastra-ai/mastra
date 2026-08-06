@@ -85,7 +85,12 @@ async function decodeStep(
   await dispatchEvent(
     {
       type: 'message_update',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'streaming...' }] },
+      message: {
+        id: 'msg-streaming',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'streaming...' }] },
+      },
     } as any,
     ectx,
     state,
@@ -141,7 +146,15 @@ describe('tokens/sec decode-window calculation', () => {
     vi.setSystemTime(1000); // request issued; nothing streamed yet
     vi.setSystemTime(4000);
     await dispatchEvent(
-      { type: 'message_update', message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] } } as any,
+      {
+        type: 'message_update',
+        message: {
+          id: 'msg-hello',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+        },
+      } as any,
       ectx,
       state,
     );
@@ -163,7 +176,12 @@ describe('tokens/sec decode-window calculation', () => {
     await dispatchEvent(
       {
         type: 'message_update',
-        message: { role: 'assistant', content: [{ type: 'text', text: 'streaming...' }] },
+        message: {
+          id: 'msg-streaming',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'streaming...' }] },
+        },
       } as any,
       ectx,
       state,
@@ -180,7 +198,15 @@ describe('tokens/sec decode-window calculation', () => {
 
     vi.setSystemTime(4000);
     await dispatchEvent(
-      { type: 'message_update', message: { role: 'user', content: [{ type: 'text', text: 'user text' }] } } as any,
+      {
+        type: 'message_update',
+        message: {
+          id: 'msg-user',
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'user text' }] },
+        },
+      } as any,
       ectx,
       state,
     );
@@ -328,7 +354,15 @@ describe('tokens/sec decode-window calculation', () => {
         type: 'message_update',
         message: {
           role: 'assistant',
-          content: [{ type: 'tool-call', toolCallId: 'tc_1', toolName: 'submit_plan', args: {} }],
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { toolCallId: 'tc_1', toolName: 'submit_plan', args: {}, state: 'call' },
+              },
+            ],
+          },
         },
       } as any,
       ectx,

@@ -1,4 +1,4 @@
-import { describe, expect, test, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('execa', () => ({
   execa: vi.fn(),
@@ -108,5 +108,56 @@ describe('getVersionTag', () => {
     const tag = await getVersionTag();
 
     expect(tag).toBeUndefined();
+  });
+
+  test('uses an explicitly supplied version without resolving package metadata', async () => {
+    const { execa } = await import('execa');
+    const fsExtra = (await import('fs-extra')).default;
+    vi.mocked(execa).mockResolvedValue({ stdout: 'snapshot: 1.2.3-snapshot.4' } as any);
+
+    const { getVersionTag } = await import('./utils');
+    const tag = await getVersionTag('1.2.3-snapshot.4');
+
+    expect(tag).toBe('snapshot');
+    expect(fsExtra.readJSON).not.toHaveBeenCalled();
+    expect(execa).toHaveBeenCalledWith('npm', ['dist-tag', 'ls', 'mastra'], expect.any(Object));
+  });
+
+  test('warns and falls back to latest when explicit create version lookup fails', async () => {
+    const { execa } = await import('execa');
+    vi.mocked(execa).mockRejectedValue(new Error('registry unavailable'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { getVersionTag } = await import('./utils');
+    const tag = await getVersionTag('1.2.3');
+
+    expect(tag).toBe('latest');
+    expect(consoleSpy).toHaveBeenCalledWith('We could not resolve the mastra version tag, falling back to "latest"');
+  });
+});
+
+describe('gitInit', () => {
+  test('initializes the repository, stages files, and creates the initial commit', async () => {
+    vi.resetAllMocks();
+    vi.resetModules();
+    const { execa } = await import('execa');
+    vi.mocked(execa).mockResolvedValue({} as any);
+    const { gitInit } = await import('./utils');
+
+    await gitInit({ cwd: '/project' });
+
+    expect(execa).toHaveBeenNthCalledWith(1, 'git', ['init'], { cwd: '/project', stdio: 'ignore' });
+    expect(execa).toHaveBeenNthCalledWith(2, 'git', ['add', '-A'], { cwd: '/project', stdio: 'ignore' });
+    expect(execa).toHaveBeenNthCalledWith(
+      3,
+      'git',
+      [
+        'commit',
+        '-m',
+        'Initial commit from Mastra',
+        '--author="dane-ai-mastra[bot] <dane-ai-mastra[bot]@users.noreply.github.com>"',
+      ],
+      { cwd: '/project', stdio: 'ignore' },
+    );
   });
 });

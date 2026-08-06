@@ -7,9 +7,9 @@ packages:
 
 # StreamErrorRetryProcessor
 
-`StreamErrorRetryProcessor` is an **error processor** that retries transient errors emitted after an LLM stream starts. It includes built-in matching for OpenAI Responses stream errors and supports additional matchers for other provider-specific stream error shapes.
+`StreamErrorRetryProcessor` is an **error processor** that retries transient LLM API and stream failures. It includes built-in matching for OpenAI Responses stream errors and supports additional matchers for other provider-specific error shapes.
 
-The processor isn't enabled by default in core. Add it to `errorProcessors` for agents that need stream-error retry handling.
+The processor isn't enabled by default in core. Add it to `errorProcessors` for agents that need bounded retry handling.
 
 ## Usage example
 
@@ -39,6 +39,18 @@ The processor checks the error and its cause chain for:
 When the error is retryable, the processor returns `{ retry: true }`. It doesn't mutate messages.
 
 When `delayMs` is set, the processor waits before signaling a retry. This is useful for transient network errors like `ECONNRESET` where immediately retrying is likely to fail again. The delay can be a fixed number of milliseconds or a function evaluated with the error args (for example, to implement exponential backoff).
+
+### Retry limits
+
+`maxRetries` defaults to `1` and limits this processor's retry requests. The agent also limits processor retries with `maxProcessorRetries`. When error processors are configured without an agent limit, the runtime cap is `10`.
+
+Set both values explicitly to the same bounded value when you need a single retry budget. Keep model `maxRetries` at `0` for that call to avoid multiplying provider attempts.
+
+### `Retry-After` handling
+
+For retryable errors with a `Retry-After` response header, the processor reads case-insensitive delta-seconds and HTTP-date values through the error cause chain. It waits for the longer of `delayMs` and the bounded server delay.
+
+`maxRetryAfterMs` defaults to `30_000`. It caps only provider-provided wait time. A longer explicit `delayMs` remains unchanged. Invalid or expired headers are ignored.
 
 ## Retry unknown errors
 
@@ -141,6 +153,14 @@ export const agent = new Agent({
           'Delay in milliseconds to wait before signaling a retry. Accepts a fixed number or a function evaluated with the current error args (for example, for exponential backoff). Negative or non-finite values are clamped to 0.',
         isOptional: true,
         defaultValue: '0',
+      },
+      {
+        name: 'maxRetryAfterMs',
+        type: 'number',
+        description:
+          'Maximum provider-controlled delay read from a Retry-After header. This does not cap an explicit delayMs value. Negative or non-finite values are clamped to 0.',
+        isOptional: true,
+        defaultValue: '30000',
       },
     ],
   },

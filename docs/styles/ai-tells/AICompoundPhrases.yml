@@ -1,0 +1,139 @@
+---
+extends: existence
+message: "AI fingerprint: '%s'. Rewrite with concrete specifics instead of this clichéd phrase."
+level: error
+ignorecase: true
+tokens:
+  - rich tapestry
+  - rich tapestries
+  - tapestry of
+  - intricate tapestry
+  - complex and multifaceted
+  - multifaceted and complex
+  - intricate interplay
+  - delicate balance
+  - delicate interplay
+  - dynamic interplay
+  - crucial role
+  - played a crucial role
+  - plays a crucial role
+  - vital role
+  - pivotal role
+  - key role
+  - instrumental role
+  - cutting-edge
+  - game-changer
+  - game-changing
+  - paradigm shift
+  - sea change
+  - tipping point
+  - watershed moment
+  - double-edged sword
+  - slippery slope
+  - tip of the iceberg
+  - at the forefront
+  - on the cutting edge
+  - paving the way
+  - laid the groundwork
+  - lays the groundwork
+  - sets the stage
+  - set the stage
+  - a testament to
+  - stands as a testament
+  - serve as a reminder
+  - serves as a reminder
+  - it remains to be seen
+  - only time will tell
+  - the jury is still out
+  - takes center stage
+  - take center stage
+  - took center stage
+  - paints a picture of
+  - paint a picture of
+  - painted a picture of
+  - is not without its challenges
+  - are not without their challenges
+  - is not without challenges
+  - whether we like it or not
+  - whether you like it or not
+  - a cornerstone of
+  - the transformative power of
+  - deeply rooted in
+  - deeply rooted
+  - the hallmark of
+  - a hallmark of
+  - moving the needle
+  - moves the needle
+  - moved the needle
+  - move the needle
+  - nudge the needle
+  - nudges the needle
+  - nudged the needle
+  - unlocks new
+  - unlocked new
+  - unlocking new
+  - unlock new
+  - unlocks the potential
+  - unlock the potential
+  - unlocks the power
+  - unlock the power
+  - unlocks the value
+  - unlock the value
+  - unlocks capabilities
+  - unlock capabilities
+  - unlocks possibilities
+  - unlock possibilities
+
+  # "real" as intensifier before an abstract noun.
+  # AI reaches for "a real choice" / "a real difference" to inflate
+  # weight where a plain noun would do. Bare "real" is too broad
+  # (real-time, real estate, real world), so this is enumerated.
+  - a real choice
+  - a real option
+  - a real difference
+  - a real test
+  - a real question
+  - a real chance
+  - a real problem
+  - a real shot
+  - a real risk
+  - a real cost
+  - a real benefit
+  - real value
+  - real progress
+  - real flexibility
+  - real benefits
+  - real costs
+  - real impact
+  - real leverage
+  - real ownership
+  - real accountability
+  - real consequences
+  - real tradeoffs
+  - real trade-offs
+  - real choices
+  - real options
+  - real differences
+
+  # Investigation-thread metaphors: AI's preferred way to describe
+  # "open questions" or "loose ends." Tutorial-blog tone.
+  - threads to pull on
+  - thread to pull on
+  - threads to pull
+  - thread to pull
+  - loose threads to pull
+  - loose threads to chase
+  - another thread to pull
+  - more threads to pull
+
+  # Solidification metaphors: the surface/design/contract "hardens"
+  # before some deadline. AI reaches for this constantly when
+  # describing in-progress work or pre-release windows.
+  # Broad regex catches "before/after X hardens" for any 1-6
+  # word X.
+  - (?:before|after) [^.,;:!?]{1,40} hardens
+  - (?:before|after) [^.,;:!?]{1,40} hardened
+  - (?:before|after) [^.,;:!?]{1,40} solidifies
+  - (?:before|after) [^.,;:!?]{1,40} solidified
+  - (?:before|after) [^.,;:!?]{1,40} ossifies
+  - (?:before|after) [^.,;:!?]{1,40} ossified

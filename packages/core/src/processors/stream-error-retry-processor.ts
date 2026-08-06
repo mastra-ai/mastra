@@ -1,5 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
+import { clampDelayMs, DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../utils/retry-after';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
 export type StreamErrorRetryMatcher = (error: unknown) => boolean;
@@ -15,6 +16,7 @@ export type StreamErrorRetryMatcherConfig = {
   match: StreamErrorRetryMatcher;
   maxRetries?: number;
   delayMs?: StreamErrorRetryDelayMs;
+  onRetry?: (args: ProcessAPIErrorArgs & { delayMs: number }) => void | Promise<void>;
 };
 
 /** A matcher entry: either a plain predicate or a config object with per-matcher policy. */
@@ -36,6 +38,12 @@ export type StreamErrorRetryProcessorOptions = {
    * existing behavior for consumers that do not configure a delay.
    */
   delayMs?: StreamErrorRetryDelayMs;
+  /**
+   * Maximum provider-controlled Retry-After delay in milliseconds. Invalid values
+   * are clamped to 0. Defaults to 30 seconds. This does not cap an explicitly
+   * configured delayMs value.
+   */
+  maxRetryAfterMs?: number;
 };
 
 const DEFAULT_MAX_RETRIES = 1;
@@ -173,7 +181,11 @@ function isKnownTerminalAuthorizationError(error: unknown): boolean {
   return visit(error);
 }
 
-type MatchedPolicy = { maxRetries?: number; delayMs?: StreamErrorRetryDelayMs };
+type MatchedPolicy = {
+  maxRetries?: number;
+  delayMs?: StreamErrorRetryDelayMs;
+  onRetry?: StreamErrorRetryMatcherConfig['onRetry'];
+};
 
 function normalizeEntry(entry: StreamErrorRetryMatcherEntry): StreamErrorRetryMatcherConfig {
   return typeof entry === 'function' ? { match: entry } : entry;
@@ -181,9 +193,8 @@ function normalizeEntry(entry: StreamErrorRetryMatcherEntry): StreamErrorRetryMa
 
 /**
  * Walk the error cause chain and return the policy of the first matching
- * entry, or `undefined` when no matcher fires. Provider `isRetryable`
- * metadata is checked first (returns an empty policy so processor-level
- * defaults apply). Among user-supplied matchers, first-match wins.
+ * entry, or `undefined` when no matcher fires. Explicit matchers take
+ * precedence over provider `isRetryable` metadata, and first-match wins.
  */
 function findMatchingPolicy(error: unknown, entries: StreamErrorRetryMatcherConfig[]): MatchedPolicy | undefined {
   const visited = new WeakSet<object>();
@@ -194,14 +205,14 @@ function findMatchingPolicy(error: unknown, entries: StreamErrorRetryMatcherConf
       visited.add(candidate);
     }
 
-    if (isRetryableProviderMetadata(candidate)) {
-      return {};
-    }
-
     for (const entry of entries) {
       if (entry.match(candidate)) {
-        return { maxRetries: entry.maxRetries, delayMs: entry.delayMs };
+        return { maxRetries: entry.maxRetries, delayMs: entry.delayMs, onRetry: entry.onRetry };
       }
+    }
+
+    if (isRetryableProviderMetadata(candidate)) {
+      return {};
     }
 
     const cause = getObjectCause(candidate);
@@ -219,6 +230,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
   readonly #entries: StreamErrorRetryMatcherConfig[];
   readonly #retryUnknownErrors: boolean;
   readonly #delayMs: StreamErrorRetryDelayMs | undefined;
+  readonly #maxRetryAfterMs: number;
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
@@ -226,6 +238,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
     this.#entries = [...defaultEntries, ...(options.matchers ?? []).map(normalizeEntry)];
     this.#retryUnknownErrors = options.retryUnknownErrors ?? false;
     this.#delayMs = options.delayMs;
+    this.#maxRetryAfterMs = clampDelayMs(options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS);
   }
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
@@ -240,49 +253,18 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
     if (retryCount >= effectiveMaxRetries) return;
 
     const effectiveDelay = policy.delayMs ?? this.#delayMs;
-    if (effectiveDelay !== undefined) {
-      await waitDelay(effectiveDelay, args, abortSignal);
-    }
+    const configuredDelayMs = effectiveDelay === undefined ? 0 : await resolveDelayMs(effectiveDelay, args);
+    const retryAfterMs = getRetryAfterMs(error);
+    const providerDelayMs = retryAfterMs === undefined ? 0 : Math.min(retryAfterMs, this.#maxRetryAfterMs);
+    const delayMs = Math.max(configuredDelayMs, providerDelayMs);
+    await policy.onRetry?.({ ...args, delayMs });
+    await waitDelay(delayMs, abortSignal);
 
     return { retry: true };
   }
 }
 
-function clampDelayMs(value: number): number {
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-async function waitDelay(
-  delayMs: StreamErrorRetryDelayMs,
-  args: ProcessAPIErrorArgs,
-  abortSignal?: AbortSignal,
-): Promise<void> {
+async function resolveDelayMs(delayMs: StreamErrorRetryDelayMs, args: ProcessAPIErrorArgs): Promise<number> {
   const delay = typeof delayMs === 'function' ? await delayMs(args) : delayMs;
-  const ms = clampDelayMs(delay);
-  if (ms <= 0) return;
-
-  if (!abortSignal) {
-    await new Promise<void>(resolve => setTimeout(resolve, ms));
-    return;
-  }
-
-  await new Promise<void>(resolve => {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const onAbort = () => {
-      if (timeout) clearTimeout(timeout);
-      abortSignal.removeEventListener('abort', onAbort);
-      resolve();
-    };
-    // Register before checking aborted to close the race window where
-    // abort fires between the check and addEventListener.
-    abortSignal.addEventListener('abort', onAbort, { once: true });
-    if (abortSignal.aborted) {
-      onAbort();
-      return;
-    }
-    timeout = setTimeout(() => {
-      abortSignal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-  });
+  return clampDelayMs(delay);
 }

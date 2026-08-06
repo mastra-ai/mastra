@@ -63,6 +63,10 @@ export type PaginationInfo = {
 
 export type MastraMessageFormat = 'v1' | 'v2';
 
+export type StorageMetadataFilterValue = string | number | boolean | null;
+
+export type StorageMetadataFilter = Record<string, StorageMetadataFilterValue>;
+
 /**
  * Common options for listing messages (pagination, filtering, ordering)
  */
@@ -100,6 +104,13 @@ type StorageListMessagesOptions = {
        */
       endExclusive?: boolean;
     };
+    /**
+     * Filter messages by shallow scalar metadata key-value pairs from message content metadata.
+     * All specified key-value pairs must match with exact type equality (AND logic).
+     * Keys must start with a letter or underscore, contain only letters, numbers, and underscores,
+     * be at most 128 characters, and cannot be `__proto__`, `prototype`, or `constructor`.
+     */
+    metadata?: StorageMetadataFilter;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
 };
@@ -2451,17 +2462,25 @@ export interface DatasetItemToolMock {
  * Diagnostic receipt for tool-mock usage on a single experiment result.
  * Structurally mirrors `ToolMockReport` in the experiment engine.
  */
+export type DatasetUnmockedToolPolicy = 'allow' | 'deny';
+
 export interface DatasetToolMockReport {
   served: { mockIndex: number; toolName: string; args: unknown }[];
   unconsumed: { mockIndex: number; toolName: string; args: unknown }[];
   liveCalls: { toolName: string; args: unknown }[];
-  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
+  failure?: {
+    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED' | 'TOOL_MOCK_NOT_DECLARED';
+    toolName: string;
+    args: unknown;
+  };
 }
 
 export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Caller-defined, dataset-local logical identity. Immutable after insertion. */
+  externalId?: string | null;
   /** Inherited from the parent dataset at insert time. */
   organizationId?: string | null;
   /** Inherited from the parent dataset at insert time. */
@@ -2470,6 +2489,8 @@ export interface DatasetItem {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2481,6 +2502,8 @@ export interface DatasetItemRow {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Caller-defined, dataset-local logical identity. Immutable across SCD-2 history. */
+  externalId?: string | null;
   /** Inherited from the parent dataset at insert time. */
   organizationId?: string | null;
   /** Inherited from the parent dataset at insert time. */
@@ -2491,6 +2514,8 @@ export interface DatasetItemRow {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2508,6 +2533,11 @@ export interface DatasetVersion {
 // Dataset CRUD Input/Output Types
 
 export interface CreateDatasetInput {
+  /**
+   * Optional caller-defined durable identity. When provided, storage adapters atomically create
+   * the dataset or return the compatible dataset that already owns this ID.
+   */
+  id?: string;
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
@@ -2593,10 +2623,18 @@ export interface UpdateDatasetInput {
  * {@link UpdateDatasetItemInput}.
  */
 export interface DatasetItemPayload {
+  /**
+   * Optional caller-defined identity scoped to this dataset. Reusing an identity
+   * with the originally accepted payload is idempotent; incompatible reuse fails.
+   */
+  externalId?: string;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2619,10 +2657,18 @@ export interface AddDatasetItemInput extends DatasetItemPayload {
  * The optional `filters` field is a tenancy read-scope for the parent dataset;
  * see {@link AddDatasetItemInput.filters}.
  */
-export interface UpdateDatasetItemInput extends Partial<DatasetItemPayload> {
+export interface UpdateDatasetItemInput extends Partial<Omit<DatasetItemPayload, 'externalId' | 'scorerIds'>> {
   id: string;
   datasetId: string;
+  scorerIds?: string[] | null;
   filters?: DatasetTenancyFilters;
+}
+
+export interface DatasetItemIdentityConflictDetail {
+  index: number;
+  externalId: string;
+  existingItemId: string;
+  reason: 'payload_mismatch' | 'deleted';
 }
 
 /**
@@ -2762,6 +2808,7 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
+  comment?: string | null;
   toolMockReport?: DatasetToolMockReport | null;
   /** Multi-tenant organization/account scope. Denormalized from the parent experiment for efficient tenancy-scoped queries. */
   organizationId?: string | null;
@@ -2776,6 +2823,7 @@ export interface UpdateExperimentResultInput {
   experimentId?: string;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  comment?: string | null;
 }
 
 export interface CreateExperimentInput {

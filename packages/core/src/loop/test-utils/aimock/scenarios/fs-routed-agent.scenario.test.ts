@@ -20,7 +20,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 // Run the direct comparison on every execution engine except `'fs'` itself
 // (this file builds both a code and an fs agent, so re-running it under the fs
 // variant would be redundant). `'durable'` wraps the agent and is orthogonal to
-// the assembly path; normal/evented fully cover loop parity.
+// the assembly path; the normal engine covers loop parity.
 describeForAllEngines(
   'AIMock loop scenario: file-routed agent parity',
   engine => {

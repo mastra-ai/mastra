@@ -17,7 +17,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.89",
+    "@ai-sdk/openai": "^2.0.110",
     "@mastra/core": "deployers-e2e-test",
     "@mastra/deployer-cloudflare": "deployers-e2e-test",
     "@mastra/pg": "deployers-e2e-test",
@@ -25,9 +25,9 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "mastra": "deployers-e2e-test",
-    "wrangler": "^4.61.1",
-    "typescript": "^6.0.3"
+    "wrangler": "^4.110.0",
+    "typescript": "^7.0.2"
   }
 }

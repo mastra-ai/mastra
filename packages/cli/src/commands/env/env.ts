@@ -12,6 +12,7 @@ import {
   restartEnvironment,
 } from './platform-api.js';
 import { resolveProject } from './resolve-project.js';
+import { registerEnvVarsCommands } from './vars.js';
 
 /**
  * Shape returned by `mastra env list --json` and `mastra env create --json`.
@@ -118,6 +119,9 @@ export function registerEnvCommands(program: Command): Command {
     .option(...PROJECT_OPTION)
     .option('--json', 'Output as JSON')
     .action(wrapAction(listDeploysAction));
+
+  // Env vars: mastra env vars ...
+  registerEnvVarsCommands(env);
 
   return env;
 }

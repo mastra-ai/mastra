@@ -55,12 +55,12 @@ export const mastra = new Mastra({
 ```
 
 :::note
-When using `import { env } from 'cloudflare:workers'`, `D1Store` must be initialized inline inside `new Mastra({...})` — not extracted to a module-level variable. Alternatively, initialize `D1Store` inside the `fetch` handler after `env` is available. See [CloudflareDeployer reference](/reference/deployer/cloudflare#cloudflare-bindings) for details.
+When using `import { env } from 'cloudflare:workers'`, `D1Store` must be initialized inline inside `new Mastra({...})`: not extracted to a module-level variable. Alternatively, initialize `D1Store` inside the `fetch` handler after `env` is available. See [CloudflareDeployer reference](/reference/deployer/cloudflare#cloudflare-bindings) for details.
 :::
 
 ### Using in a Cloudflare Worker without HTTP routes
 
-If you want to call Mastra directly in a Worker — for example, to run an agent or trigger a workflow — without serving HTTP routes, you don't need `CloudflareDeployer`. Access the D1 binding from the worker's `env` parameter and call Mastra programmatically.
+If you want to call Mastra directly in a Worker (for example, to run an agent or trigger a workflow) without serving HTTP routes, you don't need `CloudflareDeployer`. Access the D1 binding from the worker's `env` parameter and call Mastra programmatically.
 
 ```typescript
 import { D1Store } from '@mastra/cloudflare-d1'
@@ -235,8 +235,8 @@ If `init()` isn't called, tables won't be created and storage operations will fa
 
 ### Transactions & Consistency
 
-Cloudflare D1 provides transactional guarantees for single-row operations. This means that multiple operations can be executed as a single, all-or-nothing unit of work.
+Cloudflare D1 provides transactional guarantees for single-row operations. Multiple operations can be executed as a single, all-or-nothing unit of work.
 
 ### Table Creation & Migrations
 
-Tables are created automatically when storage is initialized (and can be isolated per environment using the `tablePrefix` option), but advanced schema changes—such as adding columns, changing data types, or modifying indexes—require manual migration and careful planning to avoid data loss.
+Tables are created automatically when storage is initialized (and can be isolated per environment using the `tablePrefix` option), but advanced schema changes require manual migration and careful planning. Examples include adding columns or changing data types and indexes to avoid data loss.
