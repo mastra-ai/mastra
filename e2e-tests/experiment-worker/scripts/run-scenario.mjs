@@ -11,7 +11,7 @@ if (!scenario) {
   process.exit(1);
 }
 
-const result = spawnSync('pnpm', ['exec', 'vitest', 'run', 'tests', '--testNamePattern', scenario, ...args], {
+const result = spawnSync('pnpm', ['exec', 'vitest', 'run', '--testNamePattern', scenario, ...args], {
   stdio: 'inherit',
   env: {
     ...process.env,
