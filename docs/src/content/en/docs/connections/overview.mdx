@@ -12,6 +12,9 @@ packages:
   - "@mastra/mcp"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Connections overview
 
 Connections let Mastra work with remote agents, coding agents, provider software development kit (SDK) runtimes, and external tools and resources. Choose a connection type based on which system owns the agent runtime and what you need to exchange.
@@ -33,6 +36,77 @@ Use connections when you need to:
 ## Get started
 
 Start with the boundary you need to cross. Use [A2A](/docs/agents/a2a) for remote agent endpoints, [ACP](/docs/agents/acp) for coding-agent processes, [SDK agents](/docs/agents/sdk-agents) for provider-owned runtimes, or [MCP](/docs/mcp/overview) for tools and resources.
+
+After completing the setup on the linked page, use the corresponding tab as a minimal starting point.
+
+<Tabs>
+  <TabItem value="a2a" label="A2A">
+    ```typescript
+    import { A2AAgent } from '@mastra/core/a2a'
+
+    const agent = new A2AAgent({
+      url: 'https://agent.example.com/.well-known/agent-card.json',
+    })
+
+    const result = await agent.generate('Summarize the latest report')
+    console.log(result.text)
+    ```
+  </TabItem>
+
+  <TabItem value="acp" label="ACP">
+    ```typescript
+    import { AcpAgent } from '@mastra/acp'
+
+    const agent = new AcpAgent({
+      id: 'coding-agent',
+      description: 'Inspects and edits code',
+      command: 'claude',
+      args: ['--acp'],
+    })
+
+    const result = await agent.generate('Review this project')
+    console.log(result.text)
+    ```
+  </TabItem>
+
+  <TabItem value="sdk-agents" label="SDK agents">
+    ```typescript
+    import { OpenAISDKAgent } from '@mastra/openai'
+
+    const agent = new OpenAISDKAgent({
+      id: 'openai-agent',
+      description: 'Answers project questions',
+      sdkOptions: {
+        name: 'Project assistant',
+        model: '__AI_SDK_OPENAI_MODEL_BASE__',
+      },
+    })
+
+    const result = await agent.generate('Summarize this project')
+    console.log(result.text)
+    ```
+  </TabItem>
+
+  <TabItem value="mcp" label="MCP">
+    ```typescript
+    import { MCPClient } from '@mastra/mcp'
+
+    const client = new MCPClient({
+      id: 'wikipedia-client',
+      servers: {
+        wikipedia: {
+          command: 'npx',
+          args: ['-y', 'wikipedia-mcp'],
+        },
+      },
+    })
+
+    const tools = await client.listTools()
+    console.log(Object.keys(tools))
+    await client.disconnect()
+    ```
+  </TabItem>
+</Tabs>
 
 ## Next steps
 
