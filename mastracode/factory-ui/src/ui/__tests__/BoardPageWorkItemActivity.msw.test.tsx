@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -239,9 +239,10 @@ describe('Board work-item activity', () => {
         return HttpResponse.json({ events: [events[2]], actors: { 'user-ada': actors['user-ada'] } });
       }),
     );
-    renderBoard('work');
+    const { client } = renderBoard('work');
 
     await expectActivity('Ada Lovelace', 'Moved the item');
+    await waitForMutationsIdle(client);
     expect(requestedBefore).toContain(null);
     expect(requestedBefore).toContain('cursor-2');
   });
