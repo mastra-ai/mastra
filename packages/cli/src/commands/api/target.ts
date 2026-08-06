@@ -161,7 +161,11 @@ async function resolvePlatformServiceTarget(
 export function isPlatformHostedInstance(url: string): boolean {
   let hostname: string;
   try {
-    hostname = new URL(url).hostname.toLowerCase();
+    const parsed = new URL(url);
+    // Only attach the stored bearer token over HTTPS to avoid leaking
+    // credentials on unencrypted connections.
+    if (parsed.protocol !== 'https:') return false;
+    hostname = parsed.hostname.toLowerCase();
   } catch {
     return false;
   }

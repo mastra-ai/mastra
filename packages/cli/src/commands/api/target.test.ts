@@ -404,6 +404,7 @@ describe('resolveTarget', () => {
       ['https://shipyard.server.mastra.cloud', 'production user-provided server'],
       ['https://shipyard.server.staging.mastra.cloud', 'staging user-provided server'],
       ['https://runtime.example.com', 'arbitrary custom URL'],
+      ['http://shipyard.factory.mastra.cloud', 'non-HTTPS platform host'],
     ])('does not attach Bearer for %s (%s)', async url => {
       await expect(resolveTarget(options({ url }))).resolves.toEqual({
         baseUrl: url,
