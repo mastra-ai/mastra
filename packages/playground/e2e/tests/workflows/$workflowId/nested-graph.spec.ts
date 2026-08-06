@@ -7,22 +7,26 @@ import { resetStorage } from '../../__utils__/reset-storage';
 // BEHAVIOR UNDER TEST: Triggering "View nested graph" mounts the step detail panel
 // showing the nested workflow.
 
-test.afterEach(async () => {
-  await resetStorage();
-});
+test.describe('Workflow nested graph', () => {
+  test.afterEach(async () => {
+    await resetStorage();
+  });
 
-test.beforeEach(async ({ page }) => {
-  await page.goto('/workflows/complexWorkflow/graph');
-});
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/workflows/complexWorkflow/graph');
+  });
 
-test('opens the nested graph view', async ({ page }) => {
-  const nestedNode = page.locator('[data-workflow-node]').filter({ hasText: 'nested-text-processor' });
-  await expect(nestedNode).toBeVisible();
+  test.describe('when "View nested graph" is selected on a nested step', () => {
+    test('opens the nested graph view in the step detail panel', async ({ page }) => {
+      const nestedNode = page.locator('[data-workflow-node]').filter({ hasText: 'nested-text-processor' });
+      await expect(nestedNode).toBeVisible();
 
-  await nestedNode.getByRole('button', { name: 'Step actions' }).click();
-  await page.getByRole('menuitem', { name: 'View nested graph' }).click();
+      await nestedNode.getByRole('button', { name: 'Step actions' }).click();
+      await page.getByRole('menuitem', { name: 'View nested graph' }).click();
 
-  const panel = page.getByTestId('workflow-step-detail-panel');
-  await expect(panel).toBeVisible({ timeout: 15000 });
-  await expect(panel).toContainText('Workflow');
+      const panel = page.getByTestId('workflow-step-detail-panel');
+      await expect(panel).toBeVisible({ timeout: 15000 });
+      await expect(panel).toContainText('Workflow');
+    });
+  });
 });

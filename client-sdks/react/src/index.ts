@@ -4,7 +4,7 @@ export * from './agent/types';
 export type { MastraClientCredentials, MastraClientProviderProps } from './mastra-client-context';
 export { useMastraClient } from './mastra-client-context';
 export * from './lib/mastra-db';
-export type { TaskItem } from '@mastra/core/harness';
+export type { TaskItem } from '@mastra/core/signals';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,

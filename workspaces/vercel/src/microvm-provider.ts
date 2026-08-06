@@ -3,20 +3,20 @@
  *
  * @example
  * ```typescript
- * import { vercelMicroVMSandboxProvider } from '@mastra/vercel';
+ * import { vercelSandboxProvider } from '@mastra/vercel';
  *
  * const editor = new MastraEditor({
- *   sandboxes: [vercelMicroVMSandboxProvider],
+ *   sandboxes: [vercelSandboxProvider],
  * });
  * ```
  */
 import type { SandboxProvider } from '@mastra/core/editor';
-import { VercelMicroVMSandbox } from './microvm';
+import { VercelSandbox } from './microvm';
 
 /**
- * Serializable subset of VercelMicroVMSandboxOptions for editor storage.
+ * Serializable subset of VercelSandboxOptions for editor storage.
  */
-interface VercelMicroVMProviderConfig {
+interface VercelSandboxProviderConfig {
   token?: string;
   teamId?: string;
   projectId?: string;
@@ -27,8 +27,8 @@ interface VercelMicroVMProviderConfig {
   env?: Record<string, string>;
 }
 
-export const vercelMicroVMSandboxProvider: SandboxProvider<VercelMicroVMProviderConfig> = {
-  id: 'vercel-microvm',
+export const vercelSandboxProvider: SandboxProvider<VercelSandboxProviderConfig> = {
+  id: 'vercel-sandbox',
   name: 'Vercel Sandbox (MicroVM)',
   description: 'Ephemeral Firecracker MicroVM sandbox powered by Vercel Sandbox',
   configSchema: {
@@ -58,7 +58,7 @@ export const vercelMicroVMSandboxProvider: SandboxProvider<VercelMicroVMProvider
     },
   },
   createSandbox: config =>
-    new VercelMicroVMSandbox({
+    new VercelSandbox({
       token: config.token,
       teamId: config.teamId,
       projectId: config.projectId,

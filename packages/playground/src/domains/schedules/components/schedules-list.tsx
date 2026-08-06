@@ -20,7 +20,9 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     if (!term) return schedules;
-    return schedules.filter(s => s.id.toLowerCase().includes(term) || s.target.workflowId.toLowerCase().includes(term));
+    return schedules.filter(
+      s => s.id.toLowerCase().includes(term) || (s.workflowId ?? s.agentId ?? '').toLowerCase().includes(term),
+    );
   }, [schedules, search]);
 
   if (isLoading) {
@@ -30,7 +32,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
   return (
     <DataList columns={COLUMNS} variant="striped" className="min-w-0">
       <DataList.Top>
-        <DataList.TopCell>Workflow</DataList.TopCell>
+        <DataList.TopCell>Target</DataList.TopCell>
         <DataList.TopCell>Schedule ID</DataList.TopCell>
         <DataList.TopCell>Cron</DataList.TopCell>
         <DataList.TopCell>Status</DataList.TopCell>
@@ -43,15 +45,15 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
 
       {filtered.map(s => (
         <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link}>
-          <DataList.NameCell>{s.target.workflowId}</DataList.NameCell>
+          <DataList.NameCell>{s.workflowId ?? s.agentId}</DataList.NameCell>
           <DataList.Cell height="compact" className="min-w-0">
-            <span className="block truncate font-mono text-ui-smd text-neutral3" title={s.id}>
+            <span className="text-ui-smd text-neutral3 block truncate font-mono" title={s.id}>
               {s.id}
             </span>
           </DataList.Cell>
           <DataList.Cell height="compact">
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
-              <code className="font-mono text-ui-sm">{s.cron}</code>
+              <code className="text-ui-sm font-mono">{s.cron}</code>
               {s.timezone ? <span className="text-neutral4 text-ui-xs">{s.timezone}</span> : null}
             </span>
           </DataList.Cell>

@@ -2,33 +2,53 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import {
+  Composer,
+  ComposerActions,
+  ComposerAttachments,
+  ComposerBox,
+  ComposerInput,
+  ComposerRing,
+} from '@mastra/playground-ui/components/Composer';
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
+import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
-import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
+import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
-import { ComposerAttachments } from './attachments/attachment';
+import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import './composer-sending.css';
+import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
+import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
+import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
+const EMPTY_SUGGESTED_PROMPTS: string[] = [];
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously, so
@@ -70,23 +90,44 @@ const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   });
 };
 
+const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
+  if (turns.length === 0) return null;
+
+  return (
+    <div
+      data-testid="thread-rail-layer"
+      className="thread-rail-layer pointer-events-none absolute inset-y-0 left-4 z-20"
+    >
+      <ThreadRail turns={turns} className="pointer-events-auto sticky top-1/2 -translate-y-1/2" />
+    </div>
+  );
+};
+
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   threadId?: string;
+  suggestedPrompts?: string[];
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
   runOptionsSlot?: React.ReactNode;
+  /**
+   * Called when a voice call connects. On a brand-new chat the agent page passes its
+   * thread-list refresh here so the page navigates from /new to the real thread URL.
+   */
+  refreshThreadList?: () => Promise<void> | void;
 }
 
 export const Thread = ({
   agentName,
   agentId,
   threadId,
+  suggestedPrompts,
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
+  refreshThreadList,
 }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -104,90 +145,122 @@ export const Thread = ({
   const lastMessage = messages[messages.length - 1];
   const showPending = isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
   const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
+  const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
+  const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
 
   return (
     <ComposerAttachmentsProvider>
-      <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
-        <div ref={areaRef} className="overflow-y-scroll h-full" style={{ overflowAnchor: 'none' }}>
-          {isEmpty ? (
-            <ThreadWelcome agentName={agentName} />
-          ) : (
-            <div
-              ref={messagesContainerRef}
-              className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+      <MessageScrollerProvider>
+        <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
+          <MessageScroller>
+            <MessageScrollerViewport
+              ref={areaRef}
+              className="h-full overflow-y-scroll"
+              style={{ overflowAnchor: 'none' }}
             >
-              <BracketOverlay containerRef={messagesContainerRef} />
-              <div className="flex flex-col gap-6 py-6">
-                {messages.map(message => {
-                  // Prefer the optimistic `clientMessageId` as the React key so the
-                  // user row keeps a stable identity when `data-user-message`
-                  // reconciliation swaps `message.id` to the server signal id. A
-                  // changing key would unmount/remount the row and shift the
-                  // trailing pending indicator. Falls back to `message.id` for
-                  // messages without a correlation key (assistant, reloaded).
-                  const messageKey =
-                    (message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] as string | undefined) ?? message.id;
-                  return (
-                    <MessageRow
-                      key={messageKey}
-                      message={message}
-                      hasModelList={hasModelList}
-                      isSpeaking={isSpeaking}
-                      onReadAloud={readAloud}
-                      onStopSpeaking={stopSpeaking}
-                    />
-                  );
-                })}
-                {delayedPending && <PendingIndicator />}
-              </div>
+              {isEmpty ? (
+                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
+              ) : (
+                <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
+                  <ThreadRailLayer turns={threadRailTurns} />
+                  <div
+                    ref={messagesContainerRef}
+                    data-testid="thread-message-column"
+                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+                  >
+                    <BracketOverlay containerRef={messagesContainerRef} />
+                    <MessageScrollerContent className="flex flex-col gap-6 py-6">
+                      {messages.map(message => {
+                        // Prefer the optimistic `clientMessageId` as the React key so the
+                        // user row keeps a stable identity when `data-user-message`
+                        // reconciliation swaps `message.id` to the server signal id. A
+                        // changing key would unmount/remount the row and shift the
+                        // trailing pending indicator. Falls back to `message.id` for
+                        // messages without a correlation key (assistant, reloaded).
+                        const messageKey = getClientMessageKey(message);
+                        return (
+                          <MessageScrollerItem
+                            key={messageKey}
+                            messageId={message.id}
+                            scrollAnchor={threadRailAnchorIds.has(message.id)}
+                          >
+                            <MessageRow
+                              message={message}
+                              hasModelList={hasModelList}
+                              isSpeaking={isSpeaking}
+                              onReadAloud={readAloud}
+                              onStopSpeaking={stopSpeaking}
+                            />
+                          </MessageScrollerItem>
+                        );
+                      })}
+                      {delayedPending && <PendingIndicator />}
+                    </MessageScrollerContent>
 
-              {!isRunning && <SaveFullConversationAction />}
+                    {!isRunning && <SaveFullConversationAction />}
+                  </div>
+                </div>
+              )}
+            </MessageScrollerViewport>
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
+              <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
+            </div>
+          </MessageScroller>
+
+          {showThumbnailInChat && agentId && threadId && (
+            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
+              <BrowserThumbnail agentName={agentName} />
             </div>
           )}
+
+          <TaskPanel />
+
+          <AgentComposer
+            agentId={agentId}
+            threadId={threadId}
+            hasModelList={hasModelList}
+            hideModelSwitcher={hideModelSwitcher}
+            runOptionsSlot={runOptionsSlot}
+            refreshThreadList={refreshThreadList}
+          />
         </div>
-
-        {showThumbnailInChat && agentId && threadId && (
-          <div className="mb-2 max-w-3xl w-full mx-auto px-4">
-            <BrowserThumbnail agentName={agentName} />
-          </div>
-        )}
-
-        <TaskPanel />
-
-        <Composer
-          agentId={agentId}
-          threadId={threadId}
-          hasModelList={hasModelList}
-          hideModelSwitcher={hideModelSwitcher}
-          runOptionsSlot={runOptionsSlot}
-        />
-      </div>
+      </MessageScrollerProvider>
     </ComposerAttachmentsProvider>
   );
 };
 
 export interface ThreadWelcomeProps {
   agentName?: string;
+  suggestedPrompts?: string[];
 }
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
   return (
     <div className="flex w-full grow flex-col items-center pt-[15vh]">
       <Avatar name={agentName || 'Agent'} size="lg" />
       <p className="mt-4 font-medium">How can I help you today?</p>
+      <SuggestedPromptList prompts={suggestedPrompts} />
     </div>
   );
 };
 
-interface ComposerProps {
+interface AgentComposerProps {
   agentId?: string;
   threadId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
+  refreshThreadList?: () => Promise<void> | void;
 }
 
-const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
+const AgentComposer = ({
+  agentId,
+  threadId,
+  hasModelList,
+  hideModelSwitcher,
+  runOptionsSlot,
+  refreshThreadList,
+}: AgentComposerProps) => {
   const { threadInput: text, setThreadInput } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const send = useChatSend();
@@ -196,6 +269,9 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+  // On a brand-new chat, starting the call must transition the page out of its
+  // new-thread state (same as the first text send) or the chat never loads messages.
+  const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
 
   const isEmpty = text.trim().length === 0 && attachments.length === 0;
   const sendBlocked = isRunning && !canSendWhileStreaming;
@@ -213,93 +289,62 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
   return (
     // Named so the chat/settings view transition can slide the composer toward
     // the bottom edge independently of the root crossfade.
-    <div className="relative px-2 pb-2" style={{ viewTransitionName: 'agent-chat-composer' }}>
-      <form
-        onSubmit={e => {
-          e.preventDefault();
+    <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
+      <VoiceCallPanel voiceCall={voiceCall} />
+      <Composer
+        className="relative px-2 pb-2"
+        onSubmit={event => {
+          event.preventDefault();
           void submit();
         }}
       >
-        <div className="max-w-3xl w-full mx-auto pb-2">
-          <ComposerAttachments />
-        </div>
-
-        <div
-          className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
-          onClick={e => {
-            if (e.target === e.currentTarget) textareaRef.current?.focus();
-          }}
-        >
-          <ComposerSendingGradient pulseKey={sendPulseKey} />
-          <div className="relative z-10">
-            {/* The textarea grows with its content (field-sizing); the ScrollArea caps the
-                height and fades the clipped edges once the content overflows. */}
-            <ScrollArea maxHeight="212px">
-              <textarea
-                ref={textareaRef}
-                value={text}
-                autoFocus={false}
-                className="field-sizing-content min-h-17 w-full text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-                onChange={e => {
-                  setThreadInput(e.target.value);
-                }}
-                onKeyDown={e => {
-                  // Ignore Enter while an IME composition is active (e.g. committing a
-                  // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-                  // `keyCode === 229` fallback covers browsers that fire keydown without it.
-                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    if (sendBlocked) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void submit();
-                  }
-                }}
-                disabled={!canExecuteAgent}
-              />
-            </ScrollArea>
-            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
-            <ComposerActionRow
-              canExecute={canExecuteAgent}
-              agentId={agentId}
-              runOptionsSlot={runOptionsSlot}
-              showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
-              isEmpty={isEmpty}
-              isRunning={isRunning}
-              canSendWhileStreaming={canSendWhileStreaming}
-              onCancel={() => void cancelRun()}
-              onSetText={value => {
-                setThreadInput(value);
+        <ComposerAttachments>
+          <ChatComposerAttachments />
+        </ComposerAttachments>
+        <ComposerRing busy={isRunning}>
+          <ComposerBox sendingPulseKey={sendPulseKey}>
+            <ComposerInput
+              ref={textareaRef}
+              value={text}
+              autoFocus={false}
+              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+              onChange={event => {
+                setThreadInput(event.target.value);
               }}
+              onKeyDown={event => {
+                // Ignore Enter while an IME composition is active (e.g. committing a
+                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  if (sendBlocked) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void submit();
+                }
+              }}
+              disabled={!canExecuteAgent}
             />
-          </div>
-        </div>
-      </form>
-    </div>
-  );
-};
-
-const ComposerGradientColumn = ({ className }: { className?: string }) => (
-  <div className={cn('flex h-full w-full flex-col -space-y-3', className)}>
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Dark blur-xl" />
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Darker blur-xl" />
-  </div>
-);
-
-const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
-  if (pulseKey === 0) return null;
-  return (
-    <div
-      key={pulseKey}
-      aria-hidden
-      className="composer-sending pointer-events-none absolute -left-[10%] top-0 z-0 flex h-10 w-[120%] transform-gpu"
-    >
-      <ComposerGradientColumn />
-      <ComposerGradientColumn className="-translate-y-2" />
-      <ComposerGradientColumn />
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+            <ComposerActions>
+              <ComposerActionRow
+                canExecute={canExecuteAgent}
+                agentId={agentId}
+                runOptionsSlot={runOptionsSlot}
+                showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                isEmpty={isEmpty}
+                isRunning={isRunning}
+                canSendWhileStreaming={canSendWhileStreaming}
+                onCancel={() => void cancelRun()}
+                onSetText={value => {
+                  setThreadInput(value);
+                }}
+                voiceCall={voiceCall}
+              />
+            </ComposerActions>
+          </ComposerBox>
+        </ComposerRing>
+      </Composer>
     </div>
   );
 };
@@ -321,7 +366,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="h-5 w-5 text-neutral3 hover:text-neutral6" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
     </Button>
   );
 };
@@ -336,6 +381,7 @@ interface ComposerActionRowProps {
   canSendWhileStreaming: boolean;
   onCancel: () => void;
   onSetText: (text: string) => void;
+  voiceCall?: VoiceCallControls;
 }
 
 const ComposerActionRow = ({
@@ -348,15 +394,16 @@ const ComposerActionRow = ({
   canSendWhileStreaming,
   onCancel,
   onSetText,
+  voiceCall,
 }: ComposerActionRowProps) => {
   return (
-    <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
+    <>
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+        <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
-                <ComposerModelSwitcher agentId={agentId} />
+              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
+                <ComposerModelSwitcher />
               </div>
               <ComposerModelSettings agentId={agentId} />
             </>
@@ -369,6 +416,7 @@ const ComposerActionRow = ({
         <ButtonsGroup spacing="close">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         </ButtonsGroup>
         <ComposerSendButton
           canExecute={canExecute}
@@ -378,7 +426,7 @@ const ComposerActionRow = ({
           onCancel={onCancel}
         />
       </div>
-    </div>
+    </>
   );
 };
 
@@ -413,10 +461,10 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="rounded-full border border-border1 bg-surface5"
+        className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>

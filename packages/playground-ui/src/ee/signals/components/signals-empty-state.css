@@ -1,0 +1,54 @@
+.signals-pipeline-connector {
+  animation: signals-connector 2.8s ease-in-out infinite;
+}
+
+.signals-engine-pulse {
+  animation: signals-engine-pulse 3.2s ease-in-out infinite;
+}
+
+.signals-chip {
+  animation: signals-chip 3.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signals-pipeline-connector,
+  .signals-engine-pulse,
+  .signals-chip {
+    animation: none;
+  }
+}
+
+@keyframes signals-connector {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes signals-engine-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes signals-chip {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}

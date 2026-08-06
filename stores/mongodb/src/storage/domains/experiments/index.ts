@@ -14,6 +14,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -23,10 +24,16 @@ import type {
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
   ExperimentReviewCounts,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { cutoffFor, DEFAULT_PRUNE_BATCH_SIZE, ensureAnchorIndex, runBatchedDelete } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+import { applyTenancyFilter } from '../utils';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,6 +62,12 @@ function transformExperimentRow(row: Record<string, unknown>): Experiment {
     name: (row.name as string) ?? undefined,
     description: (row.description as string) ?? undefined,
     metadata: parseJsonField(row.metadata) ?? undefined,
+    provenance: parseJsonField(row.provenance) ?? null,
+    runnerAttestation: parseJsonField(row.runnerAttestation) ?? null,
+    experimentSetId: (row.experimentSetId as string | null) ?? null,
+    comparisonId: (row.comparisonId as string | null) ?? null,
+    variantId: (row.variantId as string | null) ?? null,
+    trialIndex: row.trialIndex != null ? Number(row.trialIndex) : null,
     datasetId: (row.datasetId as string | null) ?? null,
     datasetVersion: row.datasetVersion != null ? Number(row.datasetVersion) : null,
     organizationId: (row.organizationId as string | null) ?? null,
@@ -92,6 +105,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     traceId: (row.traceId as string | null) ?? null,
     status: (row.status as ExperimentResultStatus | null) ?? null,
     tags: Array.isArray(row.tags) ? row.tags : (parseJsonField(row.tags) ?? null),
+    comment: (row.comment as string | null) ?? null,
     toolMockReport: (parseJsonField(row.toolMockReport) as ExperimentResult['toolMockReport']) ?? null,
     createdAt: toDate(row.createdAt),
   };
@@ -108,6 +122,16 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   static readonly MANAGED_COLLECTIONS = [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS] as const;
 
+  /**
+   * Experiments prune as whole units: an experiment and its results are only
+   * deleted together, once the experiment itself is old (anchored on the
+   * parent's `completedAt`, a BSON date that stays `null` while running).
+   * `results` is intentionally not an independent retention key.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    experiments: { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -121,6 +145,69 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     return this.#connector.getCollection(name);
   }
 
+  /**
+   * Prune whole experiments older than the `experiments` policy's `maxAge`.
+   *
+   * Each batch collects up to `batchSize` aged experiment ids
+   * (`completedAt < cutoff`; BSON type bracketing means `null` — still
+   * running — never matches), then deletes their `experiment_results` rows and
+   * the experiment rows for exactly that id set inside
+   * `connector.withTransaction()` — atomic on replica sets, sequential
+   * children-first on standalone — mirroring `deleteExperiment`. Hitting
+   * `maxBatches`/`maxRows` or the abort signal between batches therefore never
+   * leaves a run hollow (parent kept, results gone). Bounds count whole
+   * experiments, not rows.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const policy = policies['experiments'];
+    if (!policy || options?.signal?.aborted) {
+      return policy
+        ? [
+            { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: 0, done: false },
+            { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
+          ]
+        : [];
+    }
+
+    await ensureAnchorIndex(
+      this.#connector,
+      { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+      this.logger,
+    );
+
+    const cutoff = cutoffFor(policy, 'date');
+    const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
+
+    const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
+    const resultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+
+    let childDeleted = 0;
+    const parent = await runBatchedDelete({
+      deleteBatch: async limit => {
+        const docs = await experimentsCollection
+          .find({ completedAt: { $lt: cutoff } })
+          .project<{ id: string }>({ id: 1 })
+          .limit(limit)
+          .toArray();
+        if (docs.length === 0) return 0;
+        const ids = docs.map(doc => doc.id);
+        return this.#connector.withTransaction(async session => {
+          const children = await resultsCollection.deleteMany({ experimentId: { $in: ids } }, { session });
+          childDeleted += children.deletedCount;
+          const parents = await experimentsCollection.deleteMany({ id: { $in: ids } }, { session });
+          return parents.deletedCount;
+        });
+      },
+      batchSize,
+      options,
+    });
+
+    return [
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: childDeleted, done: parent.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
+    ];
+  }
+
   // -------------------------------------------------------------------------
   // Index Management
   // -------------------------------------------------------------------------
@@ -130,6 +217,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       { collection: TABLE_EXPERIMENTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENTS, keys: { datasetId: 1 } },
       { collection: TABLE_EXPERIMENTS, keys: { createdAt: -1, id: 1 } },
+      { collection: TABLE_EXPERIMENTS, keys: { experimentSetId: 1, comparisonId: 1, variantId: 1, trialIndex: 1 } },
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
       { collection: TABLE_EXPERIMENTS, keys: { organizationId: 1, projectId: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { id: 1 }, options: { unique: true } },
@@ -183,6 +271,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       name: input.name ?? null,
       description: input.description ?? null,
       metadata: input.metadata ?? null,
+      provenance: input.provenance ?? null,
+      runnerAttestation: input.runnerAttestation ?? null,
+      experimentSetId: input.experimentSetId ?? null,
+      comparisonId: input.comparisonId ?? null,
+      variantId: input.variantId ?? null,
+      trialIndex: input.trialIndex ?? null,
       datasetId: input.datasetId ?? null,
       datasetVersion: input.datasetVersion ?? null,
       organizationId: input.organizationId ?? null,
@@ -194,7 +288,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       succeededCount: 0,
       failedCount: 0,
       skippedCount: 0,
-      agentVersion: null,
+      agentVersion: input.agentVersion ?? null,
       startedAt: null,
       completedAt: null,
       createdAt: now,
@@ -205,28 +299,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
       await collection.insertOne(doc);
 
-      return {
-        id,
-        name: input.name,
-        description: input.description,
-        metadata: input.metadata,
-        datasetId: input.datasetId ?? null,
-        datasetVersion: input.datasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        status: 'pending',
-        totalItems: input.totalItems,
-        succeededCount: 0,
-        failedCount: 0,
-        skippedCount: 0,
-        agentVersion: null,
-        startedAt: null,
-        completedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
+      return transformExperimentRow(structuredClone(doc));
     } catch (error) {
       throw new MastraError(
         {
@@ -283,10 +356,18 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({ id }: { id: string }): Promise<Experiment | null> {
+  async getExperimentById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<Experiment | null> {
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
-      const doc = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const doc = await collection.findOne(query);
       if (!doc) return null;
       return transformExperimentRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
@@ -323,6 +404,10 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       if (args.status) {
         filter.status = args.status;
       }
+      if (args.experimentSetId !== undefined) filter.experimentSetId = args.experimentSetId;
+      if (args.comparisonId !== undefined) filter.comparisonId = args.comparisonId;
+      if (args.variantId !== undefined) filter.variantId = args.variantId;
+      if (args.trialIndex !== undefined) filter.trialIndex = args.trialIndex;
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
@@ -377,14 +462,26 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment({ id }: { id: string }): Promise<void> {
+  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Delete results first (FK semantics)
-      const resultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      await resultsCollection.deleteMany({ experimentId: id });
-
+      // Tenancy predicate applied on every destructive query (not only the
+      // pre-check). Silent no-op on mismatch.
       const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
-      await experimentsCollection.deleteOne({ id });
+      const gateQuery: Record<string, any> = { id };
+      applyTenancyFilter(gateQuery, filters);
+      const existing = await experimentsCollection.findOne(gateQuery);
+      if (!existing) return;
+
+      // Delete results first (FK semantics). Scope on the results collection too
+      // — result rows carry organizationId/projectId of the owning experiment.
+      const resultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+      const resultsQuery: Record<string, any> = { experimentId: id };
+      applyTenancyFilter(resultsQuery, filters);
+      await resultsCollection.deleteMany(resultsQuery);
+
+      const parentDeleteQuery: Record<string, any> = { id };
+      applyTenancyFilter(parentDeleteQuery, filters);
+      await experimentsCollection.deleteOne(parentDeleteQuery);
     } catch (error) {
       throw new MastraError(
         {
@@ -469,6 +566,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
     if (input.status !== undefined) updateFields.status = input.status;
     if (input.tags !== undefined) updateFields.tags = input.tags;
+    if (input.comment !== undefined) updateFields.comment = input.comment;
 
     if (Object.keys(updateFields).length === 0) {
       const existing = await this.getExperimentResultById({ id: input.id });
@@ -517,10 +615,18 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({ id }: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      const doc = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const doc = await collection.findOne(query);
       if (!doc) return null;
       return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
@@ -598,10 +704,28 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults({ experimentId }: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults({
+    experimentId,
+    filters,
+  }: {
+    experimentId: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<void> {
     try {
+      // Tenancy predicate applied on the destructive deleteMany itself. Result
+      // rows carry organizationId/projectId of the owning experiment. Silent
+      // no-op on mismatch.
+      if (filters?.organizationId !== undefined || filters?.projectId !== undefined) {
+        const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
+        const gateQuery: Record<string, any> = { id: experimentId };
+        applyTenancyFilter(gateQuery, filters);
+        const parent = await experimentsCollection.findOne(gateQuery);
+        if (!parent) return;
+      }
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      await collection.deleteMany({ experimentId });
+      const deleteQuery: Record<string, any> = { experimentId };
+      applyTenancyFilter(deleteQuery, filters);
+      await collection.deleteMany(deleteQuery);
     } catch (error) {
       throw new MastraError(
         {

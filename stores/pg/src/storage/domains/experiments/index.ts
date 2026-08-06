@@ -16,6 +16,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -25,10 +26,18 @@ import type {
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
   CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { cutoffFor, runBatchedDelete } from '../../retention';
+import { getTableName, getSchemaName, tenancyWhere } from '../utils';
+
+const DEFAULT_PRUNE_BATCH_SIZE = 1000;
 
 export class ExperimentsPG extends ExperimentsStorage {
   #db: PgDB;
@@ -37,6 +46,18 @@ export class ExperimentsPG extends ExperimentsStorage {
   #indexes?: CreateIndexOptions[];
 
   static readonly MANAGED_TABLES = [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS] as const;
+
+  /**
+   * Experiments prune as whole units: an aged experiment and its result rows go
+   * together, mirroring `deleteExperiment`. Anchored on `completedAt` (not the
+   * `completedAtZ` mirror, which carries a `DEFAULT NOW()` this domain never
+   * overrides — it holds insert time even for running rows). `completedAt` is
+   * written as a UTC ISO string and stays NULL while running, so
+   * `completedAt < cutoff` is false for in-flight experiments.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    experiments: { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+  };
 
   constructor(config: PgDomainConfig) {
     super();
@@ -69,20 +90,115 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId'],
+      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
 
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(ExperimentsPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Delete experiments whose `completedAt` is older than the policy's `maxAge`.
+   *
+   * Each batch selects up to `batchSize` aged experiments and deletes their
+   * `experiment_results` rows and the experiment rows in one transaction —
+   * mirroring `deleteExperiment` — so hitting `maxBatches`/`maxRows` or the
+   * abort signal between batches never leaves a run hollow (parent kept,
+   * results gone). NULL `completedAt` (still running) is excluded by the
+   * `< cutoff` predicate. Bounds count whole experiments, not rows.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const policy = policies['experiments'];
+    if (!policy || options?.signal?.aborted) {
+      return policy
+        ? [
+            { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: 0, done: false },
+            { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
+          ]
+        : [];
+    }
+
+    await this.ensureRetentionIndexes(policies);
+
+    // `completedAt` is a naive TIMESTAMP holding UTC ISO strings, so bind the
+    // cutoff as a UTC ISO string too — a Date would be serialized with the
+    // session's local offset and compared against the wrong wall time.
+    const rawCutoff = cutoffFor(policy, 'timestamp');
+    const cutoff = rawCutoff instanceof Date ? rawCutoff.toISOString() : rawCutoff;
+    const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
+
+    let childDeleted = 0;
+    const parent = await runBatchedDelete({
+      deleteBatch: async limit => {
+        const { parents, children } = await this.#db.pruneUnitsBatch({
+          parentTable: TABLE_EXPERIMENTS,
+          parentKey: 'id',
+          parentColumn: 'completedAt',
+          childTable: TABLE_EXPERIMENT_RESULTS,
+          childForeignKey: 'experimentId',
+          cutoff,
+          limit,
+        });
+        childDeleted += children;
+        return parents;
+      },
+      batchSize,
+      options,
+    });
+
+    return [
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: childDeleted, done: parent.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
+    ];
+  }
+
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
     return [
       { name: 'idx_experiments_datasetid', table: TABLE_EXPERIMENTS, columns: ['datasetId'] },
+      {
+        name: 'idx_experiments_grouping',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
+      },
       { name: 'idx_experiment_results_experimentid', table: TABLE_EXPERIMENT_RESULTS, columns: ['experimentId'] },
       {
         name: 'idx_experiment_results_exp_item',
@@ -134,6 +250,12 @@ export class ExperimentsPG extends ExperimentsStorage {
       name: (row.name as string) ?? undefined,
       description: (row.description as string) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
+      provenance: row.provenance ? safelyParseJSON(row.provenance) : null,
+      runnerAttestation: row.runnerAttestation ? safelyParseJSON(row.runnerAttestation) : null,
+      experimentSetId: (row.experimentSetId as string | null) ?? null,
+      comparisonId: (row.comparisonId as string | null) ?? null,
+      variantId: (row.variantId as string | null) ?? null,
+      trialIndex: row.trialIndex != null ? (row.trialIndex as number) : null,
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       agentVersion: (row.agentVersion as string | null) ?? null,
@@ -171,6 +293,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,
+      comment: (row.comment as string | null) ?? null,
       toolMockReport: row.toolMockReport ? safelyParseJSON(row.toolMockReport) : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
@@ -191,6 +314,12 @@ export class ExperimentsPG extends ExperimentsStorage {
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ?? null,
+          provenance: input.provenance ?? null,
+          runnerAttestation: input.runnerAttestation ?? null,
+          experimentSetId: input.experimentSetId ?? null,
+          comparisonId: input.comparisonId ?? null,
+          variantId: input.variantId ?? null,
+          trialIndex: input.trialIndex ?? null,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
           agentVersion: input.agentVersion ?? null,
@@ -215,6 +344,12 @@ export class ExperimentsPG extends ExperimentsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
         agentVersion: input.agentVersion ?? null,
@@ -325,10 +460,18 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({ id }: { id: string }): Promise<Experiment | null> {
+  async getExperimentById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<Experiment | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const whereSql = ['"id" = $1', ...conditions].join(' AND ');
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -371,6 +514,22 @@ export class ExperimentsPG extends ExperimentsStorage {
       if (args.status) {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
+      }
+      if (args.experimentSetId !== undefined) {
+        conditions.push(`"experimentSetId" = $${paramIndex++}`);
+        queryParams.push(args.experimentSetId);
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push(`"comparisonId" = $${paramIndex++}`);
+        queryParams.push(args.comparisonId);
+      }
+      if (args.variantId !== undefined) {
+        conditions.push(`"variantId" = $${paramIndex++}`);
+        queryParams.push(args.variantId);
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push(`"trialIndex" = $${paramIndex++}`);
+        queryParams.push(args.trialIndex);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
@@ -427,7 +586,7 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment({ id }: { id: string }): Promise<void> {
+  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
       const resultsTable = getTableName({
         indexName: TABLE_EXPERIMENT_RESULTS,
@@ -435,9 +594,18 @@ export class ExperimentsPG extends ExperimentsStorage {
       });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
-      // Delete results first (FK semantics)
-      await this.#db.client.none(`DELETE FROM ${resultsTable} WHERE "experimentId" = $1`, [id]);
-      await this.#db.client.none(`DELETE FROM ${experimentsTable} WHERE "id" = $1`, [id]);
+      // Tenancy gate + cascade run in a single transaction with SELECT ... FOR UPDATE,
+      // so a concurrent delete/recreate cannot let a scoped delete hit another tenant's row.
+      // Silent no-op on tenancy mismatch (does not throw).
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
+
+      await this.#db.client.tx(async t => {
+        const parent = await t.oneOrNone(gateSql, [id, ...params]);
+        if (!parent) return;
+        await t.none(`DELETE FROM ${resultsTable} WHERE "experimentId" = $1`, [id]);
+        await t.none(`DELETE FROM ${experimentsTable} WHERE "id" = $1`, [id]);
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -529,6 +697,10 @@ export class ExperimentsPG extends ExperimentsStorage {
         setClauses.push(`"tags" = $${paramIndex++}`);
         values.push(JSON.stringify(input.tags));
       }
+      if (input.comment !== undefined) {
+        setClauses.push(`"comment" = $${paramIndex++}`);
+        values.push(input.comment);
+      }
 
       if (setClauses.length === 0) {
         const existing = await this.getExperimentResultById({ id: input.id });
@@ -578,10 +750,18 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({ id }: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const whereSql = ['"id" = $1', ...conditions].join(' AND ');
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -666,9 +846,31 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults({ experimentId }: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults({
+    experimentId,
+    filters,
+  }: {
+    experimentId: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+
+      // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
+      // tenancy mismatch.
+      if (filters?.organizationId !== undefined || filters?.projectId !== undefined) {
+        const { conditions, params } = tenancyWhere(filters, 2);
+        const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
+
+        await this.#db.client.tx(async t => {
+          const parent = await t.oneOrNone(gateSql, [experimentId, ...params]);
+          if (!parent) return;
+          await t.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);
+        });
+        return;
+      }
+
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);
     } catch (error) {
       throw new MastraError(

@@ -67,7 +67,7 @@ registerApiRoute('/my-custom-route', {
 
 ### Using `RequestContext`
 
-You can populate `RequestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+You can populate `RequestContext` in a runtime server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

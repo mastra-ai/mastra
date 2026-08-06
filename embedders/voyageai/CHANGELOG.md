@@ -1,5 +1,66 @@
 # @mastra/voyageai
 
+## 0.4.0
+
+### Minor Changes
+
+- Fixed VoyageAI multimodal embeddings sending text as bare strings (the API rejected the payload) and added a `baseUrl` option so you can point the embedder, reranker, and contextualized models at a provider-hosted Voyage endpoint. ([#19804](https://github.com/mastra-ai/mastra/pull/19804))
+
+  **Before**
+
+  ```ts
+  // multimodal text was serialized as inputs: [["text"]] -> HTTP 400
+  ```
+
+  **After**
+
+  ```ts
+  const embedder = voyage.multimodalEmbedding({
+    model: 'voyage-multimodal-3.5',
+    baseUrl: 'https://ai.mongodb.com/v1',
+  });
+  ```
+
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Fixed VoyageAI multimodal embeddings sending text as bare strings (the API rejected the payload) and added a `baseUrl` option so you can point the embedder, reranker, and contextualized models at a provider-hosted Voyage endpoint. ([#19804](https://github.com/mastra-ai/mastra/pull/19804))
+
+  **Before**
+
+  ```ts
+  // multimodal text was serialized as inputs: [["text"]] -> HTTP 400
+  ```
+
+  **After**
+
+  ```ts
+  const embedder = voyage.multimodalEmbedding({
+    model: 'voyage-multimodal-3.5',
+    baseUrl: 'https://ai.mongodb.com/v1',
+  });
+  ```
+
+## 0.3.0
+
+### Minor Changes
+
+- Added support for the `voyage-context-4` contextualized chunk embedding model (preview). Each chunk is embedded with awareness of the other chunks in the same document, capturing both local detail and document-level context. Supports flexible output dimensions (256, 512, 1024, 2048). ([#18413](https://github.com/mastra-ai/mastra/pull/18413))
+
+  ```typescript
+  import { voyage, voyageContextualizedEmbedding } from '@mastra/voyageai';
+
+  // Pre-configured model
+  const result = await voyage.context4.doEmbed({
+    values: [['Paragraph 1 from doc 1...', 'Paragraph 2 from doc 1...'], ['Content from doc 2...']],
+    inputType: 'document',
+  });
+
+  // Or configure explicitly
+  const model = voyageContextualizedEmbedding({ model: 'voyage-context-4', outputDimension: 512 });
+  ```
+
 ## 0.3.0-alpha.0
 
 ### Minor Changes

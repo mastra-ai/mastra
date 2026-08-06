@@ -16,6 +16,7 @@ import type {
   ExperimentResult,
   ExperimentReviewCounts,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -48,6 +49,7 @@ interface ExperimentRow {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion: string | null;
   organizationId: string | null;
   projectId: string | null;
   targetType: string;
@@ -55,6 +57,12 @@ interface ExperimentRow {
   name: string | null;
   description: string | null;
   metadata: string | null;
+  provenance: string | null;
+  runnerAttestation: string | null;
+  experimentSetId: string | null;
+  comparisonId: string | null;
+  variantId: string | null;
+  trialIndex: number | null;
   status: string;
   totalItems: number;
   succeededCount: number;
@@ -83,6 +91,7 @@ interface ExperimentResultRow {
   traceId: string | null;
   status: string | null;
   tags: string | null;
+  comment: string | null;
   createdAt: Date | string;
 }
 
@@ -102,6 +111,11 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     return [
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with
       // pg/libsql/spanner/mongodb experiments adapters).
+      {
+        name: 'idx_experiments_grouping',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
+      },
       {
         name: 'idx_experiments_org_project',
         table: TABLE_EXPERIMENTS,
@@ -178,12 +192,22 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+      ],
     });
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['comment', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -199,6 +223,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       id: row.id,
       datasetId: row.datasetId ?? null,
       datasetVersion: row.datasetVersion ?? null,
+      agentVersion: row.agentVersion ?? null,
       organizationId: row.organizationId ?? null,
       projectId: row.projectId ?? null,
       targetType: row.targetType as Experiment['targetType'],
@@ -206,6 +231,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       name: row.name ?? undefined,
       description: row.description ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
+      provenance: parseJSON<Experiment['provenance']>(row.provenance) ?? null,
+      runnerAttestation: parseJSON<Experiment['runnerAttestation']>(row.runnerAttestation) ?? null,
+      experimentSetId: row.experimentSetId ?? null,
+      comparisonId: row.comparisonId ?? null,
+      variantId: row.variantId ?? null,
+      trialIndex: row.trialIndex ?? null,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems,
       succeededCount: row.succeededCount,
@@ -236,6 +267,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       traceId: row.traceId ?? null,
       status: (row.status as ExperimentResultStatus | null) ?? null,
       tags: row.tags ? (parseJSON<string[]>(row.tags) ?? null) : null,
+      comment: row.comment ?? null,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
     };
   }
@@ -251,6 +283,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           id,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
+          agentVersion: input.agentVersion ?? null,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
           targetType: input.targetType,
@@ -258,6 +291,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+          provenance: input.provenance ? JSON.stringify(input.provenance) : null,
+          runnerAttestation: input.runnerAttestation ? JSON.stringify(input.runnerAttestation) : null,
+          experimentSetId: input.experimentSetId ?? null,
+          comparisonId: input.comparisonId ?? null,
+          variantId: input.variantId ?? null,
+          trialIndex: input.trialIndex ?? null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
@@ -274,6 +313,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: input.datasetVersion,
+        agentVersion: input.agentVersion ?? null,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
         targetType: input.targetType,
@@ -281,6 +321,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
@@ -349,11 +395,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentRow>({
         tableName: TABLE_EXPERIMENTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperiment(row) : null;
     } catch (error) {
@@ -378,6 +430,38 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (args.datasetId) {
         conditions.push(`${quoteIdentifier('datasetId', 'column name')} = ?`);
         params.push(args.datasetId);
+      }
+      if (args.targetType) {
+        conditions.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        params.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push(`${quoteIdentifier('targetId', 'column name')} = ?`);
+        params.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push(`${quoteIdentifier('agentVersion', 'column name')} = ?`);
+        params.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
+      }
+      if (args.experimentSetId !== undefined) {
+        conditions.push(`${quoteIdentifier('experimentSetId', 'column name')} = ?`);
+        params.push(args.experimentSetId);
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push(`${quoteIdentifier('comparisonId', 'column name')} = ?`);
+        params.push(args.comparisonId);
+      }
+      if (args.variantId !== undefined) {
+        conditions.push(`${quoteIdentifier('variantId', 'column name')} = ?`);
+        params.push(args.variantId);
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push(`${quoteIdentifier('trialIndex', 'column name')} = ?`);
+        params.push(args.trialIndex);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
@@ -437,11 +521,33 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
+      // tenancy mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: any[] = [];
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.organizationId);
+      }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.projectId);
+      }
+      const gateWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+
       const connection = await this.pool.getConnection();
       try {
         await connection.beginTransaction();
+        const [gateRows] = await connection.execute(
+          `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${gateWhere} FOR UPDATE`,
+          [args.id, ...tenancyParams],
+        );
+        if (!Array.isArray(gateRows) || gateRows.length === 0) {
+          await connection.commit();
+          return;
+        }
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
           [args.id],
@@ -551,11 +657,20 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentResultRow>({
         tableName: TABLE_EXPERIMENT_RESULTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperimentResult(row) : null;
     } catch (error) {
@@ -589,6 +704,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       }
       if (input.tags !== undefined) {
         updateData.tags = input.tags ? JSON.stringify(input.tags) : null;
+      }
+      if (input.comment !== undefined) {
+        updateData.comment = input.comment;
       }
 
       if (Object.keys(updateData).length > 0) {
@@ -726,8 +844,28 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
+      if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
+        const tenancyConditions: string[] = [];
+        const tenancyParams: any[] = [];
+        if (args.filters?.organizationId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.organizationId);
+        }
+        if (args.filters?.projectId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.projectId);
+        }
+        const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+        await this.pool.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
+          [args.experimentId, ...tenancyParams],
+        );
+        return;
+      }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
         [args.experimentId],

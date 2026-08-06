@@ -2,6 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { noopLogger } from '../../logger';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -249,6 +250,7 @@ describe('MCP Tool Tracing', () => {
           mcpServer: 'filesystem-server',
           serverVersion: '1.2.0',
           toolDescription: 'List files in a directory',
+          toolCallId: 'test-call-id',
         },
       }),
     );
@@ -300,6 +302,7 @@ describe('MCP Tool Tracing', () => {
         attributes: {
           toolDescription: 'A regular tool',
           toolType: 'tool',
+          toolCallId: 'test-call-id',
         },
       }),
     );
@@ -350,6 +353,7 @@ describe('MCP Tool Tracing', () => {
       mcpServer: 'my-mcp-server',
       serverVersion: undefined,
       toolDescription: 'Read a resource',
+      toolCallId: 'test-call-id',
     });
     expect(spanArgs.name).toBe("mcp_tool: 'mcp_read-resource' on 'my-mcp-server'");
   });
@@ -647,22 +651,56 @@ describe('CoreToolBuilder background task schema injection', () => {
 });
 
 describe('CoreToolBuilder requestContext merge', () => {
+  it('preserves requestContext identity when closure and exec contexts are the same instance', async () => {
+    const sharedRC = new RequestContext();
+    sharedRC.set('initial-key', 'initial-value');
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      ctx.requestContext.set('tool-write-key', 'tool-write-value');
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+        requestContext: sharedRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: sharedRC });
+
+    expect(receivedCtx.requestContext).toBe(sharedRC);
+    expect(sharedRC.get('tool-write-key')).toBe('tool-write-value');
+  });
+
   it('preserves non-serializable closure requestContext values when exec RC is also present', async () => {
     // Simulates what happens when the evented workflow engine deserialises requestContext:
-    // the 'harness' key (containing functions) is lost because JSON.stringify drops functions
+    // the 'controller' key (containing functions) is lost because JSON.stringify drops functions
     // and may throw on objects with circular references.
-    const harnessCtx = {
-      harnessId: 'h-1',
+    const controllerCtx = {
+      controllerId: 'c-1',
       getState: () => ({ tasks: [] }),
       setState: vi.fn(),
       updateState: vi.fn(),
     };
 
     const closureRC = new RequestContext();
-    closureRC.set('harness', harnessCtx);
+    closureRC.set('controller', controllerCtx);
     closureRC.set('serializable-key', 'from-closure');
 
-    // The evented engine's RC — reconstructed from toJSON(), missing 'harness'
+    // The evented engine's RC — reconstructed from toJSON(), missing 'controller'
     const execRC = new RequestContext();
     execRC.set('serializable-key', 'from-exec');
     execRC.set('workflow-only-key', 42);
@@ -694,8 +732,8 @@ describe('CoreToolBuilder requestContext merge', () => {
 
     const merged = receivedCtx.requestContext!;
     // Non-serializable key from closure is preserved
-    expect(merged.get('harness')).toBe(harnessCtx);
-    expect((merged.get('harness') as any).updateState).toBe(harnessCtx.updateState);
+    expect(merged.get('controller')).toBe(controllerCtx);
+    expect((merged.get('controller') as any).updateState).toBe(controllerCtx.updateState);
     // Closure value wins for shared keys
     expect(merged.get('serializable-key')).toBe('from-closure');
     // Exec-only key is preserved
@@ -704,7 +742,7 @@ describe('CoreToolBuilder requestContext merge', () => {
 
   it('falls back to closure RC when exec RC is empty', async () => {
     const closureRC = new RequestContext();
-    closureRC.set('harness', { harnessId: 'h-1' });
+    closureRC.set('controller', { controllerId: 'c-1' });
 
     const receivedCtx: { requestContext?: RequestContext } = {};
     const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
@@ -732,6 +770,134 @@ describe('CoreToolBuilder requestContext merge', () => {
     await builtTool.execute!({}, { toolCallId: 'call-1', messages: [] });
 
     // With no exec RC, closure RC is used directly
-    expect(receivedCtx.requestContext!.get('harness')).toEqual({ harnessId: 'h-1' });
+    expect(receivedCtx.requestContext!.get('controller')).toEqual({ controllerId: 'c-1' });
+  });
+
+  // Same public API as RequestContext but a different prototype — simulates an
+  // RC constructed by a duplicate @mastra/core copy (bundlers, monorepos),
+  // where `instanceof RequestContext` is false (#19772).
+  class ForeignRequestContext {
+    private map = new Map<string, unknown>();
+    set(key: string, value: unknown) {
+      this.map.set(key, value);
+    }
+    get(key: string) {
+      return this.map.get(key);
+    }
+    has(key: string) {
+      return this.map.has(key);
+    }
+    entries() {
+      return this.map.entries();
+    }
+    size() {
+      return this.map.size;
+    }
+  }
+
+  it('uses a foreign-copy exec requestContext when no closure requestContext is provided', async () => {
+    const foreignRC = new ForeignRequestContext();
+    foreignRC.set('exec-key', 'exec-value');
+    expect(foreignRC instanceof RequestContext).toBe(false);
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: foreignRC as any });
+
+    expect(receivedCtx.requestContext!.get('exec-key')).toBe('exec-value');
+  });
+
+  it('merges a foreign-copy exec requestContext with the closure requestContext', async () => {
+    const closureRC = new RequestContext();
+    closureRC.set('shared-key', 'from-closure');
+    closureRC.set('closure-only-key', 'closure-only');
+
+    const foreignRC = new ForeignRequestContext();
+    foreignRC.set('shared-key', 'from-exec');
+    foreignRC.set('exec-only-key', 42);
+    expect(foreignRC instanceof RequestContext).toBe(false);
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+        requestContext: closureRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: foreignRC as any });
+
+    const merged = receivedCtx.requestContext!;
+    // Exec-only entries from the foreign copy are preserved
+    expect(merged.get('exec-only-key')).toBe(42);
+    // Closure value wins for shared keys (merge semantics unchanged)
+    expect(merged.get('shared-key')).toBe('from-closure');
+    expect(merged.get('closure-only-key')).toBe('closure-only');
+  });
+
+  it('passes a same-copy exec requestContext through by identity when no closure RC exists', async () => {
+    const execRC = new RequestContext();
+    execRC.set('exec-key', 'exec-value');
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: execRC });
+
+    expect(receivedCtx.requestContext).toBe(execRC);
   });
 });

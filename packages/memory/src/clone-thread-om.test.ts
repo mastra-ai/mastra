@@ -474,22 +474,22 @@ describe('cloneThread – Observational Memory', () => {
     });
   });
 
-  describe('harness dynamic memory factory', () => {
-    it('clones OM records with observedMessageIds via Harness.cloneThread', async () => {
-      await seedThread('src-thread-harness-dynamic', 3);
+  describe('controller dynamic memory factory', () => {
+    it('clones OM records with observedMessageIds via AgentController.cloneThread', async () => {
+      await seedThread('src-thread-controller-dynamic', 3);
       const memoryStore = await getMemoryStore(memory);
 
-      await seedThreadScopedOM(memoryStore, 'src-thread-harness-dynamic', {
-        activeObservations: '* Harness dynamic clone path observation',
+      await seedThreadScopedOM(memoryStore, 'src-thread-controller-dynamic', {
+        activeObservations: '* AgentController dynamic clone path observation',
         observedMessageIds: [
-          'msg-src-thread-harness-dynamic-0',
-          'msg-src-thread-harness-dynamic-1',
-          'msg-src-thread-harness-dynamic-2',
+          'msg-src-thread-controller-dynamic-0',
+          'msg-src-thread-controller-dynamic-1',
+          'msg-src-thread-controller-dynamic-2',
         ],
       });
 
       const memoryFactory = vi.fn().mockResolvedValue(memory);
-      const harness = new AgentController({
+      const controller = new AgentController({
         id: 'clone-thread-dynamic-memory-test',
         resourceId,
         memory: memoryFactory,
@@ -509,9 +509,9 @@ describe('cloneThread – Observational Memory', () => {
         ],
       });
 
-      await harness.init();
-      const session = await harness.createSession({ resourceId });
-      const clonedThread = await session.thread.clone({ sourceThreadId: 'src-thread-harness-dynamic' });
+      await controller.init();
+      const session = await controller.createSession({ resourceId });
+      const clonedThread = await session.thread.clone({ sourceThreadId: 'src-thread-controller-dynamic' });
 
       expect(memoryFactory).toHaveBeenCalledTimes(1);
 

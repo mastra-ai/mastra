@@ -30,7 +30,7 @@ export function TracesLayout({
   return (
     <div
       className={cn(
-        'grid max-h-full min-h-0 gap-4 items-start ',
+        'grid max-h-full min-h-0 items-start gap-4 ',
         hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]',
       )}
     >
@@ -39,7 +39,7 @@ export function TracesLayout({
       {hasSidePanel && (
         <div
           className={cn(
-            'grid gap-4 max-h-full overflow-auto',
+            'grid max-h-full gap-4 overflow-auto',
             scorePanelSlot
               ? traceCollapsed
                 ? 'grid-rows-[auto_3fr_3fr]'

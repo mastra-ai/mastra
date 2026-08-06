@@ -101,6 +101,53 @@ describe('convertMessages', () => {
     });
   });
 
+  // Regression for issue #17218: a declined approval is stored as `state: 'output-denied'`.
+  // AI SDK v4 has no denied state and requires every tool invocation to carry a result, so
+  // converting to AIV4.Core (used by the agent's onFinish memory save) used to throw
+  // "ToolInvocation must have a result". It must downgrade to a result whose value is the reason.
+  describe('Mastra V2 output-denied tool invocation', () => {
+    const deniedMessage: MastraDBMessage = {
+      id: 'assistant-denied',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-denied',
+              toolCallId: 'call-1',
+              toolName: 'findUserTool',
+              args: { name: 'Dero Israel' },
+              approval: { id: 'call-1', approved: false, reason: 'Tool call was not approved by the user' },
+            },
+          },
+          { type: 'text', text: 'All done.' },
+        ],
+      },
+    };
+
+    it('converts to AIV4.Core without throwing, using the decline reason as the result', () => {
+      const result = convertMessages(deniedMessage).to('AIV4.Core');
+      const toolMessage = result.find(m => m.role === 'tool');
+      expect(toolMessage).toBeDefined();
+      expect(toolMessage?.content).toMatchObject([
+        { type: 'tool-result', toolCallId: 'call-1', result: 'Tool call was not approved by the user' },
+      ]);
+    });
+
+    it('converts to AIV4.UI as an output-available tool part carrying the reason', () => {
+      const [uiMessage] = convertMessages(deniedMessage).to('AIV4.UI');
+      const toolPart = (uiMessage.parts ?? []).find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart?.toolInvocation).toMatchObject({
+        state: 'result',
+        toolCallId: 'call-1',
+        result: 'Tool call was not approved by the user',
+      });
+    });
+  });
+
   describe('Multiple messages', () => {
     const messages: AIV4.UIMessage[] = [
       {

@@ -1,13 +1,10 @@
-import {
-  KpiCardView,
-  formatCompact,
-  formatCost,
-  useActiveResourcesKpiMetrics,
-  useActiveThreadsKpiMetrics,
-  useAgentRunsKpiMetrics,
-  useModelCostKpiMetrics,
-  useTotalTokensKpiMetrics,
-} from '@mastra/playground-ui';
+import { KpiCardView } from '@mastra/playground-ui/domains/metrics/components/kpi-card-view';
+import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
+import { useActiveResourcesKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-active-resources-kpi-metrics';
+import { useActiveThreadsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-active-threads-kpi-metrics';
+import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
+import { useModelCostKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-model-cost-kpi-metrics';
+import { useTotalTokensKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-total-tokens-kpi-metrics';
 
 export function AgentRunsKpiCard() {
   const { data, isLoading, isError } = useAgentRunsKpiMetrics();

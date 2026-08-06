@@ -1,3 +1,4 @@
 {
-  "attachment": ["nova-2-lite-v1", "nova-2-pro-v1"]
+  "attachment": ["nova-2-lite-v1", "nova-2-pro-v1"],
+  "temperature": ["nova-2-lite-v1", "nova-2-pro-v1"]
 }

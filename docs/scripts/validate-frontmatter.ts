@@ -18,7 +18,7 @@ const DEFAULT_CONFIG: ValidationConfig = {
   sourceDir: 'src/content/en',
   skipPaths: [
     'guides/',
-    'docs/community/',
+    'docs/license.mdx',
     'docs/getting-started/',
     'docs/mastra-platform/',
     'docs/index.mdx',

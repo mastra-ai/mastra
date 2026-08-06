@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItem } from '@mastra/core/signals';
 import type { ChunkType, DataChunkType } from '@mastra/core/stream';
 
 export const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);

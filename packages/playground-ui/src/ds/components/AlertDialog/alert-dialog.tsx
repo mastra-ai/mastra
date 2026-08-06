@@ -26,7 +26,7 @@ function AlertDialog({
 }
 
 type AlertDialogTriggerProps = AlertDialogPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
@@ -68,9 +68,9 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
       data-slot="alert-dialog-content"
       className={cn(
         'dialog-content-anim',
-        'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
+        'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
         'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
+        'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
         className,
       )}
       {...props}
@@ -90,7 +90,7 @@ const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDiv
 AlertDialogFooter.displayName = 'AlertDialogFooter';
 
 const AlertDialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('overflow-y-auto px-4 py-3.5 max-h-[50vh]', className)} {...props} />
+  <div className={cn('max-h-[50vh] overflow-y-auto px-4 py-3.5', className)} {...props} />
 );
 AlertDialogBody.displayName = 'AlertDialogBody';
 

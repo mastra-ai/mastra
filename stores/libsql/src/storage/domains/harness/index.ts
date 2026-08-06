@@ -1,8 +1,17 @@
 import { HarnessStorage, TABLE_HARNESS_SESSIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
-import type { HarnessPendingItemRecord, HarnessSessionOrigin, SessionRecord } from '@mastra/core/storage';
+import type {
+  HarnessPendingItemRecord,
+  HarnessSessionOrigin,
+  SessionRecord,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+} from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 
 type HarnessSessionRow = Omit<
   SessionRecord,
@@ -114,6 +123,11 @@ function sessionToRecord(record: SessionRecord): Record<string, unknown> {
 }
 
 export class HarnessLibSQL extends HarnessStorage {
+  /** Session records accumulate over time. Single table, anchored on `createdAt`. */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    sessions: { table: TABLE_HARNESS_SESSIONS, column: 'createdAt', indexed: true },
+  };
+
   #db: LibSQLDB;
 
   constructor(config: LibSQLDomainConfig) {
@@ -131,6 +145,16 @@ export class HarnessLibSQL extends HarnessStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_HARNESS_SESSIONS });
+  }
+
+  /** Delete harness sessions older than the `sessions` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: HarnessLibSQL.retentionTables,
+      order: ['sessions'],
+    });
+    return runPrune({ db: this.#db, domain: 'harness', targets, options, logger: this.logger });
   }
 
   async loadSession(sessionId: string): Promise<SessionRecord | null> {

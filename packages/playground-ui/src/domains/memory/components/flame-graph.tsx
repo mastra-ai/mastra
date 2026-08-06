@@ -58,12 +58,13 @@ function toContextData(records: OMHistoryRecord[], markers: ExtractedOmMarker[],
     ts: String(getObservationTimestamp(r)),
     pendingMessageTokens: r.pendingMessageTokens,
   }));
-  const fromMarkers = markers
-    .filter(m => m.pendingTokens != null)
-    .map(m => ({
+  const fromMarkers = markers.flatMap(m => {
+    if (m.pendingTokens == null) return [];
+    return {
       ts: m.timestamp,
-      pendingMessageTokens: m.pendingTokens!,
-    }));
+      pendingMessageTokens: m.pendingTokens,
+    };
+  });
   return [...fromRecords, ...fromMarkers]
     .sort((a, b) => a.ts.localeCompare(b.ts))
     .map(d => ({ t: toT(d.ts, domain), pendingMessageTokens: d.pendingMessageTokens }));
@@ -75,12 +76,13 @@ function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedO
       ts: String(getObservationTimestamp(record)),
       observationTokenCount: record.observationTokenCount,
     })),
-    ...markers
-      .filter(marker => marker.type === 'status' && marker.observationTokens != null)
-      .map(marker => ({
+    ...markers.flatMap(marker => {
+      if (marker.type !== 'status' || marker.observationTokens == null) return [];
+      return {
         ts: marker.timestamp,
-        observationTokenCount: marker.observationTokens!,
-      })),
+        observationTokenCount: marker.observationTokens,
+      };
+    }),
   ].sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
@@ -92,14 +94,16 @@ function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedO
 
 function toBufferedObservationData(markers: ExtractedOmMarker[], domain: TDomain) {
   const points = markers
-    .filter(
-      marker => marker.observationTokens != null && (marker.type === 'buffering-end' || marker.type === 'activation'),
-    )
-    .map(marker => ({
-      ts: marker.timestamp,
-      bufferedObservationTokenCount:
-        marker.type === 'activation' ? -marker.observationTokens! : marker.observationTokens!,
-    }))
+    .flatMap(marker => {
+      if (marker.observationTokens == null || (marker.type !== 'buffering-end' && marker.type !== 'activation')) {
+        return [];
+      }
+      return {
+        ts: marker.timestamp,
+        bufferedObservationTokenCount:
+          marker.type === 'activation' ? -marker.observationTokens : marker.observationTokens,
+      };
+    })
     .sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
@@ -129,10 +133,10 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         Time
       </p>
-      <div className="flex justify-between px-1 py-1.5 font-mono text-ui-xs text-icon3">
+      <div className="text-icon3 text-ui-xs flex justify-between px-1 py-1.5 font-mono">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -159,7 +163,7 @@ function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className="flex flex-col gap-0.5 rounded border border-border1 bg-surface3 px-2 py-1.5 font-mono text-ui-xs shadow">
+      <div className="border-border1 bg-surface3 text-ui-xs flex flex-col gap-0.5 rounded border px-2 py-1.5 font-mono shadow">
         {time && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-icon3">time</span>
@@ -179,7 +183,7 @@ function FlameTooltip({
   }
 
   return (
-    <div className="rounded border border-border1 bg-surface3 px-2 py-1 font-mono text-ui-xs shadow">
+    <div className="border-border1 bg-surface3 text-ui-xs rounded border px-2 py-1 font-mono shadow">
       {time && <span className="text-neutral6">{time}</span>}
     </div>
   );
@@ -201,8 +205,8 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
   const yMax = threshold != null ? Math.max(maxValue, threshold) : undefined;
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         {label}
       </p>
       <div>
@@ -250,8 +254,8 @@ interface EventRowProps {
 
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         {label}
       </p>
       <div>
@@ -308,7 +312,11 @@ function CombinedRow({
   height = 44,
   onSelectT,
 }: CombinedRowProps) {
-  const areaValueByTime = new Map(areaData.map(point => [point.t, Number(point[areaDataKey] ?? 0)]));
+  const areaValueByTime = new Map<number, number>();
+  for (const point of areaData) {
+    if (point.t === undefined) continue;
+    areaValueByTime.set(point.t, Number(point[areaDataKey] ?? 0));
+  }
   const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>((acc, event) => {
     const bucket = acc.get(event.t);
     if (bucket) {
@@ -339,8 +347,8 @@ function CombinedRow({
   }
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         {label}
       </p>
       <div>
@@ -445,9 +453,9 @@ function ZoomTrack({
   }, [toTimestamp, zoomLeft, zoomRight, onZoomLeftChange, onZoomRightChange]);
 
   return (
-    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border1/50">
-      <div className="flex items-center gap-1 self-stretch border-r border-border1/50 pl-3">
-        <p className="text-ui-xs font-medium text-icon3">Zoom</p>
+    <div className="border-border1/50 grid grid-cols-[6rem_1fr] items-center border-b">
+      <div className="border-border1/50 flex items-center gap-1 self-stretch border-r pl-3">
+        <p className="text-icon3 text-ui-xs font-medium">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -470,14 +478,14 @@ function ZoomTrack({
           }
         }}
       >
-        <div className="absolute inset-y-0 left-0 bg-surface2/60" style={{ width: `${leftPercent}%` }} />
+        <div className="bg-surface2/60 absolute inset-y-0 left-0" style={{ width: `${leftPercent}%` }} />
         <div
-          className="absolute inset-y-0 border-y border-border1/30 bg-neutral6/5"
+          className="border-border1/30 bg-neutral6/5 absolute inset-y-0 border-y"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
-        <div className="absolute inset-y-0 right-0 bg-surface2/60" style={{ width: `${100 - rightPercent}%` }} />
+        <div className="bg-surface2/60 absolute inset-y-0 right-0" style={{ width: `${100 - rightPercent}%` }} />
         <div
-          className="absolute inset-y-0 w-1 cursor-col-resize bg-neutral6/50 hover:bg-neutral6"
+          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -486,7 +494,7 @@ function ZoomTrack({
           }}
         />
         <div
-          className="absolute inset-y-0 w-1 cursor-col-resize bg-neutral6/50 hover:bg-neutral6"
+          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -579,7 +587,7 @@ export function FlameGraph({
   if (!hasData) return null;
 
   return (
-    <div className="flex flex-col pb-2 pr-2 [&_.recharts-surface]:outline-none">
+    <div className="flex flex-col pr-2 pb-2 [&_.recharts-surface]:outline-none">
       <CombinedRow
         label="Messages"
         areaData={contextData}

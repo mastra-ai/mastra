@@ -1,0 +1,10 @@
+---
+extends: sequence
+message: "AI empty modifier: '%s %s'. Delete the modifier and keep the noun."
+level: error
+ignorecase: true
+tokens:
+  - pattern: named|various|certain|respective|given|particular
+    tag: JJ|VBN|DT
+  - tag: NN|NNS
+---

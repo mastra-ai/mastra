@@ -96,19 +96,11 @@ export class BackgroundTaskManager {
   async #doInit(pubsub: PubSub): Promise<void> {
     this.pubsub = pubsub;
 
-    // Worker: subscribes with group so only one worker processes each task.
-    this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
-      if (event.type === 'task.dispatch') {
-        await this.handleDispatch(event);
-      } else if (event.type === 'task.resume') {
-        await this.handleResume(event);
-      } else if (event.type === 'task.cancel') {
-        this.handleCancel(event);
-      }
-      await ack?.();
-    };
+    const isProducerOnly = this.config.mode === 'producer';
 
-    // Result listener: fan-out so all processes receive results
+    // Result listener: fan-out so all processes receive results.
+    // Both producer and worker modes need this — the producer uses it
+    // to receive completion/failure notifications for dispatched tasks.
     this.resultCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
         await this.handleResult(event);
@@ -116,37 +108,55 @@ export class BackgroundTaskManager {
       await ack?.();
     };
 
-    // Register the workflow BEFORE subscribing the worker so that any
-    // dispatch event the worker picks up can immediately resolve the
-    // workflow on Mastra. Reversing this order races: a publish that
-    // arrives between `subscribe(TOPIC_DISPATCH)` and the workflow
-    // registration triggers `__getInternalWorkflow` to throw
-    // `Workflow with id __background-task not found`, the task stays at
-    // `running` forever, and the dispatch is silently dropped.
-    if (this.#mastra) {
-      // Dynamic import breaks the static cycle:
-      // agent → background-tasks → manager → workflow → workflows/evented →
-      // workflows/index → agent. Static import works at runtime but during
-      // module evaluation in test environments the cycle leaves `Workflow`
-      // undefined when `evented/workflow.ts` evaluates its `class extends`.
-      const { buildBackgroundTaskWorkflow } = await import('./workflow');
-      const workflow = buildBackgroundTaskWorkflow(this);
-      if (!this.#mastra.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) {
-        // The `__background-task` workflow is typed against `EventedEngineType`
-        // and a concrete input/output schema, while `__registerInternalWorkflow`
-        // accepts the looser default `Workflow` shape. The cast is purely a
-        // type-level bridge — the runtime value is a real Workflow.
-        this.#mastra.__registerInternalWorkflow(
-          workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
-        );
+    if (!isProducerOnly) {
+      // Worker: subscribes with group so only one worker processes each task.
+      this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
+        if (event.type === 'task.dispatch' || event.type === 'task.restart') {
+          await this.handleDispatch(event);
+        } else if (event.type === 'task.resume') {
+          await this.handleResume(event);
+        } else if (event.type === 'task.cancel') {
+          this.handleCancel(event);
+        }
+        await ack?.();
+      };
+
+      // Register the workflow BEFORE subscribing the worker so that any
+      // dispatch event the worker picks up can immediately resolve the
+      // workflow on Mastra. Reversing this order races: a publish that
+      // arrives between `subscribe(TOPIC_DISPATCH)` and the workflow
+      // registration triggers `__getInternalWorkflow` to throw
+      // `Workflow with id __background-task not found`, the task stays at
+      // `running` forever, and the dispatch is silently dropped.
+      if (this.#mastra) {
+        // Dynamic import breaks the static cycle:
+        // agent → background-tasks → manager → workflow → workflows/evented →
+        // workflows/index → agent. Static import works at runtime but during
+        // module evaluation in test environments the cycle leaves `Workflow`
+        // undefined when `evented/workflow.ts` evaluates its `class extends`.
+        const { buildBackgroundTaskWorkflow } = await import('./workflow');
+        const workflow = buildBackgroundTaskWorkflow(this);
+        if (!this.#mastra.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) {
+          // The `__background-task` workflow is typed against `EventedEngineType`
+          // and a concrete input/output schema, while `__registerInternalWorkflow`
+          // accepts the looser default `Workflow` shape. The cast is purely a
+          // type-level bridge — the runtime value is a real Workflow.
+          this.#mastra.__registerInternalWorkflow(
+            workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
+          );
+        }
       }
+
+      await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
     }
 
-    await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
 
-    // Recover stale tasks from a previous process
-    await this.recoverStaleTasks();
+    if (!isProducerOnly) {
+      // Recover stale tasks from a previous process — only workers should
+      // attempt recovery since they own execution.
+      await this.recoverStaleTasks();
+    }
 
     // Start periodic cleanup if configured
     const cleanupConfig = this.config.cleanup;
@@ -390,6 +400,10 @@ export class BackgroundTaskManager {
       throw new Error(`Concurrency limit reached, cannot resume task "${taskId}" — retry once a slot is available`);
     }
 
+    // Resume publishes directly (not via dispatch()), so it needs its own
+    // lazy worker start for the library-mode process-restart case.
+    await this.#ensureExecutionWorkersStarted();
+
     // Hand off to the worker subscriber. `task.resume` rides the same
     // `TOPIC_DISPATCH` + `WORKER_GROUP` exactly-once channel as
     // `task.dispatch`, so any worker (including a different process from
@@ -399,6 +413,47 @@ export class BackgroundTaskManager {
       data: { taskId, resumeData },
       runId: taskId,
     });
+
+    return task;
+  }
+
+  /**
+   * Restarts a previously running task. The tool executor is re-registered via
+   * `registerTaskContext(taskId, ...)` because the original
+   * registration is gone (e.g. process restart) — the manager doesn't
+   * rehydrate executor closures from storage.
+   *
+   */
+  async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
+    if (!this.#mastra) {
+      throw new Error('Mastra is not registered with this manager');
+    }
+
+    if (this.initPromise) await this.initPromise;
+
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+    if (task.status !== 'running') {
+      throw new Error(`Cannot restart task in status '${task.status}' (expected 'running')`);
+    }
+
+    if (context) {
+      this.registerTaskContext(task.id, context);
+    }
+
+    const canRun = await this.checkConcurrency(task.agentId);
+    if (!canRun) {
+      // Restart sits outside the queue/fallback-sync paths — there's no
+      // synchronous caller to fall back to, and silently leaving the task
+      // running hides the failure from the caller. Throw and let the
+      // caller retry once a slot frees.
+      throw new Error(`Concurrency limit reached, cannot restart task "${taskId}" — retry once a slot is available`);
+    }
+
+    await this.dispatch(task, true);
 
     return task;
   }
@@ -690,7 +745,31 @@ export class BackgroundTaskManager {
 
   // --- Internal ---
 
-  private async dispatch(task: BackgroundTask): Promise<void> {
+  /**
+   * Lazily start Mastra's execution workers before publishing. In "library
+   * mode" nothing ever calls `mastra.startWorkers()`, so the evented
+   * `__background-task` workflow started by `handleDispatch` would publish
+   * to the `workflows` topic with no consumer and the task would sit at
+   * `running` forever (#19339). A no-op once workers are running; honors the
+   * `workers: false` / `MASTRA_WORKERS` opt-outs.
+   *
+   * Startup failures are logged but don't abort the publish — in distributed
+   * topologies a remote worker on the shared broker can still pick the task
+   * up, and throwing here would also abort `drainPending()` /
+   * `recoverStaleTasks()` loops.
+   */
+  async #ensureExecutionWorkersStarted(): Promise<void> {
+    if (!this.#mastra) return;
+    try {
+      await this.#mastra.__ensureExecutionWorkersStarted();
+    } catch (err) {
+      this.#mastra.getLogger?.()?.error('Failed to start execution workers for background task', err as any);
+    }
+  }
+
+  private async dispatch(task: BackgroundTask, isRestart?: boolean): Promise<void> {
+    await this.#ensureExecutionWorkersStarted();
+
     // Publish `task.dispatch` on `TOPIC_DISPATCH` with `WORKER_GROUP`, so
     // exactly one worker handles the task. `handleDispatch` flips the
     // task to running and starts the per-task workflow run.
@@ -707,24 +786,32 @@ export class BackgroundTaskManager {
         timeoutMs: task.timeoutMs,
         maxRetries: task.maxRetries,
         runId: task.runId,
+        isRestart,
       },
       runId: task.id,
     });
   }
 
   /**
-   * Handles a task.dispatch event. Returns true if the message was nacked (for retry).
+   * Handles a task.dispatch and task.restart events.
+   * Both events are similar, but the latter is used to restart a running task.
    */
-  private async handleDispatch(event: Event): Promise<boolean> {
-    const { taskId } = event.data;
+  private async handleDispatch(event: Event): Promise<void> {
+    const { taskId, isRestart } = event.data;
     const deliveryAttempt = event.deliveryAttempt ?? 1;
-    let nacked = false;
 
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
     if (!task || task.status === 'cancelled') {
       this.deregisterTaskContext(taskId);
-      return false;
+      return;
+    }
+
+    if (isRestart && task.status !== 'running') {
+      // Either gone or already done/cancelled by another worker. Drop the
+      // event silently — the worker group ensures exactly-once delivery, but
+      // the task may have moved on between publish and pickup.
+      return;
     }
 
     await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount: deliveryAttempt - 1 });
@@ -739,24 +826,26 @@ export class BackgroundTaskManager {
     if (this.#mastra) {
       if (runningTask) void this.runLocalExecutionHook(runningTask);
       const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+      const prevWorkflowRun = isRestart ? await workflow.getWorkflowRunById(taskId) : undefined;
+      const shouldRestart = isRestart && prevWorkflowRun?.status === 'running';
       const run = await workflow.createRun({ runId: taskId });
-      void run
-        .start({ inputData: { taskId } })
+      const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
+      void runPromise
         .then(result => {
           if (result.status !== 'suspended') {
             void workflow.deleteWorkflowRunById(taskId);
           }
         })
         .catch(err => {
-          this.#mastra?.getLogger?.()?.error(`background-task workflow start failed for ${taskId}:`, err);
+          this.#mastra
+            ?.getLogger?.()
+            ?.error(`background-task workflow ${shouldRestart ? 'restart' : 'start'} failed for ${taskId}:`, err);
         })
         .finally(() => {
           // Free the concurrency slot once the run terminates.
           void this.drainPending();
         });
     }
-
-    return nacked;
   }
 
   /**
@@ -987,7 +1076,7 @@ export class BackgroundTaskManager {
           resourceId,
           result: event.data.result,
           status: 'completed',
-          completedAt: task.completedAt!,
+          completedAt: task.completedAt,
           startedAt: task.startedAt!,
         });
 
@@ -1020,7 +1109,7 @@ export class BackgroundTaskManager {
           resourceId,
           error: event.data.error,
           status: 'failed',
-          completedAt: task.completedAt!,
+          completedAt: task.completedAt,
           startedAt: task.startedAt!,
         });
 

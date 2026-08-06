@@ -1,6 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
+import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
+import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
@@ -53,6 +55,7 @@ const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined =>
 };
 
 interface SendDeps {
+  model?: string;
   requestContext?: Record<string, unknown>;
   agentVersionId?: string;
   threadId?: string;
@@ -70,6 +73,7 @@ interface UseChatSendHandlerArgs {
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
+  model?: string;
   chatWithNetwork?: boolean;
   chatWithGenerate?: boolean;
   maxSteps?: number;
@@ -116,6 +120,7 @@ export const useChatSendHandler = ({
   agentVersionId,
   threadId,
   modelSettingsArgs,
+  model,
   chatWithNetwork,
   chatWithGenerate,
   maxSteps,
@@ -144,6 +149,7 @@ export const useChatSendHandler = ({
     agentVersionId,
     threadId,
     modelSettingsArgs,
+    model,
     chatWithNetwork,
     chatWithGenerate,
     maxSteps,
@@ -155,6 +161,7 @@ export const useChatSendHandler = ({
     agentVersionId,
     threadId,
     modelSettingsArgs,
+    model,
     chatWithNetwork,
     chatWithGenerate,
     maxSteps,
@@ -244,6 +251,7 @@ export const useChatSendHandler = ({
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
             onNetworkChunk: async (chunk: any) => {
@@ -264,6 +272,7 @@ export const useChatSendHandler = ({
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
           });
@@ -278,6 +287,7 @@ export const useChatSendHandler = ({
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
             tracingOptions: deps.tracingOptions,
             onChunk: async (chunk: any) => {
               if (chunk.type === 'finish') {

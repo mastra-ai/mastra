@@ -6,12 +6,18 @@ import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { startRegistry } from '../_local-registry-setup/index.js';
+import { setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup/index.js';
 import { publishPackages } from '../_local-registry-setup/publish.js';
+import { getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
+  const publishedRegistryTeardown = await setupPublishedRegistryFromEnv(project);
+  if (publishedRegistryTeardown) {
+    return publishedRegistryTeardown;
+  }
+
   const tag = 'deployers-e2e-test';
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
@@ -26,19 +32,7 @@ export default async function setup(project: TestProject) {
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(
-    [
-      '--filter="mastra^..."',
-      '--filter="mastra"',
-      '--filter="@mastra/deployer-cloudflare"',
-      '--filter="@mastra/deployer-vercel"',
-      '--filter="@mastra/deployer-netlify"',
-      '--filter="@mastra/pg"',
-    ],
-    tag,
-    rootDir,
-    registry,
-  );
+  await publishPackages(await getSuitePublishFilters(rootDir, 'deployers'), tag, rootDir, registry);
 
   return () => {
     teardown();

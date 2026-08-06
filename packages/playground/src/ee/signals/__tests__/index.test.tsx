@@ -1,154 +1,521 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import type * as ReactRouter from 'react-router';
-import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from '..';
-import { SignalCrumb } from '../signal-crumb';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { navigate } = vi.hoisted(() => ({
-  navigate: vi.fn(),
-}));
+import SignalsOverviewPage from '..';
+import { navHandleWithChildren } from '../../../lib/nav';
+import { RouteHeader } from '../../../lib/route-header/route-header';
+import { SignalsEntityCrumb } from '../signals-entity-crumb';
+import {
+  drilldownThemeFlowResponse,
+  firstThemeExamplesResponse,
+  themeDetailResponse,
+  themeHistoryResponse,
+  traceInsightResponse,
+} from './fixtures/theme-drilldown';
+import {
+  billingThemeSnapshotsResponse,
+  emptyThemeEntitiesResponse,
+  emptyThemeSnapshotsResponse,
+  lowSignalFirstThemeEntitiesResponse,
+  multiAgentThemeEntitiesResponse,
+  multiEligibleThemeEntitiesResponse,
+  populatedThemeEntitiesResponse,
+  processingProgressResponse,
+  themeFlowResponse,
+  themeSnapshotsResponse,
+} from './fixtures/theme-flow';
+import { server } from '@/test/msw-server';
 
-vi.mock('react-router', async importOriginal => {
-  const actual = await importOriginal<typeof ReactRouter>();
+const BASE_URL = window.location.origin;
 
-  return {
-    ...actual,
-    useNavigate: () => navigate,
-  };
-});
-
-vi.mock('@mastra/playground-ui', () => ({
-  getSignalName: (signalId: string) => (signalId === 'tasks' ? 'Tasks' : signalId),
-  SignalsOverviewPage: ({ onSignalSelect }: { onSignalSelect: (signal: { id: string }) => void }) => (
-    <button type="button" onClick={() => onSignalSelect({ id: 'tasks' })}>
-      Select signal
-    </button>
-  ),
-  SignalDetailsPage: ({
-    signalId,
-    selectedTraceId,
-    tracePanel,
-    onTraceSelect,
-  }: {
-    signalId?: string;
-    selectedTraceId: string | null;
-    tracePanel?: ReactNode;
-    onTraceSelect: (signalId: string, traceId: string) => void;
-  }) => (
-    <div>
-      <span>signal:{signalId}</span>
-      <span>trace:{selectedTraceId ?? 'none'}</span>
-      <button type="button" onClick={() => onTraceSelect(signalId ?? 'missing', 'resolved-trace-1')}>
-        Select trace
-      </button>
-      {tracePanel}
-    </div>
-  ),
-  SignalTraceDetailsPanel: ({
-    traceId,
-    selectedSpanId,
-    onSpanSelect,
-    onClose,
-  }: {
-    traceId: string;
-    selectedSpanId: string | null;
-    onSpanSelect: (spanId: string | null) => void;
-    onClose: () => void;
-  }) => (
-    <aside aria-label="Trace details">
-      <span>details:{traceId}</span>
-      <span>span:{selectedSpanId ?? 'none'}</span>
-      <button type="button" onClick={() => onSpanSelect('span-1')}>
-        Select span
-      </button>
-      <button type="button" onClick={onClose}>
-        Close trace
-      </button>
-    </aside>
-  ),
-}));
-
-function LocationProbe() {
-  const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
-}
-
-function SignalsTestShell() {
-  return (
-    <>
-      <Outlet />
-      <LocationProbe />
-    </>
-  );
-}
-
-function renderSignalsPage(initialEntry = '/signals') {
+function renderSignalsPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route path="/signals" element={<SignalsTestShell />}>
-          <Route index element={<SignalsOverviewPage />} />
-          <Route path=":signalId" element={<SignalDetailsPage />} />
-          <Route path=":signalId/traces/:traceId" element={<SignalTraceIdPage />} />
-        </Route>
-      </Routes>
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <SignalsOverviewPage />
+      </QueryClientProvider>
     </MemoryRouter>,
   );
 }
 
+function renderSignalsPageWithShell() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/intelligence',
+        handle: navHandleWithChildren('/intelligence', [
+          { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
+        ]),
+        element: (
+          <QueryClientProvider client={queryClient}>
+            <RouteHeader />
+            <SignalsOverviewPage />
+          </QueryClientProvider>
+        ),
+      },
+    ],
+    { initialEntries: ['/intelligence'] },
+  );
+  return render(<RouterProvider router={router} />);
+}
+
+function headerAgentSelector() {
+  return within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('combobox');
+}
+
 afterEach(() => {
   cleanup();
-  navigate.mockClear();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
-describe('Signals page wrappers', () => {
-  it('navigates from the overview component callback to the signal route', () => {
-    renderSignalsPage();
+describe('Trace Intelligence page', () => {
+  describe('when the entities request is pending', () => {
+    it('shows the Trace Intelligence loading state', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, async () => {
+          await new Promise(() => {});
+          return HttpResponse.json(emptyThemeEntitiesResponse);
+        }),
+      );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Select signal' }));
+      renderSignalsPage();
 
-    expect(navigate).toHaveBeenCalledWith('/signals/tasks', { viewTransition: true });
+      expect(await screen.findByRole('status', { name: 'Loading trace intelligence' })).not.toBeNull();
+    });
   });
 
-  it('passes the route signal param to the reusable details page', () => {
-    renderSignalsPage('/signals/tasks');
+  describe('when the entities request fails', () => {
+    it('shows the entities error state', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () =>
+          HttpResponse.json({ error: 'Unable to load entities' }, { status: 500 }),
+        ),
+      );
 
-    expect(screen.getByText('signal:tasks')).not.toBeNull();
-    expect(screen.getByText('trace:none')).not.toBeNull();
+      renderSignalsPage();
+
+      expect(await screen.findByText('Unable to load trace signal entities.')).not.toBeNull();
+    });
   });
 
-  it('navigates from reusable trace selection callbacks to the trace route', () => {
-    renderSignalsPage('/signals/tasks');
+  describe('when the entities request fails once', () => {
+    it('retries the failed request and renders the page', async () => {
+      let attempts = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => {
+          attempts += 1;
+          return attempts === 1
+            ? HttpResponse.json({ error: 'Unable to load entities' }, { status: 500 })
+            : HttpResponse.json(populatedThemeEntitiesResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Select trace' }));
+      renderSignalsPageWithShell();
 
-    expect(navigate).toHaveBeenCalledWith('/signals/tasks/traces/resolved-trace-1');
+      expect(await screen.findByText('Unable to load trace signal entities.')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+      expect(attempts).toBe(2);
+    });
   });
 
-  it('passes trace route params into the reusable details and trace panel components', () => {
-    renderSignalsPage('/signals/tasks/traces/trace-1');
+  describe('when no Agent Learning entities exist', () => {
+    it('shows that Trace Intelligence is collecting traces', async () => {
+      server.use(http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(emptyThemeEntitiesResponse)));
 
-    expect(screen.getByText('signal:tasks')).not.toBeNull();
-    expect(screen.getByText('trace:trace-1')).not.toBeNull();
-    expect(screen.getByText('details:trace-1')).not.toBeNull();
-    expect(screen.getByText('span:none')).not.toBeNull();
+      renderSignalsPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close trace' }));
-    expect(navigate).toHaveBeenCalledWith('/signals/tasks');
+      expect(await screen.findByText('Collecting traces for Trace Intelligence.')).not.toBeNull();
+    });
   });
 
-  it('renders signal breadcrumbs from the playground-ui EE boundary', () => {
-    render(
-      <MemoryRouter initialEntries={['/signals/tasks']}>
-        <Routes>
-          <Route path="/signals/:signalId" element={<SignalCrumb />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  describe('when an agent has theme flow data', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+    });
 
-    expect(screen.getByText('Tasks')).not.toBeNull();
+    it('shows the snapshot summary under the timeline instead of a page header', async () => {
+      renderSignalsPage();
+
+      expect(await screen.findByTestId('snapshot-summary')).not.toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
+    });
+
+    it('exposes the theme flow as a named region', async () => {
+      renderSignalsPage();
+
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
+    });
+
+    it('keeps exactly one Trace intelligence documentation action across the shell and page', async () => {
+      renderSignalsPageWithShell();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      expect(screen.getAllByRole('link', { name: 'Trace intelligence documentation' })).toHaveLength(1);
+    });
+
+    it('keeps the single agent visible in the header selector', async () => {
+      renderSignalsPageWithShell();
+
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+    });
+
+    it('shows the agent selector in the breadcrumb instead of a page-level control row', async () => {
+      renderSignalsPageWithShell();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      const main = screen.getByRole('main');
+      expect(within(main).queryByRole('combobox')).toBeNull();
+      expect(screen.queryByText('Snapshot date')).toBeNull();
+      expect(within(main).getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
+    });
+  });
+
+  describe('when the selected range is loading snapshots', () => {
+    it('keeps the snapshot date control available', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, async () => {
+          await new Promise(() => {});
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+      );
+      renderSignalsPage();
+
+      expect(await screen.findByRole('button', { name: 'Last 7 days' })).not.toBeNull();
+      expect(screen.getByRole('status', { name: 'Loading trace intelligence' })).not.toBeNull();
+    });
+  });
+
+  describe('when the selected range fails to load snapshots', () => {
+    it('keeps the snapshot date control available', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json({ error: 'Unable to load snapshots' }, { status: 500 }),
+        ),
+      );
+      renderSignalsPage();
+
+      expect(await screen.findByText('Unable to load trace signal flow.')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
+    });
+  });
+
+  describe('when the selected range has no snapshots', () => {
+    it('keeps the snapshot date control available', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(emptyThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/progress`, () =>
+          HttpResponse.json(processingProgressResponse),
+        ),
+      );
+      renderSignalsPage();
+
+      expect(await screen.findByText('No Trace Intelligence themes in this date range.')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
+    });
+  });
+
+  describe('when an eligible agent is loaded with the default snapshot range', () => {
+    it('requests snapshots from the last seven days without a snapshot date label', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
+      const snapshotRequests: URL[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotRequests.push(new URL(request.url));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
+      expect(screen.queryByText('Snapshot date')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
+      expect(snapshotRequests).toHaveLength(1);
+      expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-20T12:00:00.000Z');
+      expect(snapshotRequests[0]?.searchParams.has('to')).toBe(false);
+    });
+  });
+
+  describe('when the snapshot date preset changes', () => {
+    it('requests and renders flows only for snapshots returned in the new range', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
+      const flowSnapshotIds: string[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const from = new URL(request.url).searchParams.get('from');
+          return HttpResponse.json(
+            from === '2026-07-13T12:00:00.000Z' ? billingThemeSnapshotsResponse : themeSnapshotsResponse,
+          );
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
+          flowSnapshotIds.push(snapshotId);
+          const snapshot = billingThemeSnapshotsResponse.snapshots.find(
+            candidate => candidate.snapshotId === snapshotId,
+          );
+          return HttpResponse.json(snapshot ? { ...themeFlowResponse, snapshot } : themeFlowResponse);
+        }),
+      );
+      renderSignalsPage();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+      fireEvent.click(await screen.findByText('Last 14 days'));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Last 14 days' })).not.toBeNull());
+      await waitFor(() => expect(flowSnapshotIds).toEqual(['snapshot-1', 'billing-snapshot-1', 'billing-snapshot-2']));
+      expect(await screen.findByRole('button', { name: /Snapshot 2 of 2/ })).not.toBeNull();
+    });
+  });
+
+  describe('when a snapshot range changes with theme details open', () => {
+    it('clears the range-local theme selection', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(drilldownThemeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId`, () =>
+          HttpResponse.json(themeDetailResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/examples`, () =>
+          HttpResponse.json(firstThemeExamplesResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
+          HttpResponse.json(themeHistoryResponse),
+        ),
+      );
+      renderSignalsPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      await screen.findByRole('dialog', { name: 'Add transcript' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+      fireEvent.click(await screen.findByText('Last 24 hours'));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
+    });
+  });
+
+  describe('when a theme example is opened from the page', () => {
+    it('reaches the trace insight view with a link to the full trace', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(drilldownThemeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId`, () =>
+          HttpResponse.json(themeDetailResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/examples`, () =>
+          HttpResponse.json(firstThemeExamplesResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
+          HttpResponse.json(themeHistoryResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
+      );
+      renderSignalsPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      await screen.findByRole('dialog', { name: 'Add transcript' });
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'View trace insight for Add this transcript to my workspace.' }),
+      );
+
+      expect(await screen.findByText('Add a transcript to the workspace.')).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Open full trace' }).getAttribute('href')).toBe('/traces/trace-1');
+    });
+  });
+
+  describe('when a custom snapshot date range is applied', () => {
+    it('requests snapshots with inclusive start and end timestamps', async () => {
+      // Freeze the clock so the calendar (which reads `new Date()`, not `Date.now()`)
+      // always opens on the same month; fake only `Date` so timers used by
+      // waitFor/React Query keep running.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
+      const snapshotRequests: URL[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotRequests.push(new URL(request.url));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+      renderSignalsPage();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+      fireEvent.click(await screen.findByText('Custom range...'));
+      const endPanel = (await screen.findByText('End')).parentElement;
+      if (!endPanel) throw new Error('Custom range end panel was not rendered');
+      fireEvent.click(within(endPanel).getByRole('gridcell', { name: '25' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const expectedFrom = new Date(2026, 6, 20, 0, 0).toISOString();
+      const expectedTo = new Date(2026, 6, 25, 23, 59).toISOString();
+      await waitFor(() => expect(snapshotRequests).toHaveLength(2));
+      expect(snapshotRequests[1]?.searchParams.get('from')).toBe(expectedFrom);
+      expect(snapshotRequests[1]?.searchParams.get('to')).toBe(expectedTo);
+    });
+  });
+
+  describe('when a low-trace-signal agent is returned before an eligible agent', () => {
+    it('defaults to the first agent that can render a flow', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(lowSignalFirstThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPageWithShell();
+
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+      expect(screen.queryByText('Not enough trace signal data yet')).toBeNull();
+    });
+  });
+
+  describe('when multiple agents have different trace signal coverage', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiAgentThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/triage-agent/progress`, () =>
+          HttpResponse.json(processingProgressResponse),
+        ),
+      );
+    });
+
+    it('lists every agent in the header selector', async () => {
+      renderSignalsPageWithShell();
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+
+      fireEvent.click(headerAgentSelector());
+
+      expect(await screen.findByRole('option', { name: 'support-agent' })).not.toBeNull();
+      expect(screen.getByRole('option', { name: 'triage-agent' })).not.toBeNull();
+    });
+
+    it('explains why the selected agent cannot render a flow', async () => {
+      renderSignalsPageWithShell();
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+
+      fireEvent.click(headerAgentSelector());
+      const triageAgent = await screen.findByRole('option', { name: 'triage-agent' });
+      fireEvent.pointerDown(triageAgent, { pointerType: 'mouse' });
+      fireEvent.click(triageAgent, { detail: 1 });
+
+      expect(await screen.findByText('Analyzing traces for Trace Intelligence.')).not.toBeNull();
+      expect(screen.getByText('87')).not.toBeNull();
+      expect(screen.getByText('1 of 4')).not.toBeNull();
+      expect(headerAgentSelector().textContent).toContain('triage-agent');
+      expect(screen.queryByText('Snapshot date')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Last 7 days' })).toBeNull();
+    });
+  });
+
+  describe('when switching between eligible agents', () => {
+    it("loads the selected agent's latest snapshot", async () => {
+      let billingFlowSnapshotId: string | null = null;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiEligibleThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-snapshots`, () =>
+          HttpResponse.json(billingThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-flow`, ({ request }) => {
+          billingFlowSnapshotId = new URL(request.url).searchParams.get('snapshotId');
+          return HttpResponse.json({
+            ...themeFlowResponse,
+            snapshot: billingThemeSnapshotsResponse.snapshots[1],
+          });
+        }),
+      );
+      renderSignalsPageWithShell();
+      await waitFor(() => expect(headerAgentSelector().textContent).toContain('support-agent'));
+      fireEvent.click(headerAgentSelector());
+      const billingAgent = await screen.findByRole('option', { name: 'billing-agent' });
+
+      fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
+      fireEvent.click(billingAgent, { detail: 1 });
+
+      expect(await screen.findByText('Snapshot 2/2 · Jul 8–15, 2026 · 30 traces')).not.toBeNull();
+      expect(billingFlowSnapshotId).toBe('billing-snapshot-2');
+    });
+  });
+
+  describe('when an agent has no theme snapshots', () => {
+    it('shows that the analysis is waiting for traces', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json({ snapshots: [] }),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/progress`, () =>
+          HttpResponse.json(processingProgressResponse),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect(await screen.findByText('No Trace Intelligence themes in this date range.')).not.toBeNull();
+    });
   });
 });

@@ -3,6 +3,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -41,6 +42,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       name: input.name,
       description: input.description,
       metadata: input.metadata,
+      provenance: input.provenance ?? null,
+      runnerAttestation: input.runnerAttestation ?? null,
+      experimentSetId: input.experimentSetId ?? null,
+      comparisonId: input.comparisonId ?? null,
+      variantId: input.variantId ?? null,
+      trialIndex: input.trialIndex ?? null,
       status: 'pending',
       totalItems: input.totalItems,
       succeededCount: 0,
@@ -53,8 +60,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       createdAt: now,
       updatedAt: now,
     };
-    this.db.experiments.set(experiment.id, experiment);
-    return experiment;
+    this.db.experiments.set(experiment.id, structuredClone(experiment));
+    return structuredClone(experiment);
   }
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
@@ -76,12 +83,20 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       metadata: input.metadata ?? existing.metadata,
       updatedAt: new Date(),
     };
-    this.db.experiments.set(input.id, updated);
-    return updated;
+    this.db.experiments.set(input.id, structuredClone(updated));
+    return structuredClone(updated);
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
-    return this.db.experiments.get(args.id) ?? null;
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
+    const row = this.db.experiments.get(args.id);
+    if (!row) return null;
+    if (args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId) {
+      return null;
+    }
+    if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
+      return null;
+    }
+    return structuredClone(row);
   }
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
@@ -103,6 +118,18 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.status) {
       experiments = experiments.filter(r => r.status === args.status);
     }
+    if (args.experimentSetId !== undefined) {
+      experiments = experiments.filter(r => r.experimentSetId === args.experimentSetId);
+    }
+    if (args.comparisonId !== undefined) {
+      experiments = experiments.filter(r => r.comparisonId === args.comparisonId);
+    }
+    if (args.variantId !== undefined) {
+      experiments = experiments.filter(r => r.variantId === args.variantId);
+    }
+    if (args.trialIndex !== undefined) {
+      experiments = experiments.filter(r => r.trialIndex === args.trialIndex);
+    }
     if (args.filters?.organizationId !== undefined) {
       experiments = experiments.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);
     }
@@ -119,7 +146,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const end = perPageInput === false ? experiments.length : start + perPage;
 
     return {
-      experiments: experiments.slice(start, end),
+      experiments: experiments.slice(start, end).map(experiment => structuredClone(experiment)),
       pagination: {
         total: experiments.length,
         page,
@@ -129,7 +156,18 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     };
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+    const existing = this.db.experiments.get(args.id);
+    if (!existing) return;
+    if (
+      args.filters?.organizationId !== undefined &&
+      (existing.organizationId ?? null) !== args.filters.organizationId
+    ) {
+      return;
+    }
+    if (args.filters?.projectId !== undefined && (existing.projectId ?? null) !== args.filters.projectId) {
+      return;
+    }
     this.db.experiments.delete(args.id);
     // Also delete associated results
     for (const [resultId, result] of this.db.experimentResults) {
@@ -157,6 +195,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      comment: null,
       toolMockReport: input.toolMockReport ?? null,
       organizationId: input.organizationId ?? null,
       projectId: input.projectId ?? null,
@@ -178,13 +217,25 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       ...existing,
       status: input.status !== undefined ? input.status : existing.status,
       tags: input.tags !== undefined ? input.tags : existing.tags,
+      comment: input.comment !== undefined ? input.comment : existing.comment,
     };
     this.db.experimentResults.set(input.id, updated);
     return updated;
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
-    return this.db.experimentResults.get(args.id) ?? null;
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
+    const row = this.db.experimentResults.get(args.id);
+    if (!row) return null;
+    if (args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId) {
+      return null;
+    }
+    if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
+      return null;
+    }
+    return row;
   }
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
@@ -223,7 +274,23 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     };
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+    // Gate the cascade on the parent experiment's tenancy — if the experiment
+    // exists but belongs to a different tenant, silently no-op instead of
+    // wiping another tenant's results.
+    if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
+      const parent = this.db.experiments.get(args.experimentId);
+      if (!parent) return;
+      if (
+        args.filters?.organizationId !== undefined &&
+        (parent.organizationId ?? null) !== args.filters.organizationId
+      ) {
+        return;
+      }
+      if (args.filters?.projectId !== undefined && (parent.projectId ?? null) !== args.filters.projectId) {
+        return;
+      }
+    }
     for (const [resultId, result] of this.db.experimentResults) {
       if (result.experimentId === args.experimentId) {
         this.db.experimentResults.delete(resultId);

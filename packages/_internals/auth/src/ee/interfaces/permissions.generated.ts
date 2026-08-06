@@ -22,7 +22,6 @@ export const RESOURCES = [
   'datasets',
   'embedders',
   'experiments',
-  'harness',
   'infrastructure',
   'logs',
   'mcp',
@@ -37,6 +36,7 @@ export const RESOURCES = [
   'stored-prompt-blocks',
   'stored-scorers',
   'stored-skills',
+  'stored-workflows',
   'stored-workspaces',
   'system',
   'tool-providers',
@@ -109,8 +109,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:*': 'embedders:*',
   /** Full access to experiments */
   'experiments:*': 'experiments:*',
-  /** Full access to harness sessions */
-  'harness:*': 'harness:*',
   /** Full access to infrastructure */
   'infrastructure:*': 'infrastructure:*',
   /** Full access to logs */
@@ -139,6 +137,8 @@ export const PERMISSION_PATTERNS = {
   'stored-scorers:*': 'stored-scorers:*',
   /** Full access to stored skills */
   'stored-skills:*': 'stored-skills:*',
+  /** Full access to stored workflows */
+  'stored-workflows:*': 'stored-workflows:*',
   /** Full access to stored workspaces */
   'stored-workspaces:*': 'stored-workspaces:*',
   /** Full access to system info */
@@ -199,10 +199,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:read': 'embedders:read',
   /** View experiments */
   'experiments:read': 'experiments:read',
-  /** Execute harness sessions */
-  'harness:execute': 'harness:execute',
-  /** View harness sessions */
-  'harness:read': 'harness:read',
   /** View infrastructure */
   'infrastructure:read': 'infrastructure:read',
   /** View logs */
@@ -231,6 +227,8 @@ export const PERMISSION_PATTERNS = {
   'processors:execute': 'processors:execute',
   /** View processors */
   'processors:read': 'processors:read',
+  /** Delete schedules */
+  'schedules:delete': 'schedules:delete',
   /** Execute schedules */
   'schedules:execute': 'schedules:execute',
   /** View schedules */
@@ -281,6 +279,10 @@ export const PERMISSION_PATTERNS = {
   'stored-skills:read': 'stored-skills:read',
   /** Create and modify stored skills */
   'stored-skills:write': 'stored-skills:write',
+  /** View stored workflows */
+  'stored-workflows:read': 'stored-workflows:read',
+  /** Create and modify stored workflows */
+  'stored-workflows:write': 'stored-workflows:write',
   /** Delete stored workspaces */
   'stored-workspaces:delete': 'stored-workspaces:delete',
   /** View stored workspaces */
@@ -373,8 +375,6 @@ export const PERMISSIONS = [
   'datasets:write',
   'embedders:read',
   'experiments:read',
-  'harness:execute',
-  'harness:read',
   'infrastructure:read',
   'logs:read',
   'mcp:execute',
@@ -389,6 +389,7 @@ export const PERMISSIONS = [
   'processor-providers:read',
   'processors:execute',
   'processors:read',
+  'schedules:delete',
   'schedules:execute',
   'schedules:read',
   'schedules:write',
@@ -414,6 +415,8 @@ export const PERMISSIONS = [
   'stored-skills:publish',
   'stored-skills:read',
   'stored-skills:write',
+  'stored-workflows:read',
+  'stored-workflows:write',
   'stored-workspaces:delete',
   'stored-workspaces:read',
   'stored-workspaces:write',
@@ -493,10 +496,6 @@ export const MastraFGAPermissions = {
   EMBEDDERS_READ: 'embedders:read',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
-  /** Execute harness sessions */
-  HARNESS_EXECUTE: 'harness:execute',
-  /** View harness sessions */
-  HARNESS_READ: 'harness:read',
   /** View infrastructure */
   INFRASTRUCTURE_READ: 'infrastructure:read',
   /** View logs */
@@ -525,6 +524,8 @@ export const MastraFGAPermissions = {
   PROCESSORS_EXECUTE: 'processors:execute',
   /** View processors */
   PROCESSORS_READ: 'processors:read',
+  /** Delete schedules */
+  SCHEDULES_DELETE: 'schedules:delete',
   /** Execute schedules */
   SCHEDULES_EXECUTE: 'schedules:execute',
   /** View schedules */
@@ -575,6 +576,10 @@ export const MastraFGAPermissions = {
   STORED_SKILLS_READ: 'stored-skills:read',
   /** Create and modify stored skills */
   STORED_SKILLS_WRITE: 'stored-skills:write',
+  /** View stored workflows */
+  STORED_WORKFLOWS_READ: 'stored-workflows:read',
+  /** Create and modify stored workflows */
+  STORED_WORKFLOWS_WRITE: 'stored-workflows:write',
   /** Delete stored workspaces */
   STORED_WORKSPACES_DELETE: 'stored-workspaces:delete',
   /** View stored workspaces */

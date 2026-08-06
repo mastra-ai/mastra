@@ -1,1 +1,1 @@
-export { isWorkspaceV1Supported } from '@mastra/playground-ui/utils';
+export { isWorkspaceV1Supported } from '@mastra/playground-ui/utils/workspace-compat';

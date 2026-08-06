@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { pathToFileURL } from 'url'
+import { extractSidebarDocIds, type SidebarItem } from './sidebar-doc-ids'
 
 /**
  * Validates that every MDX file under the content directories is referenced
@@ -9,20 +10,6 @@ import { pathToFileURL } from 'url'
  * Usage:
  *   pnpm validate:sidebar-docs
  */
-
-interface SidebarDoc {
-  type: 'doc'
-  id: string
-  label?: string
-}
-
-interface SidebarCategory {
-  type: 'category'
-  label: string
-  items: SidebarItem[]
-}
-
-type SidebarItem = SidebarDoc | SidebarCategory | string
 
 interface SectionConfig {
   name: string
@@ -58,25 +45,9 @@ const IGNORED_PATTERNS = [
   /\/_partial-.*\.mdx$/, // Partial MDX files that are imported into other docs
   // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
   /\/mastra-platform\/.*/,
+  /\/agents\/networks/,
+  /\/license\.mdx$/,
 ]
-
-function extractDocIds(items: SidebarItem[]): Set<string> {
-  const ids = new Set<string>()
-
-  for (const item of items) {
-    if (typeof item === 'string') {
-      ids.add(item)
-    } else if (item.type === 'doc') {
-      ids.add(item.id)
-    } else if (item.type === 'category') {
-      for (const id of extractDocIds(item.items)) {
-        ids.add(id)
-      }
-    }
-  }
-
-  return ids
-}
 
 async function collectMdxFiles(dir: string): Promise<string[]> {
   const results: string[] = []
@@ -120,7 +91,7 @@ async function validateSection(section: SectionConfig, rootDir: string): Promise
     throw new Error(`${section.sidebarKey} not found in ${section.sidebarPath}`)
   }
 
-  const sidebarIds = extractDocIds(items)
+  const sidebarIds = extractSidebarDocIds(items)
   const mdxFiles = await collectMdxFiles(contentFullDir)
 
   const ghostPages: string[] = []

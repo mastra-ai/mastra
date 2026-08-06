@@ -376,7 +376,7 @@ export const mastra = new Mastra({
 })
 ```
 
-This pattern ensures only one `PostgresStore` instance is created regardless of how many times the module is reloaded during development. The same pattern can be applied to other storage providers like `LibSQLStore`.
+The pattern ensures only one `PostgresStore` instance is created regardless of how many times the module is reloaded during development. The same pattern can be applied to other storage providers like `LibSQLStore`.
 
 :::tip
 This singleton pattern is only necessary during local development with HMR. In production builds, modules are only loaded once.

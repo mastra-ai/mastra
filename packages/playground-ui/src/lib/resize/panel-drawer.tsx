@@ -38,7 +38,7 @@ export const PanelDrawer = ({ direction, label, children }: PanelDrawerProps) =>
       <DrawerPortal keepMounted>
         <DrawerBackdrop />
         <DrawerViewport>
-          <DrawerPopup className="w-[calc(100vw-2.5rem)] max-w-[28rem]">
+          <DrawerPopup className="w-[calc(100vw-2.5rem)] max-w-md">
             <DrawerTitle className="sr-only">{label}</DrawerTitle>
             <div className="flex min-h-0 flex-1 flex-col">{children}</div>
           </DrawerPopup>

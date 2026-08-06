@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
-import { MastraFGAPermissions } from '../../../auth/ee';
+import { stopGoalActivity } from '../../../agent/goal';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -33,6 +33,7 @@ import {
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
+  NOW_KEY,
   RESOURCE_ID_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   STEP_ACTIVE_TOOLS_KEY,
@@ -216,7 +217,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolName,
             args: transformedArgs,
             type,
-            runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
+            // Store the OUTER (resumable) runId so clients can resume after page refresh or
+            // server restart via `resumeStream({ runId, toolCallId })`. For delegated sub-agent /
+            // workflow tools the inner suspended run is preserved separately as `delegatedRunId`
+            // — it is required to resume the delegate's own suspended stream, but it is not a
+            // valid public resume target (resuming with it fails closed). No `parentRunId` is
+            // written: readers that resume `parentRunId ?? runId` (channels) get the outer run
+            // from `runId` directly; legacy entries with `parentRunId` keep working.
+            runId,
+            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { delegatedRunId: suspendedToolRunId } : {}),
             ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
@@ -351,7 +360,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
         const memory = readScoped(scopeCtx, MEMORY_KEY, 'memory');
 
-        if (!saveQueueManager || !threadId) {
+        if (!saveQueueManager || !threadId || memoryConfig?.readOnly) {
           return;
         }
 
@@ -499,6 +508,36 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // On resume, the live `requireToolApproval` policy may be gone: function-form
+        // policies do not survive RequestContext serialization, and decline/approve
+        // helpers typically only pass `{ runId, toolCallId }` — not the original option.
+        // The suspend payload still records that this step waited for approval, so treat
+        // that as authoritative for the resume decision (especially declines).
+        //
+        // Nested sub-agent/workflow approvals also write `requireToolApproval` on the
+        // outer suspend payload, but they additionally set `suspendedToolRunId`. Those
+        // must resume into the nested tool path — not the outer approval short-circuit —
+        // even when a live outer `requireToolApproval` policy is still present.
+        const isDelegatedApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId,
+        );
+        const suspendedForApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
+          !isDelegatedApproval,
+        );
+        const isApprovalResume =
+          resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
+        // Gate the resume branch on either a live policy or a prior outer approval suspend.
+        // Without this, `declineToolCall` falls through to `execute` when the policy was
+        // lost (#20470). Do not key only on `approved` in resumeData — generic tool
+        // resumes can carry that field for unrelated reasons (same guard as durable).
+        const approvalGated =
+          !isDelegatedApproval && (toolRequiresApproval || (suspendedForApproval && isApprovalResume));
+
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
           z.object({
@@ -510,8 +549,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }),
         );
 
-        if (toolRequiresApproval) {
+        if (approvalGated) {
           if (!resumeData) {
+            await stopGoalActivity({
+              agentId,
+              runId,
+              now: readScoped(scopeCtx, NOW_KEY, 'now'),
+            });
             const approvalChunk = await transformChunk(
               {
                 type: 'tool-call-approval',
@@ -553,6 +597,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   args: inputData.args,
                 },
                 __streamState: streamState.serialize(),
+                __agentId: agentId,
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -563,13 +608,28 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
 
             if (!resumeData.approved) {
+              // Return the approval decision (not a `result` string) so it persists as
+              // `state: 'output-denied'` with `approval`. The denial reason carries the
+              // existing string so downstream consumers/UI keep the same message.
               return {
-                result: 'Tool call was not approved by the user',
+                approval: {
+                  id: inputData.toolCallId,
+                  approved: false,
+                  reason: 'Tool call was not approved by the user',
+                },
                 ...inputData,
               };
             }
           }
         }
+
+        // When an approval-gated tool is approved on resume, tag the resolved output with the
+        // approval decision so it round-trips through persistence as `approval: { approved: true }`.
+        // Use `approvalGated` (not only the live policy) so approve-after-policy-loss still tags.
+        const approvalGrant =
+          approvalGated && resumeData && (resumeData as { approved?: boolean }).approved === true
+            ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
+            : undefined;
 
         //this is to avoid passing resume data to the tool if it's not needed
         // For agent tools, always pass resume data so the agent tool wrapper knows to call
@@ -577,7 +637,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const resumeDataToPassToToolOptions =
-          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !isAgentTool &&
+          approvalGated &&
+          resumeData &&
+          Object.keys(resumeData).length === 1 &&
+          'approved' in resumeData
             ? undefined
             : resumeData;
 
@@ -608,6 +672,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
+              await stopGoalActivity({
+                agentId,
+                runId,
+                now: readScoped(scopeCtx, NOW_KEY, 'now'),
+              });
               const approvalChunk = await transformChunk(
                 {
                   type: 'tool-call-approval',
@@ -674,6 +743,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args: inputData.args,
                   },
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
                   // Persist the inner suspended run id in the workflow snapshot, partitioned
                   // per tool call (resumeLabel = toolCallId). The shared per-message
                   // pendingToolApprovals metadata is keyed by toolName and flushed/rehydrated
@@ -725,6 +795,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
+                  toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                 },
@@ -772,7 +844,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 pendingOrSuspendedTools[inputData.toolName] ??
                 Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolName === inputData.toolName);
               if (entry) {
-                suspendedToolRunId = entry.runId;
+                // Prefer the inner delegated run id — that's the run the sub-agent/workflow tool
+                // must resume. `entry.runId` is the outer resumable run; older persisted entries
+                // stored the inner run there, so it remains the fallback.
+                suspendedToolRunId = entry.delegatedRunId ?? entry.runId;
                 break;
               }
             }
@@ -790,7 +865,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   dataToolSuspendedParts.find((part: any) => part.data.toolCallId === inputData.toolCallId) ??
                   dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
                 if (foundTool) {
-                  suspendedToolRunId = (foundTool as any).data.runId;
+                  suspendedToolRunId = (foundTool as any).data.delegatedRunId ?? (foundTool as any).data.runId;
                   break;
                 }
               }
@@ -824,20 +899,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        // FGA authorization check before tool execution
-        const toolFgaProvider = mastra?.getServer?.()?.fga;
-        if (toolFgaProvider) {
-          const fgaUser = requestContext?.get('user');
-          const { checkFGA } = await import('../../../auth/ee/fga-check');
-          await checkFGA({
-            fgaProvider: toolFgaProvider,
-            user: fgaUser,
-            resource: { type: 'tool', id: inputData.toolName },
-            permission: MastraFGAPermissions.TOOLS_EXECUTE,
-            requestContext,
-            actor,
-          });
-        }
+        // Tool-level FGA (TOOLS_EXECUTE) is enforced inside the tool wrapper
+        // (`createExecute` in tools/tool-builder/builder.ts), which runs on every
+        // execution path — inline, background dispatch, and durable steps — using
+        // the canonical resource id (`<agentId>:<toolName>`, the MCP id, or the
+        // standalone name). Checking here as well would authorize a bare,
+        // non-canonical id that the durable path never checks, so it is not
+        // duplicated (keeps regular and durable authorization identical).
 
         const llmBgOverrides =
           typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
@@ -1080,11 +1148,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     {
                       type: 'tool-invocation',
                       toolInvocation: {
-                        state: 'result',
+                        // A failed background task is recorded as `output-error` with the
+                        // message in `errorText`; a successful one keeps `state: 'result'`.
+                        ...(params.status === 'failed'
+                          ? { state: 'output-error' as const, errorText: result as string }
+                          : { state: 'result' as const, result }),
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         args,
-                        result,
+                        // Preserve the approval decision for an approved approval-gated tool that
+                        // ran in the background so it round-trips on recall, matching the sync path
+                        // and the "started" placeholder above.
+                        ...(approvalGrant ?? {}),
                       },
                       ...(providerMetadata ? { providerMetadata } : {}),
                     },
@@ -1161,51 +1236,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     }
                   }
                 },
-                // Execution injector — updates the existing tool-invocation in the
-                // message list (keyed by toolCallId) background task startedAt.
+                // Execution injector — records background task lifecycle metadata on the
+                // assistant message without changing the model-visible tool result.
                 onExecution: async params => {
-                  const inputTransform = await transformToolPayloadForTargets(
-                    {
-                      phase: 'input-available',
-                      toolName: params.toolName,
-                      toolCallId: params.toolCallId,
-                      input: args,
-                      providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                    },
-                    transformSource,
-                    logger,
-                  );
-                  const transformCarrier = withToolPayloadTransformMetadata(
-                    { metadata: {} as Record<string, any> },
-                    inputTransform,
-                  );
-                  const providerMetadata = withToolPayloadTransformProviderMetadata(
-                    inputData.providerMetadata as ProviderMetadata | undefined,
-                    transformCarrier.metadata,
-                  ) as ProviderMetadata | undefined;
-
-                  messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        state: 'call',
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args,
-                      },
-                      ...(providerMetadata ? { providerMetadata } : {}),
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          suspendedAt: params.suspendedAt,
-                          taskId: params.taskId,
-                        },
+                  messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+                    mode: 'stream',
+                    backgroundTasks: {
+                      [params.toolCallId]: {
+                        startedAt: params.startedAt,
+                        suspendedAt: params.suspendedAt,
+                        taskId: params.taskId,
                       },
                     },
-                  );
+                  });
                 },
 
                 // Per-task callbacks
@@ -1241,8 +1284,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // bubbles up through the AI-SDK-v5 tool builder and gets
               // wrapped as `TOOL_EXECUTION_FAILED: Invalid state:
               // Controller is already closed`.
-              safeEnqueue(controller, {
-                type: 'background-task-started' as any,
+              const backgroundTaskStartedChunk = {
+                type: 'background-task-started' as const,
                 runId,
                 from: ChunkFrom.AGENT,
                 payload: {
@@ -1250,12 +1293,25 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   toolCallId: inputData.toolCallId,
                 },
-              });
+              };
+              safeEnqueue(controller, backgroundTaskStartedChunk);
+              try {
+                await options?.onChunk?.(backgroundTaskStartedChunk);
+              } catch (error) {
+                logger?.warn?.('Error invoking onChunk for background-task-started', {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  error,
+                  errorMessage: error instanceof Error ? error.message : undefined,
+                  errorStack: error instanceof Error ? error.stack : undefined,
+                });
+              }
 
               // Return placeholder result so the LLM can continue
               return {
                 result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
                 ...inputData,
+                ...(approvalGrant ?? {}),
               };
             }
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
@@ -1279,7 +1335,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        return { result, ...inputData };
+        return { result, ...inputData, ...(approvalGrant ?? {}) };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {

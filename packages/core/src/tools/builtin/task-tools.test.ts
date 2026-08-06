@@ -36,7 +36,7 @@ function createToolContext(
     void store.setState({ threadId: THREAD_ID, type: TASK_STATE_TYPE, value: assignTaskIds(initialTasks) });
   }
   if (options.onEvent) {
-    requestContext.set('harness', { emitEvent: options.onEvent });
+    requestContext.set('controller', { emitEvent: options.onEvent });
   }
 
   const mastra = {
@@ -140,7 +140,7 @@ describe('taskWriteTool', () => {
     ]);
   });
 
-  it('emits a task_updated event to the harness display bridge when present', async () => {
+  it('emits a task_updated event to the controller display bridge when present', async () => {
     const onEvent = vi.fn();
     const ctx = createToolContext([], { onEvent });
     await (taskWriteTool as any).execute(

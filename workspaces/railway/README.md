@@ -69,8 +69,8 @@ const sandbox = new RailwaySandbox({ sandboxId: 'existing-railway-sandbox-id' })
 ### Custom base image (templates)
 
 Pre-install packages and run setup steps so every sandbox starts ready. Pass a
-builder callback over the Railway template builder — it's built once on the
-first `start()`:
+builder callback over the Railway template builder — Railway builds the image
+when the sandbox is created during `start()`:
 
 ```typescript
 const sandbox = new RailwaySandbox({
@@ -78,8 +78,9 @@ const sandbox = new RailwaySandbox({
 });
 ```
 
-You can also pass a pre-built `SandboxTemplate` to reuse it across sandboxes
-without rebuilding. Templates are ignored when `sandboxId` is set (reattach).
+You can also pass a `SandboxTemplate` to reuse it across sandboxes. Railway
+builds the image during sandbox creation. Templates are ignored when
+`sandboxId` is set (reattach).
 
 ### Fork a running sandbox
 

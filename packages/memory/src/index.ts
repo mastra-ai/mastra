@@ -30,6 +30,8 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
+  StorageListMessagesOutput,
   MemoryStorage,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
@@ -46,6 +48,13 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
+import type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+} from './processors/observational-memory/summarize';
+import { TokenCounter } from './processors/observational-memory/token-counter';
+import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
@@ -53,6 +62,20 @@ export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
 } from './processors/observational-memory/model-by-input-tokens';
+export {
+  Extractor,
+  type ExtractorConfig,
+  type ExtractorOnExtractedContext,
+  type ExtractorRuntimeContext,
+  type ExtractorSource,
+} from './processors/observational-memory';
+export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
+export type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+  SummarizeModel,
+} from './processors/observational-memory/summarize';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -66,6 +89,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
+  hooks?: ObservationalMemoryConfig['hooks'];
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -81,7 +105,7 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 };
 
 /*
@@ -92,8 +116,9 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * published memory build during ESM instantiation before user code runs.
  *
  * Until v2 can tighten the peer contract, keep these copies manually in sync
- * with packages/core/src/memory/working-memory-utils.ts and
- * packages/core/src/memory/system-reminders.ts. Those source files also carry
+ * with packages/core/src/memory/working-memory-utils.ts,
+ * packages/core/src/memory/system-reminders.ts, and
+ * packages/core/src/agent/signals.ts. Those source files also carry
  * compatibility notes that point back here.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
@@ -195,6 +220,21 @@ function filterSystemReminderMessages(
   return messages.filter(message => !isSystemReminderMessage(message));
 }
 
+// Local copy for compatibility with core versions that predate this export. Keep in sync with
+// packages/core/src/agent/signals.ts until the peer range can be tightened.
+function isTransientSignalMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal' || !isRecord(message.content)) {
+    return false;
+  }
+  const metadata = message.content.metadata;
+  return (
+    isRecord(metadata) &&
+    isRecord(metadata.signal) &&
+    !Array.isArray(metadata.signal) &&
+    metadata.signal.transient === true
+  );
+}
+
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
@@ -202,6 +242,12 @@ function normalizeObservationalMemoryConfig(
   if (config === false || config === undefined) return undefined;
   if (typeof config === 'object' && config.enabled === false) return undefined;
   return config as NormalizedObservationalMemoryConfig;
+}
+
+function hasWorkingMemoryExtractor(
+  extractors: NonNullable<NonNullable<ObservationalMemoryConfig['observation']>['extract']> | undefined,
+): boolean {
+  return !!extractors?.some(extractor => extractor.slug === 'working-memory');
 }
 
 // Re-export for testing purposes
@@ -253,6 +299,40 @@ export class Memory extends MastraMemory {
     }
   }
 
+  public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
+    return this.applyManagedWorkingMemoryDefaults(super.getMergedThreadConfig(config));
+  }
+
+  private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
+    const omConfig = normalizeObservationalMemoryConfig(
+      config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
+    );
+    if (!omConfig?.observation?.manageWorkingMemory || !config.workingMemory?.enabled) {
+      return config;
+    }
+
+    const currentWorkingMemory = config.workingMemory;
+    const workingMemory = {
+      ...currentWorkingMemory,
+      agentManaged: currentWorkingMemory.agentManaged ?? false,
+      useStateSignals: currentWorkingMemory.useStateSignals ?? true,
+    };
+    const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
+    const extract = observation.extract ?? [];
+
+    return {
+      ...config,
+      workingMemory,
+      observationalMemory: {
+        ...omConfig,
+        observation: {
+          ...observation,
+          extract: hasWorkingMemoryExtractor(extract) ? extract : [...extract, new WorkingMemoryExtractor()],
+        },
+      },
+    } as MemoryConfigInternal;
+  }
+
   constructor(config: MemoryConstructorConfig = {}) {
     super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
 
@@ -296,26 +376,7 @@ export class Memory extends MastraMemory {
     return store;
   }
 
-  async listMessagesByResourceId(args: {
-    resourceId: string;
-    perPage?: number | false;
-    page?: number;
-    orderBy?: { field?: 'createdAt'; direction?: 'ASC' | 'DESC' };
-    filter?: {
-      dateRange?: {
-        start?: Date;
-        end?: Date;
-        startExclusive?: boolean;
-        endExclusive?: boolean;
-      };
-    };
-    include?: Array<{
-      id: string;
-      threadId?: string;
-      withPreviousMessages?: number;
-      withNextMessages?: number;
-    }>;
-  }): Promise<{ messages: MastraDBMessage[]; total: number; page: number; perPage: number | false; hasMore: boolean }> {
+  async listMessagesByResourceId(args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
     const memoryStore = await this.getMemoryStore();
     return memoryStore.listMessagesByResourceId(args);
   }
@@ -1089,9 +1150,10 @@ ${workingMemory}`;
 
     try {
       // System messages are runtime instructions and should never be stored in memory.
+      // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
       const updatedMessages = messages
-        .filter(m => m.role !== 'system')
+        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
@@ -1419,8 +1481,10 @@ ${workingMemory}`;
       return null;
     }
 
-    // In readOnly mode, provide context without tool instructions
-    if (config?.readOnly) {
+    const workingMemoryConfig = config.workingMemory;
+
+    // In readOnly or non-agent-managed mode, provide context without tool instructions.
+    if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
       return this.getReadOnlyWorkingMemoryInstruction({
         template: workingMemoryTemplate,
         data: workingMemoryData,
@@ -1594,7 +1658,7 @@ ${workingMemory}`;
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system');
+    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
@@ -1623,7 +1687,7 @@ ${workingMemory}`;
     if (omConfig.observation?.bufferTokens !== false && !coreFeatures.has('asyncBuffering')) {
       throw new Error(
         'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
-          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
+          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, @mastra/mongodb, or @mastra/convex) to the latest version, ' +
           'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
       );
     }
@@ -1651,6 +1715,7 @@ ${workingMemory}`;
 
     return new OMClass({
       storage: memoryStore,
+      memory: this,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       activateAfterIdle: omConfig.activateAfterIdle,
@@ -1659,6 +1724,7 @@ ${workingMemory}`;
       model: omConfig.model,
       mastra: this._mastraInstance,
       onIndexObservations,
+      hooks: omConfig.hooks,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,
@@ -1674,6 +1740,7 @@ ${workingMemory}`;
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
+            extract: omConfig.observation.extract,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1685,6 +1752,7 @@ ${workingMemory}`;
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
             instruction: omConfig.reflection.instruction,
+            extract: omConfig.reflection.extract,
           }
         : undefined,
     });
@@ -2044,6 +2112,131 @@ Notes:
   }
 
   /**
+   * Summarize one of this memory's threads in one shot.
+   *
+   * Loads the thread's messages from storage and runs `summarizeConversation()` over them —
+   * Observational Memory's Observer plumbing as a standalone call. Nothing is written back to
+   * memory: the summary and extracted values are returned to you (and to each extractor's
+   * `onExtracted` hook), so you decide where they go. Works whether or not observational
+   * memory is enabled on this instance.
+   *
+   * Use this when a session ends and you want a summary or structured extraction of the whole
+   * conversation — for example a voice call at hang-up.
+   *
+   * Messages are loaded page-by-page starting from the newest, bounded by `lastMessages` and
+   * `maxInputTokens`, so summarizing a very long thread doesn't read its entire history from
+   * storage.
+   *
+   * @example
+   * ```ts
+   * const result = await memory.summarizeThread({
+   *   model: 'openai/gpt-4.1-mini',
+   *   threadId: call.threadId,
+   *   instructions: 'Summarize this voicemail call for the business owner.',
+   *   extract: [callSummaryExtractor],
+   * });
+   * ```
+   */
+  public async summarizeThread(
+    opts: {
+      threadId: string;
+      resourceId?: string;
+      /** Only summarize the last N messages of the thread. By default the whole thread is loaded, bounded by `maxInputTokens`. */
+      lastMessages?: number;
+      /**
+       * Stop loading older messages once the collected messages exceed this estimated token count,
+       * so very long threads don't get read from storage in full. The newest message is always
+       * included. Defaults to 1,000,000 tokens.
+       */
+      maxInputTokens?: number;
+    } & Omit<SummarizeConversationOptions, 'messages' | 'memory' | 'mastra' | 'threadId' | 'resourceId'>,
+  ): Promise<SummarizeConversationResult> {
+    const { lastMessages, maxInputTokens, ...summarizeOptions } = opts;
+    // TODO: when Observational Memory is enabled on this instance, build the summary from the
+    // thread's existing observations plus the still-unobserved messages instead of re-reading the
+    // raw message history. https://github.com/mastra-ai/mastra/pull/19135#discussion_r3546310808
+    const messages = await this.loadMessagesForSummarization({
+      threadId: opts.threadId,
+      resourceId: opts.resourceId,
+      lastMessages,
+      maxInputTokens: maxInputTokens ?? SUMMARIZE_THREAD_DEFAULTS.maxInputTokens,
+      abortSignal: summarizeOptions.abortSignal,
+    });
+    return summarizeConversation({
+      ...summarizeOptions,
+      messages,
+      memory: this,
+      mastra: this._mastraInstance,
+    });
+  }
+
+  /**
+   * Load a thread's messages for `summarizeThread()` without reading the whole thread from
+   * storage at once. Pages backwards from the newest message and stops once `lastMessages`
+   * messages are collected or the estimated token count crosses `maxInputTokens` (the newest
+   * message is always kept). Returns messages in chronological order.
+   */
+  private async loadMessagesForSummarization({
+    threadId,
+    resourceId,
+    lastMessages,
+    maxInputTokens,
+    abortSignal,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    lastMessages?: number;
+    maxInputTokens: number;
+    abortSignal?: AbortSignal;
+  }): Promise<MastraDBMessage[]> {
+    if (lastMessages !== undefined && lastMessages <= 0) return [];
+
+    const tokenCounter = new TokenCounter();
+    const collected: MastraDBMessage[] = [];
+    let tokens = 0;
+    let page = 0;
+
+    while (true) {
+      abortSignal?.throwIfAborted();
+
+      // Each page is the next-older slice of the thread, returned in chronological order
+      // (recall queries newest-first and reverses each page when no orderBy is given).
+      const { messages: batch, hasMore } = await this.recall({
+        threadId,
+        resourceId,
+        perPage: SUMMARIZE_THREAD_DEFAULTS.pageSize,
+        page,
+      });
+      if (batch.length === 0) break;
+
+      let reachedLimit = false;
+      const kept: MastraDBMessage[] = [];
+      for (let i = batch.length - 1; i >= 0; i--) {
+        abortSignal?.throwIfAborted();
+
+        const message = batch[i]!;
+        if (lastMessages !== undefined && collected.length + kept.length >= lastMessages) {
+          reachedLimit = true;
+          break;
+        }
+        const messageTokens = tokenCounter.countMessage(message);
+        if (collected.length + kept.length > 0 && tokens + messageTokens > maxInputTokens) {
+          reachedLimit = true;
+          break;
+        }
+        kept.unshift(message);
+        tokens += messageTokens;
+      }
+
+      collected.unshift(...kept);
+      if (reachedLimit || !hasMore) break;
+      page++;
+    }
+
+    return collected;
+  }
+
+  /**
    * Index a list of messages directly (without querying storage).
    * Used by observe-time indexing to vectorize newly-observed messages.
    */
@@ -2139,7 +2332,9 @@ Notes:
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
-    if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
+    const workingMemoryConfig = mergedConfig.workingMemory;
+
+    if (workingMemoryConfig?.enabled && workingMemoryConfig.agentManaged !== false && !mergedConfig.readOnly) {
       const { name, tool } = createWorkingMemoryTool(mergedConfig, {
         vNext: this.isVNextWorkingMemoryConfig(mergedConfig),
       });
@@ -2942,6 +3137,11 @@ Notes:
     );
     if (hasObservationalMemory) return null;
 
+    // Note: attachment is intentionally permissive — `MastraMemory` may not be
+    // populated in the request context at discovery time (or at all, for direct
+    // `getInputProcessors()` calls). Ephemeral invocations without a thread
+    // (e.g. workflow agent steps) are handled at runtime: the processor no-ops
+    // when `getThreadContext` resolves no thread.
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
@@ -2974,6 +3174,11 @@ Notes:
     configuredProcessors: InputProcessorOrWorkflow[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
+    // Note: attachment is intentionally permissive — `MastraMemory` may not be
+    // populated in the request context at discovery time (or at all, for direct
+    // `getInputProcessors()` calls). Ephemeral invocations without a thread
+    // (e.g. workflow agent steps) are handled at runtime: the processor runner
+    // skips `computeStateSignal` when no thread/resource resolves.
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
     const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);

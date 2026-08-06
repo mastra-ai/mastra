@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 
 import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
-import { satisfies, gtr } from 'semver';
+import { satisfies, gtr, validRange } from 'semver';
 
 import type { MastraPackageInfo } from './mastra-packages.js';
 
@@ -52,6 +52,13 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
         const installedVersion = installedVersions.get(peerDepName);
         if (!installedVersion) {
           // Peer dep not installed - this is a separate issue that npm/pnpm will warn about
+          continue;
+        }
+
+        // Skip non-semver ranges like `workspace:^` or `catalog:` (seen when the
+        // package resolves to monorepo source) - they can't be compared and would
+        // make getUpdateCommand's gtr() throw.
+        if (!validRange(requiredRange)) {
           continue;
         }
 

@@ -1,6 +1,6 @@
 # Docs Expert
 
-A research assistant that answers questions about libraries, APIs, and documentation by searching the live web and citing its sources. It uses a Mastra `web_search` tool routed through Mastra Gateway/OpenRouter web search — no extra search API key needed.
+A research assistant that answers questions about libraries, APIs, and documentation by searching the live web and citing its sources. It uses a Mastra `web_search` tool routed through the Gateway/OpenRouter web search — no extra search API key needed.
 
 The agent uses observational memory so it learns what docs and topics you've asked about, building persistent context over time. All state is persisted to Turso (libSQL).
 
@@ -10,7 +10,7 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Prerequisites
 
-- A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra) — proxies to OpenAI, Anthropic, Google, etc. behind a single key.
+- A [Gateway API key](https://mastra.ai/docs/models/gateways/mastra) — proxies to OpenAI, Anthropic, Google, etc. behind a single key.
 - A [Turso](https://turso.tech) database (URL + auth token) for storage. A free dev tier is fine; in-memory libSQL works too if you swap the URL to `:memory:`.
 
 ## Quickstart 🚀

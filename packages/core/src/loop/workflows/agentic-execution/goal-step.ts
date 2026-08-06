@@ -15,6 +15,7 @@ import type { MastraScorer } from '../../../evals';
 import { resolveModelConfig } from '../../../llm';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import { createProcessorSendSignal } from '../../../processors/send-signal';
+import { RequestContext } from '../../../request-context';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
@@ -108,6 +109,8 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData }) => {
+      if (inputData.stepResult?.reason === 'error') return inputData;
+
       // No goal configured on the agent → nothing to do.
       if (!goal) return inputData;
 
@@ -134,6 +137,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         judgeModelId: typeof goal.judge === 'string' ? goal.judge : undefined,
         maxRuns: goal.maxRuns,
         prompt: goal.prompt,
+        maxSteps: goal.maxSteps,
       });
 
       // Defensive budget guard. Normally an objective that exhausts its budget is
@@ -162,6 +166,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
             timedOut: false,
             maxRunsReached: true,
             suppressFeedback: false,
+            shouldContinue: false,
           },
         } as ChunkType<OUTPUT>);
         return inputData;
@@ -180,7 +185,8 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // judge configured) → no-op.
       let judgeModelConfig: unknown = nonStringAgentJudge ?? effective.judgeModelId;
       if (typeof judgeModelConfig === 'function') {
-        judgeModelConfig = await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra });
+        judgeModelConfig =
+          (await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra })) ?? effective.judgeModelId;
       }
       if (!judgeModelConfig) {
         return inputData;
@@ -244,12 +250,10 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
                   { type: 'tool-call', name: chunk.payload.toolName, message: chunk.payload.toolName },
                   chunk.payload.args,
                 );
-              } else if (chunk.type === 'tool-result') {
-                emitJudgeActivity(
-                  { type: 'tool-result', name: chunk.payload.toolName, message: chunk.payload.toolName },
-                  chunk.payload.args,
-                );
               }
+              // tool-result is intentionally skipped — the tool-call already
+              // communicates what the judge is doing; the result would only
+              // produce a duplicate activity line in the TUI.
             }
           })();
         };
@@ -284,11 +288,15 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
               ? ((await (goal.tools as (args: any) => unknown)({ requestContext, mastra })) as ToolsInput | undefined)
               : goal.tools;
           const goalId = record.id ?? `${threadId}:${record.startedAt}`;
+          const judgeRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
           scorer = createGoalScorer({
+            mastra,
             judgeModel,
             prompt: effective.prompt,
             tools: goalTools,
+            requestContext: judgeRequestContext,
             onStream: observeJudgeStream,
+            ...(effective.maxSteps ? { maxSteps: effective.maxSteps } : {}),
             ...(_internal?.memory
               ? {
                   memory: _internal.memory,
@@ -460,6 +468,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         timedOut: result.timedOut,
         maxRunsReached,
         suppressFeedback,
+        shouldContinue,
       };
 
       let currentMessageId = inputData.messageId;

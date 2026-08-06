@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName } from './types';
+import { LOG_PREFIX, validateBucketName, validatePrefix } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -18,6 +18,11 @@ export interface DaytonaGCSMountConfig extends FilesystemMountConfig {
   bucket: string;
   /** Service account key JSON (optional - omit for public buckets) */
   serviceAccountKey?: string;
+  /**
+   * Optional prefix (subdirectory) to mount instead of the entire bucket.
+   * Passed to gcsfuse as `--only-dir`. Leading/trailing slashes are normalized.
+   */
+  prefix?: string;
 }
 
 /**
@@ -159,7 +164,23 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       `sudo bash -c 'grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null || echo "user_allow_other" >> /etc/fuse.conf' 2>/dev/null || true`,
   );
 
+  // Scope the mount to a prefix (subdirectory) via gcsfuse --only-dir, so sandbox
+  // paths map to prefixed GCS keys instead of the bucket root. Mirrors the S3 mount.
+  let onlyDirFlag = '';
+  if (config.prefix) {
+    const normalizedPrefix = validatePrefix(config.prefix);
+    onlyDirFlag = `--only-dir=${shellQuote(normalizedPrefix)} `;
+  }
+
   const hasCredentials = !!config.serviceAccountKey;
+  // Infer directories from object prefixes. GCS has no real directories — a
+  // "folder" only exists implicitly as a shared prefix of object names. Without
+  // --implicit-dirs, an object written to the bucket via the GCS API without a
+  // placeholder "directory" object (e.g. an SDK/gsutil upload of foo/bar.txt
+  // with no foo/ marker) is unreachable in the mount: it isn't listed, and it
+  // can't be read by full path. Common when the mount reads bucket contents
+  // produced by another process. See gcsfuse docs "implicit directories".
+  const implicitDirsFlag = '--implicit-dirs';
   // Run gcsfuse as the sandbox user (not root) so the FUSE connection is registered
   // in the container's user namespace — allowing fusermount -u to unmount it later.
   let mountCmd: string;
@@ -172,10 +193,10 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     await writeFile(keyPath, config.serviceAccountKey!);
     await run(`chmod 600 ${shellQuote(keyPath)}`, 30_000);
 
-    mountCmd = `gcsfuse --key-file=${shellQuote(keyPath)} -o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
+    mountCmd = `gcsfuse --key-file=${shellQuote(keyPath)} ${implicitDirsFlag} ${onlyDirFlag}-o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
   } else {
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting GCS as public bucket (read-only)`);
-    mountCmd = `gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
+    mountCmd = `gcsfuse --anonymous-access ${implicitDirsFlag} ${onlyDirFlag}-o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
   }
 
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);

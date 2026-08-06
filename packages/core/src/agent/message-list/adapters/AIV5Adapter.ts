@@ -2,7 +2,14 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
-import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
+import type { ImageContent } from '../prompt/image-utils';
+import {
+  categorizeFileData,
+  createDataUri,
+  imageContentToString,
+  parseDataUri,
+  resolveFilePartMediaTypeAndData,
+} from '../prompt/image-utils';
 import type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -331,6 +338,19 @@ export class AIV5Adapter {
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
+          } else if (inv.state === 'output-denied') {
+            // v5 has no denied state. Downgrade to a single output-available part whose output is
+            // the denial reason, so v5 UI consumers — and the next LLM turn's prompt, which is
+            // built through this adapter — see a tool result instead of a dangling tool call.
+            parts.push({
+              type: `tool-${inv.toolName}`,
+              toolCallId: inv.toolCallId,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              output: inv.approval?.reason ?? 'Tool call was not approved by the user',
+              state: 'output-available',
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
+            } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
               type: `tool-${inv.toolName}`,
@@ -372,30 +392,37 @@ export class AIV5Adapter {
 
         // Convert file parts from V2 format (data) to AIV5 format (url)
         if (part.type === 'file') {
+          // v5-shaped file parts (`mediaType`/`url`) can reach this v2→v5 path; resolve both
+          // shapes so the media type survives (instead of the image/png default) and the
+          // payload is read from `url` when v5-shaped. Mirrors #17366.
+          const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+
           // Skip file parts that came from experimental_attachments to avoid duplicates
-          if (typeof part.data === 'string' && attachmentUrls.has(part.data)) {
+          if (typeof fileData === 'string' && attachmentUrls.has(fileData)) {
             continue;
           }
 
           const categorized =
-            typeof part.data === 'string'
-              ? categorizeFileData(part.data, part.mimeType)
-              : { type: 'raw' as const, mimeType: part.mimeType, data: part.data };
+            typeof fileData === 'string'
+              ? categorizeFileData(fileData, fileMimeType)
+              : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
-          if (categorized.type === 'url' && typeof part.data === 'string') {
+          // Provider file IDs (e.g. OpenAI "file-...") ride the url branch untouched so
+          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
+          if ((categorized.type === 'url' || categorized.type === 'providerFileId') && typeof fileData === 'string') {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
-              url: part.data,
+              url: fileData,
               mediaType: categorized.mimeType || 'image/png',
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
           } else {
             let filePartData: string;
-            let extractedMimeType = part.mimeType;
+            let extractedMimeType = fileMimeType;
 
-            if (typeof part.data === 'string') {
-              const parsed = parseDataUri(part.data);
+            if (typeof fileData === 'string') {
+              const parsed = parseDataUri(fileData);
 
               if (parsed.isDataUri) {
                 filePartData = parsed.base64Content;
@@ -403,10 +430,12 @@ export class AIV5Adapter {
                   extractedMimeType = extractedMimeType || parsed.mimeType;
                 }
               } else {
-                filePartData = part.data;
+                filePartData = fileData;
               }
             } else {
-              filePartData = part.data;
+              // Non-string payload (defensive: stored file parts carry string data/url):
+              // coerce so `filePartData` stays typed `string`.
+              filePartData = imageContentToString(fileData as ImageContent, extractedMimeType);
             }
 
             const finalMimeType = extractedMimeType || 'image/png';
@@ -659,7 +688,7 @@ export class AIV5Adapter {
         if (p.type === 'reasoning') {
           return {
             type: 'reasoning' as const,
-            reasoning: '',
+            reasoning: p.text,
             details: [
               {
                 type: 'text' as const,
@@ -781,7 +810,11 @@ export class AIV5Adapter {
         const base64 = data.toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else if (typeof data === 'string') {
-        return data.startsWith('data:') || data.startsWith('http') ? data : `data:${mimeType};base64,${data}`;
+        // OpenAI Files API file IDs (e.g. "file-abc123") must pass through as-is so
+        // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
+        return data.startsWith('data:') || data.startsWith('http') || data.startsWith('file-')
+          ? data
+          : `data:${mimeType};base64,${data}`;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;
@@ -915,7 +948,7 @@ export class AIV5Adapter {
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: '',
+          reasoning: part.text,
           details: [{ type: 'text', text: part.text }],
         };
         if (part.providerOptions) {

@@ -56,6 +56,7 @@ import type {
 import type { ToolProvider } from '../tool-provider';
 import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 import type { WorkspaceSandbox } from '../workspace/sandbox/sandbox';
+import type { Workspace } from '../workspace/workspace';
 
 // ============================================================================
 // Workspace Provider Interfaces
@@ -142,6 +143,28 @@ export interface BrowserProvider<TConfig = Record<string, unknown>> {
   createBrowser(config: TConfig): MastraBrowser | Promise<MastraBrowser>;
 }
 
+/**
+ * A registered workspace provider that the editor can use to hydrate
+ * stored workspace configs into complete runtime Workspace instances.
+ *
+ * Unlike filesystem/sandbox providers which build individual components,
+ * workspace providers build the entire Workspace as a single unit.
+ * No built-in workspace providers exist — they must be supplied via
+ * `MastraEditorConfig.workspaces`.
+ */
+export interface WorkspaceProvider<TConfig = Record<string, unknown>> {
+  /** Unique provider identifier (e.g., 'my-cloud') — matches `StorageWorkspaceRef.provider` */
+  id: string;
+  /** Human-readable name for UI display */
+  name: string;
+  /** Short description for UI display */
+  description?: string;
+  /** JSON Schema describing the provider-specific configuration. Used by UI to render config forms. */
+  configSchema?: Record<string, unknown>;
+  /** Create a complete workspace instance from the stored config */
+  createWorkspace(config: TConfig): Workspace<any, any, any> | Promise<Workspace<any, any, any>>;
+}
+
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
@@ -174,6 +197,14 @@ export interface MastraEditorConfig {
    * @example { [stagehandBrowserProvider.id]: stagehandBrowserProvider }
    */
   browsers?: Record<string, BrowserProvider>;
+  /**
+   * Workspace providers for hydrating stored workspace configs into complete
+   * runtime Workspace instances as a single unit (instead of composing from
+   * separate filesystem/sandbox providers).
+   * No built-in providers exist — workspace providers must be registered here.
+   * @example { [myCloudProvider.id]: myCloudProvider }
+   */
+  workspaces?: Record<string, WorkspaceProvider>;
   /**
    * Configuration for the Agent Builder EE feature.
    * When present and enabled, the editor provides agent building capabilities.

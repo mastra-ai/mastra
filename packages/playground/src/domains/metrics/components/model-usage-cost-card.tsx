@@ -1,10 +1,8 @@
 import { EntityType } from '@mastra/core/observability';
-import {
-  ModelUsageCostCardView,
-  OpenInTracesButton,
-  useDrilldown,
-  useModelUsageCostMetrics,
-} from '@mastra/playground-ui';
+import { OpenInTracesButton } from '@mastra/playground-ui/domains/metrics/components/card-action-buttons';
+import { ModelUsageCostCardView } from '@mastra/playground-ui/domains/metrics/components/model-usage-cost-card-view';
+import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
+import { useModelUsageCostMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-model-usage-cost-metrics';
 import { useLinkComponent } from '@/lib/framework';
 
 export function ModelUsageCostCard() {

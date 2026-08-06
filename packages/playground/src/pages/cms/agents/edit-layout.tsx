@@ -137,7 +137,7 @@ function EditLayoutWrapper() {
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 
@@ -320,7 +320,7 @@ function EditLayoutWrapper() {
 
       {isNotFound ? (
         <>
-          <div className="flex items-center justify-center h-full text-neutral3">Agent not found</div>
+          <div className="text-neutral3 flex h-full items-center justify-center">Agent not found</div>
           <div className="hidden">
             <EditFormContent
               agentId={agentId ?? ''}

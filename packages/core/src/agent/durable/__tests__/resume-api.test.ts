@@ -17,8 +17,12 @@ import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
+import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
+import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
@@ -75,6 +79,43 @@ function createTextModel(text: string) {
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }),
+  });
+}
+
+async function seedSuspendedRun(
+  store: InMemoryStore,
+  runId: string,
+  agentId: string,
+  memory: { threadId: string; resourceId: string },
+  status: WorkflowRunState['status'] = 'suspended',
+) {
+  const workflows = (await store.getStore('workflows'))!;
+  await workflows.persistWorkflowSnapshot({
+    workflowName: DurableStepIds.AGENTIC_LOOP,
+    runId,
+    resourceId: memory.resourceId,
+    snapshot: {
+      runId,
+      status,
+      value: {},
+      context: {
+        input: {
+          __workflowKind: 'durable-agent',
+          runId,
+          agentId,
+          messageListState: { memoryInfo: memory },
+          requestContextEntries: { tenantId: 'tenant-1' },
+          state: memory,
+        },
+      },
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      serializedStepGraph: [],
+      waitingPaths: {},
+      timestamp: Date.now(),
+    } as WorkflowRunState,
   });
 }
 
@@ -160,6 +201,213 @@ describe('Resume API', () => {
       result.cleanup();
     });
 
+    it('rehydrates a missing run registry entry before resuming', async () => {
+      const mockModel = createTextModel('Resumed!');
+      const store = new InMemoryStore();
+
+      const baseAgent = new Agent({
+        id: 'cold-resume-agent',
+        name: 'Cold Resume Agent',
+        instructions: 'Test cold resume rehydration',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { coldResumeAgent: durableAgent }, storage: store, logger: false });
+      const runId = 'cold-resume-run-aaaaaaaa';
+      await seedSuspendedRun(store, runId, durableAgent.id, {
+        threadId: 'cold-thread',
+        resourceId: 'cold-resource',
+      });
+      const prepareSpy = vi.spyOn(durableAgent, 'prepare');
+
+      const result = await durableAgent.resume(runId, { approved: true });
+
+      expect(prepareSpy).toHaveBeenCalledOnce();
+      expect(prepareSpy).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({
+          runId,
+          memory: { thread: 'cold-thread', resource: 'cold-resource' },
+          requestContext: expect.anything(),
+        }),
+      );
+      expect(prepareSpy.mock.calls[0]?.[1]?.requestContext?.get('tenantId')).toBe('tenant-1');
+      expect(durableAgent.runRegistry.has(runId)).toBe(true);
+      expect(result.runId).toBe(runId);
+      expect(result.threadId).toBe('cold-thread');
+      expect(result.resourceId).toBe('cold-resource');
+      result.cleanup();
+    });
+
+    it('rejects a persisted run that is not suspended before rehydrating', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'completed-cold-resume-agent',
+        name: 'Completed Cold Resume Agent',
+        instructions: 'Test completed cold resume behavior',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { completedColdResumeAgent: durableAgent }, storage: store, logger: false });
+      const runId = 'completed-cold-run';
+      await seedSuspendedRun(
+        store,
+        runId,
+        durableAgent.id,
+        { threadId: 'completed-thread', resourceId: 'completed-resource' },
+        'success',
+      );
+      const prepareSpy = vi.spyOn(durableAgent, 'prepare');
+
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow(
+        'This workflow run was not suspended',
+      );
+      expect(prepareSpy).not.toHaveBeenCalled();
+      expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    });
+
+    it('keeps the missing-run error when no persisted snapshot exists', async () => {
+      const baseAgent = new Agent({
+        id: 'missing-cold-resume-agent',
+        name: 'Missing Cold Resume Agent',
+        instructions: 'Test missing cold resume behavior',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({
+        agents: { missingColdResumeAgent: durableAgent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+
+      await expect(durableAgent.resume('missing-cold-run', { approved: true })).rejects.toThrow(
+        'No registry entry found for run missing-cold-run. Cannot resume.',
+      );
+    });
+
+    it('does not rehydrate a persisted run owned by another agent', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'snapshot-owner-agent',
+        name: 'Snapshot Owner Agent',
+        instructions: 'Test snapshot ownership',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { snapshotOwnerAgent: durableAgent }, storage: store, logger: false });
+      const runId = 'foreign-cold-run';
+      await seedSuspendedRun(store, runId, 'different-agent', {
+        threadId: 'foreign-thread',
+        resourceId: 'foreign-resource',
+      });
+
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow(
+        `persisted run belongs to agent "different-agent", not "${durableAgent.id}"`,
+      );
+      expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    });
+
+    it('does not re-prepare a warm run before resuming', async () => {
+      const mockModel = createTextModel('Resumed!');
+
+      const baseAgent = new Agent({
+        id: 'warm-resume-agent',
+        name: 'Warm Resume Agent',
+        instructions: 'Test warm resume behavior',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('Start something');
+      const prepareSpy = vi.spyOn(durableAgent, 'prepare');
+
+      const result = await durableAgent.resume(runId, { approved: true });
+
+      expect(prepareSpy).not.toHaveBeenCalled();
+      expect(result.runId).toBe(runId);
+      result.cleanup();
+    });
+
+    it('forwards approval execution options into the durable resume path', async () => {
+      const baseAgent = new Agent({
+        id: 'approval-options-agent',
+        name: 'Approval Options Agent',
+        instructions: 'Test approval option forwarding',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const output = { marker: 'output' };
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+      const memory = { thread: 'approval-thread', resource: 'approval-resource' };
+
+      const result = await durableAgent.approveToolCall({ runId: 'approval-run', memory });
+
+      expect(result).toBe(output);
+      expect(resumeSpy).toHaveBeenCalledWith('approval-run', { approved: true }, expect.objectContaining({ memory }));
+    });
+
+    it('forwards decline execution options into the durable resume path', async () => {
+      const baseAgent = new Agent({
+        id: 'decline-options-agent',
+        name: 'Decline Options Agent',
+        instructions: 'Test decline option forwarding',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const output = { marker: 'declined-output' };
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+      const memory = { thread: 'decline-thread', resource: 'decline-resource' };
+
+      const result = await durableAgent.declineToolCall({ runId: 'decline-run', memory });
+
+      expect(result).toBe(output);
+      expect(resumeSpy).toHaveBeenCalledWith('decline-run', { approved: false }, expect.objectContaining({ memory }));
+    });
+
+    it('forwards storage-backed approval options into the durable resume path', async () => {
+      const baseAgent = new Agent({
+        id: 'stored-approval-options-agent',
+        name: 'Stored Approval Options Agent',
+        instructions: 'Test stored approval option forwarding',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const runId = 'stored-approval-run';
+      const toolCallId = 'stored-tool-call';
+      const memory = { thread: 'stored-approval-thread', resource: 'stored-approval-resource' };
+      const output = { marker: 'stored-approval-output' };
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+      const listSuspendedRunsSpy = vi.spyOn(durableAgent, 'listSuspendedRuns').mockResolvedValue({
+        runs: [
+          {
+            runId,
+            status: 'suspended',
+            threadId: memory.thread,
+            resourceId: memory.resource,
+            suspendedAt: new Date(0),
+            toolCalls: [{ toolCallId, requiresApproval: true }],
+          },
+        ],
+        total: 1,
+      });
+
+      const result = await durableAgent.sendToolApproval({
+        threadId: memory.thread,
+        resourceId: memory.resource,
+        toolCallId,
+        approved: true,
+        memory,
+      });
+
+      expect(listSuspendedRunsSpy).toHaveBeenCalledWith({
+        threadId: memory.thread,
+        resourceId: memory.resource,
+      });
+      expect(result).toEqual({ accepted: true, runId, toolCallId });
+      expect(resumeSpy).toHaveBeenCalledWith(runId, { approved: true }, expect.objectContaining({ memory }));
+    });
+
     it('should preserve threadId and resourceId from prepare through resume', async () => {
       const mockModel = createTextModel('Done');
 
@@ -188,6 +436,50 @@ describe('Resume API', () => {
 
       expect(result.threadId).toBe('thread-123');
       expect(result.resourceId).toBe('resource-456');
+      result.cleanup();
+    });
+
+    it('accepts untilIdle: true and returns a DurableAgentStreamResult', async () => {
+      // No memory + no bgManager — the idle-loop wrapper short-circuits to
+      // firstTurn (agent.resume) directly, so this exercises the resume-side
+      // delegate without needing a real suspend/resume cycle.
+      const mockModel = createTextModel('Resumed!');
+
+      const baseAgent = new Agent({
+        id: 'resume-untilidle-agent',
+        name: 'Resume UntilIdle Agent',
+        instructions: 'Test resume untilIdle',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('Start');
+
+      const result = await durableAgent.resume(runId, { approved: true }, { untilIdle: true });
+
+      expect(result.runId).toBe(runId);
+      expect(typeof result.cleanup).toBe('function');
+      expect(typeof result.abort).toBe('function');
+      result.cleanup();
+    });
+
+    it('accepts untilIdle as { maxIdleMs } and returns a DurableAgentStreamResult', async () => {
+      const mockModel = createTextModel('Resumed!');
+
+      const baseAgent = new Agent({
+        id: 'resume-untilidle-ms-agent',
+        name: 'Resume UntilIdle MaxIdleMs Agent',
+        instructions: 'Test resume untilIdle maxIdleMs',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('Start');
+
+      const result = await durableAgent.resume(runId, { approved: true }, { untilIdle: { maxIdleMs: 30_000 } });
+
+      expect(result.runId).toBe(runId);
+      expect(typeof result.cleanup).toBe('function');
       result.cleanup();
     });
   });
@@ -629,5 +921,79 @@ describe('Observe API', () => {
 
     expect(result.runId).toBe(runId);
     result.cleanup();
+  });
+});
+
+// ============================================================================
+// Per-call tool injection (toolsets / clientTools) — in-process resume
+// ============================================================================
+
+describe('per-call tool injection survives in-process resume', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  it('preserves per-call clientTools on the run registry after prepare', async () => {
+    const mockModel = createTextModel('ok');
+
+    const baseAgent = new Agent({
+      id: 'clienttools-resume-agent',
+      name: 'ClientTools Resume Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const perCallClientTool = createTool({
+      id: 'perCallClientTool',
+      description: 'Injected per-call only',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async ({ context }) => `client:${context.q}`,
+    });
+
+    const { runId } = await durableAgent.prepare('Start', {
+      clientTools: { perCallClientTool },
+    });
+
+    const tools = durableAgent.runRegistry.getTools(runId);
+    expect(tools).toBeDefined();
+    expect(tools?.perCallClientTool).toBeDefined();
+  });
+
+  it('preserves per-call toolsets on the run registry after prepare', async () => {
+    const mockModel = createTextModel('ok');
+
+    const baseAgent = new Agent({
+      id: 'toolsets-resume-agent',
+      name: 'Toolsets Resume Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const perCallToolsetTool = createTool({
+      id: 'perCallToolsetTool',
+      description: 'Injected via toolset only',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async ({ context }) => `toolset:${context.q}`,
+    });
+
+    const { runId } = await durableAgent.prepare('Start', {
+      toolsets: {
+        perCallToolset: { perCallToolsetTool },
+      },
+    });
+
+    const tools = durableAgent.runRegistry.getTools(runId);
+    expect(tools).toBeDefined();
+    expect(tools?.perCallToolsetTool).toBeDefined();
   });
 });

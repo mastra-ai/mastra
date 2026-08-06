@@ -186,10 +186,12 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
   }
 
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    // Apply default timeout if the caller didn't specify one
+    // Apply default timeout and default cwd to the first mount path so that
+    // relative paths resolve inside the FUSE mount instead of /home/daytona.
     const effectiveOptions = {
       ...options,
       timeout: options.timeout ?? this._defaultTimeout,
+      cwd: options.cwd ?? this.sandbox.mounts?.entries?.keys().next().value,
     };
 
     // Merge default env with per-spawn env

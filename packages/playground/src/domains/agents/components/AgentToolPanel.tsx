@@ -61,7 +61,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
 
   if (!tool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-6 py-12 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
@@ -70,7 +70,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
 
   if (!canExecuteTool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-6 py-12 text-center">
         <Txt variant="ui-sm" className="text-neutral3">
           You don't have permission to execute tools.
         </Txt>

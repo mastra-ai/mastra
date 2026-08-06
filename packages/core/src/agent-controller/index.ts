@@ -1,13 +1,12 @@
 /**
  * Canonical entrypoint for the AgentController API.
  *
- * The implementation currently lives under `../harness` for historical reasons.
- * This module re-exports only the canonical `AgentController*` surface; the
- * deprecated `Harness*` aliases are intentionally not re-exported here and
- * remain available from `@mastra/core/harness` for backwards compatibility.
+ * The implementation lives in this directory. The deprecated `Harness*` aliases
+ * are intentionally not re-exported here and remain available from
+ * `@mastra/core/harness` for backwards compatibility.
  */
-export { AgentController } from '../harness/harness';
-export { Session } from '../harness/session';
+export { AgentController } from './agent-controller';
+export { Session } from './session';
 export {
   askUserTool,
   assignTaskIds,
@@ -17,9 +16,8 @@ export {
   taskCompleteTool,
   taskUpdateTool,
   taskWriteTool,
-} from '../harness/tools';
-export type { TaskCheckResult, TaskCheckSummary, TaskItem, TaskItemInput, TaskItemSnapshot } from '../harness/tools';
-export { defaultDisplayState, defaultOMProgressState } from '../harness/types';
+} from './tools';
+export { defaultDisplayState, defaultOMProgressState } from './types';
 export type {
   ActiveSubagentState,
   ActiveToolState,
@@ -30,8 +28,6 @@ export type {
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
   AgentControllerMode,
   AgentControllerOMConfig,
   AgentControllerRequestContext,
@@ -43,7 +39,7 @@ export type {
   AgentControllerSubagent,
   AgentControllerSubagentHistoryEntry,
   AgentControllerThread,
-  HeartbeatHandler,
+  IntervalHandler,
   ModelAuthStatus,
   ModelUseCountProvider,
   ModelUseCountTracker,
@@ -55,4 +51,5 @@ export type {
   ToolCategory,
   BuiltinToolId,
   TokenUsage,
-} from '../harness/types';
+} from './types';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../agent/message-list/state/types';

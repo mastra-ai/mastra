@@ -10,6 +10,8 @@ import {
   normalizePerPage,
   calculatePagination,
   safelyParseJSON,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -22,6 +24,10 @@ import {
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesByResourceIdInput,
@@ -46,6 +52,7 @@ import type {
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
@@ -58,6 +65,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   /** Collections managed by this domain */
   static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
+
+  /**
+   * Retention-eligible collections. The observational-memory collection is
+   * excluded: it has no timestamp anchor to age on. All anchors are BSON dates.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    messages: { table: TABLE_MESSAGES, column: 'createdAt', indexed: true },
+    resources: { table: TABLE_RESOURCES, column: 'createdAt', indexed: true },
+    threads: { table: TABLE_THREADS, column: 'createdAt', indexed: true },
+  };
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -79,28 +96,44 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   /**
+   * Delete memory rows older than each table's `maxAge`, batched. Order is
+   * messages → resources → threads so child rows never outlive the delete of
+   * their thread. Like `deleteThread()`, this does not sweep vector-store
+   * embeddings — semantic-recall vectors live in a separate vector store the
+   * memory domain cannot reach; cleaning those up is the operator's concern.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: MemoryStorageMongoDB.retentionTables,
+      order: ['messages', 'resources', 'threads'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'memory', targets, options, logger: this.logger });
+  }
+
+  /**
    * Returns default index definitions for the memory domain collections.
    */
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
-      // Threads collection indexes
+      // Threads: point lookups (id) + resource-scoped listing sorted by createdAt or updatedAt.
+      // A single descending compound serves both ASC and DESC sorts, and its resourceId prefix
+      // covers resourceId-only filters. Unfiltered (no resourceId) listing is a rare admin path
+      // left to an in-memory sort rather than carrying standalone single-field sort indexes.
       { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1 } },
-      { collection: TABLE_THREADS, keys: { createdAt: -1 } },
-      { collection: TABLE_THREADS, keys: { updatedAt: -1 } },
-      // Messages collection indexes
+      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1 } },
+      // Messages: point lookups (id) + per-thread retrieval (listMessages) and per-resource
+      // retrieval (listMessagesByResourceId), both sorted by createdAt. The compound prefixes
+      // cover thread_id-only and resourceId-only filters.
       { collection: TABLE_MESSAGES, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_MESSAGES, keys: { thread_id: 1 } },
-      { collection: TABLE_MESSAGES, keys: { resourceId: 1 } },
-      { collection: TABLE_MESSAGES, keys: { createdAt: -1 } },
       { collection: TABLE_MESSAGES, keys: { thread_id: 1, createdAt: 1 } },
-      // Resources collection indexes
+      { collection: TABLE_MESSAGES, keys: { resourceId: 1, createdAt: 1 } },
+      // Resources: only ever fetched by id.
       { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
-      { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
-      // Observational Memory collection indexes
+      // Observational Memory: point lookups (id) + latest-generation-per-lookupKey. The compound
+      // prefix covers lookupKey-only filters.
       { collection: OM_TABLE, keys: { id: 1 }, options: { unique: true } },
-      { collection: OM_TABLE, keys: { lookupKey: 1 } },
       { collection: OM_TABLE, keys: { lookupKey: 1, generationCount: -1 } },
     ];
   }
@@ -118,8 +151,32 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         const collection = await this.getCollection(indexDef.collection);
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
-        // Log but continue - indexes are performance optimizations
-        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+        // Fail loud: a silently missing index degrades query performance at scale.
+        // Users who manage their own indexes can set skipDefaultIndexes.
+        const mongoCode = (error as any)?.code;
+        const isUniqueConflict = mongoCode === 85 && indexDef.options?.unique === true;
+        const field = Object.keys(indexDef.keys)[0] ?? 'id';
+        const indexName = Object.entries(indexDef.keys)
+          .map(([k, v]) => `${k}_${v}`)
+          .join('_');
+        const text = isUniqueConflict
+          ? `Index conflict on collection "${indexDef.collection}": an existing non-unique index on { ${field}: 1 } conflicts with Mastra's required unique index.\n\n` +
+            `To migrate:\n` +
+            `  1. Check for duplicates:  db.${indexDef.collection}.aggregate([{ $group: { _id: "$${field}", n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])\n` +
+            `  2. Drop the old index:    db.${indexDef.collection}.dropIndex("${indexName}")\n` +
+            `  3. Recreate as unique:    db.${indexDef.collection}.createIndex({ ${field}: 1 }, { unique: true })\n\n` +
+            `Alternatively, set skipDefaultIndexes: true to manage indexes yourself.`
+          : `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`;
+        throw new MastraError(
+          {
+            id: createStorageErrorId('MONGODB', 'CREATE_DEFAULT_INDEXES', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            text,
+            details: { collection: indexDef.collection },
+          },
+          error,
+        );
       }
     }
   }
@@ -144,14 +201,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const threadsCollection = await this.getCollection(TABLE_THREADS);
-    const messagesCollection = await this.getCollection(TABLE_MESSAGES);
-    const resourcesCollection = await this.getCollection(TABLE_RESOURCES);
+    const [threadsCollection, messagesCollection, resourcesCollection, omCollection] = await Promise.all([
+      this.getCollection(TABLE_THREADS),
+      this.getCollection(TABLE_MESSAGES),
+      this.getCollection(TABLE_RESOURCES),
+      this.getCollection(OM_TABLE),
+    ]);
 
     await Promise.all([
       threadsCollection.deleteMany({}),
       messagesCollection.deleteMany({}),
       resourcesCollection.deleteMany({}),
+      omCollection.deleteMany({}),
     ]);
   }
 
@@ -281,6 +342,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -354,24 +416,37 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       }
 
-      // Get total count
-      const total = await collection.countDocuments(query);
-
       const messages: any[] = [];
+      let total = 0;
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       if (perPage !== 0) {
         const sortObj: any = { [field]: sortOrder };
-        let cursor = collection.find(query).sort(sortObj).skip(offset);
+        if (metadataFilter) {
+          const candidates = (await collection.find(query).sort(sortObj).toArray())
+            .map((row: any) => this.parseRow(row))
+            .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter));
+          total = candidates.length;
+          messages.push(...(perPageInput === false ? candidates : candidates.slice(offset, offset + perPage)));
+        } else {
+          total = await collection.countDocuments(query);
+          let cursor = collection.find(query).sort(sortObj).skip(offset);
 
-        // Only apply limit if not unlimited
-        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-        if (perPageInput !== false) {
-          cursor = cursor.limit(perPage);
+          // Only apply limit if not unlimited
+          // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+          if (perPageInput !== false) {
+            cursor = cursor.limit(perPage);
+          }
+
+          const dataResult = await cursor.toArray();
+          messages.push(...dataResult.map((row: any) => this.parseRow(row)));
         }
-
-        const dataResult = await cursor.toArray();
-        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+      } else if (metadataFilter) {
+        total = (await collection.find(query).toArray())
+          .map((row: any) => this.parseRow(row))
+          .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter)).length;
+      } else {
+        total = await collection.countDocuments(query);
       }
 
       // Only return early if there are no messages AND no includes to process
@@ -404,15 +479,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const list = new MessageList().add(messages, 'memory');
       const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + perPage < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -422,6 +496,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'FAILED'),
@@ -436,13 +514,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -450,6 +522,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     args: StorageListMessagesByResourceIdInput,
   ): Promise<StorageListMessagesOutput> {
     const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
       throw new MastraError(
@@ -522,24 +595,37 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       }
 
-      // Get total count
-      const total = await collection.countDocuments(query);
-
       const messages: any[] = [];
+      let total = 0;
 
       // Step 1: Get paginated messages
       if (perPage !== 0) {
         const sortObj: any = { [field]: sortOrder };
-        let cursor = collection.find(query).sort(sortObj).skip(offset);
+        if (metadataFilter) {
+          const candidates = (await collection.find(query).sort(sortObj).toArray())
+            .map((row: any) => this.parseRow(row))
+            .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter));
+          total = candidates.length;
+          messages.push(...(perPageInput === false ? candidates : candidates.slice(offset, offset + perPage)));
+        } else {
+          total = await collection.countDocuments(query);
+          let cursor = collection.find(query).sort(sortObj).skip(offset);
 
-        // Only apply limit if not unlimited
-        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-        if (perPageInput !== false) {
-          cursor = cursor.limit(perPage);
+          // Only apply limit if not unlimited
+          // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+          if (perPageInput !== false) {
+            cursor = cursor.limit(perPage);
+          }
+
+          const dataResult = await cursor.toArray();
+          messages.push(...dataResult.map((row: any) => this.parseRow(row)));
         }
-
-        const dataResult = await cursor.toArray();
-        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+      } else if (metadataFilter) {
+        total = (await collection.find(query).toArray())
+          .map((row: any) => this.parseRow(row))
+          .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter)).length;
+      } else {
+        total = await collection.countDocuments(query);
       }
 
       // Only return early if there are no messages AND no includes to process
@@ -583,6 +669,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
@@ -594,13 +684,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -651,11 +735,20 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       });
 
-      // Execute message inserts and thread update in parallel
-      await Promise.all([
-        collection.bulkWrite(messagesToInsert),
-        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
-      ]);
+      // Collect every distinct thread touched by this batch (mirrors pg behaviour)
+      const allThreadIds = new Set(messages.map(m => m.threadId!));
+      const now = new Date();
+
+      // Write messages and refresh each touched thread's updatedAt atomically when
+      // supported. Operations are sequential because a transaction session is not
+      // concurrency-safe; on a standalone server this degrades to the same sequential
+      // best-effort behavior.
+      await this.#connector.withTransaction(async session => {
+        await collection.bulkWrite(messagesToInsert, { session });
+        for (const tid of allThreadIds) {
+          await threadsCollection.updateOne({ id: tid }, { $set: { updatedAt: now } }, { session });
+        }
+      });
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
@@ -808,10 +901,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       await collection.updateOne(
         { id: resource.id },
         {
-          $set: {
-            ...resource,
-            metadata: JSON.stringify(resource.metadata),
-          },
+          $set: { ...resource },
         },
         { upsert: true },
       );
@@ -869,7 +959,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       if (metadata) {
-        updateDoc.metadata = JSON.stringify(updatedResource.metadata);
+        updateDoc.metadata = updatedResource.metadata;
       }
 
       await collection.updateOne({ id: resourceId }, { $set: updateDoc });
@@ -1015,7 +1105,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
-      throw new MastraError(
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
+      const mastraError = new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
@@ -1027,6 +1121,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         },
         error,
       );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      throw mastraError;
     }
   }
 
@@ -1117,10 +1214,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      // First, delete all messages associated with the thread
+      // Best-effort cascade, deliberately NOT wrapped in a transaction: a thread
+      // can accumulate an unbounded number of messages, and a transactional
+      // deleteMany is capped by transactionLifetimeLimitSeconds (60s default) and
+      // must hold every delete in cache until commit — so a large thread would
+      // abort and become permanently undeletable. A plain deleteMany commits
+      // incrementally and always completes. Messages are removed before the thread
+      // so the thread row is the linearization point: a crash mid-drain leaves the
+      // thread re-deletable (deleteMany is idempotent), with only orphaned messages
+      // keyed by a thread_id nothing queries as transient, sweepable residue.
       const collectionMessages = await this.getCollection(TABLE_MESSAGES);
       await collectionMessages.deleteMany({ thread_id: threadId });
-      // Then delete the thread itself
       const collectionThreads = await this.getCollection(TABLE_THREADS);
       await collectionThreads.deleteOne({ id: threadId });
     } catch (error) {
@@ -1956,6 +2060,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
         threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
       };
 
       // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically

@@ -23,8 +23,12 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
       const match = defaultValue.match(timeRegex);
 
       if (match) {
-        let parsedHour = parseInt(match[1], 10);
-        const parsedMinute = parseInt(match[2], 10);
+        const rawHour = match[1];
+        const rawMinute = match[2];
+        if (rawHour === undefined || rawMinute === undefined) return;
+
+        let parsedHour = parseInt(rawHour, 10);
+        const parsedMinute = parseInt(rawMinute, 10);
         const period = match[3]?.toUpperCase();
 
         if (parsedHour >= 1 && parsedHour <= 12 && parsedMinute >= 0 && parsedMinute <= 59) {
@@ -37,22 +41,28 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
   }, [defaultValue]);
 
   const handleHourChange = (val: string) => {
-    setHour(val);
-    onValueChange(`${hourOptions[+val]}:${minute} ${timePeriod}`.trim());
+    const nextHour = hourOptions[+val];
+    if (nextHour === undefined) return;
+    setHour(nextHour);
+    onValueChange(`${nextHour}:${minute} ${timePeriod}`.trim());
   };
 
   const handleMinuteChange = (val: string) => {
-    setMinute(minuteOptions[+val]);
-    onValueChange(`${hour}:${minuteOptions[+val]} ${timePeriod}`.trim());
+    const nextMinute = minuteOptions[+val];
+    if (nextMinute === undefined) return;
+    setMinute(nextMinute);
+    onValueChange(`${hour}:${nextMinute} ${timePeriod}`.trim());
   };
 
   const handleTimePeriodChange = (val: string) => {
-    setTimePeriod(timePeriodOptions[+val]);
-    onValueChange(`${hour}:${minute} ${timePeriodOptions[+val]}`.trim());
+    const nextPeriod = timePeriodOptions[+val];
+    if (nextPeriod === undefined) return;
+    setTimePeriod(nextPeriod);
+    onValueChange(`${hour}:${minute} ${nextPeriod}`.trim());
   };
 
   return (
-    <div className={cn('flex gap-2 items-center', className)}>
+    <div className={cn('flex items-center gap-2', className)}>
       <Select name="hour" value={hourOptions.indexOf(hour).toString()} onValueChange={handleHourChange}>
         <SelectTrigger size="sm">
           <SelectValue placeholder="Select..." />

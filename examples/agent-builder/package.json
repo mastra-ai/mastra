@@ -12,7 +12,7 @@
     "mastra:dev": "mastra dev"
   },
   "dependencies": {
-    "zod": "^4.3.6",
+    "zod": "^4.4.3",
     "typescript": "^5.9.3",
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",

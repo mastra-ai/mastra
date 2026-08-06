@@ -1,4 +1,5 @@
 import type { Pool, PoolClient, QueryResult } from 'pg';
+import type { SchemaSnapshot, SchemaSnapshotHost } from './db/schema-snapshot';
 
 // Re-export pg types for consumers
 export type { Pool, PoolClient, QueryResult } from 'pg';
@@ -378,12 +379,30 @@ export class PinnedClientAdapter implements DbClient {
  * During PostgresStore.init() we temporarily pin a single-client adapter
  * so every domain's DDL flows through one backend connection.
  */
-export class RoutingDbClient implements DbClient {
+export class RoutingDbClient implements DbClient, SchemaSnapshotHost {
   #base: DbClient;
   #pinned: DbClient | null = null;
+  #schemaSnapshot: SchemaSnapshot | null = null;
 
   constructor(base: DbClient) {
     this.#base = base;
+  }
+
+  /**
+   * Catalog snapshot for the current init window, or `null` outside it.
+   *
+   * It lives here rather than on `PgDB` because every storage domain builds its
+   * own `PgDB` over this one shared client — hanging the snapshot off the
+   * client means one load serves all of them, and its lifetime lines up exactly
+   * with the pinned-init window that `pin()`/`unpin()` already delimit.
+   */
+  get schemaSnapshot(): SchemaSnapshot | null {
+    return this.#schemaSnapshot;
+  }
+
+  /** Install (or clear, with `null`) the init-window catalog snapshot. */
+  setSchemaSnapshot(snapshot: SchemaSnapshot | null): void {
+    this.#schemaSnapshot = snapshot;
   }
 
   /** Returns the currently active client (pinned if set, otherwise base). */

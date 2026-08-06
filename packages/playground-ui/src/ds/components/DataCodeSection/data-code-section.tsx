@@ -280,7 +280,7 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
+      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
           <div className="text-neutral4 font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
@@ -297,9 +297,9 @@ export function DataCodeSection({
       </div>
 
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
-        <DialogContent className="max-w-[90vw]! h-[calc(100vh-6rem)]! grid grid-rows-[auto_1fr] [&>.absolute]:hidden">
+        <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="flex items-center gap-1.5 [&>svg]:size-3.5 text-ui-sm min-w-0 truncate">
+            <DialogTitle className="text-ui-sm flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -308,7 +308,7 @@ export function DataCodeSection({
               )}
             </DialogTitle>
             <DialogDescription>Expanded code view</DialogDescription>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex shrink-0 items-center gap-2">
               {!expandedMultiline && (
                 <SearchFieldBlock
                   name="expanded-code-search"
@@ -343,7 +343,7 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all overflow-y-auto">
+              <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
                 <div className="text-neutral4 font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>

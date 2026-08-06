@@ -45,7 +45,7 @@ export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
       className={cn(
-        'text-neutral2 text-ui-xs h-full whitespace-nowrap text-left font-medium uppercase tracking-wide first:pl-3 last:pr-3',
+        'h-full text-left text-ui-xs font-medium tracking-wide whitespace-nowrap text-neutral2 uppercase first:pl-3 last:pr-3',
         className,
       )}
       {...props}
@@ -112,10 +112,10 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
         className={cn(
           'border-b border-border1',
           // Smooth hover transition
-          'transition-colors duration-normal ease-out-custom',
+          'duration-normal transition-colors ease-out-custom',
           'hover:bg-surface3',
           // Focus state
-          'focus:bg-surface3 focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-accent1/50',
+          'focus:bg-surface3 focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,

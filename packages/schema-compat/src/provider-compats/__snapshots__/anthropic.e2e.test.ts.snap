@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Anthropic e2e test > should be succesful with structured_output 1`] = `
+exports[`Anthropic e2e test > should be successful with structured_output 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -318,7 +318,7 @@ constraints: a valid uuid",
 }
 `;
 
-exports[`Anthropic e2e test > should be succesful with structured_output 2`] = `
+exports[`Anthropic e2e test > should be successful with structured_output 2`] = `
 {
   "value": {
     "actualData": 2024-01-20T16:45:00.000Z,

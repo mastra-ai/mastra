@@ -4,8 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 import { UserFilePartRenderer } from '../user-file-part-renderer';
 
-const v5FilePart = (part: { type: 'file'; mediaType: string; url: string }): FilePart => part as never;
-
 describe('UserFilePartRenderer', () => {
   it('renders an image preview for image mime types', () => {
     const part = {
@@ -48,44 +46,16 @@ describe('UserFilePartRenderer', () => {
     expect(container.querySelector('button')).not.toBeNull();
   });
 
-  it('renders an image preview for the V5 streaming shape (mediaType/url)', () => {
-    const part = v5FilePart({
+  it('renders an image preview for a data: URI image', () => {
+    const part = {
       type: 'file',
-      mediaType: 'image/png',
-      url: 'data:image/png;base64,aGVsbG8=',
-    });
+      mimeType: 'image/png',
+      data: 'data:image/png;base64,aGVsbG8=',
+    } satisfies FilePart;
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
     expect(container.querySelector('img')).not.toBeNull();
-  });
-
-  it('renders a PDF document preview for the V5 streaming shape (mediaType/url)', () => {
-    const part = v5FilePart({
-      type: 'file',
-      mediaType: 'application/pdf',
-      url: 'https://example.com/doc.pdf',
-    });
-
-    const { container } = render(<UserFilePartRenderer part={part} />);
-
-    expect(container.querySelector('img')).toBeNull();
-    const link = container.querySelector('a');
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toBe('https://example.com/doc.pdf');
-  });
-
-  it('falls back to a text document preview for the V5 streaming shape (mediaType/url)', () => {
-    const part = v5FilePart({
-      type: 'file',
-      mediaType: 'text/plain',
-      url: 'just text',
-    });
-
-    const { container } = render(<UserFilePartRenderer part={part} />);
-
-    expect(container.querySelector('img')).toBeNull();
-    expect(container.querySelector('button')).not.toBeNull();
   });
 
   it('renders a non-fetchable chip (no img) for gs:// image URIs', () => {
@@ -107,11 +77,11 @@ describe('UserFilePartRenderer', () => {
   });
 
   it('renders a chip for a gs:// video and does not link out', () => {
-    const part = v5FilePart({
+    const part = {
       type: 'file',
-      mediaType: 'video/mp4',
-      url: 'gs://my-bucket/clip.mp4',
-    });
+      mimeType: 'video/mp4',
+      data: 'gs://my-bucket/clip.mp4',
+    } satisfies FilePart;
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
@@ -167,11 +137,11 @@ describe('UserFilePartRenderer', () => {
 
   it('does not use a local data: payload as the chip label', () => {
     const dataUri = `data:video/mp4;base64,${'A'.repeat(2048)}`;
-    const part = v5FilePart({
+    const part = {
       type: 'file',
-      mediaType: 'video/mp4',
-      url: dataUri,
-    });
+      mimeType: 'video/mp4',
+      data: dataUri,
+    } satisfies FilePart;
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 

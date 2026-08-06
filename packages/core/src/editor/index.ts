@@ -18,4 +18,5 @@ export type {
   SandboxProvider,
   BlobStoreProvider,
   BrowserProvider,
+  WorkspaceProvider,
 } from './types';

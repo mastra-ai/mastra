@@ -311,6 +311,34 @@ describe('AgentBrowser', () => {
       // Should have re-launched
       expect(mockManager.launch).toHaveBeenCalledTimes(2);
     });
+
+    it('forwards cdpUrl and cdpHeaders to BrowserManager.launch', async () => {
+      const cdpHeaders = { Authorization: 'Bearer test-token' };
+      const browserWithCdp = new AgentBrowser({
+        scope: 'shared',
+        cdpUrl: 'wss://example.com/cdp',
+        cdpHeaders,
+      });
+
+      try {
+        await browserWithCdp.ensureReady();
+        expect(mockManager.launch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cdpUrl: 'wss://example.com/cdp',
+            cdpHeaders,
+          }),
+        );
+      } finally {
+        await browserWithCdp.close();
+      }
+    });
+
+    it('omits cdpHeaders from launch options when not configured', async () => {
+      await browser.ensureReady();
+      const launchOptions = mockManager.launch.mock.calls[0]?.[0];
+      expect(launchOptions).toBeDefined();
+      expect(launchOptions).not.toHaveProperty('cdpHeaders');
+    });
   });
 
   describe('isBrowserRunning', () => {
@@ -478,6 +506,44 @@ describe('AgentBrowser', () => {
 
       expect(mockPage.waitForNavigation).not.toHaveBeenCalled();
     });
+
+    it('does not leave an unhandled rejection when the navigation wait rejects while the click is still pending', async () => {
+      // The navigation wait is started before the click and shares its timeout,
+      // so when the click is slow or blocked the navigation timer always fires
+      // first — while `await navigation` has not been reached yet. Without a
+      // pre-attached handler that rejection is unhandled and kills the process.
+      //
+      // Note: waitForNavigation must be a plain function here, not a vi.fn() —
+      // vitest attaches handlers to promises returned from mocks (to track
+      // `mock.settledResults`), which would mask the unhandled rejection.
+      let rejectNavigation!: (error: Error) => void;
+      const navigationPromise = new Promise((_resolve, reject) => {
+        rejectNavigation = reject;
+      });
+      const originalWaitForNavigation = mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+
+      mockLocator.click.mockImplementation(async () => {
+        rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
+        // Let the navigation rejection settle while the click is still pending
+        await new Promise(resolve => setTimeout(resolve, 20));
+        throw new Error('locator.click: Timeout 100ms exceeded.');
+      });
+
+      const onUnhandledRejection = vi.fn();
+      process.on('unhandledRejection', onUnhandledRejection);
+      try {
+        const result = await browser.click({ ref: '@e1', waitUntil: 'domcontentloaded' });
+
+        expect(result.success).toBe(false);
+        // unhandledRejection fires on a later macrotask — flush before asserting
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(onUnhandledRejection).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+        mockPage.waitForNavigation = originalWaitForNavigation;
+      }
+    });
   });
 
   describe('type', () => {
@@ -533,6 +599,35 @@ describe('AgentBrowser', () => {
 
       expect(mockPage.waitForNavigation).not.toHaveBeenCalled();
     });
+
+    it('does not leave an unhandled rejection when the navigation wait rejects while the key press is still pending', async () => {
+      // Same dangling-navigation pattern as the click regression test.
+      let rejectNavigation!: (error: Error) => void;
+      const navigationPromise = new Promise((_resolve, reject) => {
+        rejectNavigation = reject;
+      });
+      const originalWaitForNavigation = mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+
+      mockPage.keyboard.press.mockImplementation(async () => {
+        rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
+        await new Promise(resolve => setTimeout(resolve, 20));
+        throw new Error('keyboard.press: Timeout 100ms exceeded.');
+      });
+
+      const onUnhandledRejection = vi.fn();
+      process.on('unhandledRejection', onUnhandledRejection);
+      try {
+        const result = await browser.press({ key: 'Enter', waitUntil: 'domcontentloaded' });
+
+        expect(result.success).toBe(false);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(onUnhandledRejection).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+        mockPage.waitForNavigation = originalWaitForNavigation;
+      }
+    });
   });
 
   describe('select', () => {
@@ -565,6 +660,35 @@ describe('AgentBrowser', () => {
       await browser.select({ ref: '@e1', value: 'option1' });
 
       expect(mockPage.waitForNavigation).not.toHaveBeenCalled();
+    });
+
+    it('does not leave an unhandled rejection when the navigation wait rejects while the selection is still pending', async () => {
+      // Same dangling-navigation pattern as the click regression test.
+      let rejectNavigation!: (error: Error) => void;
+      const navigationPromise = new Promise((_resolve, reject) => {
+        rejectNavigation = reject;
+      });
+      const originalWaitForNavigation = mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+
+      mockLocator.selectOption.mockImplementation(async () => {
+        rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
+        await new Promise(resolve => setTimeout(resolve, 20));
+        throw new Error('locator.selectOption: Timeout 100ms exceeded.');
+      });
+
+      const onUnhandledRejection = vi.fn();
+      process.on('unhandledRejection', onUnhandledRejection);
+      try {
+        const result = await browser.select({ ref: '@e1', value: 'option1', waitUntil: 'domcontentloaded' });
+
+        expect(result.success).toBe(false);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(onUnhandledRejection).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+        mockPage.waitForNavigation = originalWaitForNavigation;
+      }
     });
   });
 

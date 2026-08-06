@@ -106,8 +106,14 @@ describe('Agent ↔ DurableAgent parity', () => {
   });
 
   describe('per-call tool injection', () => {
-    it.todo('preserves toolsets across resume (gates toolsets_clienttools_resume)');
-    it.todo('preserves clientTools across resume (gates toolsets_clienttools_resume)');
+    // Per-call `toolsets` / `clientTools` are stored on the in-process run
+    // registry at prepare time and read back from there during resume. The
+    // contract is verified end-to-end in `resume-api.test.ts` under the
+    // 'per-call tool injection survives in-process resume' describe block.
+    // A true cross-process resume falls back to the agent's static tools
+    // because per-call tools carry closures and cannot be JSON-serialized.
+    it.todo('preserves toolsets across resume (cross-process; gated on a future serialization story)');
+    it.todo('preserves clientTools across resume (cross-process; gated on a future serialization story)');
   });
 
   describe('non-stream APIs', () => {
@@ -116,7 +122,11 @@ describe('Agent ↔ DurableAgent parity', () => {
   });
 
   describe('abort', () => {
-    it.todo('abortSignal cancels durably across resume (gates abort_signal_durable)');
+    // Runtime abort coverage (mid-stream `result.abort()` and pre-aborted
+    // external `abortSignal`) lives in `durable-agent-abort.test.ts`. A true
+    // resume-after-abort parity check requires the resume_until_idle slice
+    // to land first; keeping the todo as a tracking marker.
+    it.todo('abortSignal cancels durably across resume (gates resume_until_idle)');
   });
 
   describe('resume', () => {

@@ -27,6 +27,21 @@ describe('validateCron', () => {
   it('throws on invalid timezone', () => {
     expect(() => validateCron('0 9 * * *', 'Not/AZone')).toThrow();
   });
+
+  it('labels timezone failures as timezone errors, not cron errors', () => {
+    expect(() => validateCron('0 9 * * *', 'Not/AZone')).toThrow('Invalid timezone "Not/AZone"');
+  });
+
+  it('throws a clear error when cron is missing', () => {
+    // @ts-expect-error - exercising the runtime guard for callers passing undefined
+    expect(() => validateCron(undefined)).toThrow('expected a non-empty cron string');
+    expect(() => validateCron('')).toThrow('expected a non-empty cron string');
+    expect(() => validateCron('   ')).toThrow('expected a non-empty cron string');
+  });
+
+  it('wraps croner errors with the offending pattern', () => {
+    expect(() => validateCron('not a cron')).toThrow('Invalid cron expression "not a cron"');
+  });
 });
 
 describe('computeNextFireAt', () => {

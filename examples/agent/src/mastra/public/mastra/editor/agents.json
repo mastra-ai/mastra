@@ -8,9 +8,7 @@
     "name": "support triage",
     "requestContextSchema": {
       "properties": {
-        "required": [
-          "user"
-        ],
+        "required": ["user"],
         "user": {
           "properties": {
             "avatarUrl": {
@@ -38,9 +36,7 @@
               "type": "array"
             }
           },
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "type": "object"
         }
       },
@@ -57,9 +53,7 @@
     "name": "support triage",
     "requestContextSchema": {
       "properties": {
-        "required": [
-          "user"
-        ],
+        "required": ["user"],
         "user": {
           "properties": {
             "avatarUrl": {
@@ -87,9 +81,7 @@
               "type": "array"
             }
           },
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "type": "object"
         }
       },

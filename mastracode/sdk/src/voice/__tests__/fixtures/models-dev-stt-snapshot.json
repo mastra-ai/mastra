@@ -1,0 +1,153 @@
+{
+  "alibaba-cn": {
+    "name": "Alibaba (China)",
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "models": {
+      "qwen3-asr-flash": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "vercel": {
+    "name": "Vercel AI Gateway",
+    "npm": "@ai-sdk/gateway",
+    "models": {
+      "xai/grok-stt": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      },
+      "openai/gpt-4o-transcribe": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      },
+      "openai/gpt-4o-mini-transcribe": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      },
+      "openai/whisper-1": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "privatemode-ai": {
+    "name": "Privatemode AI",
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "http://localhost:8080/v1",
+    "models": {
+      "whisper-large-v3": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "groq": {
+    "name": "Groq",
+    "npm": "@ai-sdk/groq",
+    "models": {
+      "whisper-large-v3-turbo": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      },
+      "whisper-large-v3": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "nearai": {
+    "name": "NEAR AI Cloud",
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://cloud-api.near.ai/v1",
+    "models": {
+      "openai/whisper-large-v3": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "nvidia": {
+    "name": "Nvidia",
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://integrate.api.nvidia.com/v1",
+    "models": {
+      "openai/whisper-large-v3": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "evroc": {
+    "name": "evroc",
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://models.think.evroc.com/v1",
+    "models": {
+      "openai/whisper-large-v3-turbo": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      },
+      "openai/whisper-large-v3": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      },
+      "KBLab/kb-whisper-large": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "scaleway": {
+    "name": "Scaleway",
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://api.scaleway.ai/v1",
+    "models": {
+      "whisper-large-v3": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  },
+  "alibaba": {
+    "name": "Alibaba",
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "models": {
+      "qwen3-asr-flash": {
+        "modalities": {
+          "input": ["audio"],
+          "output": ["text"]
+        }
+      }
+    }
+  }
+}

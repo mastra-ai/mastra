@@ -566,7 +566,7 @@ describe.skip('Agent - network', () => {
     expect(titleGenerationAttempted).toBe(false);
   });
 
-  it('Should not generate title when generateTitle:false is passed in netwwork options', async () => {
+  it('Should not generate title when generateTitle:false is passed in network options', async () => {
     let titleGenerationAttempted = false;
 
     const memoryWithoutTitleGen = new MockMemory();

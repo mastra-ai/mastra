@@ -1,7 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
-import { useChat } from '@mastra/react';
+import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
+import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useChat, useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
@@ -10,15 +12,19 @@ import type { MessagesContextValue, RunningContextValue, SendContextValue, Tasks
 import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
+import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
 import {
   buildGlobalOmPartsByCycleId,
   convertOmPartsInMastraMessage,
+  hasInProgressBufferingMarkers,
+  injectBufferingEnds,
   markOmMarkersAsDisconnected,
   scanOmInitialState,
 } from '@/services/om-parts-converter';
+import type { OmTerminalExtractionCache } from '@/services/om-parts-converter';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import type { ChatProps } from '@/types';
 
@@ -44,6 +50,7 @@ export function ChatProvider({
   supportsMemory,
 }: Readonly<{ children: ReactNode }> & ChatProps) {
   const { settings: tracingSettings } = useTracingSettings();
+  const modelOverride = usePlaygroundModelOptional()?.modelOverride;
 
   // Errors emitted as `error` chunks (or thrown by sendMessage) are not persisted
   // to server memory, so they get wiped from useChat's `messages` state when
@@ -106,6 +113,7 @@ export function ChatProvider({
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const queryClient = useQueryClient();
+  const baseClient = useMastraClient();
 
   const { data: memoryConfigData } = useMemoryConfig(agentId);
   const omConfig = memoryConfigData?.config?.observationalMemory as unknown;
@@ -202,6 +210,26 @@ export function ChatProvider({
     }
   }, [handleProgressUpdate, initialMessages, markCycleIdActivated]);
 
+  useEffect(() => {
+    if (!threadId || !hasInProgressBufferingMarkers(initialMessages || [])) return;
+
+    let cancelled = false;
+    baseClient
+      .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
+      .then(result => {
+        if (cancelled) return;
+        setMessages(prev => injectBufferingEnds(prev, result?.record));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMessages(prev => markOmMarkersAsDisconnected(prev));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, baseClient, initialMessages, setMessages, threadId]);
+
   const {
     frequencyPenalty,
     presencePenalty,
@@ -239,6 +267,7 @@ export function ChatProvider({
     agentVersionId,
     threadId,
     modelSettingsArgs,
+    model: modelOverride,
     chatWithNetwork,
     chatWithGenerate,
     maxSteps,
@@ -265,7 +294,11 @@ export function ChatProvider({
   // Build a global OM cycle index then convert OM parts to dynamic-tool form so
   // OM badges render. Strip transient error messages from `messages` (the same
   // errors live in `streamErrors`, which survives the post-stream refresh).
-  const globalOmParts = useMemo(() => buildGlobalOmPartsByCycleId(messages), [messages]);
+  const omTerminalExtractionCacheRef = useRef<OmTerminalExtractionCache>(new Map());
+  const globalOmParts = useMemo(
+    () => buildGlobalOmPartsByCycleId(messages, omTerminalExtractionCacheRef.current),
+    [messages],
+  );
 
   const renderMessages = useMemo<MastraDBMessage[]>(
     () =>

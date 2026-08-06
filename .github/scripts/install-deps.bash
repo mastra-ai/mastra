@@ -22,7 +22,7 @@ for package_json in $changed_files; do
     dir=$(dirname "$package_json")
     echo "Installing dependencies in $dir"
     cd "$dir"
-    pnpm install --ignore-workspace --no-frozen-lockfile
+    pnpm install --no-frozen-lockfile
     cd - > /dev/null
   fi
 done

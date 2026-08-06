@@ -47,10 +47,10 @@ export class DepsService {
     const pm = this.packageManager;
     const installCommand = getPackageManagerAddCommand(pm);
 
-    const packageList = packages.join(' ');
-    return execa(`${pm} ${installCommand} ${packageList}`, {
+    // Pass arguments as an array (no shell) so package names can't be used
+    // for command injection (CodeQL js/shell-command-constructed-from-input).
+    return execa(pm, [...installCommand.split(' '), ...packages], {
       all: true,
-      shell: true,
       stdio: 'pipe',
     });
   }

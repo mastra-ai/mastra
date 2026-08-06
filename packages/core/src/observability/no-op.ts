@@ -153,6 +153,10 @@ export class NoOpObservability implements ObservabilityEntrypoint {
     return;
   }
 
+  async flush(): Promise<void> {
+    return;
+  }
+
   async shutdown(): Promise<void> {
     return;
   }

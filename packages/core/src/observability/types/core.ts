@@ -123,7 +123,7 @@ export interface ObservabilityContext {
 // ============================================================================
 
 /** Where a registered definition came from. */
-export type DefinitionSource = 'code' | 'stored';
+export type DefinitionSource = 'code' | 'stored' | 'fs';
 
 /** What kind of scoring flow produced the score. */
 export type ScorerScoreSource = 'live' | 'trace' | 'experiment';
@@ -309,6 +309,8 @@ export interface ObservabilityInstance {
 // ============================================================================
 
 export interface ObservabilityEntrypoint {
+  flush(): Promise<void>;
+
   shutdown(): Promise<void>;
 
   setMastraContext(options: { mastra: Mastra }): void;
@@ -667,6 +669,22 @@ export interface ObservabilityBridge extends ObservabilityEvents {
    * @returns Span identifiers (spanId, traceId, parentSpanId) from bridge, or undefined if creation fails
    */
   createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
+
+  /**
+   * Release any state the bridge holds for a span that ended but will not be
+   * exported. Bridges keep per-span state from `createSpan()` until the span
+   * ends; span-end events are only emitted for spans that survive export
+   * filtering, so without this the state for a span dropped by
+   * `excludeSpanTypes`, a `spanFilter`, or a span output processor is never
+   * freed.
+   *
+   * The bridge should only drop its bookkeeping here. It must not end/finish
+   * the underlying span, which would export data the user filtered out.
+   *
+   * @param spanId - The ID of the Mastra span whose bridge state can be dropped
+   * @param traceId - The trace the span belonged to, for per-trace bridge state
+   */
+  releaseSpan?(spanId: string, traceId: string): void;
 
   /**
    * Force flush any buffered/queued spans without shutting down the bridge.

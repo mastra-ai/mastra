@@ -155,6 +155,52 @@ describe('DatasetsManager', () => {
     expect(result.datasets.length).toBe(0);
   });
 
+  // 9a. list — filters by targetType
+  it('list filters by targetType', async () => {
+    await mgr.create({ name: 'agent-ds', targetType: 'agent' });
+    await mgr.create({ name: 'workflow-ds', targetType: 'workflow' });
+    await mgr.create({ name: 'untyped-ds' });
+
+    const result = await mgr.list({ filters: { targetType: 'agent' } });
+    expect(result.datasets.map(d => d.name).sort()).toEqual(['agent-ds']);
+  });
+
+  // 9b. list — filters by targetIds (overlap)
+  it('list filters by targetIds with overlap semantics', async () => {
+    await mgr.create({ name: 'ds-a', targetType: 'agent', targetIds: ['a1', 'a2'] });
+    await mgr.create({ name: 'ds-b', targetType: 'agent', targetIds: ['a2', 'a3'] });
+    await mgr.create({ name: 'ds-c', targetType: 'agent', targetIds: ['a4'] });
+
+    const matchA2 = await mgr.list({ filters: { targetIds: ['a2'] } });
+    expect(matchA2.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-b']);
+
+    const matchA1OrA4 = await mgr.list({ filters: { targetIds: ['a1', 'a4'] } });
+    expect(matchA1OrA4.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-c']);
+  });
+
+  // 9c. list — filters by name (case-insensitive substring)
+  it('list filters by name substring case-insensitively', async () => {
+    await mgr.create({ name: 'Production Tickets' });
+    await mgr.create({ name: 'production-logs' });
+    await mgr.create({ name: 'staging-tickets' });
+
+    const result = await mgr.list({ filters: { name: 'PROD' } });
+    expect(result.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'production-logs']);
+  });
+
+  // 9d. list — combines all three filters
+  it('list combines targetType, targetIds, and name filters', async () => {
+    await mgr.create({ name: 'agent-prod-alpha', targetType: 'agent', targetIds: ['a1'] });
+    await mgr.create({ name: 'agent-prod-beta', targetType: 'agent', targetIds: ['a2'] });
+    await mgr.create({ name: 'workflow-prod-alpha', targetType: 'workflow', targetIds: ['a1'] });
+    await mgr.create({ name: 'agent-staging-alpha', targetType: 'agent', targetIds: ['a1'] });
+
+    const result = await mgr.list({
+      filters: { targetType: 'agent', targetIds: ['a1'], name: 'prod' },
+    });
+    expect(result.datasets.map(d => d.name)).toEqual(['agent-prod-alpha']);
+  });
+
   // 10. delete — delegates
   it('delete removes dataset so get throws', async () => {
     const created = await mgr.create({ name: 'ToDelete' });
@@ -168,10 +214,232 @@ describe('DatasetsManager', () => {
     }
   });
 
+  // --- Tenancy scoping on manager.get / manager.delete ---
+  describe('tenancy scoping', () => {
+    it('get forwards organizationId + projectId to storage', async () => {
+      const created = await mgr.create({
+        name: 'ScopedGet',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const spy = vi.spyOn(datasetsStorage, 'getDatasetById');
+
+      const fetched = await mgr.get({ id: created.id, organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(fetched).toBeInstanceOf(Dataset);
+      expect(fetched.id).toBe(created.id);
+      expect(spy).toHaveBeenCalledWith({
+        id: created.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('get throws NOT_FOUND when the dataset belongs to a different organization', async () => {
+      const created = await mgr.create({
+        name: 'CrossTenant',
+        organizationId: 'org_a',
+      });
+
+      try {
+        await mgr.get({ id: created.id, organizationId: 'org_b' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MastraError);
+        expect((err as MastraError).id).toBe('DATASET_NOT_FOUND');
+      }
+    });
+
+    it('get returns a Dataset handle whose subsequent getDetails() re-forwards the scope', async () => {
+      const created = await mgr.create({
+        name: 'ScopedHandle',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const handle = await mgr.get({
+        id: created.id,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      // Spy AFTER get() so we capture the follow-up call from getDetails().
+      const spy = vi.spyOn(datasetsStorage, 'getDatasetById');
+      await handle.getDetails();
+      expect(spy).toHaveBeenCalledWith({
+        id: created.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('delete forwards organizationId + projectId to storage', async () => {
+      const created = await mgr.create({
+        name: 'ScopedDelete',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const spy = vi.spyOn(datasetsStorage, 'deleteDataset');
+
+      await mgr.delete({ id: created.id, organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(spy).toHaveBeenCalledWith({
+        id: created.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('delete is a silent no-op on tenancy mismatch (dataset still exists)', async () => {
+      const created = await mgr.create({
+        name: 'SilentDelete',
+        organizationId: 'org_a',
+      });
+
+      // Mismatched delete must resolve without throwing.
+      await expect(mgr.delete({ id: created.id, organizationId: 'org_b' })).resolves.toBeUndefined();
+
+      // Dataset must still be fetchable with correct tenancy.
+      const stillThere = await mgr.get({ id: created.id, organizationId: 'org_a' });
+      expect(stillThere.id).toBe(created.id);
+    });
+
+    it('unscoped calls (no organizationId / projectId) forward no filters and preserve legacy behavior', async () => {
+      const created = await mgr.create({ name: 'Legacy' });
+      const spy = vi.spyOn(datasetsStorage, 'getDatasetById');
+
+      const fetched = await mgr.get({ id: created.id });
+      expect(fetched.id).toBe(created.id);
+
+      // filters should be `undefined` (or an empty scope), not include any org/project keys.
+      const call = spy.mock.calls.at(-1)?.[0];
+      expect(call?.id).toBe(created.id);
+      expect(call?.filters?.organizationId).toBeUndefined();
+      expect(call?.filters?.projectId).toBeUndefined();
+    });
+  });
+
   // 11. getExperiment — returns null for missing
   it('getExperiment returns null for nonexistent experiment', async () => {
     const result = await mgr.getExperiment({ experimentId: 'nonexistent' });
     expect(result).toBeNull();
+  });
+
+  describe('getExperiment tenancy scoping', () => {
+    it('forwards organizationId + projectId to storage', async () => {
+      const exp = await experimentsStorage.createExperiment({
+        name: 'tenant-exp',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const spy = vi.spyOn(experimentsStorage, 'getExperimentById');
+      const fetched = await mgr.getExperiment({
+        experimentId: exp.id,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      expect(fetched?.id).toBe(exp.id);
+      expect(spy).toHaveBeenLastCalledWith({
+        id: exp.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('returns null on tenancy mismatch (no cross-tenant existence leak)', async () => {
+      const exp = await experimentsStorage.createExperiment({
+        name: 'tenant-exp',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const fetched = await mgr.getExperiment({
+        experimentId: exp.id,
+        organizationId: 'org_b',
+      });
+      expect(fetched).toBeNull();
+    });
+
+    it('unscoped getExperiment forwards no filters (preserves legacy behavior)', async () => {
+      const exp = await experimentsStorage.createExperiment({
+        name: 'legacy-exp',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+
+      const spy = vi.spyOn(experimentsStorage, 'getExperimentById');
+      await mgr.getExperiment({ experimentId: exp.id });
+
+      const call = spy.mock.calls.at(-1)?.[0];
+      expect(call?.id).toBe(exp.id);
+      expect(call?.filters?.organizationId).toBeUndefined();
+      expect(call?.filters?.projectId).toBeUndefined();
+    });
+  });
+
+  describe('Dataset handle experiment tenancy scoping', () => {
+    it('Dataset.getExperiment forwards scope into storage getter', async () => {
+      const created = await mgr.create({
+        name: 'scoped',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const exp = await experimentsStorage.createExperiment({
+        name: 'e1',
+        datasetId: created.id,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const spy = vi.spyOn(experimentsStorage, 'getExperimentById');
+      const fetched = await created.getExperiment({ experimentId: exp.id });
+      expect(fetched?.id).toBe(exp.id);
+
+      // Should forward the handle's scope as filters.
+      expect(spy).toHaveBeenLastCalledWith({
+        id: exp.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('Dataset.getExperiment returns null when experiment belongs to another tenant', async () => {
+      const handle = await mgr.get({
+        id: (await mgr.create({ name: 'scoped-b', organizationId: 'org_a', projectId: 'proj_1' })).id,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      // Create an experiment on that dataset id but stamped with a different tenant.
+      const exp = await experimentsStorage.createExperiment({
+        name: 'foreign',
+        datasetId: handle.id,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        organizationId: 'org_b',
+        projectId: 'proj_1',
+      });
+
+      const fetched = await handle.getExperiment({ experimentId: exp.id });
+      expect(fetched).toBeNull();
+    });
   });
 
   // 12. compareExperiments — validates length

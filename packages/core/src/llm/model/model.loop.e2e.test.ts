@@ -1,11 +1,11 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { convertAsyncIterableToArray } from '../../loop/test-utils/stream-helpers';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
