@@ -39,9 +39,13 @@ export type VerifyAgentCardSignatureOptions = {
 };
 
 function stripAgentCardSignatures(agentCard: AgentCard): AgentCard {
-  const unsignedCard = structuredClone(agentCard) as AgentCard & { signatures?: AgentCardSignature[] };
+  // A2A v1's AgentCard types `signatures` as a required field, so clone into a
+  // shape where it is optional before deleting it for canonicalization.
+  const unsignedCard = structuredClone(agentCard) as Omit<AgentCard, 'signatures'> & {
+    signatures?: AgentCardSignature[];
+  };
   delete unsignedCard.signatures;
-  return unsignedCard;
+  return unsignedCard as AgentCard;
 }
 
 function isCryptoKey(value: unknown): value is CryptoKey {

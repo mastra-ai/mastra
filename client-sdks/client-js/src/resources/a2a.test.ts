@@ -2,20 +2,14 @@ import { generateKeyPairSync } from 'node:crypto';
 import type { Server } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type {
-  AgentCard,
-  GetTaskResponse,
-  MessageSendParams,
-  SendMessageResponse,
-  Task,
-  TaskPushNotificationConfig,
-} from '@mastra/core/a2a/client';
+import type { AgentCard, TaskPushNotificationConfig } from '@mastra/core/a2a/client';
 import canonicalize from 'canonicalize';
 import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
 import { MastraClientError } from '../types';
+import type { A2ATask } from '../utils/process-a2a-stream';
 import { A2A } from './a2a';
-import type { A2AStreamEventData } from './a2a';
+import type { A2AStreamEventData, MessageSendParams, SendMessageResult } from './a2a';
 
 async function collectStream<T>(stream: AsyncIterable<T>): Promise<T[]> {
   const chunks: T[] = [];
@@ -83,23 +77,27 @@ describe('A2A', () => {
               signature,
             },
           ],
-        } satisfies AgentCard,
+        } as AgentCard,
         publicJwk: await exportJWK(publicKey),
       };
     }
 
-    it('getAgentCard fetches the well-known agent card', async () => {
-      const mockCard: AgentCard = {
+    function baseAgentCard(description: string): AgentCard {
+      return {
         name: 'Test Agent',
-        description: 'A test agent',
+        description,
         url: `${serverUrl}/api/a2a/test-agent`,
         version: '1.0.0',
-        protocolVersion: '0.3.0',
+        protocolVersion: '1.0',
         capabilities: {},
         defaultInputModes: ['text/plain'],
         defaultOutputModes: ['text/plain'],
         skills: [],
-      };
+      } as unknown as AgentCard;
+    }
+
+    it('getAgentCard fetches the well-known agent card', async () => {
+      const mockCard = baseAgentCard('A test agent');
 
       server.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -113,18 +111,7 @@ describe('A2A', () => {
     });
 
     it('verifies a signed agent card when verifySignature is configured', async () => {
-      const baseCard: AgentCard = {
-        name: 'Test Agent',
-        description: 'A signed test agent',
-        url: `${serverUrl}/api/a2a/test-agent`,
-        version: '1.0.0',
-        protocolVersion: '0.3.0',
-        capabilities: {},
-        defaultInputModes: ['text/plain'],
-        defaultOutputModes: ['text/plain'],
-        skills: [],
-      };
-      const { card, publicJwk } = await createSignedAgentCard(baseCard);
+      const { card, publicJwk } = await createSignedAgentCard(baseAgentCard('A signed test agent'));
       let keyProviderInput:
         | {
             kid?: string;
@@ -162,17 +149,7 @@ describe('A2A', () => {
     });
 
     it('returns unsigned cards unchanged when verifySignature is configured', async () => {
-      const mockCard: AgentCard = {
-        name: 'Test Agent',
-        description: 'An unsigned test agent',
-        url: `${serverUrl}/api/a2a/test-agent`,
-        version: '1.0.0',
-        protocolVersion: '0.3.0',
-        capabilities: {},
-        defaultInputModes: ['text/plain'],
-        defaultOutputModes: ['text/plain'],
-        skills: [],
-      };
+      const mockCard = baseAgentCard('An unsigned test agent');
       let keyProviderCalled = false;
 
       server.on('request', (_req, res) => {
@@ -195,24 +172,13 @@ describe('A2A', () => {
     });
 
     it('throws when a signed agent card cannot be verified', async () => {
-      const baseCard: AgentCard = {
-        name: 'Test Agent',
-        description: 'An invalid signed test agent',
-        url: `${serverUrl}/api/a2a/test-agent`,
-        version: '1.0.0',
-        protocolVersion: '0.3.0',
-        capabilities: {},
-        defaultInputModes: ['text/plain'],
-        defaultOutputModes: ['text/plain'],
-        skills: [],
-      };
-      const { card, publicJwk } = await createSignedAgentCard(baseCard);
+      const { card, publicJwk } = await createSignedAgentCard(baseAgentCard('An invalid signed test agent'));
       const tamperedSignature = (() => {
         const bytes = base64url.decode(card.signatures?.[0]?.signature ?? '');
         bytes[0] = bytes[0] ^ 0xff;
         return base64url.encode(bytes);
       })();
-      const invalidCard: AgentCard = {
+      const invalidCard = {
         ...card,
         signatures: card.signatures?.map((signature, index) =>
           index === 0
@@ -222,7 +188,7 @@ describe('A2A', () => {
               }
             : signature,
         ),
-      };
+      } as AgentCard;
 
       server.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -241,7 +207,7 @@ describe('A2A', () => {
       ).rejects.toThrow('A2A Agent Card signature verification failed');
     });
 
-    it('getExtendedAgentCard sends the authenticated extended card method', async () => {
+    it('getExtendedAgentCard sends the v1 extended card method', async () => {
       let receivedBody: Record<string, unknown> | undefined;
       const mockResponse = {
         jsonrpc: '2.0',
@@ -273,7 +239,7 @@ describe('A2A', () => {
       });
       expect(receivedBody).toMatchObject({
         jsonrpc: '2.0',
-        method: 'agent/getAuthenticatedExtendedCard',
+        method: 'GetExtendedAgentCard',
       });
       expect(receivedBody).not.toHaveProperty('params');
     });
@@ -285,9 +251,12 @@ describe('A2A', () => {
         jsonrpc: '2.0',
         id: 'req-1',
         result: {
-          kind: 'task',
           id: 'task-1',
-          status: { state: 'completed', message: { text: 'Done!' } },
+          contextId: 'ctx-1',
+          status: {
+            state: 'TASK_STATE_COMPLETED',
+            message: { messageId: 'm-1', role: 'ROLE_AGENT', parts: [{ text: 'Done!' }] },
+          },
         },
       };
 
@@ -300,21 +269,22 @@ describe('A2A', () => {
       const params: MessageSendParams = {
         message: {
           messageId: 'msg-1',
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: 'Hello' }],
+          role: 'ROLE_USER',
+          parts: [{ text: 'Hello' }],
         },
       };
 
       const response = await a2a.sendMessage(params);
-      expectTypeOf<ReturnType<A2A['sendMessage']>>().toEqualTypeOf<Promise<SendMessageResponse>>();
+      expectTypeOf(response.result).toEqualTypeOf<SendMessageResult | undefined>();
       expect(response).toEqual(mockResponse);
     });
 
-    it('should include JSON-RPC 2.0 fields in the request body', async () => {
+    it('should include JSON-RPC 2.0 fields and A2A-Version header in the request', async () => {
       let receivedBody: Record<string, unknown> | undefined;
+      let receivedVersionHeader: string | undefined;
 
       server.on('request', (req, res) => {
+        receivedVersionHeader = req.headers['a2a-version'] as string | undefined;
         let body = '';
         req.on('data', chunk => {
           body += chunk;
@@ -330,9 +300,8 @@ describe('A2A', () => {
       const params: MessageSendParams = {
         message: {
           messageId: 'msg-1',
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: 'Hello' }],
+          role: 'ROLE_USER',
+          parts: [{ text: 'Hello' }],
         },
       };
 
@@ -340,10 +309,11 @@ describe('A2A', () => {
 
       expect(receivedBody).toMatchObject({
         jsonrpc: '2.0',
-        method: 'message/send',
+        method: 'SendMessage',
         params,
       });
       expect(typeof receivedBody?.id).toBe('string');
+      expect(receivedVersionHeader).toBe('1.0');
     });
   });
 
@@ -351,9 +321,8 @@ describe('A2A', () => {
     const params: MessageSendParams = {
       message: {
         messageId: 'msg-1',
-        kind: 'message',
-        role: 'user',
-        parts: [{ kind: 'text', text: 'Hello' }],
+        role: 'ROLE_USER',
+        parts: [{ text: 'Hello' }],
       },
     };
 
@@ -366,15 +335,15 @@ describe('A2A', () => {
 
     it('sendMessageStream unwraps JSON-RPC SSE events into A2A event data', async () => {
       const streamEvents = [
-        { kind: 'task', id: 'task-1', status: { state: 'submitted' } },
-        { kind: 'status-update', taskId: 'task-1', status: { state: 'working' }, final: false },
+        { id: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_SUBMITTED' } },
+        { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } },
         {
-          kind: 'artifact-update',
           taskId: 'task-1',
+          contextId: 'ctx-1',
           artifact: {
             artifactId: 'artifact-1',
             name: 'result',
-            parts: [{ kind: 'text', text: 'Done!' }],
+            parts: [{ text: 'Done!' }],
           },
           append: false,
           lastChunk: true,
@@ -388,7 +357,7 @@ describe('A2A', () => {
         });
         req.on('end', () => {
           const parsedBody = JSON.parse(body);
-          expect(parsedBody.method).toBe('message/stream');
+          expect(parsedBody.method).toBe('SendStreamingMessage');
 
           res.writeHead(200, { 'Content-Type': 'text/event-stream' });
           for (const event of streamEvents) {
@@ -402,11 +371,9 @@ describe('A2A', () => {
       const received = await collectStream(a2a.sendMessageStream(params));
 
       expect(received).toHaveLength(3);
-      expect(received.map(event => event.kind)).toEqual(['task', 'status-update', 'artifact-update']);
       expect(received[2]).toMatchObject({
-        kind: 'artifact-update',
         artifact: {
-          parts: [{ kind: 'text', text: 'Done!' }],
+          parts: [{ text: 'Done!' }],
         },
       });
     });
@@ -414,7 +381,7 @@ describe('A2A', () => {
     it('deprecated sendStreamingMessage returns a raw Response for backward compatibility', async () => {
       server.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-        res.write(`data: ${JSON.stringify({ jsonrpc: '2.0', result: { kind: 'task', id: 'task-1' } })}\n\n`);
+        res.write(`data: ${JSON.stringify({ jsonrpc: '2.0', result: { id: 'task-1', contextId: 'ctx-1' } })}\n\n`);
         res.end();
       });
 
@@ -458,12 +425,16 @@ describe('A2A', () => {
 
   describe('task operations', () => {
     it('cancelTask returns the full JSON-RPC envelope (backward-compatible contract)', () => {
-      expectTypeOf<ReturnType<A2A['cancelTask']>>().toEqualTypeOf<Promise<Task>>();
+      expectTypeOf<Awaited<ReturnType<A2A['cancelTask']>>['result']>().toEqualTypeOf<A2ATask | undefined>();
     });
 
-    it('cancelTask sends the tasks/cancel JSON-RPC method', async () => {
+    it('cancelTask sends the CancelTask JSON-RPC method', async () => {
       let receivedBody: Record<string, unknown> | undefined;
-      const mockEnvelope = { jsonrpc: '2.0', id: 'req-1', result: { kind: 'task', id: 'task-1' } };
+      const mockEnvelope = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        result: { id: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_CANCELED' } },
+      };
 
       server.on('request', (req, res) => {
         let body = '';
@@ -481,17 +452,17 @@ describe('A2A', () => {
       const response = await a2a.cancelTask({ id: 'task-1' });
 
       expect(receivedBody).toMatchObject({
-        method: 'tasks/cancel',
+        method: 'CancelTask',
         params: { id: 'task-1' },
       });
-      expect(response).toMatchObject({ result: { kind: 'task', id: 'task-1' } });
+      expect(response).toMatchObject({ result: { id: 'task-1', status: { state: 'TASK_STATE_CANCELED' } } });
     });
 
     it('getTask returns the full JSON-RPC envelope (backward-compatible contract)', async () => {
       const mockEnvelope = {
         jsonrpc: '2.0',
         id: 'req-1',
-        result: { kind: 'task', id: 'task-1', status: { state: 'working' } },
+        result: { id: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } },
       };
 
       server.on('request', (_req, res) => {
@@ -502,11 +473,11 @@ describe('A2A', () => {
       const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
       const task = await a2a.getTask({ id: 'task-1' });
 
-      expectTypeOf<ReturnType<A2A['getTask']>>().toEqualTypeOf<Promise<GetTaskResponse>>();
+      expectTypeOf(task.result).toEqualTypeOf<A2ATask | undefined>();
       expect(task).toEqual(mockEnvelope);
     });
 
-    it('resubscribeTask returns typed stream events and uses tasks/resubscribe', async () => {
+    it('resubscribeTask returns typed stream events and uses SubscribeToTask', async () => {
       let receivedBody: Record<string, unknown> | undefined;
 
       server.on('request', (req, res) => {
@@ -520,7 +491,7 @@ describe('A2A', () => {
           res.write(
             `data: ${JSON.stringify({
               jsonrpc: '2.0',
-              result: { kind: 'status-update', taskId: 'task-1', status: { state: 'working' }, final: false },
+              result: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } },
             })}\n\n`,
           );
           res.end();
@@ -534,12 +505,10 @@ describe('A2A', () => {
         AsyncGenerator<A2AStreamEventData, void, undefined>
       >();
       expect(receivedBody).toMatchObject({
-        method: 'tasks/resubscribe',
+        method: 'SubscribeToTask',
         params: { id: 'task-1' },
       });
-      expect(response).toEqual([
-        { kind: 'status-update', taskId: 'task-1', status: { state: 'working' }, final: false },
-      ]);
+      expect(response).toEqual([{ taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } }]);
     });
 
     it('supports push notification config methods including get', async () => {
@@ -548,18 +517,18 @@ describe('A2A', () => {
         {
           jsonrpc: '2.0',
           id: '1',
-          result: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/get' } },
+          result: { taskId: 'task-1', url: 'https://example.com/get' },
         },
         {
           jsonrpc: '2.0',
           id: '2',
-          result: [{ taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/list' } }],
+          result: [{ taskId: 'task-1', url: 'https://example.com/list' }],
         },
         { jsonrpc: '2.0', id: '3', result: {} },
         {
           jsonrpc: '2.0',
           id: '4',
-          result: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/set' } },
+          result: { taskId: 'task-1', url: 'https://example.com/set' },
         },
       ];
 
@@ -586,10 +555,8 @@ describe('A2A', () => {
       });
       const setResponse = await a2a.setTaskPushNotificationConfig({
         taskId: 'task-1',
-        pushNotificationConfig: {
-          url: 'https://example.com/push',
-        },
-      });
+        url: 'https://example.com/push',
+      } as unknown as TaskPushNotificationConfig);
 
       expectTypeOf(getResponse).toEqualTypeOf<TaskPushNotificationConfig>();
       expectTypeOf(listResponse).toEqualTypeOf<TaskPushNotificationConfig[]>();
@@ -597,23 +564,23 @@ describe('A2A', () => {
       expectTypeOf(setResponse).toEqualTypeOf<TaskPushNotificationConfig>();
 
       expect(receivedBodies.map(body => body.method)).toEqual([
-        'tasks/pushNotificationConfig/get',
-        'tasks/pushNotificationConfig/list',
-        'tasks/pushNotificationConfig/delete',
-        'tasks/pushNotificationConfig/set',
+        'GetTaskPushNotificationConfig',
+        'ListTaskPushNotificationConfigs',
+        'DeleteTaskPushNotificationConfig',
+        'CreateTaskPushNotificationConfig',
       ]);
       expect(receivedBodies[0]?.params).toEqual({ id: 'task-1' });
       expect(receivedBodies[1]?.params).toEqual({ id: 'task-1' });
       expect(receivedBodies[2]?.params).toEqual({ id: 'task-1', pushNotificationConfigId: 'push-1' });
       expect(receivedBodies[3]?.params).toEqual({
         taskId: 'task-1',
-        pushNotificationConfig: { url: 'https://example.com/push' },
+        url: 'https://example.com/push',
       });
 
-      expect(getResponse).toEqual({ taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/get' } });
-      expect(listResponse).toEqual([{ taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/list' } }]);
+      expect(getResponse).toEqual({ taskId: 'task-1', url: 'https://example.com/get' });
+      expect(listResponse).toEqual([{ taskId: 'task-1', url: 'https://example.com/list' }]);
       expect(deleteResponse).toBeUndefined();
-      expect(setResponse).toEqual({ taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/set' } });
+      expect(setResponse).toEqual({ taskId: 'task-1', url: 'https://example.com/set' });
     });
 
     it('throws a protocol-aware error for unsupported push notification methods', async () => {
