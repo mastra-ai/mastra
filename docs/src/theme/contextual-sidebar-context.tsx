@@ -65,7 +65,7 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
     }
   }, [observedState, sidebarState])
 
-  const activeSidebar = isContextualSidebarVisible(sidebarState, pathname) ? sidebarState : undefined
+  const activeSidebar = isContextualSidebarVisible(observedState, pathname) ? observedState : undefined
 
   const value: ContextualSidebarContextValue = {
     activateSidebar: state => {

@@ -236,10 +236,10 @@ function contextualTopLevelLinks(pane: Locator) {
 
 async function firstContextualChild(pane: Locator) {
   const links = contextualTopLevelLinks(pane)
-  expect(await links.count()).toBeGreaterThan(1)
   const link = links.nth(1)
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute('href', /.+/)
   const href = await link.getAttribute('href')
-  expect(href).toBeTruthy()
   return { link, href: href! }
 }
 
