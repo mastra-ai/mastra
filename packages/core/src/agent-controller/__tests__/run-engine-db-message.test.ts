@@ -168,6 +168,30 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(events.filter(event => event.type === 'message_update').length).toBe(updatesBefore + 1);
   });
 
+  it('Given a tool-error carrying an Error instance, When it folds, Then the failure message survives JSON serialization', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-error', payload: { toolCallId: 'tc1', toolName: 'read', error: new Error('boom') } }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+    if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('no tool invocation part emitted');
+    const wire = JSON.parse(JSON.stringify(toolPart));
+    expect(wire.toolInvocation.result).toBe('boom');
+    expect(wire.toolInvocation.isError).toBe(true);
+  });
+
   it('Given a signal data chunk, When it arrives, Then it emits a DB-native signal message', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

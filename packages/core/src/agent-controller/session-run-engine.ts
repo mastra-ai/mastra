@@ -558,10 +558,11 @@ export class SessionRunEngine {
 
       case 'tool-error': {
         const toolError = getPayload(chunk);
+        // Error instances JSON-serialize to `{}`; keep the message so failure text survives SSE + persistence.
         this.applyToolOutcome(state, {
           toolCallId: getString(toolError.toolCallId) ?? '',
           toolName: getString(toolError.toolName) ?? '',
-          result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
+          result: getDisplayTransform(chunk.metadata, 'error', getErrorFromUnknown(toolError.error).message),
           isError: true,
           providerMetadata: isProviderMetadata(toolError.providerMetadata) ? toolError.providerMetadata : undefined,
         });
