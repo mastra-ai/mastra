@@ -27,7 +27,6 @@ export async function runCommand(
   let stderr = '';
   child.stdout.setEncoding('utf8').on('data', chunk => (stdout += chunk));
   child.stderr.setEncoding('utf8').on('data', chunk => (stderr += chunk));
-  child.stdin.end(options.stdin);
 
   let timedOut = false;
   let forceKillTimeout: NodeJS.Timeout | undefined;
@@ -39,12 +38,30 @@ export async function runCommand(
   }, options.timeoutMs ?? 90_000);
   timeout.unref();
 
-  const { exitCode, signal } = await new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>(
-    (resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', (exitCode, signal) => resolve({ exitCode, signal }));
-    },
-  ).finally(() => {
+  const completion = new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+    let settled = false;
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
+    const rejectAndTerminate = (error: Error) =>
+      settle(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          killProcessGroup(child.pid, 'SIGKILL');
+        }
+        reject(error);
+      });
+
+    child.once('error', rejectAndTerminate);
+    child.stdin.once('error', rejectAndTerminate);
+    child.stdout.once('error', rejectAndTerminate);
+    child.stderr.once('error', rejectAndTerminate);
+    child.once('close', (exitCode, signal) => settle(() => resolve({ exitCode, signal })));
+  });
+
+  child.stdin.end(options.stdin);
+  const { exitCode, signal } = await completion.finally(() => {
     clearTimeout(timeout);
     if (forceKillTimeout) clearTimeout(forceKillTimeout);
   });
@@ -66,6 +83,17 @@ export function killProcessGroup(pid: number | undefined, signal: NodeJS.Signals
   try {
     process.kill(process.platform === 'win32' ? pid : -pid, signal);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ESRCH') return;
+    if (code === 'EPERM' && process.platform !== 'win32') {
+      try {
+        process.kill(pid, signal);
+        return;
+      } catch (fallbackError) {
+        if ((fallbackError as NodeJS.ErrnoException).code === 'ESRCH') return;
+        throw fallbackError;
+      }
+    }
+    throw error;
   }
 }
