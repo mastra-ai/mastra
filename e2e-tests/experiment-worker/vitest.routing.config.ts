@@ -12,7 +12,7 @@ export default defineConfig({
       'tests/registry-digest.test.ts',
       'tests/scenario-reporter.test.ts',
       'tests/verdaccio-resolution.test.ts',
-      'tests/vitest-selection.test.ts',
+      'vitest.config.test.ts',
     ],
   },
 });

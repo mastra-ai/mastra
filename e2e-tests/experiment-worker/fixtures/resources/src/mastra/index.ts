@@ -178,7 +178,9 @@ const sandboxHangStep = createStep({
   outputSchema: z.object({ done: z.boolean() }),
   execute: async ({ mastra }) => {
     const ws = await inheritedWorkspace(mastra);
-    const handle = await ws.sandbox.processes!.spawn('sleep', { args: ['600'] });
+    const processes = ws.sandbox.processes;
+    if (!processes) throw new Error('sandbox process manager is unavailable');
+    const handle = await processes.spawn('sleep', { args: ['600'] });
     await writeFile(join(process.cwd(), 'sandbox-descendant.json'), JSON.stringify({ pid: handle.pid }));
     await new Promise(() => {});
     return { done: true };
@@ -214,7 +216,8 @@ const persistenceStep = createStep({
       },
     });
 
-    const vector = mastra!.getVector('libsql');
+    if (!mastra) throw new Error('Mastra instance is unavailable');
+    const vector = mastra.getVector('libsql');
     await vector.createIndex({ indexName: 'e2e_vectors', dimension: 4 });
     await vector.upsert({
       indexName: 'e2e_vectors',
