@@ -29,14 +29,21 @@ When using the default Mastra Server `apiPrefix` of `/api`, an agent registered 
 - Agent card: `/api/.well-known/weather-agent/agent-card.json`
 - Execution endpoint: `/api/a2a/weather-agent`
 
-An agent card includes fields like the agent name, description, endpoint URL, provider, capabilities, security metadata, and skills:
+An agent card includes fields like the agent name, description, supported interfaces, provider, capabilities, security metadata, and skills:
 
 ```json title="agent-card.json"
 {
-  "protocolVersion": "0.3.0",
+  "protocolVersion": "1.0",
   "name": "Weather Agent",
   "description": "Provides weather information.",
-  "url": "https://agent.example.com/api/a2a/weather-agent",
+  "supportedInterfaces": [
+    {
+      "url": "https://agent.example.com/api/a2a/weather-agent",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0",
+      "tenant": ""
+    }
+  ],
   "version": "1.0",
   "provider": {
     "organization": "Acme",
@@ -45,7 +52,7 @@ An agent card includes fields like the agent name, description, endpoint URL, pr
   "capabilities": {
     "streaming": true,
     "pushNotifications": true,
-    "stateTransitionHistory": false
+    "extendedAgentCard": false
   },
   "defaultInputModes": ["text/plain"],
   "defaultOutputModes": ["text/plain"],
@@ -59,6 +66,8 @@ An agent card includes fields like the agent name, description, endpoint URL, pr
   ]
 }
 ```
+
+Mastra serves protocol version 1.0 by default and stays compatible with version 0.3. The server reads the `A2A-Version` request header, accepts both v1 method names (such as `SendMessage`) and v0.3 method names (such as `message/send`), and translates its agent card and responses to the v0.3 shape for clients that request it. Version 0.3 clients keep working without changes.
 
 A2A represents work as messages and tasks. Messages carry text, file, or structured data parts.
 
@@ -104,8 +113,8 @@ If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-know
 During execution, `A2AAgent`:
 
 - Fetches and caches the remote agent card.
-- Reads the execution URL and capabilities from the card.
-- Calls `message/send` for non-streaming runs or `message/stream` when streaming is supported.
+- Selects a supported interface from the card and reads the execution URL, capabilities, and protocol version.
+- Sends v1 requests (`SendMessage`, or `SendStreamingMessage` when streaming is supported), and falls back to the v0.3 method names for remote agents that only advertise v0.3.
 - Converts remote messages, tasks, artifacts, and status updates into Mastra subagent results.
 - Supports `resumeGenerate()` and `resumeStream()` when the remote task requires follow-up input or resubscription.
 
@@ -136,19 +145,20 @@ Use `sendMessageStream()` to send a message and receive task status and artifact
 ```typescript title="src/a2a-client.ts"
 const stream = a2a.sendMessageStream({
   message: {
-    kind: 'message',
-    role: 'user',
+    role: 'ROLE_USER',
     messageId: crypto.randomUUID(),
-    parts: [{ kind: 'text', text: "What's the weather in Prague?" }],
+    parts: [{ text: "What's the weather in Prague?" }],
   },
 })
 
 for await (const event of stream) {
-  if (event.kind === 'artifact-update') {
+  if ('artifact' in event) {
     console.log(event.artifact.parts)
   }
 }
 ```
+
+Version 1.0 messages use the wire shape `{ messageId, role, parts }` with no `kind` field, and event types are distinguished by their fields (an artifact update has an `artifact`, a status update has a `status`).
 
 If a stream disconnects while a task is still running, use `resubscribeTask()` to receive live updates for the in-progress task:
 
