@@ -715,6 +715,9 @@ describe('Mid-Loop Observation', () => {
       // `get.input.db()` and the durable loop reads the first input message for
       // task tracking — draining the bucket at step 0 would starve both.
       expect(messageList.get.input.db().map(msg => msg.id)).toContain('giant-msg');
+      // The user prompt must NOT be sealed: `sealed` metadata persisted on a user
+      // message would route any future same-id re-add through the re-id branch.
+      expect(((survivor as any)?.content?.metadata?.mastra as any)?.sealed).toBeUndefined();
     });
 
     it('preserves the fresh prompt at step 0 even with an explicit bufferActivation of 1 (retention floor 0)', async () => {

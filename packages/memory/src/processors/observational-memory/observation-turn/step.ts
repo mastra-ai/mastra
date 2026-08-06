@@ -242,7 +242,7 @@ export class ObservationStep {
         // protect it (and everything else pending) from cleanup by identity rather than
         // relying on the token-based retention floor, which resolves to 0 for sync-only,
         // resource-scope, and explicit `bufferActivation: 1` configs.
-        step0PreserveIds = pending.map(msg => msg.id).filter(Boolean);
+        step0PreserveIds = pending.map(msg => msg.id);
       }
 
       // Step-0 observation: seed an empty assistant message under the active response id
@@ -469,7 +469,17 @@ export class ObservationStep {
         }
       }
 
-      const messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
+      let messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
+      // At step 0 the newest observed message is the fresh USER prompt (the seed is
+      // excluded from observation). Sealing it would persist `sealed` metadata on a
+      // user message, permanently routing any future same-id re-add through the
+      // MessageList re-id branch. The seal exists to stop later streaming/buffering
+      // from merging into observed ASSISTANT content — a user message needs no seal,
+      // so skip it. Step > 0 is unaffected (input was drained before observation, so
+      // the newest observed message there is the pre-drain state, same as main).
+      if (this.stepNumber === 0 && messageToSeal?.role !== 'assistant') {
+        messageToSeal = undefined;
+      }
       const messagesToSeal = messageToSeal ? [messageToSeal] : [];
       om.sealMessagesForBuffering(messagesToSeal);
 
