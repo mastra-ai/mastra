@@ -36,6 +36,7 @@ import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
+import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
   computeWorktreePath,
@@ -844,13 +845,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           return c.json({ error: 'invalid_url' }, 400);
         }
 
-        if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        if (!runBoardIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
         const branch = `factory/issue-${issueNumber}`;
         const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        await github.addIssueLabels(Number(project.installation.externalId), project.repository.slug, issueNumber, [
-          'auto-triaged',
-        ]);
-        const result = await runIssueTriage({
+        const result = await runBoardIssueTriage({
           repository: project.repository.slug,
           issueNumber,
           issueTitle: body.title,
@@ -860,7 +858,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           resourceId: project.factoryProjectId,
           projectPath,
           branch,
-          defaultModelId: await resolveFactoryDefaultModelId(options.projects, project.factoryProjectId),
         });
         await emitAudit?.({
           context: loose(c),
@@ -1357,29 +1354,22 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        let sandbox: MaterializationSandbox | undefined;
-        if (session.sandboxId) {
-          try {
-            sandbox = await fleet.reattachSandbox(session.sandboxId);
-          } catch {
-            // The provider may already have reclaimed the sandbox.
-          }
-          await fleet.teardownSandbox(
-            {
-              sandboxId: session.sandboxId,
-              setSandboxId: async () => {},
-              clear: async () => {
-                await github.sourceControlStorage.sessions.setSandbox({
-                  id: session.id,
-                  sandboxId: null,
-                  sandboxWorkdir: session.sandboxWorkdir ?? '',
-                });
-              },
-            },
-            sandbox,
-          );
-        }
+        // Answer as soon as the workspace is actually gone. Reclaiming its
+        // sandbox wakes the VM and scrubs the checkout, which takes minutes on
+        // a large repository — the caller must not sit through that for a
+        // workspace that has already been removed.
         await github.sourceControlStorage.sessions.delete(session.id);
+        void reclaimDeletedSessionSandbox({
+          fleet,
+          sourceControl: github.sourceControlStorage,
+          session,
+        }).catch((error: unknown) => {
+          console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+            sessionId: session.sessionId,
+            sandboxId: session.sandboxId,
+            error,
+          });
+        });
         return c.json({ removed: true });
       },
     }),

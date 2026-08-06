@@ -3564,10 +3564,16 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
   let httpServer: HttpServer;
   let baseUrl: URL;
   let failing = false;
+  let initializeCount = 0;
+  let dropConcurrentToolCalls = false;
+  let pendingToolCallSockets: Array<{ destroy(): void }> = [];
   let client: InternalMastraMCPClient;
 
   beforeEach(async () => {
     failing = false;
+    initializeCount = 0;
+    dropConcurrentToolCalls = false;
+    pendingToolCallSockets = [];
     httpServer = createServer(async (req, res) => {
       if (failing || req.method === 'GET') {
         res.writeHead(req.method === 'GET' ? 405 : 404).end();
@@ -3592,6 +3598,7 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
           .end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result }));
       };
       if (body?.method === 'initialize') {
+        initializeCount++;
         reply({
           protocolVersion: body.params?.protocolVersion ?? '2025-03-26',
           capabilities: { tools: {} },
@@ -3602,6 +3609,14 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
       } else if (body.method === 'tools/list') {
         reply({ tools: [{ name: 'ping', description: 'ping', inputSchema: { type: 'object', properties: {} } }] });
       } else if (body.method === 'tools/call') {
+        if (dropConcurrentToolCalls) {
+          pendingToolCallSockets.push(req.socket);
+          if (pendingToolCallSockets.length === 2) {
+            dropConcurrentToolCalls = false;
+            pendingToolCallSockets.forEach(socket => socket.destroy());
+          }
+          return;
+        }
         reply({ content: [{ type: 'text', text: 'pong' }] });
       } else {
         reply({});
@@ -3757,4 +3772,206 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
       content: [{ type: 'text', text: 'pong' }],
     });
   }, 20000);
+
+  it('shares one real HTTP reconnect when concurrent tool calls lose the same transport', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'concurrent-http-reconnect',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+
+    dropConcurrentToolCalls = true;
+    const results = await Promise.all([
+      tools['ping'].execute!({ context: {} }),
+      tools['ping'].execute!({ context: {} }),
+    ]);
+
+    expect(results).toEqual([
+      { content: [{ type: 'text', text: 'pong' }] },
+      { content: [{ type: 'text', text: 'pong' }] },
+    ]);
+    expect(initializeCount).toBe(2);
+  }, 20000);
+});
+
+describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function createToolClient() {
+    const client = new InternalMastraMCPClient({
+      name: 'concurrent-reconnect-client',
+      server: { url: new URL('http://localhost:1234/mcp') },
+    });
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'ping', description: 'ping', inputSchema: { type: 'object' as const } }],
+    });
+    return { client, sdkClient };
+  }
+
+  it('shares one reconnect when concurrent calls fail on the same transport', async () => {
+    const { client, sdkClient } = createToolClient();
+    const staleTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    const replacementTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    (client as any).transport = staleTransport;
+
+    let rejectFirst!: (error: Error) => void;
+    let rejectSecond!: (error: Error) => void;
+    const callTool = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectFirst = reject)) as ReturnType<Client['callTool']>,
+      )
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectSecond = reject)) as ReturnType<Client['callTool']>,
+      )
+      .mockResolvedValue({ content: [{ type: 'text', text: 'pong' }] });
+    const connect = vi.spyOn(client, 'connect').mockImplementation(async () => {
+      (client as any).transport = replacementTransport;
+      return true;
+    });
+
+    const tool = (await client.tools())['ping'];
+    const firstCall = tool.execute?.({});
+    const secondCall = tool.execute?.({});
+    await vi.waitFor(() => expect(callTool).toHaveBeenCalledTimes(2));
+
+    rejectFirst(new Error('Connection closed'));
+    rejectSecond(new Error('Connection closed'));
+
+    await expect(Promise.all([firstCall, secondCall])).resolves.toEqual([
+      { content: [{ type: 'text', text: 'pong' }] },
+      { content: [{ type: 'text', text: 'pong' }] },
+    ]);
+    expect(staleTransport.close).toHaveBeenCalledOnce();
+    expect(connect).toHaveBeenCalledOnce();
+    expect((client as any).transport).toBe(replacementTransport);
+  });
+
+  it('does not replace a healthy transport after a late failure from an older one', async () => {
+    const { client, sdkClient } = createToolClient();
+    const staleTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    const replacementTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    (client as any).transport = staleTransport;
+
+    let rejectToolCall!: (error: Error) => void;
+    const callTool = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectToolCall = reject)) as ReturnType<Client['callTool']>,
+      )
+      .mockResolvedValue({ content: [{ type: 'text', text: 'pong' }] });
+    const connect = vi.spyOn(client, 'connect').mockResolvedValue(true);
+
+    const tool = (await client.tools())['ping'];
+    const result = tool.execute?.({});
+    await vi.waitFor(() => expect(callTool).toHaveBeenCalledOnce());
+
+    (client as any).transport = replacementTransport;
+    rejectToolCall(new Error('Connection closed'));
+
+    await expect(result).resolves.toEqual({ content: [{ type: 'text', text: 'pong' }] });
+    expect(staleTransport.close).not.toHaveBeenCalled();
+    expect(replacementTransport.close).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+    expect((client as any).transport).toBe(replacementTransport);
+  });
+
+  it('reconnects again when the replacement transport fails while an earlier reconnect is settling', async () => {
+    const { client, sdkClient } = createToolClient();
+    const firstTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    const secondTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    const thirdTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    (client as any).transport = firstTransport;
+
+    let replacementPublished!: () => void;
+    const replacementWasPublished = new Promise<void>(resolve => (replacementPublished = resolve));
+    let finishFirstReconnect!: () => void;
+    const firstReconnectCanFinish = new Promise<void>(resolve => (finishFirstReconnect = resolve));
+    const connect = vi
+      .spyOn(client, 'connect')
+      .mockImplementationOnce(async () => {
+        (client as any).transport = secondTransport;
+        replacementPublished();
+        await firstReconnectCanFinish;
+        return true;
+      })
+      .mockImplementationOnce(async () => {
+        (client as any).transport = thirdTransport;
+        return true;
+      });
+    const callTool = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockRejectedValueOnce(new Error('Connection closed'))
+      .mockRejectedValueOnce(new Error('Connection closed'))
+      .mockResolvedValue({ content: [{ type: 'text', text: 'pong' }] });
+
+    const tool = (await client.tools())['ping'];
+    const firstCall = tool.execute?.({});
+    await replacementWasPublished;
+
+    const secondCall = tool.execute?.({});
+    await vi.waitFor(() => expect(callTool).toHaveBeenCalledTimes(2));
+    finishFirstReconnect();
+
+    await expect(Promise.all([firstCall, secondCall])).resolves.toEqual([
+      { content: [{ type: 'text', text: 'pong' }] },
+      { content: [{ type: 'text', text: 'pong' }] },
+    ]);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(firstTransport.close).toHaveBeenCalledOnce();
+    expect(secondTransport.close).toHaveBeenCalledOnce();
+    expect((client as any).transport).toBe(thirdTransport);
+  });
+
+  it('does not leave a replacement transport connected when disconnect starts during reconnect', async () => {
+    const { client } = createToolClient();
+    const firstTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    const replacementTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    (client as any).transport = firstTransport;
+
+    let finishConnect!: () => void;
+    const connectCanFinish = new Promise<void>(resolve => (finishConnect = resolve));
+    const connect = vi.spyOn(client, 'connect').mockImplementation(async () => {
+      (client as any).transport = replacementTransport;
+      await connectCanFinish;
+      return true;
+    });
+
+    const reconnect = client.forceReconnect();
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledOnce());
+    const disconnect = client.disconnect();
+    finishConnect();
+
+    await expect(reconnect).resolves.toBeUndefined();
+    await expect(disconnect).resolves.toBeUndefined();
+    expect(firstTransport.close).toHaveBeenCalledOnce();
+    expect(replacementTransport.close).toHaveBeenCalledOnce();
+    expect((client as any).transport).toBeUndefined();
+  });
+
+  it('does not reconnect a tool call that fails after an explicit disconnect', async () => {
+    const { client, sdkClient } = createToolClient();
+    const transport = { close: vi.fn().mockResolvedValue(undefined) };
+    (client as any).transport = transport;
+
+    let rejectToolCall!: (error: Error) => void;
+    const callTool = vi.spyOn(sdkClient, 'callTool').mockImplementationOnce(
+      () => new Promise((_, reject) => (rejectToolCall = reject)) as ReturnType<Client['callTool']>,
+    );
+    const connect = vi.spyOn(client, 'connect');
+    const tool = (await client.tools())['ping'];
+    const result = tool.execute?.({});
+    await vi.waitFor(() => expect(callTool).toHaveBeenCalledOnce());
+
+    await client.disconnect();
+    rejectToolCall(new Error('Connection closed'));
+
+    await expect(result).rejects.toThrow('Connection closed');
+    expect(connect).not.toHaveBeenCalled();
+    expect(transport.close).toHaveBeenCalledOnce();
+  });
 });

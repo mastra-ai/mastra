@@ -27,7 +27,7 @@ Storage powers:
 
 ## When to configure storage
 
-Configure a persistent storage adapter when state must survive restarts, be shared across processes, or be visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
+Configure a persistent storage adapter when state must survive restarts or be shared across processes. Persistent storage also keeps state visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
 
 Use storage when your application needs any of these behaviors:
 
@@ -203,7 +203,7 @@ export const mastra = new Mastra({
 })
 ```
 
-You can also route `observability` to a dedicated analytics backend. See [observability storage](/docs/observability/storage) for an observability-specific example.
+You can also route `observability` to a dedicated analytics backend. See the [observability quickstart](/docs/observability/overview#quickstart) for an observability-specific example.
 
 ## Supported providers
 
@@ -235,4 +235,4 @@ libSQL is the fastest path for local development because it doesn't require runn
 - [Storage retention](/reference/storage/retention)
 - [Storage schemas](/reference/storage/overview)
 - [Memory](/docs/memory/overview)
-- [Observability storage](/docs/observability/storage)
+- [Observability storage](/docs/observability/overview#storage)

@@ -133,8 +133,6 @@ minimumReleaseAgeExclude:
   - webpack-dev-server@5.2.6
   # Renovate security update: dompurify@3.4.12
   - dompurify@3.4.12
-  # Renovate security update: fast-uri@3.1.4
-  - fast-uri@3.1.4
   # Renovate security update: fast-xml-parser@5.10.1
   - fast-xml-parser@5.10.1
   # Renovate security update: svgo@3.3.4
@@ -203,12 +201,12 @@ overrides:
   ws@>=8.0.0 <8.21.0: 8.21.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
-  fast-uri@<3.1.2: 3.1.4
+  fast-uri@<3.1.5: 3.1.5
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
   brace-expansion@>=2.0.0 <2.0.3: 2.1.2
-  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.7
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4
@@ -372,3 +370,4 @@ allowBuilds:
   braintrust: false
   # node-oracledb runs in Thin mode (pure JS); its install script is a no-op stub.
   oracledb: false
+  isolated-vm: true

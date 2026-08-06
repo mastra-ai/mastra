@@ -119,6 +119,7 @@ describe('execViaLease', () => {
       stderr: 'oops',
       truncated: false,
       timedOut: false,
+      opened: true,
     });
 
     const [init, stdinClose] = sockets[0]!.sent.map(s => JSON.parse(s));
@@ -204,6 +205,9 @@ describe('execViaLease', () => {
       stderr: '',
       truncated: false,
       timedOut: false,
+      closeCode: 1006,
+      closeReason: 'connection lost',
+      opened: true,
     });
   });
 
@@ -219,6 +223,9 @@ describe('execViaLease', () => {
       stderr: '',
       truncated: false,
       timedOut: false,
+      closeCode: 1006,
+      closeReason: 'handshake rejected',
+      opened: false,
     });
   });
 
@@ -239,12 +246,14 @@ describe('execViaLease', () => {
 
       // Handshake deadline is transport failure, NOT timeout — timedOut stays
       // false so the caller can distinguish "stalled connect" from "ran too long".
+      // No closeCode/closeReason because the socket never fired onclose.
       expect(result).toEqual({
         exitCode: null,
         stdout: '',
         stderr: '',
         truncated: false,
         timedOut: false,
+        opened: false,
       });
     } finally {
       vi.useRealTimers();
@@ -353,6 +362,7 @@ describe('execViaLease', () => {
       stderr: '',
       truncated: false,
       timedOut: false,
+      opened: true,
     });
     // Only one close() call should have originated from our side.
     expect(sockets[0]!.closeCalls).toEqual([{ code: 1000, reason: '' }]);

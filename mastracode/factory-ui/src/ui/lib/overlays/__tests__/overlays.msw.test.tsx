@@ -1,11 +1,3 @@
-/**
- * BDD coverage for the cross-cutting overlay open-state context
- * (`src/ui/lib/overlays`).
- *
- * Overlay visibility (sidebar, shortcuts) is
- * platform-level UI plumbing shared by unrelated components, so it lives in a
- * dedicated provider instead of being prop-drilled through the layout tree.
- */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -13,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { OverlaysProvider, useOverlays } from '../overlays';
 import type { OverlayName } from '../overlays';
 
-const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'shortcuts'];
+const OVERLAY_NAMES: OverlayName[] = ['search', 'sidebar', 'shortcuts'];
 
 function Probe() {
   const overlays = useOverlays();
@@ -27,7 +19,6 @@ function Probe() {
           <button onClick={() => overlays.toggle(name)}>toggle {name}</button>
         </div>
       ))}
-      <button onClick={() => overlays.closeAll()}>close all</button>
     </div>
   );
 }
@@ -83,18 +74,6 @@ describe('OverlaysProvider', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'toggle shortcuts' }));
     expect(stateOf('shortcuts')).toBe('closed');
-  });
-
-  it('given several open overlays, when closeAll is called, then every overlay closes', async () => {
-    renderProbe();
-
-    await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
-    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
-    await userEvent.click(screen.getByRole('button', { name: 'close all' }));
-
-    for (const name of OVERLAY_NAMES) {
-      expect(stateOf(name)).toBe('closed');
-    }
   });
 
   it('given no provider, when useOverlays is called, then it throws a descriptive error', () => {

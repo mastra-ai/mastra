@@ -15,7 +15,8 @@
     "build": "node scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra",
     "deploy": "pnpm run build && node scripts/validate-output.mjs && mastra deploy --skip-build",
     "start": "varlock run -- mastra start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "slack:manifest": "node scripts/slack-manifest.mjs"
   },
   "keywords": [],
   "author": "",
@@ -30,7 +31,7 @@
     "@mastra/redis-streams": "link:../../pubsub/redis-streams"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^3.0.86",
+    "@ai-sdk/openai": "^3.0.88",
     "@copilotkit/aimock": "^1.29.0",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/hono": "link:../../server-adapters/hono",

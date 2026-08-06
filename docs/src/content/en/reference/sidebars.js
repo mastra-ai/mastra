@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'build-with-ai', label: 'Build with AI' },
     { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
@@ -154,7 +155,6 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'client-js/agent-builder', label: 'Agent Builder API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
@@ -199,6 +199,22 @@ const sidebars = {
         { type: 'doc', id: 'core/mastra-class', label: 'Mastra Class' },
         { type: 'doc', id: 'core/mastra-model-gateway', label: 'MastraModelGateway' },
         { type: 'doc', id: 'core/addGateway', label: '.addGateway()' },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflow',
+          label: '.addStoredWorkflow()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflows',
+          label: '.addStoredWorkflows()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
@@ -252,25 +268,10 @@ const sidebars = {
         { type: 'doc', id: 'editor/blob-store-provider', label: 'BlobStoreProvider' },
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
         { type: 'doc', id: 'editor/processor-provider', label: 'ProcessorProvider' },
+        { type: 'doc', id: 'editor/prompt-blocks', label: 'Prompt blocks' },
+        { type: 'doc', id: 'editor/tools', label: 'Tool configuration' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
-        {
-          type: 'category',
-          label: 'Agent Builder',
-          collapsed: true,
-          items: [
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/agent-builder-options',
-              label: 'AgentBuilderOptions',
-            },
-            {
-              type: 'doc',
-              id: 'editor/agent-builder/builder-agent-defaults',
-              label: 'BuilderAgentDefaults',
-            },
-            { type: 'doc', id: 'editor/agent-builder/builder-models', label: 'Models default' },
-          ],
-        },
+        { type: 'doc', id: 'editor/versioning', label: 'Versioning' },
         {
           type: 'category',
           label: 'Browser',
@@ -321,6 +322,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
             { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
+            { type: 'doc', id: 'evals/summarization', label: 'Summarization Scorer' },
             { type: 'doc', id: 'evals/textual-difference', label: 'Textual Difference Scorer' },
             { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
             { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
@@ -374,6 +376,7 @@ const sidebars = {
         { type: 'doc', id: 'file-based-agents/memory', label: 'Memory' },
         { type: 'doc', id: 'file-based-agents/observability', label: 'Observability' },
         { type: 'doc', id: 'file-based-agents/processors', label: 'Processors' },
+        { type: 'doc', id: 'file-based-agents/schedules', label: 'Schedules' },
         { type: 'doc', id: 'file-based-agents/scorers', label: 'Scorers' },
         { type: 'doc', id: 'file-based-agents/server', label: 'Server' },
         { type: 'doc', id: 'file-based-agents/skills', label: 'Skills' },
@@ -472,6 +475,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
                   label: 'CloudExporter (deprecated)',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/confident-ai',
+                  label: 'Confident AI',
                 },
                 {
                   type: 'doc',
@@ -722,6 +730,12 @@ const sidebars = {
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
+        {
+          type: 'doc',
+          id: 'tools/isolated-vm-transport',
+          label: 'IsolatedVmCodeModeTransport',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
@@ -797,17 +811,32 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Workers',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'workers/overview', label: 'Overview' }],
+    },
+    {
+      type: 'category',
       label: 'Workflows',
       collapsed: true,
       items: [
         { type: 'doc', id: 'workflows/run', label: 'Run Class' },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
+        {
+          type: 'doc',
+          id: 'workflows/stored-workflow-definition',
+          label: 'Stored Workflow Definition',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
         { type: 'doc', id: 'workflows/workflow-state-reader', label: 'Workflow State Reader' },
         {
           type: 'category',
           label: 'Methods',
           items: [
+            { type: 'doc', id: 'workflows/workflow-methods/agent', label: '.agent()' },
             { type: 'doc', id: 'workflows/workflow-methods/branch', label: '.branch()' },
             { type: 'doc', id: 'workflows/workflow-methods/commit', label: '.commit()' },
             { type: 'doc', id: 'workflows/workflow-methods/create-run', label: '.createRun()' },
@@ -819,6 +848,7 @@ const sidebars = {
             { type: 'doc', id: 'workflows/workflow-methods/sleep', label: '.sleep()' },
             { type: 'doc', id: 'workflows/workflow-methods/sleepUntil', label: '.sleepUntil()' },
             { type: 'doc', id: 'workflows/workflow-methods/then', label: '.then()' },
+            { type: 'doc', id: 'workflows/workflow-methods/tool', label: '.tool()' },
           ],
         },
         {

@@ -89,6 +89,7 @@ function githubContext(
       url: 'https://github.test/acme/repo/pull/17',
       createdAt: sourceCreatedAt,
       state: 'open',
+      draft: false,
       merged: false,
       headBranch: 'feature',
       baseBranch: 'main',
@@ -111,6 +112,7 @@ function linearContext(): FactoryLinearRuleContext {
       stateType: 'unstarted',
       priorityLabel: 'High',
       assignee: 'ada',
+      creator: 'grace',
       team: 'ENG',
       labels: ['bug'],
       createdAt: '2026-07-01T00:00:00Z',
@@ -133,6 +135,10 @@ describe('defaultFactoryRules', () => {
     expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueEdited?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueCommentCreated?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueCommentEdited?.onEvent).toBeTypeOf('function');
+    expect(rules.github.issueCommentDeleted?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
     expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
@@ -148,7 +154,7 @@ describe('defaultFactoryRules', () => {
       sourceKey: 'linear:ENG-42',
       title: 'ENG-42: Fix intake sync',
       stage: 'triage',
-      metadata: { linearIssueId: 'issue-1', linearIssueIdentifier: 'ENG-42' },
+      metadata: { linearIssueId: 'issue-1', identifier: 'ENG-42' },
     });
   });
 
@@ -195,19 +201,63 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('starts the same investigation when a human moves an issue into Triage', async () => {
+  it.each(['issueEdited', 'issueCommentCreated', 'issueCommentEdited', 'issueCommentDeleted'] as const)(
+    're-runs investigation when %s arrives for a linked GitHub issue',
+    async event => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github[event]?.onEvent;
+      const decision = await rule?.({
+        ...githubContext(event),
+        item: { ...item, source: 'github-issue' },
+        board: 'work',
+        itemRevision: 3,
+      });
+      expect(decision).toMatchObject({
+        type: 'invokeSkill',
+        role: 'triage',
+        skillName: 'factory-triage',
+        arguments: expect.stringContaining('https://github.test/acme/repo/issues/42'),
+      });
+    },
+  );
+
+  it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
     const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'work'),
+      cause: 'linked_item_materialized',
       stage: 'triage',
       fromStage: 'intake',
       toStage: 'triage',
     } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toBeUndefined();
+    expect(await rule?.({ ...context, fromStage: 'planning' })).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'factory-triage',
+    });
+  });
+
+  it('starts investigation when a board drag or reconciliation moves an issue into Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      cause: 'board_drag',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'triage',
       skillName: 'factory-triage',
       arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
+    });
+    expect(await rule?.({ ...context, cause: 'linked_item_reconciled' })).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'factory-triage',
     });
   });
 
@@ -346,10 +396,41 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('records the PR head branch on Review intake so the card links back to its work item', async () => {
+  it('records PR branches and status on Review intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestOpened');
+    context.pullRequest = { ...context.pullRequest!, draft: true };
+    expect(await rules.github.pullRequestOpened?.onEvent?.(context)).toMatchObject({
+      metadata: {
+        state: 'open',
+        draft: true,
+        merged: false,
+        headBranch: 'feature',
+        baseBranch: 'main',
+      },
+    });
+  });
+
+  it('stamps the GitHub author login on issue and PR intake metadata', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
+      metadata: { author: 'author' },
+    });
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
-      metadata: { headBranch: 'feature', baseBranch: 'main' },
+      metadata: { author: 'author' },
+    });
+  });
+
+  it('mirrors the Linear assignee under `assignee` and the creator under `author` for provider-agnostic attribution', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.linear.issueObserved?.onEvent?.(linearContext())).toMatchObject({
+      metadata: {
+        linearAssignee: 'ada',
+        assignee: 'ada',
+        linearCreator: 'grace',
+        creator: 'grace',
+        author: 'grace',
+      },
     });
   });
 

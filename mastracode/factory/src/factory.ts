@@ -20,13 +20,15 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { hasAuthInit } from '@mastra/core/server';
+import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
+import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryAuthUser } from './auth.js';
 import {
@@ -38,7 +40,9 @@ import {
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from './integrations/github/issue-triage.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import { releaseWorkItemSandboxes } from './integrations/github/sandbox-release.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -65,6 +69,7 @@ import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
+import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
@@ -159,6 +164,19 @@ export interface MastraFactoryConfig {
    * Omitted → conservative built-in rules for the current deployment.
    */
   rules?: FactoryRules;
+
+  /**
+   * Platform-specific overrides. When the Platform-backed GitHub integration
+   * is active, it derives a `runIssueTriage` runner from the mounted
+   * controller automatically. An explicit `runIssueTriage` here takes
+   * precedence over the controller-derived default. `githubAppSlug` identifies
+   * Factory's own GitHub App writes so their webhook deliveries do not retrigger
+   * triage.
+   */
+  platform?: {
+    runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+    githubAppSlug?: string;
+  };
 }
 
 export interface MastraFactorySandboxConfig {
@@ -321,7 +339,12 @@ export class MastraFactory {
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformSecretKey()) {
       if (!integrations.some(integration => integration.id === 'github')) {
-        integrations.push(new PlatformGithubIntegration());
+        integrations.push(
+          new PlatformGithubIntegration({
+            runIssueTriage: this.#config.platform?.runIssueTriage,
+            slug: this.#config.platform?.githubAppSlug,
+          }),
+        );
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
@@ -355,6 +378,9 @@ export class MastraFactory {
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
+    // tenant, so inbound channel events can resolve the sender's model creds.
+    const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -366,6 +392,7 @@ export class MastraFactory {
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
+      channelIdentity: channelIdentityStorage,
     };
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
@@ -379,6 +406,7 @@ export class MastraFactory {
       auth: routeAuth,
       audit: auditStorage,
       projects: factoryProjectsStorage,
+      users: auth && isUserProvider(auth) ? auth : undefined,
       sinks: integrations,
       agentTenant: requestContext => {
         const user = requestContext.get('user') as FactoryAuthUser | undefined;
@@ -472,7 +500,13 @@ export class MastraFactory {
     // providers additionally require the source-control storage domain. Readiness
     // is derived solely from capability presence, never from provider ids.
     const integrationRegistrations = integrations.map(integration => {
-      const requiredDomains = ['integrations', ...(integration.versionControl ? ['source-control'] : [])];
+      const requiredDomains = [
+        'integrations',
+        ...(integration.versionControl ? ['source-control'] : []),
+        // Channels resolve an inbound sender to a tenant through the reverse
+        // index; without it every message would dispatch tenant-less.
+        ...(integration.channels ? ['channel-identity'] : []),
+      ];
       return {
         integration,
         ready: requiredDomains.every(domain => storage.isDomainReady(domain)),
@@ -488,8 +522,27 @@ export class MastraFactory {
       | GithubIntegration
       | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
+    // Terminal work items release their session sandboxes back to the reuse
+    // pool so the next session for the same repository/user claims a warm VM
+    // instead of provisioning fresh. Remote providers only: local "sandboxes"
+    // are the host machine with per-session workdirs — nothing to pool.
+    const releaseTerminalSandboxes =
+      machine && !(machine instanceof LocalSandbox) && workItemsReady && storage.isDomainReady('source-control')
+        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) =>
+            releaseWorkItemSandboxes({
+              workItems: workItemsStorage,
+              sourceControl: sourceControlStorage.forIntegration('github'),
+              fleet,
+              orgId,
+              workItemId,
+            })
+        : undefined;
     const transitionService = workItemsReady
-      ? new FactoryTransitionService({ rules, storage: workItemsStorage })
+      ? new FactoryTransitionService({
+          rules,
+          storage: workItemsStorage,
+          ...(releaseTerminalSandboxes ? { onTerminalStage: releaseTerminalSandboxes } : {}),
+        })
       : undefined;
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -565,6 +618,10 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        // A factory reads the repository it works on and its skill, never the
+        // ~/.claude instructions of whoever hosts the process. On the controller
+        // rather than per session, so webhook-recreated sessions keep it too.
+        initialState: { skipGlobalInstructions: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
@@ -732,6 +789,51 @@ export class MastraFactory {
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
 
+    // Chat-platform channels (Slack, Discord, …) contributed by integrations,
+    // attached to the mounted controller so inbound platform messages reach
+    // the same agents the web UI drives. READY integrations only — readiness
+    // means the `channel-identity` domain's `init()` succeeded, so its link
+    // table is queryable. Without it a sender can't be resolved to a tenant,
+    // and attaching anyway would dispatch runs on default credentials.
+    const channelRegistrations = integrationRegistrations.filter(
+      ({ integration, ready }) => ready && integration.channels,
+    );
+    // `setChannels` replaces rather than merges, so a second provider would
+    // silently never receive a message. Fail loud instead.
+    if (channelRegistrations.length > 1) {
+      throw new Error(
+        `MastraFactory: integrations [${channelRegistrations
+          .map(({ integration }) => integration.id)
+          .join(', ')}] all provide channels, but only one may. Remove all but one.`,
+      );
+    }
+    for (const { integration } of channelRegistrations) {
+      // Integrations return a channels CONFIG; the factory owns construction.
+      prepared.base.controller.setChannels(
+        new AgentControllerChannels(
+          integration.channels!(
+            buildIntegrationContext(
+              {
+                controller: prepared.base.controller,
+                publicOrigin,
+                auth: routeAuth,
+                stateSigner,
+                fleet,
+                factoryStorage: storage,
+                integrationStorage,
+                sourceControlStorage,
+                rules,
+                factoryReady,
+                domains,
+                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+              },
+              integration.id,
+            ),
+          ),
+        ),
+      );
+    }
+
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the
     // constructor args so `new Mastra(...)` merges them with the default
@@ -755,6 +857,7 @@ export class MastraFactory {
               rules,
               factoryReady,
               domains,
+              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
           ),

@@ -45,6 +45,8 @@ export interface FactoryAuthUser {
   id?: string;
   email?: string;
   name?: string;
+  /** Provider-supplied profile picture URL, when the auth provider exposes one. */
+  avatarUrl?: string;
   /**
    * Organization id. The org is the top-level tenant: it owns the GitHub
    * App installation and connected projects, while each user inside the org gets
@@ -172,13 +174,14 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
 
   // Session-shaped results: { session, user }.
   if (record.user && typeof record.user === 'object' && record.session && typeof record.session === 'object') {
-    const user = record.user as { id?: unknown; email?: unknown; name?: unknown };
+    const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown };
     const session = record.session as { activeOrganizationId?: unknown };
     if (typeof user.id !== 'string') return null;
     return {
       id: user.id,
       email: typeof user.email === 'string' ? user.email : undefined,
       name: typeof user.name === 'string' ? user.name : undefined,
+      avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : undefined,
       organizationId: typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
     };
   }
@@ -189,6 +192,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     workosId?: unknown;
     email?: unknown;
     name?: unknown;
+    avatarUrl?: unknown;
     organizationId?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
@@ -199,6 +203,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     workosId,
     email: typeof flat.email === 'string' ? flat.email : undefined,
     name: typeof flat.name === 'string' ? flat.name : undefined,
+    avatarUrl: typeof flat.avatarUrl === 'string' ? flat.avatarUrl : undefined,
     organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
   };
 }
@@ -396,20 +401,63 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
   });
 }
 
-/** Encode a validated returnTo path into the OAuth `state` parameter. */
+/**
+ * Encode a validated returnTo path into the OAuth `state` parameter.
+ *
+ * Pipe format (`uuid|encodedPath`) is the contract `MastraAuthStudio` parses
+ * to forward the path as the platform's `post_login_redirect`; a JSON blob
+ * here silently degrades every post-login redirect to `/`.
+ */
 function encodeState(returnTo: string): string {
-  return Buffer.from(JSON.stringify({ returnTo }), 'utf8').toString('base64url');
+  return `${crypto.randomUUID()}|${encodeURIComponent(returnTo)}`;
 }
 
 /** Decode the OAuth `state` parameter back into a sanitized returnTo path. */
 function decodeState(state: string | undefined): string {
   if (!state) return '/';
-  try {
-    const parsed = JSON.parse(Buffer.from(state, 'base64url').toString('utf8')) as { returnTo?: string };
-    return sanitizeReturnTo(parsed.returnTo);
-  } catch {
-    return '/';
+  const pipeIndex = state.indexOf('|');
+  if (pipeIndex !== -1) {
+    try {
+      return sanitizeReturnTo(decodeURIComponent(state.slice(pipeIndex + 1)));
+    } catch {
+      return '/';
+    }
   }
+  return '/';
+}
+
+/**
+ * Short-lived cookie stashing the post-login destination across the hosted
+ * OAuth round-trip. Providers/platforms differ in whether they echo `state`
+ * back to the callback, so the cookie is the reliable channel; `state` (when
+ * echoed) takes precedence only if the cookie is missing.
+ */
+const RETURN_TO_COOKIE = 'mastra_factory_return_to';
+
+function returnToCookieHeader(returnTo: string): string {
+  const crossSite = isCrossSiteAuth() ? '; SameSite=None; Secure' : '; SameSite=Lax';
+  return `${RETURN_TO_COOKIE}=${encodeURIComponent(returnTo)}; Path=/; Max-Age=600; HttpOnly${crossSite}`;
+}
+
+function clearReturnToCookieHeader(): string {
+  const crossSite = isCrossSiteAuth() ? '; SameSite=None; Secure' : '; SameSite=Lax';
+  return `${RETURN_TO_COOKIE}=; Path=/; Max-Age=0; HttpOnly${crossSite}`;
+}
+
+function readReturnToCookie(c: Context): string | undefined {
+  const header = c.req.header('Cookie');
+  if (!header) return undefined;
+  for (const part of header.split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name === RETURN_TO_COOKIE) {
+      try {
+        return decodeURIComponent(rest.join('='));
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
 }
 
 /** HTTP methods supported for public auth routes. */
@@ -465,6 +513,11 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
           for (const cookie of (await provider.getLoginCookies?.(redirectUri, state)) ?? []) {
             c.header('Set-Cookie', cookie, { append: true });
           }
+          // Stash the destination in a cookie too: not every provider/platform
+          // echoes `state` back to the callback.
+          if (returnTo !== '/') {
+            c.header('Set-Cookie', returnToCookieHeader(returnTo), { append: true });
+          }
           return c.redirect(loginUrl);
         },
       },
@@ -473,7 +526,10 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
         method: 'GET',
         handler: async c => {
           const code = c.req.query('code');
-          const returnTo = decodeState(c.req.query('state'));
+          const stateReturnTo = decodeState(c.req.query('state'));
+          const cookieReturnTo = sanitizeReturnTo(readReturnToCookie(c));
+          const returnTo = cookieReturnTo !== '/' ? cookieReturnTo : stateReturnTo;
+          c.header('Set-Cookie', clearReturnToCookieHeader(), { append: true });
           if (!code) {
             return c.redirect('/auth/login');
           }
@@ -623,6 +679,13 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
 }
 
 /**
+ * Channel webhook paths whose adapter verifies the platform's request signature,
+ * making the delivery self-authenticating. Add a platform here only once its
+ * adapter rejects unsigned or mis-signed requests.
+ */
+const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
+
+/**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
@@ -636,6 +699,26 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       return next();
     }
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
+      return next();
+    }
+    // Inbound chat-channel webhooks (Slack events) carry no user session: they
+    // authenticate by platform signature, the adapter verifying the request
+    // against its signing secret. The routes declare `requiresAuth: false`, but
+    // this gate is `use()` middleware — it runs before route matching, so that
+    // metadata is not readable here and the path needs an explicit pass.
+    //
+    // The platform is allowlisted rather than matched as a wildcard: a pass
+    // keyed on path shape alone would silently extend to any future adapter,
+    // including one that does not verify signatures. Controller id stays a
+    // wildcard because it is whatever the host registered.
+    if (c.req.method === 'POST' && SIGNATURE_VERIFYING_CHANNEL_WEBHOOK.test(path)) {
+      return next();
+    }
+    // The Slack account-linking deep link and the Sign-in-with-Slack OIDC
+    // start/callback do their own auth (friendly login-redirect for signed-out
+    // visitors; the OIDC callback authenticates via its signed `state`) — see
+    // connect-route.ts.
+    if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
       return next();
     }
     // The SPA sign-in page, its static bundle, and browser-fetched metadata

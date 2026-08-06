@@ -7,6 +7,7 @@ import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { GithubIntegration } from './integration.js';
 import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
 import type { ReconcilePullRequestState } from './rules.js';
+import { changeRequestTargetKey } from './subscriptions.js';
 
 async function setup(permission: string | undefined) {
   const seeded = await createFactoryStorageForTests();
@@ -46,11 +47,15 @@ async function setup(permission: string | undefined) {
     sandboxWorkdir: '/workspace',
   });
   const github = {
+    slug: 'factory-app',
     getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue(permission),
   } as unknown as GithubIntegration;
   return {
     sourceControl,
     integrationStorage,
+    // Same rows as `integrationStorage`, typed for the subscription payloads the
+    // reconciler retires rather than the provenance payloads the rules read.
+    subscriptionStorage: seeded.integrations.forIntegration('github'),
     workItems,
     projects: seeded.projects,
     project,
@@ -76,6 +81,61 @@ function issueOpened(deliveryId = 'delivery-1', createdAt = '2030-01-01T00:00:00
       },
     },
   };
+}
+
+function issueComment(
+  action: 'created' | 'edited' | 'deleted',
+  deliveryId: string,
+  options: { sender?: string; author?: string; body?: string } = {},
+) {
+  const sender = options.sender ?? 'contributor';
+  const author = options.author ?? sender;
+  const body = options.body ?? 'New details';
+  return {
+    event: 'issue_comment',
+    deliveryId,
+    payload: {
+      action,
+      installation: { id: 7 },
+      repository: { id: 10, full_name: 'acme/repo' },
+      sender: { login: sender },
+      issue: {
+        number: 42,
+        title: 'Issue 42',
+        html_url: 'https://github.com/acme/repo/issues/42',
+      },
+      comment: {
+        id: 100,
+        body,
+        user: { login: author, type: author.endsWith('[bot]') ? 'Bot' : 'User' },
+      },
+    },
+  };
+}
+
+async function createLinkedIssue(
+  workItems: Awaited<ReturnType<typeof createFactoryStorageForTests>>['workItems'],
+  projectId: string,
+) {
+  return (
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: projectId,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    })
+  ).item;
 }
 
 function pullRequest(
@@ -126,6 +186,59 @@ describe('GithubRules', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
   });
 
+  it('retriages a human comment containing the handoff marker', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-human-marker', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+      ),
+    ).resolves.toEqual({ status: 'committed' });
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    const [decision] = decisions;
+    expect(decision?.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-triage',
+      idempotencyKey: '7:delivery-human-marker:factory-triage',
+    });
+  });
+
+  it('ignores a marked handoff comment authored by the configured GitHub App', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('edited', 'delivery-factory-handoff', {
+          sender: 'factory-app[bot]',
+          author: 'factory-app[bot]',
+          body: '<!-- mastra-factory-triage -->\nUpdated handoff',
+        }),
+      ),
+    ).resolves.toEqual({ status: 'ignored' });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
   it('keeps trusted issues created before the Factory in Intake', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const service = new GithubRules({
@@ -143,10 +256,27 @@ describe('GithubRules', () => {
     expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'intake' });
   });
 
-  it('moves a trusted issue to Triage and rematerializes it after deletion', async () => {
+  it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('write');
-    const rules = builtInFactoryRules();
+    const rules = defaultFactoryRules({
+      version: 'test-web-policy',
+      overrides: {
+        work: {
+          intake: {
+            issue: {
+              onEnter: context => ({
+                type: 'invokeSkill',
+                idempotencyKey: `${context.ingress.id}:factory-triage`,
+                role: 'triage',
+                skillName: 'factory-triage',
+                arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+              }),
+            },
+          },
+        },
+      },
+    });
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
     const service = new GithubRules({
       github,
@@ -161,6 +291,7 @@ describe('GithubRules', () => {
 
     function makeSession(key: string, initialThreadId?: string) {
       let threadId: string | undefined = initialThreadId;
+      const agentEndListeners = new Set<(event: { type: string }) => void>();
       const session = {
         thread: {
           list: vi.fn(async () => []),
@@ -189,9 +320,16 @@ describe('GithubRules', () => {
           (input: { id: string; contents: string }, options: { requestContext: { get(key: string): unknown } }) => {
             if (!threadId) throw new Error('Signal delivered before thread persistence.');
             deliveredSignals.push({ ...input, threadId, user: options.requestContext.get('user') });
+            for (const listener of agentEndListeners) {
+              listener({ type: 'agent_end' });
+            }
             return { accepted: Promise.resolve({ accepted: true, action: 'wake' }) };
           },
         ),
+        subscribe: vi.fn((listener: (event: { type: string }) => void) => {
+          agentEndListeners.add(listener);
+          return () => agentEndListeners.delete(listener);
+        }),
         state: { set: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
@@ -258,10 +396,14 @@ describe('GithubRules', () => {
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
-    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
-      'succeeded',
-      'succeeded',
-    ]);
+    const deferredDecisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(deferredDecisions).toHaveLength(2);
+    expect(deferredDecisions.map(decision => decision.status)).toEqual(['succeeded', 'succeeded']);
+    expect(
+      deferredDecisions.filter(
+        decision => decision.decision.type === 'invokeSkill' && decision.decision.skillName === 'factory-triage',
+      ),
+    ).toHaveLength(1);
 
     await workItems.delete({ orgId: 'org-1', id: item!.id });
     await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'replayed' });
@@ -587,9 +729,11 @@ describe('createGithubPullRequestReconciler', () => {
       title: `PR ${number}`,
       url: `https://github.com/acme/repo/pull/${number}`,
       state: 'closed',
+      draft: false,
       merged: true,
       headBranch: 'feature',
       baseBranch: 'main',
+      author: 'pr-author',
       createdAt: '2030-01-01T00:00:00Z',
       mergedBy: 'maintainer',
     };
@@ -597,7 +741,7 @@ describe('createGithubPullRequestReconciler', () => {
 
   async function createCard(
     context: Awaited<ReturnType<typeof setup>>,
-    input: { number: number; url?: string | null; stages?: string[] },
+    input: { number: number; url?: string | null; stages?: string[]; metadata?: Record<string, unknown> },
   ) {
     return context.workItems.upsert({
       orgId: 'org-1',
@@ -613,15 +757,12 @@ describe('createGithubPullRequestReconciler', () => {
         title: `PR ${input.number}`,
         stages: input.stages ?? ['review'],
         sessions: {},
-        metadata: {},
+        metadata: input.metadata ?? {},
       },
     });
   }
 
-  function createReconciler(
-    context: Awaited<ReturnType<typeof setup>>,
-    fetchPullRequest: ReturnType<typeof vi.fn>,
-  ) {
+  function createReconciler(context: Awaited<ReturnType<typeof setup>>, fetchPullRequest: ReturnType<typeof vi.fn>) {
     return createGithubPullRequestReconciler(
       {
         github: context.github,
@@ -641,7 +782,14 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(17));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
     const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
     expect(decisions).toEqual([
@@ -653,21 +801,149 @@ describe('createGithubPullRequestReconciler', () => {
 
     // A later sweep re-checks live state but the ingress replays: no
     // duplicate decisions are committed for the same merge.
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
   it('only checks open cards and commits nothing for unmerged pull requests', async () => {
     const context = await setup('read');
-    await createCard(context, { number: 17, stages: ['done'] });
+    await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { author: 'pr-author', state: 'closed', draft: false, merged: true },
+    });
     await createCard(context, { number: 18 });
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('backfills status once for terminal pull request cards created before status metadata existed', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, stages: ['done'] });
+    const fetchPullRequest = vi.fn(async () => ({
+      ...mergedState(17),
+      state: 'open' as const,
+      draft: true,
+      merged: false,
+    }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { state: 'open', draft: true, merged: false },
+    });
+  });
+
+  it('backfills authors once for terminal pull request cards created before author metadata existed', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { state: 'closed', draft: false, merged: true },
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { author: 'pr-author', state: 'closed', draft: false, merged: true },
+    });
+  });
+
+  it('silently reconciles status and authors on open pull request cards', async () => {
+    const context = await setup('read');
+    const missing = await createCard(context, { number: 18, metadata: { repository: 'acme/repo' } });
+    const stale = await createCard(context, {
+      number: 19,
+      metadata: { author: 'old-author', state: 'open', draft: false, merged: false, repository: 'acme/repo' },
+    });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
+      ...mergedState(input.number),
+      state: 'open' as const,
+      draft: input.number === 19,
+      merged: false,
+      author: `author-${input.number}`,
+    }));
+
+    await expect(createReconciler(context, fetchPullRequest)([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 2,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
+
+    await expect(context.workItems.get({ orgId: 'org-1', id: missing.item.id })).resolves.toMatchObject({
+      metadata: {
+        author: 'author-18',
+        state: 'open',
+        draft: false,
+        merged: false,
+        repository: 'acme/repo',
+      },
+    });
+    await expect(context.workItems.get({ orgId: 'org-1', id: stale.item.id })).resolves.toMatchObject({
+      metadata: {
+        author: 'author-19',
+        state: 'open',
+        draft: true,
+        merged: false,
+        repository: 'acme/repo',
+      },
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it.each([
+    { merged: true, expected: 'merged' },
+    { merged: false, expected: 'closed' },
+  ])('retires the thread subscription to $expected', async ({ merged, expected }) => {
+    const context = await setup('read');
+    await createCard(context, { number: 23 });
+    const subscription = await context.subscriptionStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: changeRequestTargetKey({
+        installationExternalId: '7',
+        repositoryExternalId: '10',
+        changeRequestId: '23',
+      }),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      status: 'open',
+      data: {},
+    });
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(23), merged, mergedBy: undefined }));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    const [row] = await context.subscriptionStorage.subscriptions.listByTarget(subscription.targetKey);
+    expect(row?.status).toBe(expected);
   });
 
   it('never checks a card whose URL points at a different repository', async () => {
@@ -676,7 +952,14 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(19));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).not.toHaveBeenCalled();
   });
 

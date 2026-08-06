@@ -1,9 +1,13 @@
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { toast } from '@mastra/playground-ui/components/Toaster';
+import { useState } from 'react';
 
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModels } from '../../context/useChatModels';
+import { useChatSessionContext } from '../../context/useChatSessionContext';
 
 function titleCase(value: string): string {
   return value ? `${value[0]?.toUpperCase()}${value.slice(1).toLowerCase()}` : value;
@@ -35,9 +39,11 @@ function formatModelName(id: string): string {
 
 /** Current model id and whether its provider has usable credentials. */
 export function ActiveModel() {
-  const { activeModelId } = useChatModels();
+  const { kind } = useChatSessionContext();
+  const { activeModelId, setModel } = useChatModels();
   const { status } = useChatConnection();
   const modelsQuery = useAvailableModelsQuery();
+  const [pendingModelId, setPendingModelId] = useState<string>();
 
   // While the connection is still resolving there is no model id yet — show a
   // placeholder instead of a misleading "No model" label.
@@ -45,9 +51,52 @@ export function ActiveModel() {
     return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
   }
 
-  const label = activeModelId ? formatModelName(activeModelId) : 'No model';
+  const selectedModelId = pendingModelId ?? activeModelId;
+  const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
-    Boolean(activeModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === activeModelId);
+    Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
+
+  if (kind === 'factory' && modelsQuery.data?.length) {
+    return (
+      <Select
+        value={selectedModelId}
+        disabled={Boolean(pendingModelId)}
+        onValueChange={modelId => {
+          if (pendingModelId || modelId === activeModelId) return;
+          setPendingModelId(modelId);
+          void setModel(modelId).then(
+            () => setPendingModelId(undefined),
+            (cause: unknown) => {
+              setPendingModelId(undefined);
+              // failed switch must be loud — label alone just snaps back
+              toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
+            },
+          );
+        }}
+      >
+        <SelectTrigger
+          variant="ghost"
+          size="xs"
+          aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
+          aria-busy={Boolean(pendingModelId)}
+          className={notConfigured ? 'text-accent2 w-auto' : 'text-neutral3 w-auto'}
+          title={selectedModelId}
+        >
+          <span>
+            {label}
+            {notConfigured ? ' · not configured' : null}
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          {modelsQuery.data.map(model => (
+            <SelectItem key={model.id} value={model.id}>
+              {model.provider} / {model.modelName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
 
   return (
     <span

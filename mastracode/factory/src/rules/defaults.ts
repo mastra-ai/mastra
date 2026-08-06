@@ -23,6 +23,10 @@ function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): bo
   return context.actor.type === 'github' && context.actor.trusted;
 }
 
+function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): string | undefined {
+  return context.actor.type === 'github' ? context.actor.login : undefined;
+}
+
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
@@ -34,7 +38,35 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
 }
 
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
+  if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
+    return;
+  }
   return invokeIssueInvestigation(context);
+}
+
+function retriageGithubIssue(context: FactoryGithubRuleContext) {
+  if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
+  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+
+  const reason =
+    context.event === 'issueEdited'
+      ? context.issueChange?.title && context.issueChange.body
+        ? 'issue title and body edited'
+        : context.issueChange?.title
+          ? 'issue title edited'
+          : 'issue body edited'
+      : context.event === 'issueCommentDeleted'
+        ? 'comment deleted'
+        : context.event === 'issueCommentEdited'
+          ? 'comment edited'
+          : 'comment created';
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: `Re-triage GitHub issue (${context.item.url}) after ${reason}.`,
+  } as const;
 }
 
 function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
@@ -123,6 +155,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
     },
   } as const;
 }
@@ -145,8 +178,12 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+      state: context.pullRequest.state,
+      draft: context.pullRequest.draft,
+      merged: context.pullRequest.merged,
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
     },
   } as const;
 }
@@ -213,12 +250,15 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     stage: 'triage',
     metadata: {
       linearIssueId: context.issue.id,
-      linearIssueIdentifier: context.issue.identifier,
+      identifier: context.issue.identifier,
       linearState: context.issue.state,
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,
       linearAssignee: context.issue.assignee,
+      linearCreator: context.issue.creator,
       linearTeam: context.issue.team,
+      ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
+      ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
     },
   } as const;
 }
@@ -239,6 +279,10 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },
+    issueEdited: { onEvent: retriageGithubIssue },
+    issueCommentCreated: { onEvent: retriageGithubIssue },
+    issueCommentEdited: { onEvent: retriageGithubIssue },
+    issueCommentDeleted: { onEvent: retriageGithubIssue },
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },
