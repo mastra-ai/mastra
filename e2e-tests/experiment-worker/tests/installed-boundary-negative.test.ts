@@ -6,8 +6,10 @@ import { recordAssertionEvidence } from '../helpers/assertion-evidence.js';
 import { buildWorker } from '../helpers/build-worker.js';
 import { runCommand } from '../helpers/command.js';
 import { installPnpmProject } from '../helpers/install-project.js';
+import { inspectManifest } from '../helpers/inspect-manifest.js';
 import { materializeProject } from '../helpers/materialize-project.js';
 import { OwnedResources } from '../helpers/process-cleanup.js';
+import { createRunRequest } from '../helpers/run-protocol.js';
 import { importFailureScenario, malformedApprovalsScenario, missingMastraScenario } from '../scenarios/index.js';
 
 const suiteRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -24,7 +26,12 @@ async function expectBuildFailure(id: string, expected: RegExp) {
 async function expectStartupFailure(id: string, expected: RegExp) {
   const outputRoot = resources.trackPath(join(inject('runRoot'), 'negative-builds', id));
   const build = await buildWorker(projectRoot, outputRoot);
-  const result = await runCommand('node', ['index.mjs'], { cwd: build.artifactRoot, timeoutMs: 30_000 });
+  const { manifest } = await inspectManifest(build.artifactRoot);
+  const result = await runCommand(manifest.launch.executable, manifest.launch.arguments, {
+    cwd: build.artifactRoot,
+    timeoutMs: 30_000,
+    stdin: `${JSON.stringify(createRunRequest(manifest))}\n`,
+  });
   expect(result.exitCode).not.toBe(0);
   expect(`${result.stdout}\n${result.stderr}`).toMatch(expected);
 }

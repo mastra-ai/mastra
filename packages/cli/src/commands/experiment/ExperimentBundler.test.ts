@@ -42,6 +42,7 @@ describe('ExperimentBundler', () => {
     expect((bundler as unknown as { outputDir: string }).outputDir).toBe('.');
     expect(entry).toContain("import('@mastra/core/datasets')");
     expect(entry).toContain("import('#mastra')");
+    expect(entry).toContain("#mastra does not provide an export named 'mastra'");
     expect(entry).toContain('import { runExperimentWorker }');
     expect(entry).not.toContain('file://');
     expect(entry).toContain('await runExperimentWorker({');

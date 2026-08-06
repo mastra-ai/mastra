@@ -123,10 +123,12 @@ import { runExperimentWorker } from ${JSON.stringify(runtimePath)};
 console.log = (...args) => console.error(...args);
 console.info = (...args) => console.error(...args);
 console.debug = (...args) => console.error(...args);
-const [{ runExperiment }, { mastra }] = await Promise.all([
+const [{ runExperiment }, mastraModule] = await Promise.all([
   import('@mastra/core/datasets'),
   import('#mastra'),
 ]);
+const { mastra } = mastraModule;
+if (!mastra) throw new Error("#mastra does not provide an export named 'mastra'");
 const exitCode = await runExperimentWorker({
   mastra,
   runExperiment,
