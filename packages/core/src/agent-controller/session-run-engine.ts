@@ -181,6 +181,54 @@ function formatToolProgressOutput(progress: unknown): string {
   return parts.length > 0 ? `${parts.join(': ')}\n` : `${JSON.stringify(progress)}\n`;
 }
 
+const ABORT_STREAM_GRACE_MS = 5_000;
+const abortDeadline = Symbol('abort-deadline');
+
+/**
+ * Yields `stream`'s chunks, but once `signal` fires gives the stream `graceMs`
+ * to wind down on its own before bailing out. Without the deadline, an
+ * upstream await that never settles (e.g. a hung model call) leaves the run
+ * loop suspended forever with the session stuck in `running` — the only
+ * recovery is a server restart.
+ */
+async function* withAbortDeadline(
+  stream: AsyncIterable<StreamChunk>,
+  signal: AbortSignal | undefined,
+  graceMs: number,
+): AsyncGenerator<StreamChunk> {
+  if (!signal) {
+    yield* stream;
+    return;
+  }
+  const iterator = stream[Symbol.asyncIterator]();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let resolveDeadline = () => {};
+  const deadline = new Promise<typeof abortDeadline>(resolve => {
+    resolveDeadline = () => resolve(abortDeadline);
+  });
+  const armDeadline = () => {
+    timer = setTimeout(resolveDeadline, graceMs);
+  };
+  if (signal.aborted) armDeadline();
+  else signal.addEventListener('abort', armDeadline, { once: true });
+  try {
+    while (true) {
+      const winner = await Promise.race([iterator.next(), deadline]);
+      if (winner === abortDeadline) {
+        // return() on an async generator queues behind the hung next(), so
+        // fire-and-forget: the leaked iterator settles (or not) on its own.
+        void Promise.resolve(iterator.return?.()).catch(() => {});
+        return;
+      }
+      if (winner.done) return;
+      yield winner.value;
+    }
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', armDeadline);
+  }
+}
+
 type StreamState = {
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
@@ -331,7 +379,8 @@ export class SessionRunEngine {
     let error = false;
     let aborted = false;
 
-    for await (const chunk of response.fullStream) {
+    const abortSignal = this.#session.run.getAbortSignal();
+    for await (const chunk of withAbortDeadline(response.fullStream, abortSignal, ABORT_STREAM_GRACE_MS)) {
       result = await this.processStreamChunk(state, chunk, requestContext);
       if (chunk.type === 'error') {
         error = true;
