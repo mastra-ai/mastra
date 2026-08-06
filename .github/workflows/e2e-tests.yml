@@ -111,6 +111,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
+          test -f tests/minimal-agent.test.ts
           pnpm test:pr 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
