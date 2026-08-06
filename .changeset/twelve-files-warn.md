@@ -2,4 +2,4 @@
 '@mastra/factory': minor
 ---
 
-Added searchable teammate and relevance filters to Factory work and review boards. Filter state can be shared by URL, and matching covers GitHub and Linear authors, assignees, activity, and requested reviewers.
+Added searchable, resettable teammate and relevance filters to Factory work and review boards. Filter state can be shared by URL, and matching covers GitHub and Linear authors, assignees, activity, and requested reviewers.

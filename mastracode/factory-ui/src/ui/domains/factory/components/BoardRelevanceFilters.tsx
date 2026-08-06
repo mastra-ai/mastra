@@ -2,7 +2,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ListFilter, UsersRound } from 'lucide-react';
+import { ListFilter, RotateCcw, UsersRound } from 'lucide-react';
 
 import type { BoardKind } from '../boardStages';
 import { boardRelevanceOptions } from '../boardRelevance';
@@ -18,6 +18,7 @@ export function BoardRelevanceFilters({
   currentUserId,
   onParticipantChange,
   onTypeChange,
+  onReset,
 }: {
   kind: BoardKind;
   participants: readonly BoardParticipant[];
@@ -26,10 +27,12 @@ export function BoardRelevanceFilters({
   currentUserId?: string;
   onParticipantChange: (participantId: string | undefined) => void;
   onTypeChange: (type: BoardRelevanceType, selected: boolean) => void;
+  onReset: () => void;
 }) {
   const options = boardRelevanceOptions(kind);
   const selectedLabels = options.filter(option => selectedTypes.has(option.id)).map(option => option.label);
   const relevanceLabel = selectedLabels.length === options.length ? 'All relevance' : selectedLabels.join(', ');
+  const hasActiveFilters = selectedParticipantId !== undefined || selectedLabels.length !== options.length;
   const teammateOptions = [
     {
       label: 'All teammates',
@@ -84,6 +87,13 @@ export function BoardRelevanceFilters({
           ))}
         </DropdownMenu.Content>
       </DropdownMenu>
+
+      {hasActiveFilters && (
+        <Button type="button" variant="ghost" size="sm" onClick={onReset}>
+          <RotateCcw size={14} aria-hidden />
+          Reset filters
+        </Button>
+      )}
     </div>
   );
 }

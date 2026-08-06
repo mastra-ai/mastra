@@ -125,6 +125,9 @@ function BoardContent({
     activityPage,
     currentUser: auth.data?.user,
   });
+  const participantCandidateBySourceKey = new Map(
+    intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
+  );
   const filteredCandidates = intake.candidates.filter(candidate =>
     candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes),
   );
@@ -147,6 +150,12 @@ function BoardContent({
     else next.delete('relevance');
     setSearchParams(next, { replace: true });
   };
+  const resetFilters = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('teammate');
+    next.delete('relevance');
+    setSearchParams(next, { replace: true });
+  };
   const loadingStages = boardLoadingStages({
     stages,
     itemsPending: items.isPending,
@@ -158,7 +167,13 @@ function BoardContent({
     settled: loadingStages.size === 0,
     stages,
     workItems: items.visible.filter(item =>
-      workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes),
+      workItemMatchesRelevance(
+        item,
+        activityPage,
+        selectedParticipantId,
+        selectedRelevanceTypes,
+        item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined,
+      ),
     ),
     candidates: filteredCandidates,
   });
@@ -181,7 +196,13 @@ function BoardContent({
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
     unfilteredWorkItemsForStage(stage).filter(item =>
-      workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes),
+      workItemMatchesRelevance(
+        item,
+        activityPage,
+        selectedParticipantId,
+        selectedRelevanceTypes,
+        item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined,
+      ),
     );
   const mutationError = runs.error ?? items.mutationError;
   const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
@@ -205,6 +226,7 @@ function BoardContent({
         currentUserId={auth.data?.user?.userId}
         onParticipantChange={setParticipant}
         onTypeChange={setRelevanceType}
+        onReset={resetFilters}
       />
       <ScrollArea
         viewportRef={scroll.containerRef}
