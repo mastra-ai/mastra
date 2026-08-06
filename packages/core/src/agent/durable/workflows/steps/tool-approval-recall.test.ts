@@ -24,8 +24,6 @@ import { createDurableToolCallStep } from './tool-call';
 vi.mock('../../utils/resolve-runtime', () => ({
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(true),
-  // The tool-call step rebuilds the toolset whenever the registry entry lacks a
-  // SaveQueueManager (see #19713); resolving undefined keeps the registry tool.
   rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),
 }));
 

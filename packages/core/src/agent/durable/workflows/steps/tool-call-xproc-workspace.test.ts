@@ -112,8 +112,9 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     globalRunRegistry.set(RUN_ID, {
       tools: { skill: { id: 'skill', execute: executeMock } as any },
       model: {} as any,
-      // A missing SaveQueueManager is itself a rebuild trigger (see #19713), so
-      // provide one: this test only covers the tool-resolution path.
+      // A registry entry produced by a real `stream()` call carries a SaveQueueManager;
+      // without one the flush-gating rebuild (needsSaveQueueForFlush) would fire and
+      // defeat what this test asserts — that a registry hit avoids the Mastra rebuild.
       saveQueueManager: {} as any,
     } as any);
 
