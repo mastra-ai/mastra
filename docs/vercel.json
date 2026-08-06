@@ -86,6 +86,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
@@ -1273,6 +1278,11 @@
     {
       "source": "/models/v1/:path*/llms.txt",
       "destination": "/models/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/neon/llms.txt",
+      "destination": "/models/gateways/neon/llms.txt",
       "permanent": true
     },
     {

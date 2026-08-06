@@ -18,6 +18,7 @@ import {
   makeCoreTool,
   maskStreamTags,
   omitKeys,
+  readPositiveIntEnv,
   removeUndefinedValues,
   resolveSerializedZodOutput,
   safeStringify,
@@ -1156,5 +1157,47 @@ describe('removeUndefinedValues', () => {
   it('returns the same entries when no values are undefined', () => {
     const obj = { a: 1, b: 'x', c: true };
     expect(removeUndefinedValues(obj)).toEqual({ a: 1, b: 'x', c: true });
+  });
+});
+
+describe('readPositiveIntEnv', () => {
+  const ENV_NAME = 'MASTRA_TEST_POSITIVE_INT';
+  const FALLBACK = 30_000;
+
+  afterEach(() => {
+    delete process.env[ENV_NAME];
+  });
+
+  it('reads a positive integer', () => {
+    process.env[ENV_NAME] = '5000';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(5000);
+  });
+
+  it('reads exponent notation that lands on an integer', () => {
+    process.env[ENV_NAME] = '6e4';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(60_000);
+  });
+
+  it('falls back when unset or empty', () => {
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+    process.env[ENV_NAME] = '';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['abc', '10s', '30 minutes', 'Infinity', 'NaN'])('falls back on non-numeric %s', raw => {
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['0', '-1', '-5000'])('falls back on non-positive %s', raw => {
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['1.5', '0.5'])('falls back on fractional %s, since callers use these as ms counts', raw => {
+    // A fractional TTL would be compared against integer `Date.now()` deltas and
+    // would land in a setInterval period, so it is rejected rather than rounded.
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
   });
 });

@@ -20,6 +20,7 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -806,23 +807,27 @@ export class MastraFactory {
       );
     }
     for (const { integration } of channelRegistrations) {
+      // Integrations return a channels CONFIG; the factory owns construction.
       prepared.base.controller.setChannels(
-        integration.channels!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              fleet,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              rules,
-              factoryReady,
-              domains,
-            },
-            integration.id,
+        new AgentControllerChannels(
+          integration.channels!(
+            buildIntegrationContext(
+              {
+                controller: prepared.base.controller,
+                publicOrigin,
+                auth: routeAuth,
+                stateSigner,
+                fleet,
+                factoryStorage: storage,
+                integrationStorage,
+                sourceControlStorage,
+                rules,
+                factoryReady,
+                domains,
+                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+              },
+              integration.id,
+            ),
           ),
         ),
       );
@@ -851,6 +856,7 @@ export class MastraFactory {
               rules,
               factoryReady,
               domains,
+              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
           ),

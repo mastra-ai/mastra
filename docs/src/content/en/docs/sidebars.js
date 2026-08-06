@@ -114,6 +114,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'workflows/stored-workflows',
+              label: 'Stored Workflows',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'workflows/snapshots',
               label: 'Snapshots',
             },
@@ -155,6 +163,11 @@ const sidebars = {
             contextualSidebar: true,
           },
           items: [
+            {
+              type: 'doc',
+              id: 'harness/overview',
+              label: 'Overview',
+            },
             {
               type: 'doc',
               id: 'long-running-agents/durable-agents',
