@@ -1843,6 +1843,7 @@ describe('Factory session routes', () => {
 
   it.each([
     [{ sessionId: 'not-a-uuid' }, 'Invalid sessionId'],
+    [{ sessionId: '00000000-0000-4000-8000-00000000000A' }, 'Invalid sessionId'],
     [{ sessionId: 42 }, 'Invalid sessionId'],
     [{ title: 42 }, 'Invalid title'],
     [{ baseBranch: 42 }, 'Invalid baseBranch'],

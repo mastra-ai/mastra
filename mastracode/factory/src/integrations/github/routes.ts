@@ -54,7 +54,8 @@ import type { GitIdentity } from './sandbox.js';
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
 const MAX_SESSION_TITLE_LENGTH = 80;
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /**
  * Serialize same-session mutations within one Factory process. Factory sessions
  * normally issue these operations sequentially, so this lock is probably not
