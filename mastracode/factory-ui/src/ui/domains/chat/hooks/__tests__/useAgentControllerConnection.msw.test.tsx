@@ -417,6 +417,54 @@ describe('useAgentControllerConnection', () => {
     expect(observedStatuses).not.toContain('reconnecting');
   });
 
+  it('given an active stream, when the tab is hidden, then the stream is released and reconnects once visible', async () => {
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+
+    const setDocumentVisibility = (state: 'visible' | 'hidden') => {
+      Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    try {
+      setDocumentVisibility('hidden');
+      // The stream is torn down and nothing reconnects while hidden.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onStream).toHaveBeenCalledTimes(1);
+
+      setDocumentVisibility('visible');
+      await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+    } finally {
+      setDocumentVisibility('visible');
+    }
+  });
+
   it('given the stream drops, when the state re-sync succeeds, then the hook resubscribes and returns to ready', async () => {
     const onReadState = vi.fn();
     const onStream = vi.fn();
