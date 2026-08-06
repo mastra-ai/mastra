@@ -562,11 +562,12 @@ export function createGithubPullRequestReconciler(
             if (!pullRequestNumber) continue;
             const stage = item.stages[0];
             const metadata = item.metadata ?? {};
-            const hasReconciledStatus =
+            const hasReconciledMetadata =
               (metadata.state === 'open' || metadata.state === 'closed') &&
               typeof metadata.draft === 'boolean' &&
-              typeof metadata.merged === 'boolean';
-            if ((stage === 'done' || stage === 'canceled') && hasReconciledStatus) continue;
+              typeof metadata.merged === 'boolean' &&
+              typeof metadata.author === 'string';
+            if ((stage === 'done' || stage === 'canceled') && hasReconciledMetadata) continue;
             const cards = cardsByNumber.get(pullRequestNumber) ?? [];
             cards.push(item);
             cardsByNumber.set(pullRequestNumber, cards);

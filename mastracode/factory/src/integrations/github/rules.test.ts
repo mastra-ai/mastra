@@ -817,7 +817,7 @@ describe('createGithubPullRequestReconciler', () => {
     await createCard(context, {
       number: 17,
       stages: ['done'],
-      metadata: { state: 'closed', draft: false, merged: true },
+      metadata: { author: 'pr-author', state: 'closed', draft: false, merged: true },
     });
     await createCard(context, { number: 18 });
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
@@ -853,6 +853,25 @@ describe('createGithubPullRequestReconciler', () => {
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: { state: 'open', draft: true, merged: false },
+    });
+  });
+
+  it('backfills authors once for terminal pull request cards created before author metadata existed', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { state: 'closed', draft: false, merged: true },
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { author: 'pr-author', state: 'closed', draft: false, merged: true },
     });
   });
 

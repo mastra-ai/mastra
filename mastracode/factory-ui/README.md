@@ -22,7 +22,7 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.
 
-Factory resolves names and profile images through the configured authentication provider. When a provider can't resolve an older actor, the card falls back to the stored actor ID and an initial.
+Factory stores actor names and profile images in audit event metadata when events are written. For older events without that metadata, Factory resolves actor profiles through the configured authentication provider and falls back to the stored actor ID and an initial.
 
 ## Tests
 

@@ -225,6 +225,27 @@ describe('Board work-item activity', () => {
     expect(screen.getByLabelText('Work item activity')).toHaveTextContent('build agent · anthropic/claude-sonnet-4-5');
   });
 
+  it('loads older audit pages so cards are not limited to the newest project events', async () => {
+    stubBoardEndpoints();
+    const requestedBefore: Array<string | null> = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) => {
+        const before = new URL(request.url).searchParams.get('before');
+        requestedBefore.push(before);
+        if (!before) {
+          return HttpResponse.json({ events: [events[0]], actors: {}, nextCursor: 'cursor-2' });
+        }
+        expect(before).toBe('cursor-2');
+        return HttpResponse.json({ events: [events[2]], actors: { 'user-ada': actors['user-ada'] } });
+      }),
+    );
+    renderBoard('work');
+
+    await expectActivity('Ada Lovelace', 'Moved the item');
+    expect(requestedBefore).toContain(null);
+    expect(requestedBefore).toContain('cursor-2');
+  });
+
   it('shows the latest human worker, initial fallback, and synthetic created event on review cards', async () => {
     stubBoardEndpoints();
     renderBoard('review');

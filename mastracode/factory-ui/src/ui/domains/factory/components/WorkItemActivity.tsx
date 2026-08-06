@@ -58,7 +58,7 @@ function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<st
           {modelId ? <span className="text-icon3 font-normal"> · {modelId}</span> : null}
         </span>
         <span className="text-ui-xs text-icon3 flex items-baseline justify-between gap-3">
-          <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate capitalize')}>
+          <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate first-letter:uppercase')}>
             {isCreated ? (
               <time dateTime={event.occurredAt}>
                 Created at: {timestampFormatter.format(new Date(event.occurredAt))}

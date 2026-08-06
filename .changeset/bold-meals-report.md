@@ -2,4 +2,4 @@
 '@mastra/factory': minor
 ---
 
-Added work and review card attribution with human names and profile images, provider-aware creator and assignee activity, and timelines for recent events. GitHub pull request cards now reconcile author and draft, open, closed, or merged status.
+Added creator and recent worker attribution to Factory board cards, with names and profile images from GitHub and Linear. GitHub pull request cards now show the author and draft, open, closed, or merged status.

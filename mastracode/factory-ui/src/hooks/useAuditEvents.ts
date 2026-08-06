@@ -30,6 +30,36 @@ export function useAuditEvents(
   });
 }
 
+/** Load the complete project audit history for board-card attribution. */
+export function useCompleteAuditEvents(
+  factoryProjectId: string | undefined,
+  group: string,
+  limit: number,
+  actorIds: string[] = [],
+) {
+  const { baseUrl } = useApiConfig();
+  const actorKey = [...actorIds].sort().join(',');
+  return useQuery({
+    queryKey: queryKeys.factoryAudit(factoryProjectId, `${group}:complete`, actorKey),
+    queryFn: async (): Promise<AuditEventPage> => {
+      const events: AuditEventPage['events'] = [];
+      const actors: AuditEventPage['actors'] = {};
+      let before: string | undefined;
+
+      do {
+        const page = await fetchAuditEvents(baseUrl, factoryProjectId!, { actorIds, before, limit });
+        events.push(...page.events);
+        for (const [actorId, actor] of Object.entries(page.actors)) actors[actorId] ??= actor;
+        before = page.nextCursor;
+      } while (before);
+
+      return { events, actors };
+    },
+    enabled: Boolean(factoryProjectId),
+    staleTime: 15_000,
+  });
+}
+
 /**
  * One-time WorkOS Admin Portal URL for the audit-log viewer, or `null` when
  * WorkOS isn't configured (the button is hidden). Links are single-use, so
