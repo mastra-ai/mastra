@@ -103,9 +103,9 @@ const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; thr
 
 const renderThreadTree = (
   initialMessages: MastraDBMessage[],
-  options: { hasModelList?: boolean; threadId?: string } = {},
+  options: { hasModelList?: boolean; threadId?: string; suggestedPrompts?: string[] } = {},
 ) => {
-  const { hasModelList = true, threadId = 'thread-1' } = options;
+  const { hasModelList = true, threadId = 'thread-1', suggestedPrompts } = options;
 
   return (
     <Wrapper threadId={threadId}>
@@ -118,7 +118,13 @@ const renderThreadTree = (
           supportsMemory={true}
           settings={{ modelSettings: { chatWithLegacyStream: false } }}
         >
-          <Thread agentId="agent-1" agentName="Helper" threadId={threadId} hasModelList={hasModelList} />
+          <Thread
+            agentId="agent-1"
+            agentName="Helper"
+            threadId={threadId}
+            suggestedPrompts={suggestedPrompts}
+            hasModelList={hasModelList}
+          />
         </ChatProvider>
       </ThreadInputProvider>
     </Wrapper>
@@ -127,7 +133,7 @@ const renderThreadTree = (
 
 const renderThread = (
   initialMessages: MastraDBMessage[],
-  options: { hasModelList?: boolean; threadId?: string } = { hasModelList: true },
+  options: { hasModelList?: boolean; threadId?: string; suggestedPrompts?: string[] } = { hasModelList: true },
 ) => render(renderThreadTree(initialMessages, options));
 
 const userMessage = (text: string): MastraDBMessage => ({
@@ -192,6 +198,55 @@ describe('Thread', () => {
 
     expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+  });
+
+  describe('when suggested prompts are provided for an empty thread', () => {
+    it('renders each suggested prompt', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([], { suggestedPrompts: ['Check the weather', 'Check a stock', 'Build a page'] });
+      });
+
+      expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Check a stock' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Build a page' })).toBeTruthy();
+    });
+
+    it('sends the selected prompt through the agent stream endpoint', async () => {
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+      );
+
+      await act(async () => {
+        renderThread([], { suggestedPrompts: ['Check the weather'] });
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Check the weather' }));
+        await new Promise(resolve => setTimeout(resolve, 80));
+      });
+
+      expect(captured).toHaveLength(1);
+      expect(JSON.stringify(captured[0].body.messages ?? [])).toContain('Check the weather');
+    });
+  });
+
+  describe('when the thread already has messages', () => {
+    it('does not render suggested prompts', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([userMessage('previous question')], { suggestedPrompts: ['Check the weather'] });
+      });
+
+      expect(screen.queryByRole('button', { name: 'Check the weather' })).toBeFalsy();
+    });
   });
 
   describe('when rendering the thread rail', () => {
