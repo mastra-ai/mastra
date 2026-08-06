@@ -6230,6 +6230,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@mastra/ai-sdk':
+        specifier: workspace:*
+        version: link:../../client-sdks/ai-sdk
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
