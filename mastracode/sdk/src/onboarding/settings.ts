@@ -448,7 +448,10 @@ export function toCustomProviderModelId(providerName: string, modelName: string)
  * middle segment matches one of the user's configured custom providers, so
  * legitimate `mastracode/...` gateway-routed ids are left untouched.
  */
-export function stripMastraCodeCustomProviderPrefix(modelId: string, customProviders: CustomProviderSetting[]): string {
+export function stripMastraCodeCustomProviderPrefix(
+  modelId: string,
+  customProviders: Array<Pick<CustomProviderSetting, 'name'>>,
+): string {
   const gatewayPrefix = 'mastracode/';
   if (!modelId.startsWith(gatewayPrefix)) return modelId;
 
