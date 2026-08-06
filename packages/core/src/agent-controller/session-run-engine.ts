@@ -542,12 +542,38 @@ export class SessionRunEngine {
       case 'tool-error': {
         const toolError = getPayload(chunk);
         const toolCallId = getString(toolError.toolCallId) ?? '';
+        const toolName = getString(toolError.toolName) ?? '';
+        const result = getDisplayTransform(chunk.metadata, 'error', toolError.error);
+        const toolIndex = state.toolPartById.get(toolCallId);
+        const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+        if (existing && existing.type === 'tool-invocation') {
+          existing.toolInvocation = Object.assign(existing.toolInvocation, {
+            state: 'result' as const,
+            result,
+            isError: true,
+          });
+        } else {
+          state.currentMessage.content.parts.push({
+            type: 'tool-invocation',
+            toolInvocation: Object.assign(
+              {
+                state: 'result' as const,
+                toolCallId,
+                toolName,
+                args: {},
+                result,
+              },
+              { isError: true },
+            ),
+          });
+        }
         this.#session.emit({
           type: 'tool_end',
           toolCallId,
-          result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
+          result,
           isError: true,
         });
+        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 

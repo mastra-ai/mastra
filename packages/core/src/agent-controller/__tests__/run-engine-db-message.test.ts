@@ -141,6 +141,44 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect((toolPart.toolInvocation as { isError?: boolean }).isError).toBe(true);
   });
 
+  it('Given a tool call that throws, When the tool-error arrives, Then it emits an errored tool result', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'throwingTool', args: { reason: 'repro' } } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'tool-error',
+        payload: { toolCallId: 'tc1', toolName: 'throwingTool', error: 'intentional failure' },
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+    if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('no tool invocation part emitted');
+    expect(toolPart.toolInvocation).toMatchObject({
+      state: 'result',
+      toolCallId: 'tc1',
+      toolName: 'throwingTool',
+      args: { reason: 'repro' },
+      result: 'intentional failure',
+      isError: true,
+    });
+    expect(events).toContainEqual({
+      type: 'tool_end',
+      toolCallId: 'tc1',
+      result: 'intentional failure',
+      isError: true,
+    });
+  });
+
   it('Given a signal data chunk, When it arrives, Then it emits a DB-native signal message', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

@@ -107,6 +107,7 @@ import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 import { approvalDemoAgent } from './agents/approval-demo-agent';
+import { failedToolLoopAgent, failedToolLoopController } from './agents/failed-tool-loop-agent';
 import {
   standupNoteNormalizerAgent,
   standupDigestAgent,
@@ -137,10 +138,14 @@ const storage = new MastraCompositeStore({
 });
 
 export const mastra = new Mastra({
+  agentControllers: {
+    failedToolLoop: failedToolLoopController,
+  },
   agents: {
     gatewayAgent,
     askUserAgent,
     approvalDemoAgent,
+    failedToolLoopAgent,
     chefAgent,
     chefAgentResponses,
     codeOverrideEditableAgent,
