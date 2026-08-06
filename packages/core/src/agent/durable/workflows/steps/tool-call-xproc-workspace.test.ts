@@ -112,6 +112,9 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     globalRunRegistry.set(RUN_ID, {
       tools: { skill: { id: 'skill', execute: executeMock } as any },
       model: {} as any,
+      // A missing SaveQueueManager is itself a rebuild trigger (see #19713), so
+      // provide one: this test only covers the tool-resolution path.
+      saveQueueManager: {} as any,
     } as any);
 
     const step = createDurableToolCallStep();
