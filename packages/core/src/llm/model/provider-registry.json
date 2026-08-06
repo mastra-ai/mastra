@@ -2105,7 +2105,6 @@
       "name": "Friendli",
       "models": [
         "MiniMaxAI/MiniMax-M2.5",
-        "Qwen/Qwen3-235B-A22B-Instruct-2507",
         "deepseek-ai/DeepSeek-V3.2",
         "google/gemma-4-31B-it",
         "zai-org/GLM-5.1",
@@ -2786,72 +2785,72 @@
       "gateway": "models.dev",
       "modelOverrides": {
         "gpt-5-4": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-4-nano": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-5-pro": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-6-luna": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-4-mini": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-3-codex": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-6-terra": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-mini": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-6-sol": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-nano": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-2": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-1": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-5": {
-          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         }
@@ -3008,7 +3007,7 @@
       "apiKeyEnvVar": "UPSTAGE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Upstage",
-      "models": ["solar-mini", "solar-pro2", "solar-pro3"],
+      "models": ["solar-mini", "solar-pro2", "solar-pro3", "solar-pro4"],
       "docUrl": "https://developers.upstage.ai/docs/apis/chat",
       "gateway": "models.dev"
     },
@@ -5553,7 +5552,6 @@
         "anthropic/claude-opus-4.8",
         "anthropic/claude-opus-4.8-fast",
         "anthropic/claude-opus-5",
-        "anthropic/claude-opus-5-fast",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
         "anthropic/claude-sonnet-4.6",
@@ -9219,7 +9217,6 @@
     ],
     "friendli": [
       "MiniMaxAI/MiniMax-M2.5",
-      "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "deepseek-ai/DeepSeek-V3.2",
       "google/gemma-4-31B-it",
       "zai-org/GLM-5.1",
@@ -9704,7 +9701,7 @@
       "text-prime",
       "text-standard"
     ],
-    "upstage": ["solar-mini", "solar-pro2", "solar-pro3"],
+    "upstage": ["solar-mini", "solar-pro2", "solar-pro3", "solar-pro4"],
     "cline-pass": [
       "cline-pass/deepseek-v4-flash",
       "cline-pass/deepseek-v4-pro",
@@ -11428,7 +11425,6 @@
       "anthropic/claude-opus-4.8",
       "anthropic/claude-opus-4.8-fast",
       "anthropic/claude-opus-5",
-      "anthropic/claude-opus-5-fast",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-sonnet-4.6",
