@@ -11,7 +11,10 @@ export type UnresolvedPromptBlock = {
 export type RuntimeEmptyResult = { type: 'empty' } | { type: 'published' } | { type: 'unknown'; ids: string[] };
 
 /**
- * Determines whether instruction blocks would produce runtime content.
+ * Checks all instruction blocks for prompt block references and determines whether runtime content is available.
+ * Returns { type: 'empty' } when every referenced block is unpublished;
+ * { type: 'unknown', ids: [...] } when some blocks have an unknown publication status;
+ * { type: 'published' } otherwise.
  */
 export function instructionsResolveEmptyDueToDrafts(
   blocks: InstructionBlock[] | undefined,
@@ -48,7 +51,8 @@ export function instructionsResolveEmptyDueToDrafts(
 }
 
 /**
- * Formats an error for prompt block references that cannot be resolved.
+ * Formats unresolved prompt block references into a human-readable error message.
+ * Includes the block name alongside the ID when available.
  */
 export function formatUnresolvedPromptBlocksMessage(blocks: UnresolvedPromptBlock[]): string {
   const labels = blocks.map(block => (block.name ? `"${block.name}" (${block.id})` : block.id)).join(', ');
@@ -60,14 +64,15 @@ export const EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE =
   'This agent only references unpublished prompt blocks, so it would run with an empty prompt. Publish the referenced prompt blocks or add inline instructions before continuing.';
 
 /**
- * Formats an error for referenced prompt blocks that are not published.
+ * Formats unpublished prompt block IDs into an error message telling the user to publish before continuing.
  */
 export function formatUnpublishedPromptBlocksMessage(ids: string[]): string {
   return `Unable to use unpublished referenced prompt block${ids.length === 1 ? '' : 's'}: ${ids.join(', ')}. Publish these prompt blocks and try again.`;
 }
 
 /**
- * Formats an error when referenced prompt block publication status is unavailable.
+ * Formats prompt block IDs whose publication status is unknown into an error message.
+ * These blocks may have been deleted or are temporarily unavailable.
  */
 export function formatUnknownPromptBlocksMessage(ids: string[]): string {
   const labels = ids.join(', ');

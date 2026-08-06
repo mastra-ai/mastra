@@ -9,7 +9,7 @@ const UNPUBLISHED_REFERENCES_MESSAGE =
   'Unable to use unpublished referenced prompt blocks: {ids}. Publish these prompt blocks and try again.';
 
 /**
- * Returns structured instruction blocks when the supplied value is an array.
+ * Type guard that returns AgentInstructionBlock[] when the input is an array, or undefined otherwise.
  */
 function getInstructionBlocks(instructions: unknown): AgentInstructionBlock[] | undefined {
   if (!Array.isArray(instructions)) {
@@ -20,7 +20,9 @@ function getInstructionBlocks(instructions: unknown): AgentInstructionBlock[] | 
 }
 
 /**
- * Rejects agent instructions that reference unresolved or unpublished prompt blocks.
+ * Validates prompt_block_ref references in agent instructions.
+ * Checks every referenced prompt block for existence, access scope, and published status with an activeVersionId.
+ * Throws an HTTP 400 error listing unresolved or unpublished block IDs when validation fails.
  */
 export async function validateAgentInstructionReferences({
   instructions,
