@@ -124,6 +124,21 @@ export class GithubReconcileWorker extends MastraWorker {
       .catch(() => ({ acquired: false }));
     if (!lease.acquired) return;
 
+    // Folding the issue sweep into the same tick extends how long we hold the
+    // lease. Renew periodically so a replica can't grab the expired lease and
+    // start an overlapping sweep partway through this one.
+    const renewalTimer = setInterval(
+      () => {
+        void this.#leaseProvider.renewLease(LEASE_KEY, this.#leaseOwner, this.#leaseTtlMs).catch(error => {
+          this.deps?.logger.warn('GitHub reconcile lease renewal failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      },
+      Math.max(1_000, Math.floor(this.#leaseTtlMs / 3)),
+    );
+    renewalTimer.unref?.();
+
     try {
       const targets = await this.#targets();
       if (targets.length === 0) return;
@@ -171,6 +186,7 @@ export class GithubReconcileWorker extends MastraWorker {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
+      clearInterval(renewalTimer);
       await this.#leaseProvider.releaseLease(LEASE_KEY, this.#leaseOwner).catch(() => undefined);
     }
   }

@@ -51,11 +51,13 @@ function repositorySource(
   };
 }
 
-function workerDeps(leaseProvider?: Partial<{ acquireLease: unknown; releaseLease: unknown }>): WorkerDeps {
+function workerDeps(
+  leaseProvider?: Partial<{ acquireLease: unknown; releaseLease: unknown; renewLease: unknown }>,
+): WorkerDeps {
   const pubsub = {
     acquireLease: leaseProvider?.acquireLease ?? vi.fn(async () => ({ acquired: true })),
     releaseLease: leaseProvider?.releaseLease ?? vi.fn(async () => undefined),
-    renewLease: vi.fn(async () => true),
+    renewLease: leaseProvider?.renewLease ?? vi.fn(async () => true),
     getLeaseOwner: vi.fn(async () => undefined),
     transferLease: vi.fn(async () => true),
   };
@@ -172,6 +174,61 @@ describe('GithubReconcileWorker', () => {
     expect(scope.scopes).toBe(targets);
     // Same lease covers both writers of card state.
     expect(releaseLease).toHaveBeenCalledTimes(1);
+  });
+
+  it('renews the lease during a sweep longer than the lease TTL', async () => {
+    // 60s interval → 180s lease TTL → 60s renewal cadence.
+    const intervalMs = 60_000;
+    const leaseTtlMs = intervalMs * 3;
+    const renewLease = vi.fn(async () => true);
+    const releaseLease = vi.fn(async () => undefined);
+
+    // A slow PR sweep pushes the tick past the lease TTL; folding the issue
+    // sweep in on top of that made renewal necessary to avoid handoff.
+    const reconcile = vi.fn(async () => {
+      await vi.advanceTimersByTimeAsync(leaseTtlMs + intervalMs);
+      return EMPTY_SUMMARY;
+    });
+    const reconcileIssues = vi.fn(async () => EMPTY_ISSUE_SUMMARY);
+
+    const worker = new GithubReconcileWorker({
+      reconcile,
+      reconcileIssues,
+      sourceControl: repositorySource(),
+      intervalMs,
+    });
+    await worker.init(workerDeps({ renewLease, releaseLease }));
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(leaseTtlMs + intervalMs);
+
+    expect(renewLease.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const call of renewLease.mock.calls) {
+      expect(call).toEqual(['github:pull-request-reconcile', expect.any(String), leaseTtlMs]);
+    }
+    expect(releaseLease).toHaveBeenCalledTimes(1);
+
+    await worker.stop();
+  });
+
+  it('stops renewing the lease between sweeps', async () => {
+    const renewLease = vi.fn(async () => true);
+    const reconcile = vi.fn(async () => EMPTY_SUMMARY);
+    const worker = new GithubReconcileWorker({ reconcile, sourceControl: repositorySource(), intervalMs: 60_000 });
+    await worker.init(workerDeps({ renewLease }));
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const renewalsAfterFirstSweep = renewLease.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    await worker.stop();
+
+    // Idle windows must not accumulate renewals — the timer is cleared before
+    // release, so at most one renewal per sweep can leak in.
+    expect(renewLease.mock.calls.length - renewalsAfterFirstSweep).toBeLessThanOrEqual(reconcile.mock.calls.length);
   });
 
   it('rejects a non-positive interval', () => {
