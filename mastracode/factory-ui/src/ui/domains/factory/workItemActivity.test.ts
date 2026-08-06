@@ -83,7 +83,11 @@ describe('workItemActivity', () => {
     const activity = workItemActivity(item, page);
 
     expect(activity.lastWorker).toEqual(page.actors['user-ada']);
-    expect(activity.events.map(candidate => candidate.id)).toEqual(['agent-event', 'human-event']);
+    expect(activity.events.map(candidate => candidate.id)).toEqual([
+      'agent-event',
+      'human-event',
+      `synthetic-created:${item.id}`,
+    ]);
   });
 
   it('does not treat automation events recorded as human as card attribution', () => {
@@ -110,7 +114,11 @@ describe('workItemActivity', () => {
     const activity = workItemActivity(item, page);
 
     expect(activity.lastWorker).toEqual(page.actors['user-ada']);
-    expect(activity.events.map(candidate => candidate.id)).toEqual(['automation-event', 'human-event']);
+    expect(activity.events.map(candidate => candidate.id)).toEqual([
+      'automation-event',
+      'human-event',
+      `synthetic-created:${item.id}`,
+    ]);
   });
 
   it('falls back to the latest human stage actor when it resolves to a real profile', () => {
@@ -188,6 +196,58 @@ describe('workItemActivity', () => {
       name: 'Grace Hopper',
       avatarUrl: 'https://avatars.example/grace.png',
     });
+  });
+
+  it('falls back to the Linear assignee without an avatar url', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'linear-issue',
+        metadata: { identifier: 'ENG-42', assignee: 'grace' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'linear:grace', name: 'grace' });
+    expect(activity.extraActors).toEqual({ 'linear:grace': { id: 'linear:grace', name: 'grace' } });
+  });
+
+  it('prepends a synthetic created event when the audit page has none', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'github-pr',
+        metadata: { author: 'octocat', number: 7 },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.events).toHaveLength(1);
+    const created = activity.events[0];
+    expect(created.id).toBe(`synthetic-created:${item.id}`);
+    expect(created.action).toBe('factory.work_item.created');
+    expect(created.actorId).toBe('github:octocat');
+    expect(created.occurredAt).toBe(item.createdAt);
+  });
+
+  it('does not synthesize a created event when the audit page already has one', () => {
+    const realCreate = {
+      ...event({
+        id: 'real-create',
+        actorId: 'user-ada',
+        actorType: 'human' as const,
+        occurredAt: '2026-08-01T09:00:00.000Z',
+      }),
+      action: 'factory.work_item.created',
+    };
+    const activity = workItemActivity(item, {
+      events: [realCreate],
+      actors: { 'user-ada': { id: 'user-ada', name: 'Ada Lovelace' } },
+    });
+
+    expect(activity.events.map(candidate => candidate.id)).toEqual(['real-create']);
   });
 
   it('omits card attribution when the item has no human association', () => {

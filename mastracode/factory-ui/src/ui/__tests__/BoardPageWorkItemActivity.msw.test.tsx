@@ -47,6 +47,7 @@ const reviewItem = {
       startedBy: 'user-grace',
     },
   },
+  metadata: { number: 8, author: 'octocat' },
   externalSource: {
     integrationId: 'github',
     type: 'pull-request',
@@ -200,10 +201,12 @@ describe('Board work-item activity', () => {
     expect(screen.getByLabelText('Work item activity')).toHaveTextContent('build agent · anthropic/claude-sonnet-4-5');
   });
 
-  it('shows the latest human worker, initial fallback, and timeline on review cards', async () => {
+  it('shows the latest human worker, initial fallback, and synthetic created event on review cards', async () => {
     stubBoardEndpoints();
     renderBoard('review');
 
-    await expectActivity('Grace Hopper', 'No recorded activity yet', false);
+    await expectActivity('Grace Hopper', 'Created the item', false);
+    // The synthetic created event resolves to the external PR opener.
+    expect(screen.getByLabelText('Work item activity')).toHaveTextContent('octocat');
   });
 });

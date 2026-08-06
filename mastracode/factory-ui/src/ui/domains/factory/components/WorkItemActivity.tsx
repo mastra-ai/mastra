@@ -30,15 +30,16 @@ function metadataString(event: AuditEvent, key: string): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile {
+function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
   }
-  return actors[event.actorId] ?? { id: event.actorId, name: event.actorId };
+  return actors[event.actorId];
 }
 
 function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<string, AuditActorProfile> }) {
   const actor = eventActor(event, actors);
+  if (!actor) return null;
   const modelId = event.actorType === 'agent' ? metadataString(event, 'modelId') : undefined;
   return (
     <li className="flex items-start gap-2">
@@ -68,6 +69,7 @@ export function WorkItemActivity({
 }) {
   const worker = activity.lastWorker;
   const timeline = activity.events.slice(0, 8);
+  const mergedActors = { ...actors, ...activity.extraActors };
   if (!worker) return null;
 
   return (
@@ -108,7 +110,7 @@ export function WorkItemActivity({
           {timeline.length > 0 ? (
             <ol className="flex flex-col gap-2.5">
               {timeline.map(event => (
-                <ActivityEvent key={event.id} event={event} actors={actors} />
+                <ActivityEvent key={event.id} event={event} actors={mergedActors} />
               ))}
             </ol>
           ) : (
