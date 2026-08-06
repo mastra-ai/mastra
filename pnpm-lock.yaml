@@ -187,6 +187,7 @@ packageExtensionsChecksum: sha256-xGYNP5bHLPlbBT+RiHXWlNCiUtPhW6W9ntBiVM/duy4=
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
   '@earendil-works/pi-tui@0.80.6': 88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b
+  gray-matter@4.0.3: 058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8
 
 importers:
 
@@ -4369,7 +4370,7 @@ importers:
         version: 1.20.1
       gray-matter:
         specifier: ^4.0.3
-        version: 4.0.3
+        version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
@@ -4710,7 +4711,7 @@ importers:
         version: 11.3.5
       gray-matter:
         specifier: ^4.0.3
-        version: 4.0.3
+        version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
       hono:
         specifier: ^4.12.8
         version: 4.12.30
@@ -37481,7 +37482,7 @@ snapshots:
       fs-extra: 11.3.5
       github-slugger: 1.5.0
       globby: 11.1.0
-      gray-matter: 4.0.3
+      gray-matter: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
       jiti: 1.21.7
       js-yaml: 5.2.3
       lodash: 4.18.1
@@ -37522,7 +37523,7 @@ snapshots:
       fs-extra: 11.3.5
       github-slugger: 1.5.0
       globby: 11.1.0
-      gray-matter: 4.0.3
+      gray-matter: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
       jiti: 1.21.7
       js-yaml: 5.2.3
       lodash: 4.18.1
@@ -50636,7 +50637,7 @@ snapshots:
 
   graphql@16.14.0: {}
 
-  gray-matter@4.0.3:
+  gray-matter@4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8):
     dependencies:
       js-yaml: 5.2.3
       kind-of: 6.0.3
