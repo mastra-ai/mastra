@@ -20,6 +20,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 
 import { handleError } from './error';
+import { validateAgentInstructionReferences } from './validate-agent-instructions';
 import {
   extractConfigFromVersion,
   calculateChangedFields,
@@ -292,6 +293,12 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       if (version.agentId !== agentId) {
         throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
       }
+
+      await validateAgentInstructionReferences({
+        instructions: version.instructions,
+        mastra,
+        requestContext,
+      });
 
       // Update the agent's activeVersionId AND status to 'published'
       await agentsStore.update({

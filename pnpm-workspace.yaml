@@ -145,6 +145,10 @@ minimumReleaseAgeExclude:
   - react-router@7.18.0
   # Renovate security update: js-yaml@5.2.2
   - js-yaml@5.2.2
+  # Renovate security update: better-auth@1.6.23
+  - better-auth@1.6.23
+  # Renovate security update: valibot@1.4.2
+  - valibot@1.4.2
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -175,7 +179,7 @@ overrides:
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
-  better-auth: ^1.6.13
+  better-auth: ^1.6.23
   js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
   # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws

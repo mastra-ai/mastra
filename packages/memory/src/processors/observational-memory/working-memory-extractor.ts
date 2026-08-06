@@ -64,6 +64,7 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
       name: 'Working Memory',
       includePreviousExtraction: false,
       metadataKeyPath: false,
+      retryStructuredExtractionOnEmptyObject: true,
       instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
       schema: async context => {
         const details = await getWorkingMemoryDetails(context);

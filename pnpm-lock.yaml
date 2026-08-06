@@ -48,7 +48,7 @@ overrides:
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
-  better-auth: ^1.6.13
+  better-auth: ^1.6.23
   js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
   '@mastra/memory>image-size': 1.2.1
@@ -487,7 +487,7 @@ importers:
         specifier: ^0.4.1
         version: 0.4.1(bufferutil@4.1.0)(kysely@0.28.17)
       better-auth:
-        specifier: ^1.6.13
+        specifier: ^1.6.23
         version: 1.6.23(@cloudflare/workers-types@4.20260702.1)(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260702.1)(@libsql/client@0.17.4(bufferutil@4.1.0))(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(@upstash/redis@1.38.0)(kysely@0.28.17)(mysql2@3.22.4(@types/node@22.19.15))(pg@8.22.0)(sql.js@1.14.1)(sqlite3@5.1.7))(mongodb@7.5.0(@aws-sdk/credential-providers@3.1006.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9))(mysql2@3.22.4(@types/node@22.19.15))(pg@8.22.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.10)
       hono:
         specifier: ^4.0.0
