@@ -227,6 +227,23 @@ export interface UsageStats {
 }
 
 /**
+ * Serialized definition of one tool made available to the model, in the
+ * provider-agnostic form sent on the wire. Attached to MODEL_GENERATION
+ * spans so observability exporters can surface tool schemas (e.g. PostHog
+ * `$ai_tools`, OpenInference `llm.tools.*`).
+ */
+export interface ModelToolDefinition {
+  /** Tool type: 'function' for standard tools, or the provider tool type (e.g. 'provider-defined') */
+  type: string;
+  name: string;
+  description?: string;
+  /** JSON schema of the tool's input parameters (function tools) */
+  parameters?: Record<string, unknown>;
+  /** Provider tool id (e.g. 'anthropic.web_search_20250305') for provider-defined tools */
+  id?: string;
+}
+
+/**
  * Model Generation attributes
  */
 export interface ModelGenerationAttributes extends AIBaseAttributes {
@@ -234,6 +251,12 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
   provider?: string;
+  /**
+   * Definitions of the tools made available to the model for this generation,
+   * captured once per generation. Per-step tool names (after `activeTools`
+   * filtering) live on MODEL_INFERENCE spans as `availableTools`.
+   */
+  tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */

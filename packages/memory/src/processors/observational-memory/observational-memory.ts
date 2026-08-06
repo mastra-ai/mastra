@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -344,6 +345,15 @@ export class ObservationalMemory {
    * accept eventual consistency (acceptable for v1).
    */
   private locks = new Map<string, Promise<void>>();
+
+  /**
+   * Initial record lookup/creation promises keyed by the effective storage scope.
+   * Concurrent callers share the full read-or-create operation so a stale read
+   * cannot create another generation-zero record after the first insert finishes.
+   * Entries are removed after both success and failure so later calls always
+   * re-read storage and transient failures can be retried.
+   */
+  private recordInitializations = new Map<string, Promise<ObservationalMemoryRecord>>();
 
   /**
    * Acquire a lock for the given key, execute the callback, then release.
@@ -1068,13 +1078,29 @@ export class ObservationalMemory {
    */
   async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
     const ids = this.getStorageIds(threadId, resourceId);
-    let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    // Storage adapters identify thread-scoped records by threadId alone and
+    // resource-scoped records by resourceId alone. The single-flight key must
+    // mirror that identity so optional resourceId differences cannot split a
+    // thread-scoped initialization into separate operations.
+    const initializationKey = ids.threadId === null ? `resource:${ids.resourceId}` : `thread:${ids.threadId}`;
+    const pendingInitialization = this.recordInitializations.get(initializationKey);
+    if (pendingInitialization) {
+      return pendingInitialization;
+    }
 
-    if (!record) {
+    // Defer the storage read to the next microtask so the complete operation is
+    // registered before any adapter code runs. This prevents an already-started
+    // read from returning a stale null after another caller has finished inserting.
+    const initialization = Promise.resolve().then(async () => {
+      const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+      if (record) {
+        return record;
+      }
+
       // Capture the timezone used for Observer date formatting
       const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      record = await this.storage.initializeObservationalMemory({
+      return this.storage.initializeObservationalMemory({
         threadId: ids.threadId,
         resourceId: ids.resourceId,
         scope: this.scope,
@@ -1085,9 +1111,16 @@ export class ObservationalMemory {
         },
         observedTimezone,
       });
-    }
+    });
+    this.recordInitializations.set(initializationKey, initialization);
 
-    return record;
+    try {
+      return await initialization;
+    } finally {
+      if (this.recordInitializations.get(initializationKey) === initialization) {
+        this.recordInitializations.delete(initializationKey);
+      }
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1704,10 +1737,15 @@ export class ObservationalMemory {
     // fall back to a resource-keyed record which causes deadlocks when
     // multiple threads share the same resourceId.
     if (this.scope === 'thread') {
-      throw new Error(
-        `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
+      throw new MastraError({
+        id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.USER,
+        details: { status: 400 },
+        text:
+          `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
           `Ensure the agent is configured with Memory and a valid threadId is provided.`,
-      );
+      });
     }
 
     return null;

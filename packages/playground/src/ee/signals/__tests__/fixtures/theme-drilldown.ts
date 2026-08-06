@@ -223,7 +223,11 @@ export const traceInsightResponse = {
     version: 'trace_summary/om_observer_slim/v0',
     summary:
       'The user asked the agent to add a meeting transcript to their workspace. The agent located the workspace, uploaded the transcript, and confirmed the addition.',
-    observations: ['Task: add a transcript to the workspace.', 'The upload tool succeeded on the first attempt.'],
+    observations: [
+      'severity=info | kind=task | Task: add a transcript to the workspace.',
+      'severity=success | kind=completion | The upload tool succeeded on the first attempt.',
+      'severity=problem | kind=unresolved | The run never verified the transcript was linked to the project.',
+    ],
     currentTask: 'Add a transcript to the workspace.',
     degenerate: false,
     createdAt: '2026-07-21T09:00:00.000Z',
