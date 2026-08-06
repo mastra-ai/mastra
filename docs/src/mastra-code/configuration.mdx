@@ -309,6 +309,10 @@ MCP: Skipped "bad-server": Missing required field: "command" (stdio) or "url" (h
 
 Tools from MCP servers are namespaced as `serverName_toolName` and appear in the agent's tool list alongside built-in tools. Use `/mcp` to see the status of all servers, including their transport type and any skipped entries.
 
+To turn servers off without editing configuration files, use `/mcp disable <server-name|all>`. Disabled servers stay visible in `/mcp` with a disabled marker, their tools are removed from the agent, and the state persists across restarts for the current project. Re-enable them with `/mcp enable <server-name|all>` or from the interactive `/mcp` selector.
+
+Add `--global` to disable or enable servers across every project instead of just the current one: `/mcp disable <server-name|all> --global`. Global and project scopes are independent — a server disabled globally stays off until you run `/mcp enable <server-name> --global`, even if it is enabled in the current project. `/mcp disable all --global` acts as a kill switch for all MCP servers everywhere.
+
 ## Hooks
 
 Hooks are user-configured shell commands that run at specific lifecycle events. Use hooks for custom validation, logging, notifications, or integration with external systems.

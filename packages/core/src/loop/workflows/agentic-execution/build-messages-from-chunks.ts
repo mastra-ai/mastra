@@ -1,6 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
+import { getErrorFromUnknown } from '../../../error';
 import type {
   FilePayload,
   ReasoningDeltaPayload,
@@ -9,6 +10,7 @@ import type {
   TextDeltaPayload,
   TextStartPayload,
   ToolCallPayload,
+  ToolErrorPayload,
   ToolResultPayload,
 } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
@@ -270,6 +272,23 @@ export function buildMessagesFromChunks({
             providerMetadata,
             providerExecuted,
           } as MastraMessagePart);
+        }
+        break;
+      }
+
+      case 'tool-error': {
+        const p = chunk.payload as ToolErrorPayload;
+        const invocationPart = parts.find(
+          part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === p.toolCallId,
+        );
+
+        if (invocationPart?.type === 'tool-invocation') {
+          const errorMessage = getErrorFromUnknown(p.error, { fallbackMessage: 'Tool execution failed' }).message;
+          invocationPart.toolInvocation = {
+            ...invocationPart.toolInvocation,
+            state: 'output-error',
+            errorText: errorMessage.trim() ? errorMessage : 'Tool execution failed',
+          };
         }
         break;
       }

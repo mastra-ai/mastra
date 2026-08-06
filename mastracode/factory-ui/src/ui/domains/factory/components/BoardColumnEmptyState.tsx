@@ -73,12 +73,19 @@ export function BoardColumnEmptyState({
   stage,
   kind,
   hasIntakeSource,
+  filtersExcludeAll = false,
 }: {
   stage: BoardStageId;
   kind: BoardKind;
   hasIntakeSource: boolean;
+  filtersExcludeAll?: boolean;
 }) {
-  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+  const copy = filtersExcludeAll
+    ? {
+        title: kind === 'review' ? 'No pull requests match filters' : 'No work items match filters',
+        description: 'Try another teammate or relevance type.',
+      }
+    : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
     <div className="border-border1 flex min-h-24 flex-col justify-center rounded-lg border border-dashed px-4 py-4">
       <Txt as="p" variant="ui-sm" className="text-icon4 m-0 font-medium">
