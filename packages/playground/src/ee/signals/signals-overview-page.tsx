@@ -10,7 +10,10 @@ import type { TraceSignalName } from './types';
 import { useSelectedThemeEntity } from './use-selected-theme-entity';
 import { useSignalsDateUrlState } from './use-signals-date-url-state';
 
-const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
+// Default columns follow the order signals are produced during an interaction:
+// the user states a goal, sentiment surfaces while it runs, the agent's
+// behavior responds, and the outcome lands last.
+const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
 
 export function SignalsOverviewPage() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();

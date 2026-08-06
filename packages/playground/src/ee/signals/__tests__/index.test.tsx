@@ -169,6 +169,21 @@ describe('Trace Intelligence page', () => {
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
 
+    it('requests signals in processing order: goal, sentiment, behavior, outcome', async () => {
+      const snapshotSignalNames: (string | null)[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotSignalNames.push(new URL(request.url).searchParams.get('signalNames'));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+      );
+
+      renderSignalsPage();
+
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      expect(snapshotSignalNames[0]).toBe('goal,sentiment,behavior,outcome');
+    });
+
     it('keeps exactly one Trace intelligence documentation action across the shell and page', async () => {
       renderSignalsPageWithShell();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
