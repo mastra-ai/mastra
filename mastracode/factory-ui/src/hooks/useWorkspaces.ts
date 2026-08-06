@@ -80,9 +80,15 @@ export function addCachedSession(
   projectRepositoryId: string | undefined,
   session: FactoryUserSession,
 ) {
-  void queryClient.cancelQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
-  queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(projectRepositoryId), current => {
-    if (!current) return splitSessions([session]);
+  const queryKey = queryKeys.sessions(projectRepositoryId);
+  // no cached list to graft onto — refetch instead of replacing a possibly in-flight full list
+  if (!queryClient.getQueryData<WorkspacesData>(queryKey)) {
+    void queryClient.invalidateQueries({ queryKey });
+    return;
+  }
+  void queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<WorkspacesData>(queryKey, current => {
+    if (!current) return current;
     const all = [...current.workspaces, ...current.userSessions];
     return all.some(cached => cached.sessionId === session.sessionId) ? current : splitSessions([...all, session]);
   });
@@ -142,7 +148,7 @@ export function useCreateWorkspaceMutation(
       const trimmedBranch = branch.trim();
       if (!factoryId) throw new Error('No Factory selected');
       if (!projectRepositoryId) throw new Error('Connect a repository before creating a workspace');
-      return createUserSession(baseUrl, projectRepositoryId, trimmedBranch);
+      return createUserSession(baseUrl, projectRepositoryId, { branch: trimmedBranch });
     },
     onSuccess: session => {
       invalidateSessionQueries(queryClient, projectRepositoryId, scope, session.sessionId);

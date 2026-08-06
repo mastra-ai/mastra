@@ -237,7 +237,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         title: text,
       });
       void queueThreadPageKickoff({ resourceId: session.sessionId, threadId: session.sessionId }, text, {
-        echoed: false,
         timeoutMs: PREPARING_SESSION_TIMEOUT_MS,
       }).catch(error => {
         if (!(error instanceof ThreadPageKickoffTimeoutError)) return;
@@ -279,7 +278,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    const text = onUserDraft ? draft : draft.trim();
+    const text = draft.trim();
     if (!text.trim() && images.length === 0) return;
     updateDraft('');
     void handleInput(text);
@@ -348,18 +347,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     if (onUserDraft && text.startsWith('/')) {
       if (commandRequiresReadySession(text)) {
         updateDraft(text);
-        pushNotice('Commands run once the session is ready.');
+        pushNotice('This command needs a session. Send a prompt to create one first.');
       } else {
         await runComposerCommand(text);
       }
       return;
     }
     if (onUserDraft) {
-      if (images.length > 0) {
-        updateDraft(text);
-        pushNotice('Remove the attached images before creating the session.');
-        return;
-      }
       await createSessionFromDraft(text);
       return;
     }
@@ -394,8 +388,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   }
 
-  const attachDisabled = onUserDraft || status !== 'ready';
-  const disabled = creatingDraftSession || (attachDisabled && !preparingThreadId && !onUserDraft);
+  const notReady = status !== 'ready';
+  const attachDisabled = onUserDraft || notReady;
+  const disabled = creatingDraftSession || (onUserDraft ? !factorySessionState : notReady && !preparingThreadId);
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">

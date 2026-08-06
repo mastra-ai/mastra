@@ -23,11 +23,7 @@ export interface GithubInstallation {
 
 /** Reason the GitHub feature is in its current state, returned by the server. */
 export type GithubStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -648,11 +644,8 @@ export interface CreateUserSessionOptions {
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
-  branchOrOptions?: string | CreateUserSessionOptions,
-  baseBranch?: string,
+  options: CreateUserSessionOptions = {},
 ): Promise<FactoryUserSession> {
-  const options =
-    typeof branchOrOptions === 'string' ? { branch: branchOrOptions, baseBranch } : (branchOrOptions ?? {});
   const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(
     baseUrl,
     projectRepositoryId,

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import assert from 'node:assert';
 import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -15,12 +15,20 @@ import Chat from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useThreadPageKickoffs } from '../../hooks/useThreadPageKickoffs';
+import { claimThreadPageKickoffs } from '../../services/threadPageReadiness';
 import { Composer, PREPARING_SESSION_TIMEOUT_MS } from '../Composer';
 import { Transcript } from '../Transcript';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// the kickoff queue is module state; a kickoff left by one test must not dispatch in the next
+afterEach(() => {
+  for (const kickoff of claimThreadPageKickoffs({ resourceId: SESSION_ID, threadId: SESSION_ID })) {
+    kickoff.complete();
+  }
+});
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const FACTORY_ID = 'fp-preparing';
@@ -312,10 +320,9 @@ describe('Composer on a lazy user-session draft', () => {
     const { client, container } = renderDraft();
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
-    expect(message).toBeEnabled();
+    await waitFor(() => expect(message).toBeEnabled());
     expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
     expect(createBodies).toEqual([]);
-    await waitFor(() => expect(client.getQueryData(queryKeys.factories())).toBeDefined());
     expect(preparation.controllerCreates).toBe(0);
 
     expect(preparation.sessionLookups).toBe(0);
@@ -329,7 +336,7 @@ describe('Composer on a lazy user-session draft', () => {
     await user.type(message, '  fix the login bug  ');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: '  fix the login bug  ' }]));
+    await waitFor(() => expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug' }]));
     expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`);
     expect(preparation.controllerCreates).toBe(0);
 
@@ -340,15 +347,14 @@ describe('Composer on a lazy user-session draft', () => {
     );
     await waitFor(() => expect(preparation.controllerCreates).toBe(1));
     expect(preparation.sentMessages).toEqual([]);
+    await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
     expect(client.getQueryData(queryKeys.userSession(SESSION_ID))).toEqual(createdDraftSession('fix the login bug'));
-    expect(client.getQueryData(queryKeys.sessions(PROJECT_REPOSITORY_ID))).toEqual({
-      workspaces: [],
-      userSessions: [createdDraftSession('fix the login bug')],
-    });
+    expect(client.getQueryData(queryKeys.sessions(PROJECT_REPOSITORY_ID))).toBeUndefined();
 
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(preparation.sentMessages).toEqual(['  fix the login bug  ']));
+    await waitFor(() => expect(preparation.sentMessages).toEqual(['fix the login bug']));
+    expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
   });
 
   it('restores the exact prompt after failure and retries with the same route UUID', async () => {
@@ -368,11 +374,11 @@ describe('Composer on a lazy user-session draft', () => {
     const draftUrl = `/factories/${FACTORY_ID}/user/new/${SESSION_ID}`;
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
     await user.type(message, '  retry this prompt  ');
-    await waitFor(() => expect(client.getQueryData(queryKeys.factories())).toBeDefined());
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(message).toHaveValue('  retry this prompt  '));
+    await waitFor(() => expect(message).toHaveValue('retry this prompt'));
     expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
     expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
     expect(preparation.controllerCreates).toBe(0);
@@ -383,13 +389,13 @@ describe('Composer on a lazy user-session draft', () => {
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
     expect(createBodies).toEqual([
-      { sessionId: SESSION_ID, title: '  retry this prompt  ' },
-      { sessionId: SESSION_ID, title: '  retry this prompt  ' },
+      { sessionId: SESSION_ID, title: 'retry this prompt' },
+      { sessionId: SESSION_ID, title: 'retry this prompt' },
     ]);
 
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(preparation.sentMessages).toEqual(['  retry this prompt  ']));
+    await waitFor(() => expect(preparation.sentMessages).toEqual(['retry this prompt']));
   });
   it('runs local commands and keeps session commands in the draft without creating a session', async () => {
     const preparation = stubPreparingSession();
@@ -404,7 +410,7 @@ describe('Composer on a lazy user-session draft', () => {
     const { client } = renderDraft();
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(client.getQueryData(queryKeys.factories())).toBeDefined());
+    await waitFor(() => expect(message).toBeEnabled());
     await user.type(message, '/help');
     await user.keyboard('{Enter}');
 
@@ -416,7 +422,9 @@ describe('Composer on a lazy user-session draft', () => {
     await user.type(message, '/goal ship it');
     await user.keyboard('{Enter}');
 
-    expect(await screen.findByText('Commands run once the session is ready.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('This command needs a session. Send a prompt to create one first.'),
+    ).toBeInTheDocument();
     expect(message).toHaveValue('/goal ship it');
     expect(sessionPosts).toBe(0);
     expect(preparation.controllerCreates).toBe(0);

@@ -22,7 +22,7 @@ function userSession(overrides: Partial<FactoryUserSession> = {}): FactoryUserSe
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
-    branch: `user/session-1-${sessionId}`,
+    branch: 'user/session-1',
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
