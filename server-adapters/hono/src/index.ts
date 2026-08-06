@@ -755,6 +755,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
   registerContextMiddleware(): void {
     this.app.use('*', this.createContextMiddleware());
+    this.app.use('*', async (c, next) => {
+      await next();
+      this.warnIfUnregisteredChannelWebhook(c.req.path, c.req.method, c.res.status);
+    });
   }
 
   registerAuthMiddleware(): void {

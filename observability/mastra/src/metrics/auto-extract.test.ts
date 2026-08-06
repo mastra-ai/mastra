@@ -154,13 +154,14 @@ describe('AutoExtractedMetrics', () => {
     expect(emittedMetrics[0]!.metric.labels.status).toBe('error');
   });
 
-  it('should extract token usage metrics for model generation', () => {
+  it('should use the configured model when the response model is blank', () => {
     setup();
     const span = createMockSpan({
       type: SpanType.MODEL_GENERATION,
       endTime: new Date('2026-01-01T00:00:02Z'),
       attributes: {
         model: 'gpt-4',
+        responseModel: '   ',
         provider: 'openai',
         usage: {
           inputTokens: 100,

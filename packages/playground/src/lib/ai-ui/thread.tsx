@@ -8,6 +8,7 @@ import {
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
+  ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import {
   MessageScroller,
@@ -104,6 +105,7 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   threadId?: string;
+  suggestedPrompts?: string[];
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
@@ -119,6 +121,7 @@ export const Thread = ({
   agentName,
   agentId,
   threadId,
+  suggestedPrompts,
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
@@ -154,7 +157,7 @@ export const Thread = ({
               style={{ overflowAnchor: 'none' }}
             >
               {isEmpty ? (
-                <ThreadWelcome agentName={agentName} />
+                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
               ) : (
                 <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
                   <ThreadRailLayer turns={threadRailTurns} />
@@ -226,13 +229,36 @@ export const Thread = ({
 
 export interface ThreadWelcomeProps {
   agentName?: string;
+  suggestedPrompts?: string[];
 }
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName, suggestedPrompts = [] }: ThreadWelcomeProps) => {
+  const send = useChatSend();
+  const { isRunning, canSendWhileStreaming } = useChatRunning();
+  const { canExecute } = usePermissions();
+  const canExecuteAgent = canExecute('agents');
+  const sendBlocked = isRunning && !canSendWhileStreaming;
+
   return (
     <div className="flex w-full grow flex-col items-center pt-[15vh]">
       <Avatar name={agentName || 'Agent'} size="lg" />
       <p className="mt-4 font-medium">How can I help you today?</p>
+      {suggestedPrompts.length > 0 && (
+        <div className="mt-6 flex max-w-full flex-row gap-2 overflow-x-auto px-4">
+          {suggestedPrompts.map(prompt => (
+            <Button
+              key={prompt}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={sendBlocked || !canExecuteAgent}
+              onClick={() => send({ message: prompt })}
+            >
+              {prompt}
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -294,47 +320,49 @@ const AgentComposer = ({
         <ComposerAttachments>
           <ChatComposerAttachments />
         </ComposerAttachments>
-        <ComposerBox sendingPulseKey={sendPulseKey}>
-          <ComposerInput
-            ref={textareaRef}
-            value={text}
-            autoFocus={false}
-            placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-            onChange={event => {
-              setThreadInput(event.target.value);
-            }}
-            onKeyDown={event => {
-              // Ignore Enter while an IME composition is active (e.g. committing a
-              // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-              // `keyCode === 229` fallback covers browsers that fire keydown without it.
-              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-              if (event.key === 'Enter' && !event.shiftKey) {
-                if (sendBlocked) return;
-                event.preventDefault();
-                event.stopPropagation();
-                void submit();
-              }
-            }}
-            disabled={!canExecuteAgent}
-          />
-          {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
-          <ComposerActions>
-            <ComposerActionRow
-              canExecute={canExecuteAgent}
-              agentId={agentId}
-              runOptionsSlot={runOptionsSlot}
-              showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
-              isEmpty={isEmpty}
-              isRunning={isRunning}
-              canSendWhileStreaming={canSendWhileStreaming}
-              onCancel={() => void cancelRun()}
-              onSetText={value => {
-                setThreadInput(value);
+        <ComposerRing busy={isRunning}>
+          <ComposerBox sendingPulseKey={sendPulseKey}>
+            <ComposerInput
+              ref={textareaRef}
+              value={text}
+              autoFocus={false}
+              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+              onChange={event => {
+                setThreadInput(event.target.value);
               }}
-              voiceCall={voiceCall}
+              onKeyDown={event => {
+                // Ignore Enter while an IME composition is active (e.g. committing a
+                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  if (sendBlocked) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void submit();
+                }
+              }}
+              disabled={!canExecuteAgent}
             />
-          </ComposerActions>
-        </ComposerBox>
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+            <ComposerActions>
+              <ComposerActionRow
+                canExecute={canExecuteAgent}
+                agentId={agentId}
+                runOptionsSlot={runOptionsSlot}
+                showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                isEmpty={isEmpty}
+                isRunning={isRunning}
+                canSendWhileStreaming={canSendWhileStreaming}
+                onCancel={() => void cancelRun()}
+                onSetText={value => {
+                  setThreadInput(value);
+                }}
+                voiceCall={voiceCall}
+              />
+            </ComposerActions>
+          </ComposerBox>
+        </ComposerRing>
       </Composer>
     </div>
   );

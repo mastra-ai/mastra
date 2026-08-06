@@ -198,7 +198,9 @@ export class AIV4Adapter {
               // Raw base64 - convert to data URI
               normalizedUrl = createDataUri(fileData, fileMimeType || 'application/octet-stream');
             } else {
-              // Already a URL or data URI
+              // Already a URL, data URI, or provider file ID (e.g. OpenAI "file-...").
+              // Provider file IDs are not parseable URLs; attachmentsToParts handles
+              // them explicitly before constructing a URL.
               normalizedUrl = fileData;
             }
           } else {
@@ -588,7 +590,13 @@ export class AIV4Adapter {
             } else if (typeof aiV4Part.data === 'string') {
               const categorized = categorizeFileData(aiV4Part.data, aiV4Part.mimeType);
 
-              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+              if (
+                categorized.type === 'url' ||
+                categorized.type === 'dataUri' ||
+                // Provider file IDs (e.g. OpenAI "file-...") must be stored untouched,
+                // not base64-converted, so they can be forwarded as { file_id } later.
+                categorized.type === 'providerFileId'
+              ) {
                 const part: MastraDBMessage['content']['parts'][number] = {
                   type: 'file' as const,
                   data: aiV4Part.data,
