@@ -114,7 +114,8 @@ Pass Oracle connection options (`user`, `password`, `connectString`, `pool`, wal
   {
     name: 'upsertBatchSize',
     type: 'number',
-    description: 'Number of vectors sent per Oracle `executeMany` call. The full upsert commits once after all batches succeed.',
+    description:
+      'Number of vectors sent per Oracle `executeMany` call. The full upsert commits once after all batches succeed.',
     isOptional: true,
     defaultValue: '200',
   },
@@ -353,7 +354,11 @@ Deletes the Oracle vector table and removes the registry entry for the logical i
 Update vectors by ID or metadata filter. Either `id` or `filter` must be provided, but not both. The `update` object may include `vector`, `metadata`, or both.
 
 ```ts
-await vector.updateVector({ indexName: 'support_articles', id: 'doc-1', update: { metadata: { status: 'reviewed' } } })
+await vector.updateVector({
+  indexName: 'support_articles',
+  id: 'doc-1',
+  update: { metadata: { status: 'reviewed' } },
+})
 ```
 
 ### `deleteVector()`

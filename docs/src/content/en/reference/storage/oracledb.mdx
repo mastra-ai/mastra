@@ -64,19 +64,22 @@ export const mastra = new Mastra({
   {
     name: 'connectString',
     type: 'string',
-    description: 'Oracle connect string, service name, TNS alias, or Autonomous Database connect descriptor. Required unless using `pool`.',
+    description:
+      'Oracle connect string, service name, TNS alias, or Autonomous Database connect descriptor. Required unless using `pool`.',
     isOptional: true,
   },
   {
     name: 'pool',
     type: 'oracledb.Pool',
-    description: 'Existing Oracle connection pool. When provided, Mastra uses the pool but doesn\'t close it when `store.close()` is called.',
+    description:
+      "Existing Oracle connection pool. When provided, Mastra uses the pool but doesn't close it when `store.close()` is called.",
     isOptional: true,
   },
   {
     name: 'poolManager',
     type: 'OraclePoolManager',
-    description: 'Shared Oracle pool manager. Use this to share one Oracle pool between `OracleStore` and `OracleVector`.',
+    description:
+      'Shared Oracle pool manager. Use this to share one Oracle pool between `OracleStore` and `OracleVector`.',
     isOptional: true,
   },
   {
@@ -133,27 +136,30 @@ export const mastra = new Mastra({
   {
     name: 'disableInit',
     type: 'boolean',
-    description: 'When true, automatic schema initialization is disabled. Use this when schema changes are applied separately before the app starts.',
+    description:
+      'When true, automatic schema initialization is disabled. Use this when schema changes are applied separately before the app starts.',
     isOptional: true,
     defaultValue: 'false',
   },
   {
     name: 'messageBatchSize',
     type: 'number',
-    description: 'Number of messages sent per Oracle `executeMany` call when saving messages. The operation still commits once at the transaction boundary.',
+    description:
+      'Number of messages sent per Oracle `executeMany` call when saving messages. The operation still commits once at the transaction boundary.',
     isOptional: true,
     defaultValue: '200',
   },
   {
     name: 'skipDefaultIndexes',
     type: 'boolean',
-    description: 'When true, default storage indexes aren\'t created during initialization.',
+    description: "When true, default storage indexes aren't created during initialization.",
     isOptional: true,
   },
   {
     name: 'indexes',
     type: 'OracleCreateIndexOptions[]',
-    description: 'Custom Oracle index definitions to create during initialization. Indexes are routed to the storage domain that owns the target table.',
+    description:
+      'Custom Oracle index definitions to create during initialization. Indexes are routed to the storage domain that owns the target table.',
     isOptional: true,
   },
   {
@@ -166,7 +172,8 @@ export const mastra = new Mastra({
   {
     name: 'vectorRegistryTableName',
     type: 'string',
-    description: 'OracleVector registry table used to discover semantic-recall vector tables when threads or messages are deleted. Set this to match `OracleVector`\'s `registryTableName` when that option is customized.',
+    description:
+      "OracleVector registry table used to discover semantic-recall vector tables when threads or messages are deleted. Set this to match `OracleVector`'s `registryTableName` when that option is customized.",
     isOptional: true,
   },
 ]}
@@ -227,7 +234,10 @@ const storage = new OracleStore({
     {
       name: 'idx_messages_status',
       table: 'mastra_messages',
-      columns: ["JSON_VALUE(metadata, '$.status' RETURNING VARCHAR2(32) NULL ON ERROR)", 'thread_id'],
+      columns: [
+        "JSON_VALUE(metadata, '$.status' RETURNING VARCHAR2(32) NULL ON ERROR)",
+        'thread_id',
+      ],
       online: true,
       invisible: true,
     },
@@ -248,7 +258,15 @@ import { exportSchemas } from '@mastra/oracledb'
 
 const ddl = exportSchemas({
   schemaName: 'MASTRA_APP',
-  domains: ['memory', 'workflows', 'observability', 'scores', 'scorerDefinitions', 'mcpClients', 'agents'],
+  domains: [
+    'memory',
+    'workflows',
+    'observability',
+    'scores',
+    'scorerDefinitions',
+    'mcpClients',
+    'agents',
+  ],
 })
 
 console.log(ddl)
