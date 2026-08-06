@@ -59,7 +59,7 @@ function notificationSignalDBMessage(id: string, text: string): MastraDBMessage 
 /** Feed a DB message through the reducer to get a coerced TimelineEntry. */
 function entryViaReducer(message: MastraDBMessage): TimelineEntry {
   const state = transcriptReducer(initialTranscript, {
-    type: 'prependOlder',
+    type: 'mergeWindow',
     messages: [message],
   });
   return state.entries[0]!;

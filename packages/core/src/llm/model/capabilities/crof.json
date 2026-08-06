@@ -13,6 +13,7 @@
   "temperature": [
     "deepseek-v3.2",
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-lightning",
     "gemma-4-31b-it",
@@ -34,6 +35,7 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-lightning",
     "gemma-4-31b-it",

@@ -97,7 +97,8 @@ Invalid input is rejected before templates are fetched or files are created.
   {
     name: '-k, --llm-api-key <key>',
     type: 'string',
-    description: 'Write the selected provider API key to the generated .env file.',
+    description:
+      'Write the selected provider API key to the generated .env file when automatic provider setup succeeds.',
     isOptional: true,
   },
   {
@@ -110,6 +111,12 @@ Invalid input is rejected before templates are fetched or files are created.
     name: '--no-git',
     type: 'boolean',
     description: 'Skip automatic Git initialization and the initial commit.',
+    isOptional: true,
+  },
+  {
+    name: '--no-install',
+    type: 'boolean',
+    description: 'Skip dependency installation.',
     isOptional: true,
   },
   {

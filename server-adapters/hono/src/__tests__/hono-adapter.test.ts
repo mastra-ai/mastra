@@ -231,6 +231,39 @@ describe('Hono Server Adapter', () => {
         await reader.cancel();
       }
     });
+
+    it('handles a rejected source cancellation when the client disconnects', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+      const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'));
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/rejected-stream-cancellation',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () =>
+          new ReadableStream({
+            cancel,
+          }),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/rejected-stream-cancellation'));
+      const reader = response.body!.getReader();
+
+      await reader.read();
+      await reader.cancel();
+      await waitFor(() => cancel.mock.calls.length === 1);
+
+      expect(cancel).toHaveBeenCalledWith('request aborted');
+    });
   });
 
   describe('Stream Data Redaction', () => {
@@ -832,6 +865,27 @@ describe('Hono Server Adapter', () => {
 
       expect(spec.paths['/external']).toBeDefined();
       expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
+    });
+  });
+
+  describe('Channel webhook diagnostics', () => {
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      const response = await app.request('/api/agents/support/channels/slack/webhook', {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
     });
   });
 

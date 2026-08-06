@@ -98,6 +98,18 @@ async function mockTraceResponse(page: Page, status: number, body: unknown = { e
       body: JSON.stringify(body),
     });
   });
+  // Registered last so it wins over the `traces/*` glob above, which would otherwise
+  // swallow the trace LIST's lightweight requests (traces/light?...) with detail bodies.
+  await page.route('**/api/observability/traces/light?**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
 }
 
 async function mockLongTrace(page: Page) {

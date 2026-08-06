@@ -20,10 +20,11 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { hasAuthInit } from '@mastra/core/server';
+import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -168,10 +169,13 @@ export interface MastraFactoryConfig {
    * Platform-specific overrides. When the Platform-backed GitHub integration
    * is active, it derives a `runIssueTriage` runner from the mounted
    * controller automatically. An explicit `runIssueTriage` here takes
-   * precedence over the controller-derived default.
+   * precedence over the controller-derived default. `githubAppSlug` identifies
+   * Factory's own GitHub App writes so their webhook deliveries do not retrigger
+   * triage.
    */
   platform?: {
     runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+    githubAppSlug?: string;
   };
 }
 
@@ -338,6 +342,7 @@ export class MastraFactory {
         integrations.push(
           new PlatformGithubIntegration({
             runIssueTriage: this.#config.platform?.runIssueTriage,
+            slug: this.#config.platform?.githubAppSlug,
           }),
         );
       }
@@ -401,6 +406,7 @@ export class MastraFactory {
       auth: routeAuth,
       audit: auditStorage,
       projects: factoryProjectsStorage,
+      users: auth && isUserProvider(auth) ? auth : undefined,
       sinks: integrations,
       agentTenant: requestContext => {
         const user = requestContext.get('user') as FactoryAuthUser | undefined;
@@ -612,6 +618,10 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        // A factory reads the repository it works on and its skill, never the
+        // ~/.claude instructions of whoever hosts the process. On the controller
+        // rather than per session, so webhook-recreated sessions keep it too.
+        initialState: { skipGlobalInstructions: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
@@ -798,23 +808,27 @@ export class MastraFactory {
       );
     }
     for (const { integration } of channelRegistrations) {
+      // Integrations return a channels CONFIG; the factory owns construction.
       prepared.base.controller.setChannels(
-        integration.channels!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              fleet,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              rules,
-              factoryReady,
-              domains,
-            },
-            integration.id,
+        new AgentControllerChannels(
+          integration.channels!(
+            buildIntegrationContext(
+              {
+                controller: prepared.base.controller,
+                publicOrigin,
+                auth: routeAuth,
+                stateSigner,
+                fleet,
+                factoryStorage: storage,
+                integrationStorage,
+                sourceControlStorage,
+                rules,
+                factoryReady,
+                domains,
+                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+              },
+              integration.id,
+            ),
           ),
         ),
       );
@@ -843,6 +857,7 @@ export class MastraFactory {
               rules,
               factoryReady,
               domains,
+              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
           ),
