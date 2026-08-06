@@ -36,72 +36,81 @@ describe('experiment worker installed project shapes', () => {
       `${shape.scenario.id} builds and executes from an isolated package-manager root`,
       async () => {
         const resources = new OwnedResources();
-        const projectRoot = resources.trackPath(
-          await materializeProject({
-            fixtureDir: join(suiteRoot, 'fixtures', shape.scenario.fixture),
-            runRoot: inject('runRoot'),
-            registry: inject('registry'),
-            tag: inject('tag'),
-            scenarioId: shape.scenario.id,
-          }),
-        );
+        try {
+          const projectRoot = resources.trackPath(
+            await materializeProject({
+              fixtureDir: join(suiteRoot, 'fixtures', shape.scenario.fixture),
+              runRoot: inject('runRoot'),
+              registry: inject('registry'),
+              tag: inject('tag'),
+              scenarioId: shape.scenario.id,
+            }),
+          );
 
-        if (shape.packageManager === 'npm') await installNpmProject(projectRoot, inject('registry'));
-        else if (shape.packageManager === 'yarn') {
-          await installYarnProject(projectRoot, inject('registry'));
-          expect(await readFile(join(projectRoot, 'yarn.lock'), 'utf8')).toContain('experiment-worker-yarn-fixture');
-        } else await installPnpmProject(projectRoot, inject('registry'));
+          const install =
+            shape.packageManager === 'npm'
+              ? await installNpmProject(projectRoot, inject('registry'))
+              : shape.packageManager === 'yarn'
+                ? await installYarnProject(projectRoot, inject('registry'))
+                : await installPnpmProject(projectRoot, inject('registry'));
+          if (shape.packageManager === 'yarn') {
+            expect(await readFile(join(projectRoot, 'yarn.lock'), 'utf8')).toContain('experiment-worker-yarn-fixture');
+          }
 
-        const buildRoot = resources.trackPath(join(inject('runRoot'), 'builds', shape.scenario.id));
-        const build = await buildWorker(projectRoot, buildRoot, shape.packageManager);
-        const manifest = (await inspectManifest(build.artifactRoot)).manifest;
-        const artifactRoot = resources.trackPath(
-          await copyArtifact({
-            artifactRoot: build.artifactRoot,
-            destinationRoot: join(inject('artifactRoot'), shape.scenario.id),
-            sourceRoots: [projectRoot, buildRoot, suiteRoot],
-            deleteRoots: [projectRoot, buildRoot],
-          }),
-        );
-        const request = createRunRequest(manifest, {
-          targetType: 'agent',
-          targetId: 'shape-agent',
-          items: [{ id: `${shape.scenario.id}-item`, input: 'hello', toolMocks: [] }],
-        });
-        const run = await runProtocol(artifactRoot, manifest, request);
-        expect(JSON.stringify(run.events.find(event => event.type === 'item-completed'))).toContain(shape.expectedText);
-
-        if (shape.packageManager === 'yarn') {
-          expect(await readFile(join(artifactRoot, 'package.json'), 'utf8')).toContain('"type": "module"');
-        }
-        if (shape.packageManager === 'pnpm') {
-          await expect(access(join(artifactRoot, 'node_modules'))).resolves.toBeUndefined();
-        }
-
-        const cleanup = await resources.cleanup();
-        expect(cleanup.remainingPaths).toEqual([]);
-        const commonEvidence = {
-          'isolated-install-root': projectRoot,
-          'artifact-relocated': artifactRoot,
-        };
-        if (shape.scenario === npmMinimalScenario) {
-          await recordAssertionEvidence(shape.scenario, {
-            ...commonEvidence,
-            'npm-install': build.result.exitCode,
-            'minimal-environment': run.events.at(-1)?.payload,
+          const buildRoot = resources.trackPath(join(inject('runRoot'), 'builds', shape.scenario.id));
+          const build = await buildWorker(projectRoot, buildRoot, shape.packageManager);
+          const manifest = (await inspectManifest(build.artifactRoot)).manifest;
+          const artifactRoot = resources.trackPath(
+            await copyArtifact({
+              artifactRoot: build.artifactRoot,
+              destinationRoot: join(inject('artifactRoot'), shape.scenario.id),
+              sourceRoots: [projectRoot, buildRoot, suiteRoot],
+              deleteRoots: [projectRoot, buildRoot],
+            }),
+          );
+          const request = createRunRequest(manifest, {
+            targetType: 'agent',
+            targetId: 'shape-agent',
+            items: [{ id: `${shape.scenario.id}-item`, input: 'hello', toolMocks: [] }],
           });
-        } else if (shape.scenario === yarnMinimalScenario) {
-          await recordAssertionEvidence(shape.scenario, {
-            ...commonEvidence,
-            'yarn-berry-node-modules': build.result.exitCode,
-            'minimal-environment': run.events.at(-1)?.payload,
-          });
-        } else {
-          await recordAssertionEvidence(shape.scenario, {
-            ...commonEvidence,
-            'workspace-package-imported': run.events.at(-1)?.payload,
-            'source-independent': artifactRoot,
-          });
+          const run = await runProtocol(artifactRoot, manifest, request);
+          expect(JSON.stringify(run.events.find(event => event.type === 'item-completed'))).toContain(
+            shape.expectedText,
+          );
+
+          if (shape.packageManager === 'yarn') {
+            expect(await readFile(join(artifactRoot, 'package.json'), 'utf8')).toContain('"type": "module"');
+          }
+          if (shape.packageManager === 'pnpm') {
+            await expect(access(join(artifactRoot, 'node_modules'))).resolves.toBeUndefined();
+          }
+
+          const commonEvidence = {
+            'isolated-install-root': projectRoot,
+            'artifact-relocated': artifactRoot,
+          };
+          if (shape.scenario === npmMinimalScenario) {
+            await recordAssertionEvidence(shape.scenario, {
+              ...commonEvidence,
+              'npm-install': install.exitCode,
+              'minimal-environment': run.events.at(-1)?.payload,
+            });
+          } else if (shape.scenario === yarnMinimalScenario) {
+            await recordAssertionEvidence(shape.scenario, {
+              ...commonEvidence,
+              'yarn-berry-node-modules': install.exitCode,
+              'minimal-environment': run.events.at(-1)?.payload,
+            });
+          } else {
+            await recordAssertionEvidence(shape.scenario, {
+              ...commonEvidence,
+              'workspace-package-imported': run.events.at(-1)?.payload,
+              'source-independent': artifactRoot,
+            });
+          }
+        } finally {
+          const cleanup = await resources.cleanup();
+          expect(cleanup.remainingPaths).toEqual([]);
         }
       },
       shape.scenario.timeoutMs,

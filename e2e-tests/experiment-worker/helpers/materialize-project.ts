@@ -48,7 +48,9 @@ export async function materializeProject(options: {
       yarnConfigPath,
       `${yarnConfig}npmRegistryServer: "https://registry.npmjs.org"\nnpmScopes:\n  mastra:\n    npmRegistryServer: "${options.registry}"\nunsafeHttpWhitelist:\n  - "${registryUrl.hostname}"\n`,
     );
-  } catch {}
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
 
   return root;
 }

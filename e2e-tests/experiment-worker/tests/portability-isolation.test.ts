@@ -20,7 +20,6 @@ const resources = new OwnedResources();
 let artifactRoot = '';
 let manifest: ExperimentWorkerManifest;
 let repeatabilityEvidence: Record<string, unknown>;
-let concurrencyEvidence: Record<string, unknown>;
 
 function normalize(value: string, roots: string[], buildIds: string[]) {
   return [...roots, ...buildIds].reduce((result, token) => result.split(token).join('<volatile>'), value);
@@ -131,7 +130,7 @@ afterAll(async () => {
 });
 
 describe('experiment worker portability and process isolation', () => {
-  test('portability-isolation runs concurrent workers from one immutable artifact', async () => {
+  test('portability-isolation runs concurrent workers and recovers after abrupt termination', async () => {
     const requests = ['concurrent-a', 'concurrent-b'].map(id =>
       createRunRequest(manifest, { items: [{ id, input: 'hello', toolMocks: [] }] }),
     );
@@ -139,13 +138,7 @@ describe('experiment worker portability and process isolation', () => {
     expect(first.request.experimentId).not.toBe(second.request.experimentId);
     expect(first.result.exitCode).toBe(0);
     expect(second.result.exitCode).toBe(0);
-    concurrencyEvidence = {
-      'concurrent-workers': [first.request.experimentId, second.request.experimentId],
-      'artifact-immutable': manifest.artifact.contentDigest,
-    };
-  });
 
-  test('portability-isolation recovers in a fresh process after abrupt termination', async () => {
     const slowRequest = createRunRequest(manifest, {
       targetId: 'slow-agent',
       timeoutMs: 30_000,
@@ -156,7 +149,8 @@ describe('experiment worker portability and process isolation', () => {
     expect(recovered.result.exitCode).toBe(0);
     await recordAssertionEvidence(portabilityIsolationScenario, {
       ...repeatabilityEvidence,
-      ...concurrencyEvidence,
+      'concurrent-workers': [first.request.experimentId, second.request.experimentId],
+      'artifact-immutable': manifest.artifact.contentDigest,
       'abrupt-termination-recovery': {
         signal: 'SIGKILL',
         recovered: recovered.events.at(-1)?.payload,

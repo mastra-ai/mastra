@@ -35,7 +35,7 @@ export async function writeScenarioReport(reportRoot: string, report: ScenarioRe
       '',
       '## Assertions',
       '',
-      ...report.assertions.map(assertion => `- ${assertion.status === 'passed' ? 'PASS' : 'FAIL'} \`${assertion.id}\``),
+      ...report.assertions.map(assertion => `- ${assertion.status.toUpperCase()} \`${assertion.id}\``),
       '',
     ].join('\n'),
   );

@@ -170,8 +170,7 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       const output = completedPayloads(run.events).join('\n');
       expect(output).toContain('project mount output');
       expect(output).toContain('shared mount reference');
-      expect(output).toContain('readOnlyRejected');
-      expect(output).toContain('true');
+      expect(output).toContain('"readOnlyRejected":true');
       await recordAssertionEvidence(workspaceMountsScenario, {
         'multi-mount-routing': output,
         'read-only-mount': output,

@@ -16,8 +16,9 @@ export default class ScenarioReporter implements Reporter {
   private readonly startedAt = new Date();
 
   onTestCaseResult(testCase: TestCase) {
+    const scenarioTags = new Set(testCase.fullName.split(/\s+/));
     for (const scenario of scenarios) {
-      if (!testCase.fullName.includes(scenario.id)) continue;
+      if (!scenarioTags.has(scenario.id)) continue;
       const result = testCase.result();
       const entry = this.results.get(scenario.id) ?? { definition: scenario, tests: [] };
       entry.tests.push({

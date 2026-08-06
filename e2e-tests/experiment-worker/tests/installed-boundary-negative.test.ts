@@ -68,7 +68,7 @@ describe('experiment worker installed-boundary diagnostics', () => {
   test('negative-missing-mastra reports a missing #mastra entrypoint', async () => {
     await writeFile(join(projectRoot, 'src', 'mastra', 'index.ts'), '');
     try {
-      await expectStartupFailure('missing-mastra', /does not provide an export named 'mastra'|mastra/i);
+      await expectStartupFailure('missing-mastra', /does not provide an export named ['"]mastra['"]/i);
       await recordAssertionEvidence(missingMastraScenario, {
         'missing-mastra-diagnostic': 'missing #mastra export',
       });

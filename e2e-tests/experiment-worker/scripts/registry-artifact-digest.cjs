@@ -24,12 +24,14 @@ async function computeRegistryArtifactDigest(registryRoot) {
       return;
     }
     if (stats.isSymbolicLink()) {
-      hash.update(`symlink\0${relativePath}\0${await readlink(path)}\0`);
+      const target = await readlink(path);
+      hash.update(`symlink\0${relativePath}\0${Buffer.byteLength(target)}\0${target}\0`);
       return;
     }
     if (stats.isFile()) {
-      hash.update(`file\0${relativePath}\0`);
-      hash.update(await readFile(path));
+      const content = await readFile(path);
+      hash.update(`file\0${relativePath}\0${content.byteLength}\0`);
+      hash.update(content);
       hash.update('\0');
       return;
     }
@@ -45,5 +47,10 @@ module.exports = { computeRegistryArtifactDigest };
 if (require.main === module) {
   const registryRoot = process.argv[2];
   if (!registryRoot) throw new Error('Usage: node registry-artifact-digest.cjs <registry-root>');
-  computeRegistryArtifactDigest(registryRoot).then(digest => process.stdout.write(`${digest}\n`));
+  computeRegistryArtifactDigest(registryRoot)
+    .then(digest => process.stdout.write(`${digest}\n`))
+    .catch(error => {
+      console.error(error);
+      process.exitCode = 1;
+    });
 }

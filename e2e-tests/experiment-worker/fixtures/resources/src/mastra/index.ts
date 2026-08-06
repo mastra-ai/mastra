@@ -331,7 +331,7 @@ const lspWorkspace = new Workspace({
     initTimeout: 15_000,
     diagnosticTimeout: 5_000,
     binaryOverrides: {
-      typescript: `${process.execPath} ${join(process.cwd(), 'node_modules', 'typescript-language-server', 'lib', 'cli.mjs')} --stdio`,
+      typescript: `${JSON.stringify(process.execPath)} ${JSON.stringify(join(process.cwd(), 'node_modules', 'typescript-language-server', 'lib', 'cli.mjs'))} --stdio`,
     },
   },
 });
@@ -413,14 +413,14 @@ const browserStep = createStep({
   outputSchema: z.object({ lazyBefore: z.boolean(), launched: z.boolean(), commandRan: z.boolean() }),
   execute: async ({ inputData }) => {
     if (browserWorkspace.status !== 'running') await browserWorkspace.init();
-    const lazyBefore = !browserProvider.isBrowserRunning(inputData.threadId);
+    const lazyBefore = !browserProvider.isBrowserRunning();
     await executeCommandTool.execute(
       { command: 'agent-browser open https://example.com', timeout: 10, cwd: browserRoot, tail: 0 },
       { workspace: browserWorkspace, threadId: inputData.threadId },
     );
     return {
       lazyBefore,
-      launched: browserProvider.isBrowserRunning(inputData.threadId),
+      launched: browserProvider.isBrowserRunning(),
       commandRan: existsSync(join(browserRoot, 'browser-command.txt')),
     };
   },

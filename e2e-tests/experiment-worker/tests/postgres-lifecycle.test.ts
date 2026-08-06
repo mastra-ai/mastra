@@ -151,13 +151,21 @@ describe('experiment worker Postgres lifecycle', () => {
         expect(Number(count)).toBe(0);
       }
 
-      const connectionReuse = await docker(['exec', containerName, 'psql', '-U', 'postgres', '-tAc', 'SELECT 1']);
-      expect(connectionReuse).toBe('1');
+      const remainingConnections = await docker([
+        'exec',
+        containerName,
+        'psql',
+        '-U',
+        'postgres',
+        '-tAc',
+        "SELECT COUNT(*) FROM pg_stat_activity WHERE datname = 'postgres' AND pid <> pg_backend_pid()",
+      ]);
+      expect(remainingConnections).toBe('0');
       await recordAssertionEvidence(postgresScenario, {
         'application-state-persisted': { threads: Number(threads) },
         'experiment-persistence-absent': { tables },
         'bounded-shutdown': true,
-        'connection-reuse': connectionReuse,
+        'connection-reuse': { remainingConnections: Number(remainingConnections) },
         'docker-cleanup': containerName,
       });
     },

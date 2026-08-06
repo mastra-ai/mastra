@@ -113,12 +113,14 @@ jobs:
           mkdir -p "${{ runner.temp }}/experiment-worker-registry"
           tar -xf "${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar" -C "${{ runner.temp }}/experiment-worker-registry"
 
+      - name: Create experiments report directory
+        run: mkdir -p "${{ runner.temp }}/experiments-reports"
+
       - name: Run strict published-registry PR tier
         working-directory: ./e2e-tests/experiment-worker
         shell: bash
         run: |
           set -o pipefail
-          mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
           test -f tests/minimal-agent.test.ts
           pnpm test:pr 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
         env:
@@ -129,14 +131,14 @@ jobs:
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-e2e-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
-          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiments-reports
 
-      - name: Upload experiment worker reports and transcripts
+      - name: Upload experiments reports and transcripts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: experiment-worker-pr-reports
-          path: ${{ runner.temp }}/experiment-worker-reports
+          name: experiments-pr-reports
+          path: ${{ runner.temp }}/experiments-reports
           if-no-files-found: error
           retention-days: 14
 

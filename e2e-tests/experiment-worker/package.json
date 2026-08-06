@@ -8,7 +8,7 @@
     "test": "vitest run",
     "test:pr": "MASTRA_EXPERIMENT_E2E_SCENARIO= MASTRA_EXPERIMENT_E2E_TIER=pr vitest run",
     "test:full": "MASTRA_EXPERIMENT_E2E_SCENARIO= MASTRA_EXPERIMENT_E2E_TIER=full vitest run",
-    "test:full:strict": "MASTRA_EXPERIMENT_E2E_SCENARIO= MASTRA_EXPERIMENT_E2E_TIER=full vitest run",
+    "test:full:strict": "MASTRA_EXPERIMENT_E2E_SCENARIO= MASTRA_EXPERIMENT_E2E_TIER=full MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY=1 vitest run",
     "test:scenario": "node scripts/run-scenario.mjs",
     "test:workflow-routing": "vitest run --config vitest.routing.config.ts"
   },

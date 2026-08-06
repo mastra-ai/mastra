@@ -1,6 +1,6 @@
 import { fork, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,8 +27,12 @@ export function resolveVerdaccioPathFrom(requireFrom) {
 function resolveVerdaccioPath() {
   try {
     return resolveVerdaccioPathFrom(require);
-  } catch {
-    return resolveVerdaccioPathFrom(createRequire(join(process.cwd(), 'package.json')));
+  } catch (primaryError) {
+    try {
+      return resolveVerdaccioPathFrom(createRequire(join(process.cwd(), 'package.json')));
+    } catch (fallbackError) {
+      throw new AggregateError([primaryError, fallbackError], 'Unable to resolve the Verdaccio binary');
+    }
   }
 }
 
@@ -110,6 +114,17 @@ export async function stopRegistry(registry) {
       resolve();
     }
   });
+
+  const pidFile = process.env.MASTRA_E2E_REGISTRY_PID_FILE;
+  if (pidFile) {
+    try {
+      if ((await readFile(pidFile, 'utf8')).trim() === String(registry.pid)) {
+        await unlink(pidFile);
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
 }
 
 export async function startPublishedRegistry({
