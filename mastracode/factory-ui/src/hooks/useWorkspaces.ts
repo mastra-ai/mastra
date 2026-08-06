@@ -75,6 +75,19 @@ export function removeCachedSession(
   });
 }
 
+export function addCachedSession(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectRepositoryId: string | undefined,
+  session: FactoryUserSession,
+) {
+  void queryClient.cancelQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+  queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(projectRepositoryId), current => {
+    if (!current) return splitSessions([session]);
+    const all = [...current.workspaces, ...current.userSessions];
+    return all.some(cached => cached.sessionId === session.sessionId) ? current : splitSessions([...all, session]);
+  });
+}
+
 function invalidateSessionQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   projectRepositoryId: string | undefined,

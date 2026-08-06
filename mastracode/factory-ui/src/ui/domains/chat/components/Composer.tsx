@@ -27,6 +27,9 @@ import {
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
+import { addCachedSession } from '../../../../hooks/useWorkspaces';
+import { createUserSession } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/github';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession, matchCommands } from '../services/commands';
@@ -82,9 +85,10 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
+  const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
+  const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
@@ -111,9 +115,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spotlightRef = useComposerSpotlight(!busy);
   const modeSwitchPendingRef = useRef(false);
+  const creatingDraftSessionRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
+  const [creatingDraftSession, setCreatingDraftSession] = useState(false);
 
   const updateDraft = (next: string) => {
     setComposerDraft(next);
@@ -152,7 +158,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const addImageFiles = async (fileList: Iterable<File>) => {
     // drop/paste bypass disabled attach button; queued kickoffs cannot carry files
-    if (preparingThreadId) {
+    if (onUserDraft || preparingThreadId) {
       pushNotice('Images can be attached once the session is ready.');
       return;
     }
@@ -217,6 +223,40 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       pushNotice('The session never came online. Send the message again once it is ready.', 'error');
     });
   };
+  const createSessionFromDraft = async (text: string) => {
+    if (creatingDraftSessionRef.current) return;
+    if (!draftSessionId || !factoryId || !factorySessionState?.projectRepositoryId) {
+      updateDraft(text);
+      pushNotice('Could not create the session. Reload the page and try again.', 'error');
+      return;
+    }
+
+    creatingDraftSessionRef.current = true;
+    setCreatingDraftSession(true);
+    try {
+      const session = await createUserSession(baseUrl, factorySessionState.projectRepositoryId, {
+        sessionId: draftSessionId,
+        title: text,
+      });
+      void queueThreadPageKickoff({ resourceId: session.sessionId, threadId: session.sessionId }, text, {
+        echoed: false,
+        timeoutMs: PREPARING_SESSION_TIMEOUT_MS,
+      }).catch(error => {
+        if (!(error instanceof ThreadPageKickoffTimeoutError)) return;
+        pushNotice('The session never came online. Send the message again once it is ready.', 'error');
+      });
+      queryClient.setQueryData<FactoryUserSession>(queryKeys.userSession(session.sessionId), session);
+      addCachedSession(queryClient, factorySessionState.projectRepositoryId, session);
+      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`, { replace: true });
+    } catch (error) {
+      updateDraft(text);
+      const message = error instanceof Error ? error.message : 'Session creation failed';
+      pushNotice(`Could not create the session: ${message}. Try again.`, 'error');
+    } finally {
+      creatingDraftSessionRef.current = false;
+      setCreatingDraftSession(false);
+    }
+  };
 
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
@@ -241,8 +281,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    const text = draft.trim();
-    if (!text && images.length === 0) return;
+    const text = onUserDraft ? draft : draft.trim();
+    if (!text.trim() && images.length === 0) return;
     updateDraft('');
     void handleInput(text);
   };
@@ -306,6 +346,25 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    // user drafts have no controller; only local commands can run
+    if (onUserDraft && text.startsWith('/')) {
+      if (commandRequiresReadySession(text)) {
+        updateDraft(text);
+        pushNotice('Commands run once the session is ready.');
+      } else {
+        await runComposerCommand(text);
+      }
+      return;
+    }
+    if (onUserDraft) {
+      if (images.length > 0) {
+        updateDraft(text);
+        pushNotice('Remove the attached images before creating the session.');
+        return;
+      }
+      await createSessionFromDraft(text);
+      return;
+    }
     // queued message sets busy; check before the offline-unsafe steer path
     if (preparingThreadId) {
       if (text.startsWith('/')) {
@@ -342,8 +401,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   }
 
-  const attachDisabled = status !== 'ready';
-  const disabled = attachDisabled && !preparingThreadId;
+  const attachDisabled = onUserDraft || status !== 'ready';
+  const disabled = creatingDraftSession || (attachDisabled && !preparingThreadId && !onUserDraft);
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">

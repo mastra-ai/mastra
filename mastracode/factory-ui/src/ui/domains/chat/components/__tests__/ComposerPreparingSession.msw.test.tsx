@@ -4,12 +4,15 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import assert from 'node:assert';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { queryKeys } from '../../../../../api/keys';
 import { OverlaysProvider } from '../../../../lib/overlays';
+import Chat from '../../Chat';
+import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useThreadPageKickoffs } from '../../hooks/useThreadPageKickoffs';
 import { Composer, PREPARING_SESSION_TIMEOUT_MS } from '../Composer';
@@ -22,16 +25,20 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const FACTORY_ID = 'fp-preparing';
 const PROJECT_REPOSITORY_ID = 'repo-preparing';
-const SESSION_ID = 'sess-preparing';
+const SESSION_ID = '20000000-0000-4000-8000-000000000003';
 
 interface PreparingSession {
   finishWorkspace: () => void;
   finishFirstDispatch: () => void;
   sentMessages: string[];
+  sessionLookups: number;
+  ensureRequests: number;
+  controllerCreates: number;
   steerAttempts: number;
 }
 
 interface StubPreparingSessionOptions {
+  createdSessionTitle?: string;
   failDispatch?: boolean;
   failWorkspace?: boolean;
   holdFirstDispatch?: boolean;
@@ -45,6 +52,7 @@ function readSentMessage(body: unknown): string {
 }
 
 function stubPreparingSession({
+  createdSessionTitle,
   failDispatch = false,
   failWorkspace = false,
   holdFirstDispatch = false,
@@ -64,6 +72,9 @@ function stubPreparingSession({
     finishFirstDispatch: releaseFirstDispatch,
     sentMessages,
     steerAttempts: 0,
+    controllerCreates: 0,
+    sessionLookups: 0,
+    ensureRequests: 0,
   };
 
   server.use(
@@ -91,15 +102,17 @@ function stubPreparingSession({
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () =>
-      HttpResponse.json({
+    http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () => {
+      result.sessionLookups += 1;
+      return HttpResponse.json({
         session: {
-          id: 'row-1',
+          id: createdSessionTitle ? 'row-draft' : 'row-1',
           sessionId: SESSION_ID,
           projectRepositoryId: PROJECT_REPOSITORY_ID,
           orgId: 'org-1',
           userId: 'user-1',
-          branch: 'user/session-1',
+          title: createdSessionTitle,
+          branch: createdSessionTitle ? `user/session-${SESSION_ID}` : 'user/session-1',
           baseBranch: 'main',
           sandboxId: null,
           sandboxWorkdir: null,
@@ -107,8 +120,8 @@ function stubPreparingSession({
           createdAt: '2026-07-23T00:00:00.000Z',
           updatedAt: '2026-07-23T00:00:00.000Z',
         },
-      }),
-    ),
+      });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
@@ -116,10 +129,12 @@ function stubPreparingSession({
       HttpResponse.json({ workItems: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () =>
-      HttpResponse.json({ resourceId: SESSION_ID, sandboxId: null, sandboxWorkdir: '/workspace/preparing' }),
-    ),
+    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () => {
+      result.ensureRequests += 1;
+      return HttpResponse.json({ resourceId: SESSION_ID, sandboxId: null, sandboxWorkdir: '/workspace/preparing' });
+    }),
     http.post(`${API}/sessions`, async () => {
+      result.controllerCreates += 1;
       await workspaceReady;
       if (failWorkspace) return HttpResponse.json({ message: 'Clone failed' }, { status: 500 });
       return HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID });
@@ -206,6 +221,191 @@ function renderThread() {
     </MemoryRouter>,
   );
 }
+
+function PathnameProbe() {
+  return <output data-testid="pathname">{useLocation().pathname}</output>;
+}
+
+function DraftRouteSurface() {
+  return (
+    <ChatSessionBoundary deferUntilMessagesReady={false}>
+      <ThreadSurface />
+    </ChatSessionBoundary>
+  );
+}
+
+function UserThreadRouteSurface() {
+  const { threadId } = useParams<{ threadId: string }>();
+  return (
+    <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady={false}>
+      <ThreadSurface />
+    </ChatSessionBoundary>
+  );
+}
+
+function renderDraft() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`]}>
+      <Routes>
+        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<Chat />}>
+          <Route index element={<DraftRouteSurface />} />
+        </Route>
+        <Route path="/factories/:factoryId/user/threads/:threadId" element={<Chat />}>
+          <Route index element={<UserThreadRouteSurface />} />
+        </Route>
+      </Routes>
+      <PathnameProbe />
+    </MemoryRouter>,
+  );
+}
+
+function createdDraftSession(title: string) {
+  return {
+    id: 'row-draft',
+    sessionId: SESSION_ID,
+    projectRepositoryId: PROJECT_REPOSITORY_ID,
+    orgId: 'org-1',
+    userId: 'user-1',
+    title,
+    branch: `user/session-${SESSION_ID}`,
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: null,
+    createdAt: '2026-07-23T00:00:00.000Z',
+    updatedAt: '2026-07-23T00:00:00.000Z',
+  };
+}
+
+describe('Composer on a lazy user-session draft', () => {
+  it('creates once, queues before navigation, and lets preparation dispatch the exact first prompt', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'fix the login bug' });
+    let finishCreate = () => {};
+    const createFinished = new Promise<void>(resolve => {
+      finishCreate = resolve;
+    });
+    const createBodies: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, async ({ request }) => {
+        createBodies.push(await request.json());
+        await createFinished;
+        return HttpResponse.json({ session: createdDraftSession('fix the login bug') });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client, container } = renderDraft();
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    expect(message).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
+    expect(createBodies).toEqual([]);
+    await waitFor(() => expect(client.getQueryData(queryKeys.factories())).toBeDefined());
+    expect(preparation.controllerCreates).toBe(0);
+
+    expect(preparation.sessionLookups).toBe(0);
+    expect(preparation.ensureRequests).toBe(0);
+    const form = container.querySelector('form');
+    assert(form);
+    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
+    expect(await screen.findByText('Images can be attached once the session is ready.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
+    expect(createBodies).toEqual([]);
+    await user.type(message, '  fix the login bug  ');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: '  fix the login bug  ' }]));
+    expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`);
+    expect(preparation.controllerCreates).toBe(0);
+
+    finishCreate();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+    );
+    await waitFor(() => expect(preparation.controllerCreates).toBe(1));
+    expect(preparation.sentMessages).toEqual([]);
+    expect(client.getQueryData(queryKeys.userSession(SESSION_ID))).toEqual(createdDraftSession('fix the login bug'));
+    expect(client.getQueryData(queryKeys.sessions(PROJECT_REPOSITORY_ID))).toEqual({
+      workspaces: [],
+      userSessions: [createdDraftSession('fix the login bug')],
+    });
+
+    preparation.finishWorkspace();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(preparation.sentMessages).toEqual(['  fix the login bug  ']));
+  });
+
+  it('restores the exact prompt after failure and retries with the same route UUID', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'retry this prompt' });
+    const createBodies: unknown[] = [];
+    let attempts = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, async ({ request }) => {
+        createBodies.push(await request.json());
+        attempts += 1;
+        if (attempts === 1) return HttpResponse.json({ message: 'Database unavailable' }, { status: 500 });
+        return HttpResponse.json({ session: createdDraftSession('retry this prompt') });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderDraft();
+    const draftUrl = `/factories/${FACTORY_ID}/user/new/${SESSION_ID}`;
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await user.type(message, '  retry this prompt  ');
+    await waitFor(() => expect(client.getQueryData(queryKeys.factories())).toBeDefined());
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(message).toHaveValue('  retry this prompt  '));
+    expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
+    expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
+    expect(preparation.controllerCreates).toBe(0);
+
+    await user.keyboard('{Enter}');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+    );
+    expect(createBodies).toEqual([
+      { sessionId: SESSION_ID, title: '  retry this prompt  ' },
+      { sessionId: SESSION_ID, title: '  retry this prompt  ' },
+    ]);
+
+    preparation.finishWorkspace();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(preparation.sentMessages).toEqual(['  retry this prompt  ']));
+  });
+  it('runs local commands and keeps session commands in the draft without creating a session', async () => {
+    const preparation = stubPreparingSession();
+    let sessionPosts = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () => {
+        sessionPosts += 1;
+        return HttpResponse.json({ session: createdDraftSession('unused') });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderDraft();
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(client.getQueryData(queryKeys.factories())).toBeDefined());
+    await user.type(message, '/help');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText(/Available commands:/)).toBeInTheDocument();
+    expect(message).toHaveValue('');
+    expect(sessionPosts).toBe(0);
+    expect(preparation.controllerCreates).toBe(0);
+
+    await user.type(message, '/goal ship it');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Commands run once the session is ready.')).toBeInTheDocument();
+    expect(message).toHaveValue('/goal ship it');
+    expect(sessionPosts).toBe(0);
+    expect(preparation.controllerCreates).toBe(0);
+  });
+});
 
 describe('Composer while a session prepares its workspace', () => {
   it('takes the first message, shows it, and sends it once the session is online', async () => {

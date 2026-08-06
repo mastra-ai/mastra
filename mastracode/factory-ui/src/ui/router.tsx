@@ -135,6 +135,11 @@ export function createAppRoutes(): RouteObject[] {
               ],
             },
             {
+              path: 'user/new/:draftSessionId',
+              element: <Chat />,
+              children: [{ index: true, element: <NewPage /> }],
+            },
+            {
               path: 'user/threads/:threadId',
               element: <Chat />,
               children: [{ index: true, element: <ThreadPage /> }],

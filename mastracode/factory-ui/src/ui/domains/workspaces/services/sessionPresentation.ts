@@ -3,6 +3,7 @@ import { USER_SESSION_BRANCH_PREFIX } from './github';
 import type { FactoryUserSession } from './github';
 
 const REVIEW_BRANCH_PREFIX = 'factory/pr-';
+const GENERATED_USER_SESSION_NAME = /^(session-\d+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function getFactorySessionKind(session: FactoryUserSession, workItem: WorkItem | undefined): 'work' | 'review' {
   if (workItem?.source === 'github-pr') return 'review';
@@ -18,7 +19,15 @@ export function getReviewBranchIdentifier(branch: string): string | undefined {
   return `#${number}`;
 }
 
+export function isAutomaticUserSessionBranch(session: FactoryUserSession): boolean {
+  return session.branch === `${USER_SESSION_BRANCH_PREFIX}session-${session.sessionId}`;
+}
+
 export function getUserSessionLabel(session: FactoryUserSession): string {
+  const title = session.title?.trim();
+  if (title) return title;
   if (!session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)) return session.branch;
-  return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
+  if (isAutomaticUserSessionBranch(session)) return 'New session';
+  const name = session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
+  return GENERATED_USER_SESSION_NAME.exec(name)?.[1] ?? name;
 }

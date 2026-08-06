@@ -40,7 +40,7 @@ export function SessionNavRow({
   status?: 'running' | 'attention';
   preview?: SessionPreviewDetails;
   onSelect: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   const button = (
     <button
@@ -81,30 +81,31 @@ export function SessionNavRow({
       ) : null}
     </button>
   );
-  const action = loading ? undefined : (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Session actions for ${name}`}
-            disabled={disabled}
-            className="opacity-0 group-focus-within/session:opacity-100 group-hover/session:opacity-100 data-[popup-open]:opacity-100"
-          >
-            <MoreHorizontal />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end" className="min-w-28">
-        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
-          Delete
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
-  );
+  const action =
+    loading || !onDelete ? undefined : (
+      <DropdownMenu>
+        <DropdownMenu.Trigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Session actions for ${name}`}
+              disabled={disabled}
+              className="opacity-0 group-focus-within/session:opacity-100 group-hover/session:opacity-100 data-[popup-open]:opacity-100"
+            >
+              <MoreHorizontal />
+            </Button>
+          }
+        />
+        <DropdownMenu.Content align="end" className="min-w-28">
+          <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+            <Trash2 />
+            Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
   const row = (
     <MainSidebar.NavLink
       link={{ name, url }}

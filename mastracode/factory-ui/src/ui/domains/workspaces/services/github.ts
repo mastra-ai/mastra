@@ -613,6 +613,7 @@ export interface FactoryUserSession {
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  title?: string | null;
   branch: string;
   baseBranch: string;
   sandboxId: string | null;
@@ -636,24 +637,39 @@ export async function listUserSessions(
   return body.sessions;
 }
 
+export interface CreateUserSessionOptions {
+  branch?: string;
+  baseBranch?: string;
+  sessionId?: string;
+  title?: string;
+}
+
+/** Omit `branch` and the server names the session. */
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
-  branch: string,
+  branchOrOptions?: string | CreateUserSessionOptions,
   baseBranch?: string,
 ): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {
-    branch,
-    baseBranch,
-  });
+  const options =
+    typeof branchOrOptions === 'string' ? { branch: branchOrOptions, baseBranch } : (branchOrOptions ?? {});
+  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(
+    baseUrl,
+    projectRepositoryId,
+    'sessions',
+    options,
+  );
   return result.session;
 }
+
+export class UserSessionNotFoundError extends Error {}
 
 export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
+  if (res.status === 404) throw new UserSessionNotFoundError('Session not found');
   if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
   return ((await res.json()) as { session: FactoryUserSession }).session;
 }
@@ -663,7 +679,7 @@ export async function deleteUserSession(baseUrl: string, sessionId: string): Pro
     method: 'DELETE',
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {
