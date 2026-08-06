@@ -11,6 +11,7 @@ type RecordedQuery = {
 
 class RecordingTxClient implements TxClient {
   queries: RecordedQuery[] = [];
+  sourceMessages: Record<string, any>[] = [];
 
   async none(query: string, values?: QueryValues): Promise<null> {
     this.queries.push({ query, values });
@@ -30,7 +31,7 @@ class RecordingTxClient implements TxClient {
   }
 
   async manyOrNone<T = any>(): Promise<T[]> {
-    throw new Error('not implemented');
+    return this.sourceMessages as T[];
   }
 
   async many<T = any>(): Promise<T[]> {
@@ -356,5 +357,33 @@ describe('MemoryPG.saveResource', () => {
     expect(client.queries[0]!.values![4]).toBe(updatedAt.toISOString());
     expect(client.queries[0]!.values![5]).toBe(createdAt.toISOString());
     expect(client.queries[0]!.values![6]).toBe(updatedAt.toISOString());
+  });
+});
+
+describe('MemoryPG.cloneThread', () => {
+  it('prefers createdAtZ and binds the UTC string to both timestamp columns', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const legacyCreatedAt = new Date('2025-07-01T07:34:56.789Z');
+    const createdAtZ = new Date('2025-07-01T12:34:56.789Z');
+    client.txClient.sourceMessages.push({
+      id: 'message-1',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      role: 'user',
+      type: 'v2',
+      content: JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'hello' }] }),
+      createdAt: legacyCreatedAt,
+      createdAtZ,
+    });
+
+    const result = await memory.cloneThread({ sourceThreadId: 'thread-1', newThreadId: 'thread-2' });
+
+    const messageInsert = client.txClient.queries[1]!;
+    expect(messageInsert.query).toContain('mastra_messages');
+    expect(messageInsert.values![3]).toBe(createdAtZ.toISOString());
+    expect(messageInsert.values![4]).toBe(createdAtZ.toISOString());
+    expect(messageInsert.values![3]).not.toBe(legacyCreatedAt.toISOString());
+    expect(result.clonedMessages[0]!.createdAt).toEqual(createdAtZ);
   });
 });
