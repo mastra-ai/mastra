@@ -9,6 +9,8 @@ export interface FactoryProject {
   description: string | null;
   /** Default model for sessions/runs started under this Factory (null = harness default). */
   defaultModelId: string | null;
+  /** Whether new Slack sessions create Work-board items for this Factory. */
+  slackWorkItemsEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +25,7 @@ export interface UpdateFactoryProjectInput {
   name?: string;
   description?: string | null;
   defaultModelId?: string | null;
+  slackWorkItemsEnabled?: boolean;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -34,6 +37,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     name: { type: 'text' },
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
+    slack_work_items_enabled: { type: 'boolean', default: false },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
@@ -47,6 +51,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   name: string;
   description: string | null;
   default_model_id: string | null;
+  slack_work_items_enabled: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -59,6 +64,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     name: row.name,
     description: row.description,
     defaultModelId: row.default_model_id,
+    slackWorkItemsEnabled: row.slack_work_items_enabled,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -97,6 +103,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       name: input.name,
       description: input.description ?? null,
       default_model_id: input.defaultModelId ?? null,
+      slack_work_items_enabled: false,
       created_at: now,
       updated_at: now,
     });
@@ -135,6 +142,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.defaultModelId !== undefined ? { default_model_id: input.defaultModelId } : {}),
+      ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
       updated_at: new Date(),
     }));
     return row ? toFactoryProject(row) : null;

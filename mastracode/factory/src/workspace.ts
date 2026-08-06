@@ -20,6 +20,7 @@ import {
   checkoutSessionBranch,
   MaterializeError,
   materializeRepo,
+  recycleClaimedWorkdir,
   runWorktreeSetup,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
@@ -153,7 +154,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     const user = requestContext.get('user') as FactoryAuthUser | undefined;
     const userId = getFactoryAuthUserId(user);
-    if (!user?.organizationId || !userId || user.organizationId !== session.orgId || userId !== session.userId) {
+    // No identity at all is a server-side caller that forgot to seed one
+    // (webhook, cron), not someone reaching for another user's session.
+    if (!user?.organizationId || !userId) {
+      throw new Error(`Factory session ${session.sessionId} was resolved without a caller identity`);
+    }
+    if (user.organizationId !== session.orgId || userId !== session.userId) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
     if (!sandboxConfig || !github || !fleet) {
@@ -173,7 +179,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
     const repoFullName = repository.slug;
 
-    const workdir = isLocalSandbox
+    let workdir = isLocalSandbox
       ? fleet.computeLocalSessionWorkdir(repoFullName, session.id)
       : (session.sandboxWorkdir ?? projectRepository.sandboxWorkdir);
     // The system prompt derives its working directory from `state.projectPath`
@@ -235,6 +241,30 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
 
     const materialize = async (): Promise<Workspace> => {
+      // A terminal work item or a deleted session may have returned a
+      // still-warm VM — with this repository already cloned — to the reuse
+      // pool. Adopt it before provisioning a fresh sandbox. Pooled VMs carry
+      // no credentials (tokens are injected per command, and the workdir is
+      // scrubbed on release and again below), so any user's session for this
+      // repository can claim one.
+      let claimedPooledSandbox = false;
+      if (!isLocalSandbox && !session.sandboxId) {
+        const pooled = await storage.sandboxPool.claim({
+          projectRepositoryId: session.projectRepositoryId,
+        });
+        if (pooled) {
+          await storage.sessions.setSandbox({
+            id: session.id,
+            sandboxId: pooled.sandboxId,
+            sandboxWorkdir: pooled.sandboxWorkdir,
+          });
+          session.sandboxId = pooled.sandboxId;
+          session.sandboxWorkdir = pooled.sandboxWorkdir;
+          workdir = pooled.sandboxWorkdir;
+          claimedPooledSandbox = true;
+        }
+      }
+
       const access = await github.versionControl.getRepositoryAccess({
         orgId: session.orgId,
         repositoryId: repository.id,
@@ -278,6 +308,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const isGitMissing = (error: unknown) => error instanceof MaterializeError && error.code === 'git-missing';
 
       let sandbox = await ensureSandbox();
+      // A claimed VM still has the previous session's branch checked out —
+      // reset it to the default branch before materialize/checkout. When the
+      // pooled VM was already reaped, `ensureSandbox` provisioned fresh and
+      // the recycle is a no-op (no checkout on disk yet).
+      if (claimedPooledSandbox) await recycleClaimedWorkdir(sandbox, workdir, repository.defaultBranch);
       try {
         await runMaterialize(sandbox);
       } catch (error) {
@@ -321,7 +356,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const filesystem = new SandboxFilesystem({ sandbox, workdir });
       const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
       const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
-      return new Workspace({
+      const workspace = new Workspace({
         id: workspaceId,
         name: 'Mastra Code Factory Session Workspace',
         filesystem,
@@ -330,6 +365,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         skills: skillPaths,
         skillSource: effectiveSkillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
       });
+      // Register with the Mastra instance so sync HTTP handlers that resolve
+      // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions
+      // probe, MCP/tool routes) find it instead of throwing
+      // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`. `addWorkspace` is idempotent on
+      // key collision, so the inflight coalescing and reuse paths above stay
+      // race-safe. Registration happens synchronously with the return so a
+      // concurrent lookup on another request cannot observe an unregistered
+      // workspace.
+      mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
+      return workspace;
     };
 
     // Dedupe concurrent materializations of the same workspace: followers

@@ -23,6 +23,7 @@ import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
@@ -87,13 +88,11 @@ function ChannelThreadRedirect() {
 }
 
 /**
- * Factory-agnostic deep link to the Connected accounts settings surface, used
- * by server-built links that don't know a factory id (e.g. the Slack Connect
- * card). Lands on the first factory's general settings, where the Connect
- * Slack button lives — routing through the SPA guarantees the visitor is
+ * Factory-agnostic entry to Connections, used by server-built links that do not
+ * know a Factory id. Routing through the SPA guarantees the visitor is
  * authenticated before they start the OIDC flow.
  */
-function ConnectedAccountsRedirect() {
+function ConnectionsRedirect() {
   const { data: factories, isPending } = useFactoriesQuery();
 
   if (isPending) return null;
@@ -102,7 +101,7 @@ function ConnectedAccountsRedirect() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  return <Navigate to={`/factories/${firstFactory.id}/settings/general`} replace />;
+  return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -153,6 +152,7 @@ export function createAppRoutes(): RouteObject[] {
                   path: 'settings',
                   children: [
                     { index: true, element: <Navigate to="preferences" replace /> },
+                    { path: 'connections/slack', element: <SlackConnectionPage /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },
@@ -162,7 +162,7 @@ export function createAppRoutes(): RouteObject[] {
         },
         // Server-built thread deep links without a factory id (Slack cards).
         { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
-        { path: 'settings/connected-accounts', element: <ConnectedAccountsRedirect /> },
+        { path: 'settings/connections', element: <ConnectionsRedirect /> },
         // Legacy deep links (the app used to serve everything at any path).
         { path: '*', element: <Navigate to="/" replace /> },
       ],

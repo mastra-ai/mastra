@@ -842,7 +842,7 @@ describe('createMastraCode', () => {
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
       | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown; onRetry?: unknown }> }
       | undefined;
-    expect(options?.matchers).toHaveLength(2);
+    expect(options?.matchers).toHaveLength(3);
 
     // First matcher: Bad Request (400) with maxRetries 1 and 2s delay.
     const badRequestPolicy = options!.matchers![0]!;
@@ -890,6 +890,15 @@ describe('createMastraCode', () => {
     expect(transientConnectionPolicy.delayMs!({ retryCount: 2 })).toBe(2000);
     // High retry counts are capped at the max delay (30000ms).
     expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
+
+    // Third matcher: provider server failures use the same retry budget and visible status.
+    const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
+    expect(typeof serverErrorPolicy.match).toBe('function');
+    expect(serverErrorPolicy.match!(new Error('Server error. The API may be experiencing issues.'))).toBe(true);
+    expect(serverErrorPolicy.match!(Object.assign(new Error('Bad gateway'), { status: 502 }))).toBe(true);
+    expect(serverErrorPolicy.maxRetries).toBe(10);
+    expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
+    expect(typeof serverErrorPolicy.onRetry).toBe('function');
   });
 
   it('prepends embedding input processors without replacing mandatory built-ins', async () => {

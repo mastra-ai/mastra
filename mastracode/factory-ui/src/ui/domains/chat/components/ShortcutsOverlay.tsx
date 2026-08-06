@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 
 import { useOverlays } from '../../../lib/overlays';
 
@@ -20,6 +21,7 @@ const SHORTCUTS: Shortcut[] = [
 /** A help overlay listing the keyboard shortcuts, triggered by '?'. */
 export function ShortcutsOverlay() {
   const { close } = useOverlays();
+  const searchShortcutLabel = useKeyboardShortcutLabel('K');
 
   return (
     <Dialog open onOpenChange={open => !open && close('shortcuts')}>
@@ -28,6 +30,12 @@ export function ShortcutsOverlay() {
           <DialogTitle>Keyboard shortcuts</DialogTitle>
         </DialogHeader>
         <ul className="flex flex-col gap-1 px-5 pb-5">
+          <li className="flex items-center justify-between gap-4 py-1.5">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Search and navigate
+            </Txt>
+            <Kbd>{searchShortcutLabel}</Kbd>
+          </li>
           {SHORTCUTS.map(s => (
             <li key={s.description} className="flex items-center justify-between gap-4 py-1.5">
               <Txt as="span" variant="ui-sm" className="text-icon5">

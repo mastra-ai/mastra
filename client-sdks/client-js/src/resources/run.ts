@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ClientOptions, WorkflowRunResult, StreamVNextChunkType, TimeTravelParams } from '../types';
 
 import { parseClientRequestContext } from '../utils';
+import { createRecordSeparatorJsonTransform } from '../utils/stream-transforms';
 import { BaseResource } from './base';
 
 /**
@@ -20,8 +21,6 @@ function deserializeWorkflowError<T extends WorkflowRunResult>(result: T): T {
   return result;
 }
 
-const RECORD_SEPARATOR = '\x1E';
-
 export class Run extends BaseResource {
   constructor(
     options: ClientOptions,
@@ -31,41 +30,8 @@ export class Run extends BaseResource {
     super(options);
   }
 
-  /**
-   * Creates a transform stream that parses RECORD_SEPARATOR-delimited JSON chunks
-   */
   private createChunkTransformStream<T = StreamVNextChunkType>(): TransformStream<ArrayBuffer, T> {
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    return new TransformStream<ArrayBuffer, T>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
+    return createRecordSeparatorJsonTransform<T>();
   }
 
   /**

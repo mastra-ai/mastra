@@ -2,7 +2,7 @@ import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
-import { prepareToolsAndToolChoice } from './prepare-tools';
+import { getToolDefinitionsForTracing, prepareToolsAndToolChoice } from './prepare-tools';
 
 describe('prepareToolsAndToolChoice', () => {
   describe('isProviderTool detection', () => {
@@ -575,5 +575,91 @@ describe('prepareToolsAndToolChoice', () => {
         type: 'provider-defined', // v2 uses 'provider-defined'
       });
     });
+  });
+});
+
+describe('getToolDefinitionsForTracing', () => {
+  it('serializes function tools to name/description/parameters with JSON schema', () => {
+    const weatherTool = createTool({
+      id: 'get_weather',
+      description: 'Get the weather for a city',
+      inputSchema: z.object({ city: z.string().describe('City name') }),
+      execute: async () => 'sunny',
+    });
+
+    const result = getToolDefinitionsForTracing({
+      tools: { get_weather: weatherTool as any },
+      toolChoice: undefined,
+      activeTools: undefined,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result![0]).toMatchObject({
+      type: 'function',
+      name: 'get_weather',
+      description: 'Get the weather for a city',
+    });
+    const parameters = result![0]!.parameters as Record<string, any>;
+    expect(parameters.type).toBe('object');
+    expect(parameters.properties.city).toMatchObject({ type: 'string' });
+  });
+
+  it('serializes provider-defined tools to type/name/id without parameters', () => {
+    const providerTool = {
+      id: 'openai.web_search',
+      type: 'provider-defined',
+      args: { search_context_size: 'medium' },
+    };
+
+    const result = getToolDefinitionsForTracing({
+      tools: { search: providerTool as any },
+      toolChoice: undefined,
+      activeTools: undefined,
+    });
+
+    expect(result).toEqual([{ type: 'provider-defined', name: 'search', id: 'openai.web_search' }]);
+  });
+
+  it('applies activeTools filtering', () => {
+    const makeTool = (id: string) =>
+      createTool({
+        id,
+        description: id,
+        inputSchema: z.object({}),
+        execute: async () => '',
+      });
+
+    const result = getToolDefinitionsForTracing({
+      tools: { a: makeTool('a') as any, b: makeTool('b') as any },
+      toolChoice: undefined,
+      activeTools: ['b'],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result![0]!.name).toBe('b');
+  });
+
+  it('returns undefined for missing or empty tool sets', () => {
+    expect(
+      getToolDefinitionsForTracing({ tools: undefined, toolChoice: undefined, activeTools: undefined }),
+    ).toBeUndefined();
+    expect(getToolDefinitionsForTracing({ tools: {}, toolChoice: undefined, activeTools: undefined })).toBeUndefined();
+  });
+
+  it("returns undefined when toolChoice is 'none' (tools are stripped from the request)", () => {
+    const weatherTool = createTool({
+      id: 'get_weather',
+      description: 'Get the weather for a city',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => 'sunny',
+    });
+
+    const result = getToolDefinitionsForTracing({
+      tools: { get_weather: weatherTool as any },
+      toolChoice: 'none',
+      activeTools: undefined,
+    });
+
+    expect(result).toBeUndefined();
   });
 });
