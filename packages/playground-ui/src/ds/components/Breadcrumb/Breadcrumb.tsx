@@ -31,7 +31,23 @@ export interface CrumbProps {
   'data-testid'?: string;
 }
 
-export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps) => {
+// `text-overflow` only ellipsizes inline content in a block container, so
+// `truncate` on this flex Root hard-cut the label mid-glyph instead of showing
+// one, and its `overflow-hidden` sheared the descenders off the line box. Text
+// children get their own truncating box (as in DataList) and icons stay flex
+// siblings, which keeps `gap-2` and the icon on the same line as the label.
+const crumbTextTruncateStyles = 'min-w-0 flex-1 truncate';
+
+const truncateTextChildren = (children: React.ReactNode) =>
+  React.Children.map(children, child =>
+    typeof child === 'string' || typeof child === 'number' ? (
+      <span className={crumbTextTruncateStyles}>{child}</span>
+    ) : (
+      child
+    ),
+  );
+
+export const Crumb = ({ className, as, isCurrent, action, children, ...props }: CrumbProps) => {
   const Root = as || 'span';
 
   return (
@@ -40,7 +56,7 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
-            'flex min-w-0 items-center gap-2 truncate rounded-md px-1 text-ui-md leading-ui-md',
+            'flex min-w-0 items-center gap-2 overflow-hidden rounded-md px-1 py-0.5 text-ui-md leading-ui-md',
             transitions.colors,
             isCurrent
               ? 'font-medium text-neutral6'
@@ -48,7 +64,9 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
             className,
           )}
           {...props}
-        />
+        >
+          {truncateTextChildren(children)}
+        </Root>
         {action}
       </li>
       {!isCurrent && (

@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDown } from 'lucide-react';
+import { Icon } from '../../icons/Icon';
+import { WorkspacesIcon } from '../../icons/WorkspacesIcon';
 import { Breadcrumb, Crumb } from './Breadcrumb';
 
 const meta: Meta<typeof Breadcrumb> = {
@@ -91,6 +93,27 @@ export const SingleItem: Story = {
     <Breadcrumb label="Navigation">
       <Crumb as="span" to="/dashboard" isCurrent>
         Dashboard
+      </Crumb>
+    </Breadcrumb>
+  ),
+};
+
+/**
+ * A label clamped by `className` must ellipsize rather than cut mid-glyph, and
+ * must keep its descenders (g, p, y). The icon stays a flex sibling of the
+ * label so it is never truncated and keeps its gap.
+ */
+export const TruncatedLabel: Story = {
+  render: () => (
+    <Breadcrumb label="Navigation">
+      <Crumb as="a" to="/workspaces" className="max-w-40">
+        <Icon>
+          <WorkspacesIcon />
+        </Icon>
+        Staging deployment registry
+      </Crumb>
+      <Crumb as="span" to="/workspaces/playground" isCurrent className="max-w-40">
+        Agent playground copy
       </Crumb>
     </Breadcrumb>
   ),
