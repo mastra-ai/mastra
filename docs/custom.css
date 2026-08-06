@@ -688,13 +688,13 @@ li[data-contextual-sidebar='true'] span[class*='categoryLinkLabel'] {
 }
 
 .menu__link:hover,
-a[href].menu__link:hover span {
+a[href].menu__link:hover > span[class*='categoryLinkLabel'] {
   background: transparent;
   color: var(--mastra-green-accent-3);
 }
 
 [data-theme='dark'] .menu__link:hover,
-[data-theme='dark'] a[href].menu__link:hover span {
+[data-theme='dark'] a[href].menu__link:hover > span[class*='categoryLinkLabel'] {
   color: var(--mastra-green-accent);
 }
 
