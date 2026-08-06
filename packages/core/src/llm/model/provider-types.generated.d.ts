@@ -1693,7 +1693,6 @@ export type ProviderModelsMap = {
   ];
   readonly friendli: readonly [
     'MiniMaxAI/MiniMax-M2.5',
-    'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'deepseek-ai/DeepSeek-V3.2',
     'google/gemma-4-31B-it',
     'zai-org/GLM-5.1',
@@ -2184,7 +2183,7 @@ export type ProviderModelsMap = {
     'text-prime',
     'text-standard',
   ];
-  readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
+  readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3', 'solar-pro4'];
   readonly 'cline-pass': readonly [
     'cline-pass/deepseek-v4-flash',
     'cline-pass/deepseek-v4-pro',
@@ -3908,7 +3907,6 @@ export type ProviderModelsMap = {
     'anthropic/claude-opus-4.8',
     'anthropic/claude-opus-4.8-fast',
     'anthropic/claude-opus-5',
-    'anthropic/claude-opus-5-fast',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',

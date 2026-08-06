@@ -6,6 +6,7 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListTracesLightResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -224,6 +225,21 @@ export class Observability extends BaseResource {
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
     return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves paginated list of traces carrying only the fields a trace list renders.
+   *
+   * Same filtering, ordering and delta-polling contract as {@link listTraces}, but rows
+   * omit the `attributes`/`input`/`output` blobs and carry a short `inputPreview`
+   * instead. Prefer this for list views and fetch the full record on selection.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated lightweight traces and pagination info
+   */
+  listTracesLight(params: ListTracesArgs = {}): Promise<ListTracesLightResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/traces/light${queryString ? `?${queryString}` : ''}`);
   }
 
   /**

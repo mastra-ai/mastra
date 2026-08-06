@@ -8,6 +8,7 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListTracesLightResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -1043,6 +1044,18 @@ export class MastraClient extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves paginated list of traces carrying only the fields a trace list renders.
+   * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
+   * blobs and carry a short `inputPreview` instead.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated lightweight traces and pagination info
+   */
+  listTracesLight(params: ListTracesArgs = {}): Promise<ListTracesLightResponse> {
+    return this.observability.listTracesLight(params);
   }
 
   /**
