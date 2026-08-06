@@ -53,11 +53,13 @@ jobs:
           MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/experiment-worker-registry
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
-      - name: Record registry digest
+      - name: Create immutable registry snapshot
         id: digest
         shell: bash
         run: |
-          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "${{ runner.temp }}/experiment-worker-registry")"
+          archive="${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar"
+          tar --exclude='./registry-snapshot.tar' -cf "$archive" -C "${{ runner.temp }}/experiment-worker-registry" .
+          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "$archive")"
           printf '%s\n' "$digest" > "${{ runner.temp }}/experiment-worker-registry/handoff-digest.txt"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Upload registry artifact
@@ -84,6 +86,11 @@ jobs:
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/validated-experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar" -C "${{ runner.temp }}/validated-experiment-worker-registry"
       - name: Run PR tier
         working-directory: ./e2e-tests/experiment-worker
         shell: bash
@@ -92,9 +99,10 @@ jobs:
           set -o pipefail
           pnpm test:pr 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
         env:
-          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
-          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
@@ -124,6 +132,11 @@ jobs:
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/validated-experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar" -C "${{ runner.temp }}/validated-experiment-worker-registry"
       - name: Run full tier
         working-directory: ./e2e-tests/experiment-worker
         shell: bash
@@ -137,9 +150,10 @@ jobs:
           fi
         env:
           SELECTED_SCENARIO: ${{ inputs.scenario }}
-          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
-          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
@@ -169,6 +183,11 @@ jobs:
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/validated-experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar" -C "${{ runner.temp }}/validated-experiment-worker-registry"
       - name: Run browser scenario
         working-directory: ./e2e-tests/experiment-worker
         shell: bash
@@ -177,9 +196,10 @@ jobs:
           set -o pipefail
           pnpm test:scenario -- workspace-browser 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
         env:
-          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
-          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'

@@ -6,6 +6,11 @@ const excludedPaths = new Set(['handoff-digest.txt']);
 
 async function computeRegistryArtifactDigest(registryRoot) {
   const hash = createHash('sha256');
+  const rootStats = await lstat(registryRoot);
+  if (rootStats.isFile()) {
+    hash.update(await readFile(registryRoot));
+    return hash.digest('hex');
+  }
 
   async function visit(path) {
     const relativePath = relative(registryRoot, path).split(sep).join('/');

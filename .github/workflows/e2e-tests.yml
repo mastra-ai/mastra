@@ -62,11 +62,13 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
 
-      - name: Compute registry artifact digest
+      - name: Create immutable registry snapshot
         id: registry_digest
         shell: bash
         run: |
-          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "${{ runner.temp }}/mastra-e2e-registry")"
+          archive="${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar"
+          tar --exclude='./registry-snapshot.tar' -cf "$archive" -C "${{ runner.temp }}/mastra-e2e-registry" .
+          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "$archive")"
           printf '%s\n' "$digest" > "${{ runner.temp }}/mastra-e2e-registry/handoff-digest.txt"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
@@ -105,6 +107,12 @@ jobs:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
 
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar" -C "${{ runner.temp }}/experiment-worker-registry"
+
       - name: Run strict published-registry PR tier
         working-directory: ./e2e-tests/experiment-worker
         shell: bash
@@ -114,8 +122,9 @@ jobs:
           test -f tests/minimal-agent.test.ts
           pnpm test:pr 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
         env:
-          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
-          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar
           MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-e2e-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: '4873'

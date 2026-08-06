@@ -11,6 +11,19 @@ afterEach(async () => {
 });
 
 describe('registry artifact digest', () => {
+  test('preserves the immutable archive digest across artifact handoff', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'experiment-registry-archive-digest-'));
+    roots.push(root);
+    const archive = join(root, 'registry-snapshot.tar');
+    await writeFile(archive, 'immutable registry snapshot');
+
+    const publishedDigest = await computeRegistryArtifactDigest(archive);
+    expect(await computeRegistryArtifactDigest(archive)).toBe(publishedDigest);
+
+    await writeFile(archive, 'mutated registry snapshot');
+    expect(await computeRegistryArtifactDigest(archive)).not.toBe(publishedDigest);
+  });
+
   test('survives handoff metadata and rejects registry mutation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'experiment-registry-digest-'));
     roots.push(root);

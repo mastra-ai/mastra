@@ -40,10 +40,12 @@ describe('experiment worker workflow routing', () => {
   });
 
   test.each(['e2e-tests.yml', 'e2e-experiment-worker.yml'])(
-    '%s verifies the canonical registry digest at the consumer boundary',
+    '%s verifies an immutable registry snapshot at the consumer boundary',
     async workflow => {
       const contents = await readFile(resolve(import.meta.dirname, '../../../.github/workflows', workflow), 'utf8');
+      expect(contents).toContain('registry-snapshot.tar');
       expect(contents).toContain('registry-artifact-digest.cjs');
+      expect(contents).toContain('MASTRA_E2E_REGISTRY_ARTIFACT_PATH:');
       expect(contents).toContain('MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST:');
       expect(contents).toContain('handoff-digest.txt');
     },

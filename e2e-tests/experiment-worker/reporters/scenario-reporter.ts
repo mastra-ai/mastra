@@ -32,7 +32,7 @@ export default class ScenarioReporter implements Reporter {
   async onTestRunEnd() {
     const reportDirectory = process.env.MASTRA_EXPERIMENT_E2E_REPORT_DIR;
     const tier = process.env.MASTRA_EXPERIMENT_E2E_TIER as 'pr' | 'full' | undefined;
-    if (!reportDirectory || !tier) return;
+    if (!reportDirectory || !tier || this.results.size === 0) return;
 
     const reportRoot = resolve(reportDirectory);
     await mkdir(reportRoot, { recursive: true });

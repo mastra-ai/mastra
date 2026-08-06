@@ -29,7 +29,26 @@ describe('scenario reporter', () => {
     process.env.MASTRA_EXPERIMENT_E2E_TIER = 'pr';
 
     const reporter = new ScenarioReporter();
+    const firstScenario = scenarios.find(scenario => scenario.tier === 'pr')!;
+    reporter.onTestCaseResult(passedTestCase(firstScenario.id) as never);
+    await writeFile(
+      join(reportRoot, `${firstScenario.id}.assertions.json`),
+      JSON.stringify({
+        scenarioId: firstScenario.id,
+        evidence: Object.fromEntries(firstScenario.assertions.map(id => [id, { observed: true }])),
+      }),
+    );
     await expect(reporter.onTestRunEnd()).rejects.toThrow('Missing required scenario report');
+  });
+
+  test('does not mask a collection or global setup failure when no tests ran', async () => {
+    const reportRoot = await mkdtemp(join(tmpdir(), 'experiment-reports-'));
+    roots.push(reportRoot);
+    process.env.MASTRA_EXPERIMENT_E2E_REPORT_DIR = reportRoot;
+    process.env.MASTRA_EXPERIMENT_E2E_TIER = 'pr';
+
+    const reporter = new ScenarioReporter();
+    await expect(reporter.onTestRunEnd()).resolves.toBeUndefined();
   });
 
   test('rejects a scenario-level pass with missing assertion evidence', async () => {

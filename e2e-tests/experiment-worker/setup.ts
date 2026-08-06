@@ -48,22 +48,34 @@ export default async function setup(project: TestProject) {
   let publishedRegistryTeardown: (() => Promise<void>) | null = null;
 
   try {
-    publishedRegistryTeardown = await setupPublishedRegistryFromEnv(project);
-    if (publishedRegistryTeardown) {
-      const registry = `http://localhost:${Number(process.env.MASTRA_E2E_REGISTRY_PORT || 4873)}`;
-      const tag = process.env.MASTRA_E2E_REGISTRY_TAG!;
-      const registryRoot = dirname(process.env.MASTRA_E2E_REGISTRY_STORAGE!);
-      const registryArtifactDigest = await computeRegistryArtifactDigest(registryRoot);
-      const expectedDigest = process.env.MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST;
+    const expectedDigest = process.env.MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST;
+    let registryArtifactDigest: string | null = null;
+    if (hasPublishedRegistryEnv) {
+      const storageDir = process.env.MASTRA_E2E_REGISTRY_STORAGE;
+      const tag = process.env.MASTRA_E2E_REGISTRY_TAG;
+      if (!storageDir || !tag) {
+        throw new Error('MASTRA_E2E_REGISTRY_STORAGE and MASTRA_E2E_REGISTRY_TAG must be set together');
+      }
       if (process.env.MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY === '1' && !expectedDigest) {
         throw new Error('Strict published-registry mode requires MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST');
       }
 
+      const registryArtifactPath = process.env.MASTRA_E2E_REGISTRY_ARTIFACT_PATH;
+      if (expectedDigest && !registryArtifactPath) {
+        throw new Error('MASTRA_E2E_REGISTRY_ARTIFACT_PATH is required when validating the registry artifact digest');
+      }
+      registryArtifactDigest = await computeRegistryArtifactDigest(registryArtifactPath ?? dirname(storageDir));
       if (expectedDigest && registryArtifactDigest !== expectedDigest) {
         throw new Error(
           `Published registry artifact digest mismatch: expected ${expectedDigest}, received ${registryArtifactDigest}`,
         );
       }
+    }
+
+    publishedRegistryTeardown = await setupPublishedRegistryFromEnv(project);
+    if (publishedRegistryTeardown) {
+      const registry = `http://localhost:${Number(process.env.MASTRA_E2E_REGISTRY_PORT || 4873)}`;
+      const tag = process.env.MASTRA_E2E_REGISTRY_TAG!;
       await assertPublishedPackages(registry, tag);
 
       project.provide('registryMode', 'published');
