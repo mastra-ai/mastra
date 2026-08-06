@@ -26,13 +26,13 @@ test.describe('Settings page', () => {
       await expect(form).toBeVisible();
     });
 
-    test('shows the theme selector defaulting to dark', async ({ page }) => {
+    test('shows the theme selector defaulting to the system theme', async ({ page }) => {
       await page.goto('/settings');
 
       const selector = page.getByLabel('Theme mode');
 
       await expect(selector).toBeVisible();
-      await expect(selector).toContainText('Dark');
+      await expect(selector).toContainText('System');
     });
   });
 

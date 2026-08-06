@@ -1,0 +1,46 @@
+---
+title: "Reference: Mastra.getTool() | Core"
+description: "Documentation for the `Mastra.getTool()` method, which retrieves a tool by its Mastra registration key."
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getTool()
+
+The `.getTool()` method retrieves a tool from the Mastra-level registry by its registration key.
+
+## Usage example
+
+Register a tool under the `weather` key, then use that key to retrieve it.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { weatherTool } from './tools/weather-tool'
+
+export const mastra = new Mastra({
+  tools: {
+    weather: weatherTool,
+  },
+})
+
+const tool = mastra.getTool('weather')
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'TToolName extends keyof TTools',
+    description: 'The registration key of the tool in the Mastra `tools` registry.',
+  },
+]}
+/>
+
+## Related
+
+- [Share tools across agents](/docs/agents/using-tools#share-tools-across-agents)
+- [Mastra class](/reference/core/mastra-class)
+- [Mastra.getToolById()](/reference/core/getToolById)
+- [Mastra.listTools()](/reference/core/listTools)

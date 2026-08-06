@@ -31,7 +31,7 @@
         const parsedStorage = storageValue ? JSON.parse(storageValue) : null;
         const persistedTheme = parsedStorage?.state?.theme;
 
-        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'system' ? persistedTheme : 'dark';
+        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'dark' ? persistedTheme : 'system';
 
         const resolvedTheme =
           selectedTheme === 'system'

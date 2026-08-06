@@ -1,0 +1,98 @@
+---
+extends: existence
+message: "AI opening: '%s'. Start with your actual point instead of this generic lead-in."
+level: error
+ignorecase: true
+tokens:
+  - In today's rapidly evolving
+  - In today's fast-paced
+  - In today's digital age
+  - In today's ever-changing
+  - In today's interconnected
+  - In the realm of
+  - In the world of
+  - In the landscape of
+  - In the ever-evolving landscape
+  - In an era where
+  - In an age where
+  - In this day and age
+  - Embarking on a journey
+  - Embark on a journey
+  - Embarking on this journey
+  - As we navigate
+  - As we delve into
+  - As we explore
+  - When it comes to
+  - Picture this
+  - Imagine a world where
+  - Have you ever wondered
+  - In recent years
+  - Throughout history
+  - Since the dawn of
+  - From time immemorial
+  - Before we dive in
+  - Before we dive into
+  - By the end of this article
+  - By the end of this guide
+  - By the end of this post
+  - By the end of this tutorial
+  - By the end of this section
+  - This guide will walk you through
+  - This article will walk you through
+  - This post will walk you through
+  - This guide will help you
+  - This article will help you
+  - This post will help you
+  - Welcome to this guide
+  - Welcome to this overview
+  - Welcome to this exploration
+  - Welcome to this deep dive
+  - Without further ado
+  - Without further ado, let's
+  - Without further ado, here's
+  - Gone are the days
+  - Gone are the days when
+  - Gone are the days of
+  - Whether you're a
+  - Whether you're an
+  - Whether you're just
+  - Whether you're new
+  - Whether you're already
+  - Whether you're looking
+  - Whether you're trying
+  - Whether you're someone
+  - You might be wondering
+  - You may be wondering
+  - You're probably wondering
+  - You might be asking yourself
+  - You may be asking yourself
+  - If you've ever
+  - If you've ever wondered
+  - If you've ever found yourself
+  - Have you ever found yourself
+  - Chances are
+  - Chances are you've
+  - Chances are you're
+  - You're not alone
+  - You're not alone if
+  - We've all been there
+  - Look no further
+  - You've come to the right place
+  - You're in the right place
+  - Ready to dive in
+  - Ready to get started
+  - Ready to learn
+  - Ready to explore
+  - In the dynamic world of
+  - In an increasingly
+  - In a world where
+  - In a world of
+  - As technology continues to evolve
+  - As technology continues to advance
+  - As the world becomes
+  - As the world continues
+  - As we stand at
+  - As we stand on the
+  - We live in an era
+  - We live in a world
+  - We live in a time

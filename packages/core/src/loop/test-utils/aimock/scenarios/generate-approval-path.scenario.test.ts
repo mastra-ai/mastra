@@ -6,8 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createSharedAgent } from '../aimock-scenario';
-import { useLoopScenarioAimock } from '../aimock-scenario';
+import { createSharedAgent, useLoopScenarioAimock } from '../aimock-scenario';
 import { createTool } from '../../../../tools';
 import { MockMemory } from '../../../../memory';
 
@@ -133,6 +132,62 @@ describe('Generate() approval path scenario', () => {
 
     // When declined, the result should indicate the tool was not run
     // (the exact behavior may vary - just verify tool wasn't executed)
+    expect(result2).toBeDefined();
+  });
+
+  it('declineToolCallGenerate never executes when gated only by requireToolApproval (#20470)', async () => {
+    // Reproduction shape from https://github.com/mastra-ai/mastra/issues/20470:
+    // tool has no requireApproval flag; gating is only agent-level requireToolApproval.
+    // declineToolCallGenerate does not re-pass that option on resume.
+    const llm = getMock();
+    let toolExecuted = false;
+
+    const dangerTool = createTool({
+      id: 'do_the_thing',
+      description: 'Performs an irreversible action',
+      inputSchema: z.object({
+        label: z.string(),
+      }),
+      execute: async () => {
+        toolExecuted = true;
+        return { done: true };
+      },
+    });
+
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      {
+        toolCalls: [
+          {
+            id: 'call-20470-gen',
+            name: 'do_the_thing',
+            arguments: { label: 'alpha' },
+          },
+        ],
+      },
+    );
+    // After the decline is reported, the model wraps up without re-issuing the tool call.
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Declined.' });
+
+    const { agent } = await createSharedAgent(llm, {
+      tools: { do_the_thing: dangerTool },
+      memory: new MockMemory(),
+    });
+
+    const result1 = await agent.generate('Use the label "alpha".', {
+      requireToolApproval: ({ toolName }) => toolName === 'do_the_thing',
+      maxSteps: 5,
+    });
+
+    expect(result1.finishReason).toBe('suspended');
+    expect(toolExecuted).toBe(false);
+
+    const result2 = await agent.declineToolCallGenerate({
+      runId: result1.runId!,
+      toolCallId: result1.suspendPayload!.toolCallId,
+    });
+
+    expect(toolExecuted).toBe(false);
     expect(result2).toBeDefined();
   });
 

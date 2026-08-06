@@ -1,3 +1,4 @@
+export * from './agent-learning';
 export * from './client';
 export * from './types';
 export * from './tools';
@@ -15,15 +16,17 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
-export { agentControllerMessageText } from './resources/agent-controller';
+export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
   AgentControllerInfo,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
   AgentControllerEvent,
   KnownAgentControllerEvent,
   OtherAgentControllerEvent,
   CreateAgentControllerSessionResponse,
+  AgentControllerRequestOptions,
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,
   AgentControllerSessionState,

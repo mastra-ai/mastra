@@ -6,12 +6,13 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
+import type { ExecutionContext } from 'hono';
 import { Hono } from 'hono';
 import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware } from '../auth/helpers';
+import { coreAuthMiddleware, findMatchingCustomRoute } from '../auth/helpers';
 import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
@@ -67,6 +68,8 @@ export interface StreamOptions {
    */
   redact?: boolean;
 }
+
+const AGENT_CHANNEL_WEBHOOK_PATH = /^\/api\/agents\/([^/]+)\/channels\/([^/]+)\/webhook\/?$/;
 
 /**
  * MCP transport options for configuring MCP HTTP and SSE transports.
@@ -336,7 +339,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
   private customRouteHandler:
-    | ((request: Request, env?: { requestContext?: RequestContext }) => Promise<Response>)
+    | ((
+        request: Request,
+        env?: { requestContext?: RequestContext },
+        executionCtx?: ExecutionContext,
+      ) => Promise<Response>)
     | null = null;
 
   constructor({
@@ -429,6 +436,32 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Uses segment-aware matching so '/health' excludes '/health' and '/health/deep' but not '/healthcheck'
     const excludePaths = this.httpLoggingConfig.excludePaths || [];
     return !excludePaths.some((excluded: string) => path === excluded || path.startsWith(excluded + '/'));
+  }
+
+  /** Warn when a request looks like an agent channel webhook whose route was never registered. */
+  protected warnIfUnregisteredChannelWebhook(path: string, method: string, status: number): void {
+    if (status !== 404 || method.toUpperCase() !== 'POST') return;
+
+    const match = AGENT_CHANNEL_WEBHOOK_PATH.exec(path);
+    if (!match) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (findMatchingCustomRoute(path, method.toUpperCase(), routes)) return;
+
+    const agentId = match[1]!;
+    const platform = match[2]!;
+    const platformLabel = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/i.test(platform)
+      ? platform
+          .split(/[-_]/)
+          .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
+          .join(' ')
+      : 'channel';
+    this.mastra
+      .getLogger()
+      ?.warn(
+        `Received a ${platformLabel} webhook, but this agent doesn't have a ${platformLabel} adapter. Add one to the agent's channels.adapters configuration and restart the server.`,
+        { agentId, platform },
+      );
   }
 
   protected mergeRequestContext({
@@ -921,7 +954,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Mark unmatched requests so the adapter bridge can fall through to next()
     app.notFound(() => new Response(null, { status: 404, headers: { [NOT_FOUND_HEADER]: 'true' } }));
 
-    this.customRouteHandler = async (request, env) => app.fetch(request, env);
+    // Forward the platform execution context (e.g. Cloudflare Workers' `waitUntil`)
+    // into the internal app so custom route handlers can keep background work
+    // alive after the response is sent. Without this third arg, serverless
+    // runtimes freeze the invocation on return and kill any in-flight work.
+    this.customRouteHandler = async (request, env, executionCtx) => app.fetch(request, env, executionCtx);
     return true;
   }
 
@@ -936,6 +973,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     body: unknown,
     requestContext?: RequestContext,
     signal?: AbortSignal,
+    executionCtx?: ExecutionContext,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 
@@ -966,7 +1004,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     const request = new globalThis.Request(url, init);
-    const response = await this.customRouteHandler(request, { requestContext });
+    const response = await this.customRouteHandler(request, { requestContext }, executionCtx);
 
     if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
     return response;

@@ -15,13 +15,10 @@ export interface UserFilePartRendererProps {
  * data.
  */
 export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
-  // The declared `FilePart` type is V4-shaped (`{ mimeType, data }`), but the
-  // `@mastra/react` streaming accumulator emits the V5 shape (`{ mediaType, url }`)
-  // at runtime. Read both, preferring the V5/streaming shape and falling back to
-  // the V4/reload shape, so streamed and reloaded messages render identically.
-  const fileType = part as FilePart & { mediaType?: string; url?: string };
-  const data = fileType.url ?? fileType.data;
-  const mimeType = fileType.mediaType ?? fileType.mimeType;
+  // Both streamed (`@mastra/react` accumulator) and reloaded messages carry the
+  // canonical DB shape (`{ mimeType, data }`), so streamed and reloaded messages
+  // render identically.
+  const { data, mimeType } = part;
   const src = typeof data === 'string' ? data : undefined;
   const isFetchableUrl = typeof data === 'string' && isBrowserFetchableUrl(data);
   const isNonFetchableUrl = typeof data === 'string' && isNonFetchableRemoteUrl(data);

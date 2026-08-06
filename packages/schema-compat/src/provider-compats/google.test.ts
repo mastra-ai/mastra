@@ -126,6 +126,24 @@ describe('GoogleSchemaCompatLayer', () => {
       expect((schema.jsonSchema as any).properties.jsonValue.nullable).toBeUndefined();
     });
 
+    it('does not crash on zod v4 record schemas with the buggy zod <= 4.3.6 def shape (#17051)', () => {
+      const schema = z.object({ flags: z.record(z.string(), z.boolean()) });
+      // Zod v4 < 4.4.0 stores single-arg z.record(valueSchema) in def.keyType
+      // and leaves def.valueType undefined, crashing toJSONSchema. Recreate
+      // that def shape so the regression is testable on any zod version.
+      const def = (schema.shape.flags as any)._zod.def;
+      def.keyType = def.valueType;
+      def.valueType = undefined;
+
+      const result = applyCompatLayer({
+        schema,
+        compatLayers: [layer],
+        mode: 'aiSdkSchema',
+      });
+
+      expect((result.jsonSchema as any).properties.flags.type).toBe('object');
+    });
+
     it('removes non-string enum values from union branches', () => {
       const schema = layer.processToAISDKSchema(
         z.object({

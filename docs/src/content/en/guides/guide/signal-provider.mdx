@@ -33,6 +33,7 @@ import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: 'file:./mastra.db',
   }),
 })
@@ -143,6 +144,7 @@ export const mastra = new Mastra({
   // highlight-next-line
   agents: { devAgent },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: 'file:./mastra.db',
   }),
 })

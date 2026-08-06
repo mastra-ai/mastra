@@ -218,7 +218,7 @@ function toServerDef(custom: CustomLSPServer): LSPServerDef {
  *  6. `config.packageRunner` — package runner fallback (off by default)
  *
  * `config.searchPaths` also extends TypeScript module resolution
- * (used to locate typescript/lib/tsserver.js when it lives outside the project).
+ * (used to locate typescript/lib/tsserver.js for TS ≤6, and tsc for TS 7+).
  *
  * When `config.servers` is provided, custom servers are merged after built-in
  * definitions. Custom servers with the same ID as a built-in will replace it.
@@ -234,14 +234,38 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
       markers: ['tsconfig.json', 'package.json'],
       command: (root: string): string | undefined => {
         if (binaryOverrides?.typescript) return binaryOverrides.typescript;
-        if (!resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', searchPaths)) return undefined;
-        const bin = resolveNodeBin(root, 'typescript-language-server', searchPaths);
-        if (bin) return `${bin} --stdio`;
-        if (whichSync('typescript-language-server')) return 'typescript-language-server --stdio';
-        if (packageRunner) return `${packageRunner} typescript-language-server --stdio`;
-        return undefined;
+
+        const hasTsServer = !!resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', searchPaths);
+
+        if (hasTsServer) {
+          // TS ≤6: use the typescript-language-server wrapper around tsserver.js
+          const bin = resolveNodeBin(root, 'typescript-language-server', searchPaths);
+          if (bin) return `${bin} --stdio`;
+          if (whichSync('typescript-language-server')) return 'typescript-language-server --stdio';
+          if (packageRunner) return `${packageRunner} typescript-language-server --stdio`;
+          return undefined;
+        }
+
+        // TS 7+: tsserver.js no longer exists; the native tsc speaks LSP directly.
+        // Guard on the installed typescript version so we never pass --lsp to an
+        // older tsc that happens to be on PATH when typescript isn't installed.
+        const pkg = resolveRequireFromPaths(root, 'typescript/package.json', searchPaths);
+        if (!pkg) return undefined;
+        const manifest = pkg.require(pkg.resolved) as { version?: string; bin?: string | Record<string, string> };
+        if (!(parseInt(manifest.version ?? '', 10) >= 7)) return undefined;
+        // Run the validated package's own bin entry directly instead of a
+        // node_modules/.bin shim or PATH lookup — a shim found elsewhere is not
+        // guaranteed to point at the install whose version we just checked.
+        // This also covers hoisted/monorepo and pnpm layouts, where the usable
+        // shim and the resolved package live in different directories.
+        const binRel = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.tsc;
+        if (!binRel) return undefined;
+        const tscEntry = join(dirname(pkg.resolved), binRel);
+        if (!existsSync(tscEntry)) return undefined;
+        return `node ${tscEntry} --lsp --stdio`;
       },
       initialization: (root: string) => {
+        // Only TS ≤6 needs the tsserver.path hint; TS 7+ native LSP doesn't use it
         const ts = resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', searchPaths);
         if (!ts) return undefined;
         return { tsserver: { path: ts.resolved, logVerbosity: 'off' } };

@@ -42,14 +42,21 @@ import { githubSignalsIncrementalScenario } from './github-signals-incremental.j
 import { githubSignalsNotificationReloadScenario } from './github-signals-notification-reload.js';
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
+import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
+import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.js';
+import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
+import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
 import { loginPreservesModelPackScenario } from './login-preserves-model-pack.js';
+import { loginSeedsOmDefaultScenario } from './login-seeds-om-default.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
+import { mcpOauthAuthenticateScenario } from './mcp-oauth-authenticate.js';
+import { mcpOauthCancelScenario } from './mcp-oauth-cancel.js';
 import { mcpReloadConfigScenario } from './mcp-reload-config.js';
 import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
@@ -66,8 +73,11 @@ import { omAttachmentObservationScenario } from './om-attachment-observation.js'
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
 import { omPackStartupRestoreScenario } from './om-pack-startup-restore.js';
+import { omProviderErrorGuidanceScenario } from './om-provider-error-guidance.js';
 import { omSettingsScenario } from './om-settings.js';
+import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
+import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -79,8 +89,10 @@ import {
   pluginsAssetsLoadingScenario,
   pluginsBlockedConfigScenario,
   pluginsCommandUiScenario,
-  pluginsGithubInstallGhCliScenario,
-  pluginsGithubInstallMissingPackageManagerScenario,
+  pluginsGithubInstallInvalidPackageManagerScenario,
+  pluginsGithubInstallMissingCorepackScenario,
+  pluginsGithubInstallPnpm10Scenario,
+  pluginsGithubInstallPnpm11Scenario,
   pluginsGithubPollUpdateScenario,
   pluginsLocalHotReloadScenario,
   pluginsLocalToolScenario,
@@ -94,6 +106,7 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { quietSettingsScenario } from './quiet-settings.js';
+import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
@@ -106,6 +119,7 @@ import { setupCustomPackCompletionScenario } from './setup-custom-pack-completio
 import { setupLoginRefreshScenario } from './setup-login-refresh.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
 import { shellPassthroughConfiguredSettingsScenario } from './shell-passthrough-configured-settings.js';
+import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-run.js';
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
@@ -193,6 +207,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-notification-reload': githubSignalsNotificationReloadScenario,
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
+  'goal-api-error-stops-loop': goalApiErrorStopsLoopScenario,
+  'goal-duration-tool-approval': goalDurationToolApprovalScenario,
+  'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
+  'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'visible-commands': visibleCommandsScenario,
@@ -201,9 +219,12 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'lifecycle-hooks-events': lifecycleHooksEventsScenario,
   'login-dialog-masked-input': loginDialogMaskedInputScenario,
   'login-preserves-model-pack': loginPreservesModelPackScenario,
+  'login-seeds-om-default': loginSeedsOmDefaultScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
+  'mcp-oauth-authenticate': mcpOauthAuthenticateScenario,
+  'mcp-oauth-cancel': mcpOauthCancelScenario,
   'mcp-reload-config': mcpReloadConfigScenario,
   'mcp-selector-reconnect': mcpSelectorReconnectScenario,
   'mcp-server-config': mcpServerConfigScenario,
@@ -219,8 +240,11 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,
+  'om-provider-error-guidance': omProviderErrorGuidanceScenario,
   'om-settings': omSettingsScenario,
+  'om-status-indicator': omStatusIndicatorScenario,
   'om-threshold-persistence': omThresholdPersistenceScenario,
+  'onboarding-om-follows-login': onboardingOmFollowsLoginScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
   'persistent-goal-commands': persistentGoalCommandsScenario,
   'persistent-goal-judge-decision': persistentGoalJudgeDecisionScenario,
@@ -230,8 +254,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
-  'plugins-github-install-gh-cli': pluginsGithubInstallGhCliScenario,
-  'plugins-github-install-missing-package-manager': pluginsGithubInstallMissingPackageManagerScenario,
+  'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,
+  'plugins-github-install-gh-cli-pnpm-11': pluginsGithubInstallPnpm11Scenario,
+  'plugins-github-install-missing-corepack': pluginsGithubInstallMissingCorepackScenario,
+  'plugins-github-install-invalid-package-manager': pluginsGithubInstallInvalidPackageManagerScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
   'plugins-blocked-config': pluginsBlockedConfigScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
@@ -245,6 +271,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'prune-command': pruneCommandScenario,
   'quiet-settings': quietSettingsScenario,
+  'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
@@ -258,6 +285,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
   'settings-api-keys-navigation': settingsApiKeysNavigationScenario,
   'settings-startup-model-restore': settingsStartupModelRestoreScenario,
+  'shell-passthrough-during-run': shellPassthroughDuringRunScenario,
   'shell-passthrough-configured-settings': shellPassthroughConfiguredSettingsScenario,
   'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,

@@ -14,6 +14,7 @@ vi.mock('../../../../background-tasks/resolve-config', () => ({
 vi.mock('../../utils/resolve-runtime', () => ({
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
+  rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../stream-adapter', () => ({
@@ -129,6 +130,8 @@ describe('durable tool-call background task dispatch', () => {
     const mockTask = { id: 'task-abc' };
     vi.mocked(createBackgroundTask).mockReturnValue({
       dispatch: vi.fn().mockResolvedValue({ task: mockTask, fallbackToSync: false }),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
       task: mockTask,
       cancel: vi.fn(),
       waitForCompletion: vi.fn(),
@@ -154,6 +157,8 @@ describe('durable tool-call background task dispatch', () => {
 
     vi.mocked(createBackgroundTask).mockReturnValue({
       dispatch: vi.fn().mockResolvedValue({ task: { id: 't1' }, fallbackToSync: true }),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
       task: { id: 't1' },
       cancel: vi.fn(),
       waitForCompletion: vi.fn(),
@@ -178,6 +183,8 @@ describe('durable tool-call background task dispatch', () => {
 
     vi.mocked(createBackgroundTask).mockReturnValue({
       dispatch: vi.fn().mockRejectedValue(new Error('dispatch boom')),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
       task: { id: 't1' } as any,
       cancel: vi.fn(),
       waitForCompletion: vi.fn(),
@@ -202,6 +209,8 @@ describe('durable tool-call background task dispatch', () => {
 
     vi.mocked(createBackgroundTask).mockReturnValue({
       dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-x' }, fallbackToSync: false }),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
       task: { id: 'task-x' },
       cancel: vi.fn(),
       waitForCompletion: vi.fn(),
@@ -239,6 +248,8 @@ describe('durable tool-call background task dispatch', () => {
       capturedOnResult = opts.context.onResult;
       return {
         dispatch: vi.fn().mockResolvedValue({ task: { id: 't-r' }, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
         task: { id: 't-r' },
         cancel: vi.fn(),
         waitForCompletion: vi.fn(),
@@ -295,6 +306,8 @@ describe('durable tool-call background task dispatch', () => {
       capturedOnExecution = opts.context.onExecution;
       return {
         dispatch: vi.fn().mockResolvedValue({ task: { id: 't-e' }, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
         task: { id: 't-e' },
         cancel: vi.fn(),
         waitForCompletion: vi.fn(),
@@ -343,6 +356,8 @@ describe('durable tool-call background task dispatch', () => {
       capturedOnChunk = opts.context.onChunk;
       return {
         dispatch: vi.fn().mockResolvedValue({ task: { id: 't-c' }, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
         task: { id: 't-c' },
         cancel: vi.fn(),
         waitForCompletion: vi.fn(),
@@ -385,6 +400,8 @@ describe('durable tool-call background task dispatch', () => {
       capturedOnChunk = opts.context.onChunk;
       return {
         dispatch: vi.fn().mockResolvedValue({ task: { id: 't-f' }, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
         task: { id: 't-f' },
         cancel: vi.fn(),
         waitForCompletion: vi.fn(),
@@ -423,6 +440,8 @@ describe('durable tool-call background task dispatch', () => {
 
     vi.mocked(createBackgroundTask).mockReturnValue({
       dispatch: vi.fn().mockResolvedValue({ task: { id: 't-p' }, fallbackToSync: false }),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
       task: { id: 't-p' },
       cancel: vi.fn(),
       waitForCompletion: vi.fn(),

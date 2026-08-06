@@ -78,6 +78,53 @@ export function escapeUnescapedControlCharsInJsonStrings(text: string): string {
   return result;
 }
 
+function extractBalancedJsonObject(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return undefined;
+
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let lastBalanced: string | undefined;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === '{') {
+      if (depth === 0) start = i;
+      depth++;
+      continue;
+    }
+
+    if (char === '}' && depth > 0) {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        lastBalanced = text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return lastBalanced;
+}
+
 interface ProcessPartialChunkParams {
   /** Text accumulated from streaming so far */
   accumulatedText: string;
@@ -289,6 +336,11 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
         // No complete code block yet - just remove the opening ```json prefix
         processedText = trimmedStart.replace(/^```json\s*\n?/, '');
       }
+    }
+
+    const extractedObject = extractBalancedJsonObject(processedText);
+    if (extractedObject) {
+      processedText = extractedObject;
     }
 
     // LLMs often output actual newlines/tabs inside JSON strings instead of

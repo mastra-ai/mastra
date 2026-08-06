@@ -126,6 +126,7 @@ export class CustomEditor extends Editor {
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
   public getPromptAnimator?: () => GradientAnimator | undefined;
+  public requestRender?: () => void;
   private pendingBracketedPaste: string | null = null;
 
   /**
@@ -165,6 +166,14 @@ export class CustomEditor extends Editor {
   private _cachedColorFn?: (s: string) => string;
   private promptIcon = DEFAULT_PROMPT_ICON;
   private lastPromptWasInvisible = false;
+
+  private requestEditorRender(): void {
+    if (this.requestRender) {
+      this.requestRender();
+      return;
+    }
+    this.tui.requestRender();
+  }
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
@@ -214,9 +223,10 @@ export class CustomEditor extends Editor {
     const text = this.getText().trimStart();
     const isSlash = text.startsWith('/');
     const isAt = text.startsWith('@');
+    const isBang = text.startsWith('!');
     const color = this.getModeColor?.() || mastra.green;
     const promptAnimator = this.getPromptAnimator?.();
-    const shouldAnimatePrompt = !isSlash && !isAt;
+    const shouldAnimatePrompt = !isSlash && !isAt && !isBang;
     const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
     const fadeProgress = isPromptAnimated ? promptAnimator!.getFadeProgress() : 1;
     const isTransitioningIn = isPromptAnimated && promptAnimator!.isFadingIn();
@@ -265,11 +275,13 @@ export class CustomEditor extends Editor {
       ? '/'
       : isAt
         ? '@'
-        : chevronBrightness > 0.05
-          ? '›'
-          : dotBrightness > 0.05
-            ? this.promptIcon
-            : ' ';
+        : isBang
+          ? '!'
+          : chevronBrightness > 0.05
+            ? '›'
+            : dotBrightness > 0.05
+              ? this.promptIcon
+              : ' ';
     const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
 
     // Cache colorFn and prompt — only recreate when color changes
@@ -305,14 +317,14 @@ export class CustomEditor extends Editor {
     // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
     const promptWidth = 4; // "│ > " or "│   "
     const contentWidth = width - 6;
-    // Slash and mention markers are rendered in the prompt chrome, so remove them
+    // Slash, mention and shell markers are rendered in the prompt chrome, so remove them
     // from the editor's layout state before wrapping and restore the state after.
     const editorState = (
       this as unknown as {
         state: { lines: string[]; cursorLine: number; cursorCol: number };
       }
     ).state;
-    const decorativePrompt = isSlash ? '/' : isAt ? '@' : undefined;
+    const decorativePrompt = isSlash ? '/' : isAt ? '@' : isBang ? '!' : undefined;
     const firstLine = editorState.lines[0];
     const markerIndex = firstLine?.search(/\S/) ?? -1;
     const shouldHideDecorativePrompt =
@@ -703,7 +715,7 @@ export class CustomEditor extends Editor {
     this.setCursorOffset(this.voicePrefix.length + payload.length);
     // Programmatic insertion mutates editor state but does not repaint on its
     // own, so force a render to show the transcript immediately.
-    this.tui.requestRender();
+    this.requestEditorRender();
   }
 
   /**
@@ -799,13 +811,13 @@ export class CustomEditor extends Editor {
       this.voiceListenPhase = 0;
       this.voiceListenTimer ??= setInterval(() => {
         this.voiceListenPhase += 1;
-        this.tui.requestRender();
+        this.requestEditorRender();
       }, 120);
     } else if (this.voiceListenTimer) {
       clearInterval(this.voiceListenTimer);
       this.voiceListenTimer = null;
     }
-    this.tui.requestRender();
+    this.requestEditorRender();
   }
 
   /**

@@ -85,10 +85,10 @@ import type {
   ListTracesResponse,
   UpdateSpanArgs,
 } from './tracing';
-import { extractBranchSpans, getBranchArgsSchema } from './tracing';
+import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
-export type ObservabilityStorageFeature = 'delta-polling';
+export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -148,7 +148,7 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Optional feature list for observability storage APIs.
-   * Stores that implement delta polling should override this and opt in explicitly.
+   * Stores should override this to opt in to the APIs they support explicitly.
    * Older stores and older package versions will simply omit it, which keeps page mode working.
    */
   public getFeatures(): readonly ObservabilityStorageFeature[] | undefined {
@@ -329,14 +329,16 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Retrieves a lightweight list of traces with optional filtering.
+   *
+   * Defaults to {@link listTraces} with each row projected down, so every backend
+   * serves the same response shape whether or not it has a dedicated implementation.
+   * Backends that can push the projection into the query should override this --
+   * that is what actually keeps the blob columns off the read path -- but the
+   * fallback stays correct, just not cheaper than `listTraces`.
    */
-  async listTracesLight(_args: ListTracesArgs): Promise<ListTracesLightResponse> {
-    throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_LIST_TRACES_LIGHT_NOT_IMPLEMENTED',
-      domain: ErrorDomain.MASTRA_OBSERVABILITY,
-      category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support listing lightweight traces',
-    });
+  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    const { spans, ...rest } = await this.listTraces(args);
+    return { ...rest, spans: spans.map(toLightSpanRecord) };
   }
 
   /**

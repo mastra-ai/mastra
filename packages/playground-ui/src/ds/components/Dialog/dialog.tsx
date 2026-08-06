@@ -70,9 +70,9 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
         data-slot="dialog-content"
         className={cn(
           'dialog-content-anim',
-          'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
+          'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
           'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-          'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
+          'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
           'focus-visible:outline-hidden',
           className,
         )}
@@ -103,7 +103,7 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 DialogFooter.displayName = 'DialogFooter';
 
 const DialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('overflow-y-auto px-4 py-3.5 max-h-[50vh]', className)} {...props} />
+  <div className={cn('max-h-[50vh] overflow-y-auto px-4 py-3.5', className)} {...props} />
 );
 DialogBody.displayName = 'DialogBody';
 

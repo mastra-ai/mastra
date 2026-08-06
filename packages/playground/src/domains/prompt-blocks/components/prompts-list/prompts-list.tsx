@@ -12,9 +12,21 @@ export interface PromptsListProps {
   promptBlocks: StoredPromptBlockResponse[];
   isLoading: boolean;
   search?: string;
+  currentPage?: number;
+  hasMore?: boolean;
+  onNextPage?: () => void;
+  onPrevPage?: () => void;
 }
 
-export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsListProps) {
+export function PromptsList({
+  promptBlocks,
+  isLoading,
+  search = '',
+  currentPage,
+  hasMore,
+  onNextPage,
+  onPrevPage,
+}: PromptsListProps) {
   const { paths, Link } = useLinkComponent();
 
   const filteredData = useMemo(() => {
@@ -48,14 +60,21 @@ export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsLis
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">
-              {(block.hasDraft || !block.activeVersionId) && <CheckIcon className="size-4 mx-auto" />}
+              {(block.hasDraft || !block.activeVersionId) && <CheckIcon className="mx-auto size-4" />}
             </EntityList.TextCell>
             <EntityList.TextCell className="text-center">
-              {block.activeVersionId && <CheckIcon className="size-4 mx-auto" />}
+              {block.activeVersionId && <CheckIcon className="mx-auto size-4" />}
             </EntityList.TextCell>
           </EntityList.RowLink>
         );
       })}
+
+      <EntityList.Pagination
+        currentPage={currentPage}
+        hasMore={hasMore}
+        onNextPage={onNextPage}
+        onPrevPage={onPrevPage}
+      />
     </EntityList>
   );
 }

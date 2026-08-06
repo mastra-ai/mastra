@@ -1,11 +1,11 @@
-import { MastraClient } from '@mastra/client-js';
-import type { KnownAgentControllerEvent, PlanResume, SendNotificationInput } from '@mastra/client-js';
+import { MastraClient, isKnownAgentControllerEvent } from '@mastra/client-js';
+import type { PlanResume, SendNotificationInput } from '@mastra/client-js';
 
 import {
   createInitialTranscript,
   initialTranscript,
   transcriptReducer,
-} from '../../src/web/ui/domains/chat/services/transcript';
+} from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 import type {
   ApprovalPrompt,
   NotificationEntry,
@@ -13,7 +13,7 @@ import type {
   SuspensionPrompt,
   TimelineEntry,
   TranscriptState,
-} from '../../src/web/ui/domains/chat/services/transcript';
+} from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 
 /**
  * Scenario driver — the web equivalent of MastraCode's `McE2eTerminal`.
@@ -38,6 +38,12 @@ export interface ScenarioDriver {
    * events — mode/model intentionally no longer live on the transcript.
    */
   sessionState: () => { modeId?: string; modelId?: string };
+  /**
+   * Whether a run is in flight, mirroring the app's connection-state layer.
+   * Run state intentionally no longer lives on the transcript reducer, so the
+   * driver tracks it from raw agent_start/agent_end events.
+   */
+  running: () => boolean;
   /** Flattened visible text of the transcript, for substring assertions. */
   text: () => string;
   /** Resolve once `pattern` appears in the transcript text (or throw on timeout). */
@@ -105,17 +111,23 @@ export async function createDriver(opts: {
     modeId: initial.modeId,
     modelId: initial.modelId,
   };
+  let running = initial.running === true;
   apply(transcriptReducer(state, { type: 'reset', threadId: initial.threadId }));
 
   const sub = await session.subscribe({
     onEvent: event => {
       // Mirror the app: mode/model changes update the session-state layer
       // (query invalidation → refetch in React), not the transcript.
-      const known = event as KnownAgentControllerEvent;
-      if (known.type === 'mode_changed') {
-        sessionState = { ...sessionState, modeId: known.modeId };
-      } else if (known.type === 'model_changed') {
-        sessionState = { ...sessionState, modelId: known.modelId };
+      if (isKnownAgentControllerEvent(event)) {
+        if (event.type === 'mode_changed') {
+          sessionState = { ...sessionState, modeId: event.modeId };
+        } else if (event.type === 'model_changed') {
+          sessionState = { ...sessionState, modelId: event.modelId };
+        } else if (event.type === 'agent_start') {
+          running = true;
+        } else if (event.type === 'agent_end') {
+          running = false;
+        }
       }
       apply(transcriptReducer(state, { type: 'event', event }));
     },
@@ -138,6 +150,7 @@ export async function createDriver(opts: {
   return {
     state: () => state,
     sessionState: () => sessionState,
+    running: () => running,
     text,
     waitForText: (pattern, timeoutMs) =>
       waitFor(() => (matches(text(), pattern) ? true : undefined), `text ${pattern}`, timeoutMs).then(() => undefined),
@@ -215,7 +228,7 @@ export async function createDriver(opts: {
         timeoutMs,
       ),
     waitForIdle: (timeoutMs = 15_000) =>
-      waitFor(() => (!state.running ? true : undefined), 'idle', timeoutMs).then(() => undefined),
+      waitFor(() => (!running ? true : undefined), 'idle', timeoutMs).then(() => undefined),
     sendNotification: async input => {
       await session.sendNotification(input);
     },

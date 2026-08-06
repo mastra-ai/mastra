@@ -140,7 +140,7 @@ const fetchStep = createStep({
 
 const embedAndUpsertStep = createStep({
   id: 'embed-and-upsert',
-  description: 'Embed documents with text-embedding-3-small through Mastra Gateway and upsert into pgvector.',
+  description: 'Embed documents with text-embedding-3-small through the Gateway and upsert into pgvector.',
   inputSchema: z.object({ docs: z.array(docSchema) }),
   outputSchema: z.object({ indexed: z.number() }),
   execute: async ({ inputData, mastra }) => {

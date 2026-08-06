@@ -29,6 +29,7 @@ const SPAN_TYPE_CONFIG: Partial<Record<SpanType, { opType: string; opName: strin
   [SpanType.MODEL_GENERATION]: { opType: 'gen_ai.chat', opName: 'chat' },
   [SpanType.TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
   [SpanType.MCP_TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
+  [SpanType.PROVIDER_TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
   [SpanType.WORKFLOW_RUN]: { opType: 'workflow.run', opName: 'workflow' },
   [SpanType.WORKFLOW_STEP]: { opType: 'workflow.step', opName: 'step' },
   [SpanType.WORKFLOW_CONDITIONAL]: { opType: 'workflow.conditional', opName: 'step' },
@@ -230,7 +231,7 @@ export class SentryExporter extends BaseExporter {
     });
 
     // Track tool calls as children of MODEL_GENERATION spans for gen_ai.response.tool_calls attribute
-    if (span.type === SpanType.TOOL_CALL && resolvedParentId) {
+    if ((span.type === SpanType.TOOL_CALL || span.type === SpanType.PROVIDER_TOOL_CALL) && resolvedParentId) {
       this.trackToolCallForParent(span, resolvedParentId);
     }
   }
@@ -362,7 +363,7 @@ export class SentryExporter extends BaseExporter {
       this.addModelGenerationAttributes(attributes, span);
     }
 
-    if (span.type === SpanType.TOOL_CALL) {
+    if (span.type === SpanType.TOOL_CALL || span.type === SpanType.PROVIDER_TOOL_CALL) {
       this.addToolCallAttributes(attributes, span);
     }
 
@@ -443,7 +444,11 @@ export class SentryExporter extends BaseExporter {
     const toolAttr = span.attributes as ToolCallAttributes;
 
     this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.TOOL_SUCCESS, toolAttr.success);
-    this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_TOOL_CALL_ID, span.metadata?.toolCallId);
+    this.setAttributeIfDefined(
+      attributes,
+      ATTRIBUTE_KEYS.GEN_AI_TOOL_CALL_ID,
+      toolAttr.toolCallId ?? span.metadata?.toolCallId,
+    );
   }
 
   /**
@@ -539,7 +544,7 @@ export class SentryExporter extends BaseExporter {
 
     parentSpanData.toolCalls.push({
       name: this.getEntityName(span),
-      id: span.metadata?.toolCallId,
+      id: toolAttr.toolCallId ?? span.metadata?.toolCallId,
       type: toolAttr.toolType || 'function',
     });
   }

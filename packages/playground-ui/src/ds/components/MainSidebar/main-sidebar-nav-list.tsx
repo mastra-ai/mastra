@@ -5,7 +5,7 @@ export type MainSidebarNavListProps = ComponentPropsWithoutRef<'ul'>;
 
 export function MainSidebarNavList({ className, children, ...props }: MainSidebarNavListProps) {
   return (
-    <ul className={cn('grid grid-cols-[minmax(0,1fr)] gap-0.5 items-start content-center', className)} {...props}>
+    <ul className={cn('grid grid-cols-[minmax(0,1fr)] content-center items-start gap-0.5', className)} {...props}>
       {children}
     </ul>
   );

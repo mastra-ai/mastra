@@ -60,11 +60,17 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
-/** Memory gateway provider key used in AuthStorage. */
-export const MEMORY_GATEWAY_PROVIDER = 'mastra-gateway';
+/** Gateway provider key used in AuthStorage. */
+export const MASTRA_GATEWAY_PROVIDER = 'mastra-gateway';
 
 /** Default gateway URL. */
-export const MEMORY_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
+export const MASTRA_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
+
+/** @deprecated Renamed to {@link MASTRA_GATEWAY_PROVIDER}. */
+export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
+
+/** @deprecated Renamed to {@link MASTRA_GATEWAY_DEFAULT_URL}. */
+export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
 
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -232,7 +238,7 @@ export interface GlobalSettings {
   modelUseCounts: Record<string, number>;
   // Version the user dismissed the update prompt for (skip until they manually update past this)
   updateDismissedVersion: string | null;
-  // Memory gateway configuration
+  // Mastra gateway configuration
   memoryGateway: { baseUrl?: string };
   // LSP configuration forwarded to the workspace
   lsp?: LSPConfig;

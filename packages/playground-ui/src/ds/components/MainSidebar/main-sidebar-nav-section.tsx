@@ -15,7 +15,7 @@ export type MainSidebarNavSectionProps = ComponentPropsWithoutRef<'section'>;
 
 export function MainSidebarNavSection({ className, children, ...props }: MainSidebarNavSectionProps) {
   return (
-    <section className={cn('grid grid-cols-[minmax(0,1fr)] items-start content-center relative', className)} {...props}>
+    <section className={cn('relative grid grid-cols-[minmax(0,1fr)] content-center items-start', className)} {...props}>
       {children}
     </section>
   );

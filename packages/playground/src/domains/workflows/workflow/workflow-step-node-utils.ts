@@ -37,6 +37,36 @@ export type WorkflowBoundaryNodeData = {
 
 export type WorkflowBoundaryNode = Node<WorkflowBoundaryNodeData, typeof WORKFLOW_BOUNDARY_NODE_TYPE>;
 
+type SerializedStepInner = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
+export type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'component'> &
+  Partial<Pick<SerializedStepInner, 'serializedStepFlow' | 'mapConfig' | 'canSuspend' | 'metadata'>>;
+
+/**
+ * `foreach.step` / `loop.step` is a `SerializedSingleStepEntry`
+ * (agent | tool | step | mapping | workflow). For the `type: 'step'` variant,
+ * forward the wrapped step directly; for declarative variants, synthesize a
+ * step-like shim carrying the fields downstream rendering reads
+ * (`description`, `mapConfig`, `component`, `serializedStepFlow`). Entry-only
+ * fields like `agentId`/`toolId` stay available on the resolved `flow`.
+ */
+export const unwrapInnerEntry = (
+  inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step'],
+): SerializedStepLike => {
+  if (inner.type === 'step') return inner.step;
+  if (inner.type === 'workflow') {
+    return {
+      id: inner.id,
+      description: inner.description,
+      component: 'WORKFLOW',
+      serializedStepFlow: inner.serializedStepFlow,
+    };
+  }
+  if (inner.type === 'mapping') {
+    return { id: inner.id, description: undefined, component: undefined, mapConfig: inner.mapConfig };
+  }
+  return { id: inner.id, description: inner.description, component: undefined };
+};
+
 export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): ResolvedWorkflowStep => {
   switch (flow.type) {
     case 'step':
@@ -49,6 +79,8 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         };
       }
 
+      // Back-compat: older serialized graphs encoded `.map()` as a `step` entry
+      // carrying a `mapConfig`. Newer graphs use the dedicated `mapping` entry.
       if (flow.step.mapConfig) {
         return {
           kind: 'map-step',
@@ -64,13 +96,33 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         step: flow.step,
         flow,
       };
-    case 'foreach':
+    case 'agent':
       return {
-        kind: 'foreach-step',
-        id: flow.step.id,
-        step: flow.step,
+        kind: 'agent-step',
+        id: flow.id,
         flow,
       };
+    case 'tool':
+      return {
+        kind: 'tool-step',
+        id: flow.id,
+        flow,
+      };
+    case 'mapping':
+      return {
+        kind: 'map-step',
+        id: flow.id,
+        flow,
+      };
+    case 'foreach': {
+      const innerStep = unwrapInnerEntry(flow.step);
+      return {
+        kind: 'foreach-step',
+        id: innerStep.id,
+        step: innerStep,
+        flow,
+      };
+    }
     case 'parallel':
       return {
         kind: 'parallel-step',
@@ -83,13 +135,15 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         id: flow.serializedConditions[0]?.id ?? 'conditional',
         flow,
       };
-    case 'loop':
+    case 'loop': {
+      const innerStep = unwrapInnerEntry(flow.step);
       return {
         kind: 'loop-step',
-        id: flow.step.id,
-        step: flow.step,
+        id: innerStep.id,
+        step: innerStep,
         flow,
       };
+    }
     case 'sleep':
       return {
         kind: 'sleep-step',
@@ -100,6 +154,20 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
       return {
         kind: 'sleep-until-step',
         id: flow.id,
+        flow,
+      };
+    case 'workflow':
+      return {
+        kind: 'nested-workflow-step',
+        id: flow.id,
+        step: {
+          // Use the declared call-site id, consistent with unwrapInnerEntry and
+          // collectGraphStepFlags; the registry key stays available as flow.workflowId.
+          id: flow.id,
+          description: flow.description,
+          component: 'WORKFLOW',
+          serializedStepFlow: flow.serializedStepFlow,
+        } as never,
         flow,
       };
   }

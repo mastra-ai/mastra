@@ -1,7 +1,7 @@
 {
   "name": "template-browser-agent",
   "version": "1.0.0",
-  "description": "A browser-using agent built on @mastra/agent-browser (Playwright). Uses Mastra Gateway for LLM calls, web search as a fallback, and persists state to Turso (libSQL).",
+  "description": "A browser-using agent built on @mastra/agent-browser (Playwright). Uses Mastra's Gateway for LLM calls, web search as a fallback, and persists state to Turso (libSQL).",
   "main": "index.js",
   "scripts": {
     "dev": "mastra dev",

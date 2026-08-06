@@ -10,7 +10,7 @@ import type { DatabaseKind, ProjectDatabase } from './platform-api.js';
 import {
   attachDatabase,
   DB_ENV_VAR_NAMES,
-  detachDatabase,
+  deleteDatabase,
   fetchDatabase,
   fetchDatabaseConnection,
   fetchDatabases,
@@ -31,11 +31,15 @@ export function registerEnvDbCommands(envCommand: Command) {
 
   db.command('create')
     .description('Provision a database, attach it, and wait until it is ready')
-    .argument('[environment]', 'Environment name, slug, or ID (default: shared by all environments)')
+    .argument(
+      '[environment]',
+      "Environment name, slug, or ID (default: the project's only environment, or prompt if there are several)",
+    )
     .requiredOption('--kind <kind>', 'Database provider (turso, neon)')
     .option(...PROJECT_OPTION)
     .option('--name <name>', 'Database name (default: derived from the project slug)')
     .option('--region <region>', 'Provider region ID (shared databases only; environment region wins otherwise)')
+    .option('--shared', 'Attach as a project-scoped database shared by all environments')
     .option('--no-wait', 'Return immediately instead of polling until the database is ready')
     .option('--json', 'Output as JSON')
     .action(wrapAction(createDatabaseAction));
@@ -48,12 +52,12 @@ export function registerEnvDbCommands(envCommand: Command) {
     .option('--json', 'Output as JSON')
     .action(wrapAction(showDatabaseAction));
 
-  db.command('detach')
-    .description('Detach a database from the project (soft-delete; admin only)')
+  db.command('delete')
+    .description('Permanently delete a database and all its data (admin only)')
     .argument('<database>', 'Database ID or name')
     .option(...PROJECT_OPTION)
     .option('-y, --yes', 'Skip confirmation')
-    .action(wrapAction(detachDatabaseAction));
+    .action(wrapAction(deleteDatabaseAction));
 }
 
 /* ------------------------------------------------------------------ */
@@ -73,17 +77,87 @@ export function formatScope(db: Pick<ProjectDatabase, 'environmentId'>, environm
 }
 
 /**
- * Derive a provider-safe default database name from the project slug/name.
+ * Derive a provider-safe default database name from the project slug/name,
+ * optionally suffixed with an environment discriminator for env-scoped
+ * attaches.
+ *
  * Turso names become DNS labels, so: lowercase letters, digits, hyphens,
  * no leading/trailing hyphen, max 64 chars.
+ *
+ * When `environment` is provided and its type is not `production`, the name
+ * includes an env-derived suffix (e.g. `my-app-eu-db`). Two env-scoped
+ * databases in the same project must have different names — the platform
+ * rejects duplicates — so the suffix is essential for auto-provisioning
+ * across environments. The `production` env is treated as the canonical
+ * default and stays unsuffixed so existing single-env projects keep the
+ * clean `<project>-db` name.
+ *
+ * We identify production by `environment.type`, not by name/slug matching,
+ * because users are free to rename their production env to `main`, `live`,
+ * etc., and a non-prod env named `production` should still be suffixed.
+ *
+ * If the resulting name would exceed 64 chars, we truncate the *project*
+ * segment rather than the tail — otherwise `slice(0, 64)` would eat the
+ * env discriminator and re-create the collision this function exists to
+ * prevent.
  */
-export function defaultDatabaseName(project: Pick<Project, 'name' | 'slug'>): string {
-  const base = (project.slug || project.name)
+const MAX_DB_NAME_LEN = 64;
+const DB_NAME_TAIL = '-db';
+
+export function defaultDatabaseName(
+  project: Pick<Project, 'name' | 'slug'>,
+  environment?: Pick<Environment, 'name' | 'slug' | 'type'> | null,
+): string {
+  const projectPart = sanitizeSegment(project.slug || project.name) || 'mastra';
+
+  const shouldSuffix = Boolean(environment) && environment!.type !== 'production';
+  // Prefer the env name over the slug: platforms sometimes derive the
+  // production env's slug from the project name (e.g. `smoke-envdbux-1784317673`),
+  // which would produce ugly `<project>-<project>-db` duplication.
+  const envPart = shouldSuffix ? sanitizeSegment(environment!.name || environment!.slug || '') : '';
+
+  if (!envPart) {
+    return truncateToMax(projectPart) + DB_NAME_TAIL;
+  }
+
+  // Reserve room for `-<envPart>-db` and truncate the project segment first
+  // so the discriminator survives. `slice(0, 64)` on the full string would
+  // eat the tail — losing the very thing that keeps names distinct across
+  // environments (issue: same project, different envs → identical truncated
+  // name → duplicate rejected by the platform).
+  const separatorLen = 1; // '-' between project and env
+  const overhead = separatorLen + envPart.length + DB_NAME_TAIL.length;
+  let projectRoom = MAX_DB_NAME_LEN - overhead;
+  let envSegment = envPart;
+  if (projectRoom < 1) {
+    // Extreme case: env name alone eats the whole budget. Give the project
+    // segment 1 char (always keep some project context) and clamp the env
+    // to what remains — but keep at least 1 char of env so the discriminator
+    // survives.
+    projectRoom = 1;
+    const envRoom = MAX_DB_NAME_LEN - projectRoom - separatorLen - DB_NAME_TAIL.length;
+    envSegment = envPart.slice(0, Math.max(1, envRoom));
+  }
+  const projectSegment = truncateToMax(projectPart, projectRoom) || projectPart.slice(0, 1);
+  return `${projectSegment}-${envSegment}${DB_NAME_TAIL}`;
+}
+
+/**
+ * Truncate an already-sanitized segment to at most `max` chars, dropping any
+ * trailing hyphens produced by the cut so the result is still a valid DNS
+ * label fragment.
+ */
+function truncateToMax(segment: string, max: number = MAX_DB_NAME_LEN - DB_NAME_TAIL.length): string {
+  if (max < 1) return '';
+  return segment.slice(0, max).replace(/-+$/g, '');
+}
+
+function sanitizeSegment(input: string): string {
+  return input
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
-  return `${base || 'mastra'}-db`.slice(0, 64).replace(/-+$/g, '');
 }
 
 function envVarNamesFor(kind: DatabaseKind): string {
@@ -193,13 +267,31 @@ function parseKind(kind: string): DatabaseKind {
 
 async function createDatabaseAction(
   envArg: string | undefined,
-  options: { project?: string; kind: string; name?: string; region?: string; wait: boolean; json?: boolean },
+  options: {
+    project?: string;
+    kind: string;
+    name?: string;
+    region?: string;
+    shared?: boolean;
+    wait: boolean;
+    json?: boolean;
+  },
 ) {
   const kind = parseKind(options.kind);
+
+  if (envArg && options.shared) {
+    throw new Error('Cannot combine an environment argument with --shared. Pick one scope.');
+  }
+
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);
   const project = await resolveProject(token, orgId, options.project);
-  const environment = envArg ? await findEnvironment(token, orgId, project, envArg) : undefined;
+
+  const environment = options.shared
+    ? undefined
+    : envArg
+      ? await findEnvironment(token, orgId, project, envArg)
+      : await resolveDefaultEnvironment(token, orgId, project, { json: options.json });
 
   if (environment && options.region && !options.json) {
     console.info(`Note: --region is ignored for environment-scoped databases; the environment's region is used.`);
@@ -218,6 +310,63 @@ async function createDatabaseAction(
   });
 }
 
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
+}
+
+/**
+ * When the user runs `mastra env db create` without an environment argument
+ * and without --shared, pick the environment to scope the new database to:
+ *  - exactly one environment → use it
+ *  - multiple environments + interactive TTY → prompt with a picker
+ *  - multiple environments + non-interactive → fail with a clear message
+ *  - zero environments → fail (nothing to attach to)
+ */
+export async function resolveDefaultEnvironment(
+  token: string,
+  orgId: string,
+  project: Project,
+  opts: { json?: boolean } = {},
+): Promise<Environment> {
+  const environments = await fetchEnvironments(token, orgId, project.id);
+
+  if (environments.length === 0) {
+    throw new Error(`Project ${project.name} has no environments. Create one with: mastra env create <name>`);
+  }
+
+  if (environments.length === 1) {
+    return environments[0]!;
+  }
+
+  if (opts.json || !isInteractive()) {
+    const slugs = environments.map(e => e.slug).join(', ');
+    throw new Error(
+      `Project ${project.name} has multiple environments (${slugs}). Pass an environment name (e.g. ` +
+        `\`mastra env db create <env> --kind ...\`) or use --shared to attach a project-scoped database.`,
+    );
+  }
+
+  // Prefer production as the pre-selected option when it exists.
+  const preferred = environments.find(e => e.type === 'production') ?? environments[0]!;
+
+  const selected = await p.select({
+    message: 'Which environment should this database be scoped to?',
+    initialValue: preferred.id,
+    options: environments.map(e => ({
+      value: e.id,
+      label: `${e.slug} (${e.type})`,
+      hint: e.region ?? undefined,
+    })),
+  });
+
+  if (p.isCancel(selected)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+
+  return environments.find(e => e.id === selected)!;
+}
+
 async function createDatabase(opts: {
   token: string;
   orgId: string;
@@ -230,7 +379,7 @@ async function createDatabase(opts: {
   json?: boolean;
 }) {
   const { token, orgId, project, environment, kind } = opts;
-  const name = opts.name ?? defaultDatabaseName(project);
+  const name = opts.name ?? defaultDatabaseName(project, environment);
 
   const created = await attachDatabase(token, orgId, project.id, {
     kind,
@@ -343,10 +492,10 @@ async function showDatabaseAction(dbArg: string, options: { project?: string; sh
 }
 
 /* ------------------------------------------------------------------ */
-/*  mastra env db detach                                               */
+/*  mastra env db delete                                               */
 /* ------------------------------------------------------------------ */
 
-async function detachDatabaseAction(dbArg: string, options: { project?: string; yes?: boolean }) {
+async function deleteDatabaseAction(dbArg: string, options: { project?: string; yes?: boolean }) {
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);
   const project = await resolveProject(token, orgId, options.project);
@@ -355,7 +504,7 @@ async function detachDatabaseAction(dbArg: string, options: { project?: string; 
 
   if (!options.yes) {
     const confirm = await p.confirm({
-      message: `Detach database "${db.name}" (${db.kind}) from ${project.name}? Deploys will no longer receive its env vars.`,
+      message: `Permanently delete database "${db.name}" (${db.kind}) and ALL of its data? This cannot be undone. Deploys for ${project.name} will no longer receive its env vars.`,
     });
 
     if (p.isCancel(confirm) || !confirm) {
@@ -364,6 +513,6 @@ async function detachDatabaseAction(dbArg: string, options: { project?: string; 
     }
   }
 
-  await detachDatabase(token, orgId, project.id, db.id);
-  console.info(`Database "${db.name}" detached.`);
+  await deleteDatabase(token, orgId, project.id, db.id);
+  console.info(`Database "${db.name}" deleted.`);
 }

@@ -44,5 +44,17 @@
     "minimax-m2-7",
     "qwen-3-6-plus",
     "zai-glm-5-1"
+  ],
+  "structuredOutput": [
+    "gemini-3-1-pro-preview",
+    "gemini-3-flash-preview",
+    "gpt-4o",
+    "gpt-5-4-mini",
+    "gpt-5-4-nano",
+    "gpt-oss-120b",
+    "gpt-oss-20b",
+    "grok-4-3",
+    "kimi-k2-6",
+    "kimi-k2.5"
   ]
 }
