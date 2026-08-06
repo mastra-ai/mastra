@@ -54,8 +54,9 @@ function writeStateFile(state: McpStateFile): void {
     mkdirSync(dir, { recursive: true });
   }
   // Atomic write (same pattern as FileOAuthStorage) so a crash mid-write
-  // never leaves a truncated state file.
-  const tmpPath = `${filePath}.tmp`;
+  // never leaves a truncated state file. The temp name is process-unique so
+  // two concurrent mastracode processes never share a partially written file.
+  const tmpPath = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf-8');
   renameSync(tmpPath, filePath);
 }

@@ -585,8 +585,24 @@ export function createMcpManager(
     };
   }
 
-  function persistGlobalState(): void {
-    globalDisableState = { ...globalDisableState, disabledServers: Array.from(globallyDisabledServers) };
+  // Read-merge-write persistence: re-read the persisted state and apply this
+  // operation's delta on top, then adopt the merged result in memory. This
+  // way a concurrent mastracode process's changes (e.g. another window
+  // flipping the global kill switch) are never clobbered by this manager's
+  // construction-time snapshot.
+  function persistProjectDelta(mutate: (names: Set<string>) => void): void {
+    const fresh = new Set(loadDisabledServers(projectDir));
+    mutate(fresh);
+    disabledServers = fresh;
+    saveDisabledServers(projectDir, Array.from(fresh));
+  }
+
+  function persistGlobalDelta(mutate: (state: { allDisabled: boolean; disabledServers: Set<string> }) => void): void {
+    const onDisk = loadGlobalDisableState();
+    const fresh = { allDisabled: onDisk.allDisabled, disabledServers: new Set(onDisk.disabledServers) };
+    mutate(fresh);
+    globallyDisabledServers = fresh.disabledServers;
+    globalDisableState = { allDisabled: fresh.allDisabled, disabledServers: Array.from(fresh.disabledServers) };
     saveGlobalDisableState(globalDisableState);
   }
 
@@ -630,20 +646,24 @@ export function createMcpManager(
         };
       }
 
-      const scopeSet = options?.global ? globallyDisabledServers : disabledServers;
       const wasEffectivelyDisabled = isDisabled(name);
 
-      if (disabled !== scopeSet.has(name)) {
-        if (disabled) {
-          scopeSet.add(name);
-        } else {
-          scopeSet.delete(name);
-        }
-        if (options?.global) {
-          persistGlobalState();
-        } else {
-          saveDisabledServers(projectDir, Array.from(disabledServers));
-        }
+      if (options?.global) {
+        persistGlobalDelta(state => {
+          if (disabled) {
+            state.disabledServers.add(name);
+          } else {
+            state.disabledServers.delete(name);
+          }
+        });
+      } else {
+        persistProjectDelta(names => {
+          if (disabled) {
+            names.add(name);
+          } else {
+            names.delete(name);
+          }
+        });
       }
 
       // Only rebuild connections when the server's effective state actually
@@ -661,25 +681,35 @@ export function createMcpManager(
     },
 
     async setAllDisabled(disabled: boolean, options?: { global?: boolean }): Promise<void> {
+      const configuredNames = Object.keys(config.mcpServers ?? {});
+      const effectiveBefore = configuredNames.filter(name => isDisabled(name)).join(',');
       if (options?.global) {
-        globalDisableState = { ...globalDisableState, allDisabled: disabled };
-        if (!disabled) {
-          // Enabling globally also clears globally disabled server names so
-          // "/mcp enable all --global" fully restores global state.
-          globallyDisabledServers.clear();
-        }
-        persistGlobalState();
-      } else {
-        if (disabled) {
-          for (const name of Object.keys(config.mcpServers ?? {})) {
-            disabledServers.add(name);
+        persistGlobalDelta(state => {
+          state.allDisabled = disabled;
+          if (!disabled) {
+            // Enabling globally also clears globally disabled server names so
+            // "/mcp enable all --global" fully restores global state.
+            state.disabledServers.clear();
           }
-        } else {
-          disabledServers.clear();
-        }
-        saveDisabledServers(projectDir, Array.from(disabledServers));
+        });
+      } else {
+        persistProjectDelta(names => {
+          if (disabled) {
+            for (const name of configuredNames) {
+              names.add(name);
+            }
+          } else {
+            names.clear();
+          }
+        });
       }
-      await rebuildConnections();
+      // Skip the disconnect/reconnect cycle when the effective disabled set is
+      // unchanged — e.g. repeating "/mcp disable all", or a project-scope
+      // "enable all" while the global kill switch still disables everything.
+      const effectiveAfter = configuredNames.filter(name => isDisabled(name)).join(',');
+      if (effectiveAfter !== effectiveBefore) {
+        await rebuildConnections();
+      }
     },
 
     getDisabledServers() {

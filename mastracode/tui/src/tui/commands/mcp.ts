@@ -156,7 +156,9 @@ async function setDisabled(
         `MCP: All servers enabled${scopeLabel}. ${connected.length} server(s) connected, ${totalTools} tool(s).`,
       );
       const stillDisabled = statuses.filter(s => s.disabled);
-      if (stillDisabled.length > 0) {
+      if (!global && mm.isAllDisabledGlobally()) {
+        ctx.showInfo('MCP: All MCP is still disabled globally — re-enable with /mcp enable all --global.');
+      } else if (stillDisabled.length > 0) {
         const otherScope = global ? 'in this project' : 'globally';
         const otherSuffix = global ? '' : ' --global';
         ctx.showInfo(

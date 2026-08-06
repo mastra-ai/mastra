@@ -360,6 +360,29 @@ describe('handleMcpCommand', () => {
     );
   });
 
+  it('points project-scoped enable all at the global kill switch when it is active', async () => {
+    const { ctx, mcpManager } = createContext();
+    mcpManager.isAllDisabledGlobally.mockReturnValue(true);
+    mcpManager.getServerStatuses.mockReturnValue([
+      {
+        name: 'filesystem',
+        connected: false,
+        connecting: false,
+        transport: 'stdio',
+        toolCount: 0,
+        toolNames: [],
+        disabled: true,
+        disabledScope: 'global',
+      },
+    ]);
+
+    await handleMcpCommand(ctx, ['enable', 'all']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: All MCP is still disabled globally — re-enable with /mcp enable all --global.',
+    );
+  });
+
   it('surfaces the global kill switch in /mcp status', async () => {
     const { ctx, mcpManager } = createContext();
     mcpManager.isAllDisabledGlobally.mockReturnValue(true);

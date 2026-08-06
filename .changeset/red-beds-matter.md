@@ -1,6 +1,9 @@
 ---
 'mastracode': minor
-'@mastra/code-sdk': minor
 ---
 
-Added the ability to disable MCP servers from the TUI. Use `/mcp disable <server-name|all>` to turn off one or all MCP servers and `/mcp enable <server-name|all>` to turn them back on, or toggle individual servers from the interactive `/mcp` selector. Add `--global` to apply the change across every project (e.g. `/mcp disable all --global` acts as an all-MCP kill switch). Disabled servers stay visible in `/mcp status` with a disabled marker that shows which scope disabled them, their tools are removed from the agent, and the state persists across restarts.
+Added the ability to disable MCP servers without editing configuration files.
+
+- **Disable and enable servers**: Run `/mcp disable <server-name|all>` to turn servers off and `/mcp enable <server-name|all>` to turn them back on, or toggle individual servers from the interactive `/mcp` selector.
+- **Global scope**: Add `--global` to apply the change to every project. `/mcp disable all --global` acts as a kill switch for all MCP servers.
+- **Persistence**: Disabled servers stay visible in `/mcp status` with a marker for the scope that disabled them, their tools are removed from the agent, and the state survives restarts.
