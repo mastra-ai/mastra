@@ -151,6 +151,13 @@ export const mcpDisableEnableScenario = {
 
     terminal.submit('/mcp enable disable_target --global');
     await runtime.waitForScreenText(/MCP: Enabled "disable_target" — 1 tool\(s\)/i, terminal, 15_000);
+    // The success line above is identical to the project-scope enable asserted
+    // earlier and could still be in the screen buffer, so also verify the
+    // persisted global section with a unique marker — it's unambiguous.
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); let s={}; try{s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/mcp-state.json","utf8"));}catch{} const g=(s.global&&s.global.disabledServers)||[]; console.log("MCP_GLOBAL_ENABLE_PERSISTED="+(g.length===0?"empty":g.join("|")));'`,
+    );
+    await runtime.waitForScreenText(/MCP_GLOBAL_ENABLE_PERSISTED=empty/i, terminal, 15_000);
     runtime.printScreen('mcp globally re-enabled', terminal);
 
     terminal.keyCtrlC();
