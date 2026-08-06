@@ -617,23 +617,45 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const reconciled = reconcileToolResults(state, messages);
 
-  const onScreen = new Set(reconciled.entries.flatMap(entry => (entry.kind === 'message' ? [entry.id] : [])));
-  if (messages.every(message => onScreen.has(message.id))) return reconciled;
+  // A streamed turn and its persisted copy carry different message ids (the
+  // engine mints display ids independently of what MessageList persists), so
+  // identity falls back to shared toolCallIds — inserting such a window message
+  // would duplicate a turn that reconcileToolResults already heals in place.
+  const entryToolCallIds = reconciled.entries.map(entry =>
+    entry.kind === 'message' && entry.message.role === 'assistant'
+      ? new Set(toolCallIdsOf(entry.message.content.parts))
+      : undefined,
+  );
+  const matchesEntry = (entryIndex: number, message: MastraDBMessage): boolean => {
+    const entry = reconciled.entries[entryIndex];
+    if (entry.kind !== 'message') return false;
+    if (entry.id === message.id) return true;
+    if (message.role !== 'assistant') return false;
+    const toolCallIds = entryToolCallIds[entryIndex];
+    if (!toolCallIds || toolCallIds.size === 0) return false;
+    return toolCallIdsOf(message.content.parts).some(toolCallId => toolCallIds.has(toolCallId));
+  };
+  const onScreenIndexFor = (message: MastraDBMessage, from: number): number => {
+    for (let entryIndex = from; entryIndex < reconciled.entries.length; entryIndex++) {
+      if (matchesEntry(entryIndex, message)) return entryIndex;
+    }
+    return -1;
+  };
+
+  if (messages.every(message => onScreenIndexFor(message, 0) !== -1)) return reconciled;
 
   const entries: TimelineEntry[] = [];
   let cursor = 0;
   let missing: MastraDBMessage[] = [];
 
   for (const message of messages) {
-    if (!onScreen.has(message.id)) {
+    if (onScreenIndexFor(message, 0) === -1) {
       missing.push(message);
       continue;
     }
-    const anchorIndex = reconciled.entries.findIndex(
-      (entry, index) => index >= cursor && entry.kind === 'message' && entry.id === message.id,
-    );
     // Out-of-order anchor (the window disagrees with the timeline): leave it
     // where the timeline put it rather than moving rendered content around.
+    const anchorIndex = onScreenIndexFor(message, cursor);
     if (anchorIndex === -1) continue;
     entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
     missing = [];
@@ -642,6 +664,13 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
 
   return { ...reconciled, entries };
+}
+
+function toolCallIdsOf(parts: MastraMessagePart[]): string[] {
+  return parts.flatMap(part => {
+    const toolCallId = toolCallIdForPart(part);
+    return toolCallId === undefined ? [] : [toolCallId];
+  });
 }
 
 type ToolInvocationMessagePart = Extract<MastraMessagePart, { type: 'tool-invocation' }>;
@@ -961,16 +990,18 @@ function toolPart(tool: ToolCall): MastraMessagePart {
     };
   }
 
-  return {
-    type: 'tool-invocation',
-    toolInvocation: {
-      state: 'result',
-      toolCallId: tool.toolCallId,
-      toolName: tool.toolName,
-      args: tool.args,
-      result: tool.result,
-    },
+  // isError mirrors what core stamps on persisted result invocations
+  // (session-run-engine) — without it the terminal-state render precedence
+  // would read a failed live tool as a bare successful `result`.
+  const toolInvocation: ToolInvocationMessagePart['toolInvocation'] & { isError?: boolean } = {
+    state: 'result',
+    toolCallId: tool.toolCallId,
+    toolName: tool.toolName,
+    args: tool.args,
+    result: tool.result,
+    ...(tool.status === 'error' ? { isError: true } : {}),
   };
+  return { type: 'tool-invocation', toolInvocation };
 }
 
 function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptState {

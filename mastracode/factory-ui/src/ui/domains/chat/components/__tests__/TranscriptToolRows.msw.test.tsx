@@ -114,6 +114,30 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
   });
 
+  it.each(['output-error', 'output-denied'] as const)(
+    'renders a persisted %s part as failed even under a stale running overlay',
+    state => {
+      renderEntries([
+        assistantMessage(
+          'msg-1',
+          [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state, toolCallId: 'call-1', toolName: 'write_file', args: {}, errorText: 'nope' },
+            },
+          ],
+          {
+            'call-1': { toolCallId: 'call-1', toolName: 'write_file', argsText: '', status: 'running', output: '' },
+          },
+        ),
+      ]);
+
+      const row = screen.getByRole('group', { name: 'Tool: write_file' });
+      expect(within(row).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
+      expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
+    },
+  );
+
   it('gives prose entries their own vertical margins so rows stay on a uniform rhythm', () => {
     renderEntries([
       userMessage('msg-user', 'Please run the tests'),

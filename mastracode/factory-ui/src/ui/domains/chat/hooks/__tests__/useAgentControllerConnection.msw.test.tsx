@@ -5,14 +5,11 @@ import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { server } from '../../../e2e/ui/msw-server';
-import { queryKeys } from '../../api/keys';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import {
-  deriveConnectionStatus,
-  useAgentControllerConnection,
-} from '../../ui/domains/chat/hooks/useAgentControllerConnection';
-import { reconnectRefetchInterval } from '../useAgentControllerSessionSync';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { queryKeys } from '../../../../../api/keys';
+import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
+import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';
