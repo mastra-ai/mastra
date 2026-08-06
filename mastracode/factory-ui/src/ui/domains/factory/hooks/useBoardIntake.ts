@@ -62,12 +62,13 @@ export function useBoardIntake({
     () => (issues.data ?? []).filter(issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL)),
     [issues.data],
   );
-  const participantCandidates = useMemo(() => {
-    const all: BoardCandidate[] = review
-      ? (pulls.data ?? []).map(pullRequestCandidate)
-      : [...intakeIssues.map(issueCandidate), ...(linearIssues.data ?? []).map(linearCandidate)];
-    return all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
-  }, [knownSourceKeys, intakeIssues, pulls.data, linearIssues.data, review]);
+  const participantCandidates = useMemo(
+    () =>
+      review
+        ? (pulls.data ?? []).map(pullRequestCandidate)
+        : [...intakeIssues.map(issueCandidate), ...(linearIssues.data ?? []).map(linearCandidate)],
+    [intakeIssues, pulls.data, linearIssues.data, review],
+  );
   const candidates = useMemo(() => {
     const all: BoardCandidate[] = review
       ? participantCandidates

@@ -349,6 +349,18 @@ describe('Board work-item activity', () => {
 
     expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get('teammate')).toBeNull();
+      expect(params.get('relevance')).toBeNull();
+    });
+    expect(screen.getByText('Authored issue')).toBeInTheDocument();
+    expect(screen.getByText('Assigned issue')).toBeInTheDocument();
+    expect(screen.getByText('Unrelated issue')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reset filters' })).not.toBeInTheDocument();
   });
 
   it('restores work filters from a shared URL', async () => {
@@ -405,7 +417,9 @@ describe('Board work-item activity', () => {
         });
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: [linearWorkItem] }),
+        HttpResponse.json({
+          workItems: [{ ...linearWorkItem, metadata: { identifier: 'ENG-42' } }],
+        }),
       ),
     );
     const user = userEvent.setup();

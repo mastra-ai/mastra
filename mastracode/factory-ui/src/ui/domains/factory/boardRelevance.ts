@@ -168,9 +168,11 @@ export function workItemMatchesRelevance(
   activityPage: AuditEventPage | undefined,
   participantId: string | undefined,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
+  liveCandidate?: BoardCandidate,
 ): boolean {
   if (!participantId) return true;
-  return matchesRelations(workItemRelevance(item, activityPage), participantId, selectedTypes);
+  if (matchesRelations(workItemRelevance(item, activityPage), participantId, selectedTypes)) return true;
+  return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantId, selectedTypes) : false;
 }
 
 export function candidateMatchesRelevance(
