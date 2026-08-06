@@ -31,7 +31,6 @@ export const minimalAgentScenario = runtimeScenario('minimal-agent', [
   'protocol-success',
   'stdout-protocol-only',
   'cleanup-complete',
-  'report-written',
 ]);
 
 export const copiedArtifactScenario = runtimeScenario('copied-artifact', [

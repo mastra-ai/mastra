@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, inject, test } from 'vitest';
@@ -9,7 +9,6 @@ import { installPnpmProject } from '../helpers/install-project.js';
 import { inspectManifest } from '../helpers/inspect-manifest.js';
 import { materializeProject } from '../helpers/materialize-project.js';
 import { OwnedResources } from '../helpers/process-cleanup.js';
-import { writeScenarioReport, type ScenarioReport } from '../helpers/report.js';
 import { runProtocol } from '../helpers/run-protocol.js';
 import { copiedArtifactScenario, minimalAgentScenario } from '../scenarios/index.js';
 
@@ -23,7 +22,6 @@ describe('experiment worker installed artifact', () => {
   test(
     `${minimalAgentScenario.id} copied-artifact builds, relocates, and executes a published-package worker`,
     async () => {
-      const startedAt = new Date();
       const resources = new OwnedResources();
       const reportRoot = inject('reportRoot');
       try {
@@ -55,7 +53,6 @@ describe('experiment worker installed artifact', () => {
           writeFile(transcriptPath, protocol.result.stdout),
           writeFile(buildLogPath, `${build.result.stdout}\n--- stderr ---\n${build.result.stderr}`),
         ]);
-        const endedAt = new Date();
         const assertions = [
           passed('published-install', { exitCode: install.exitCode }),
           passed('worker-build', { exitCode: build.result.exitCode }),
@@ -72,38 +69,12 @@ describe('experiment worker installed artifact', () => {
         expect(cleanup.remainingPaths).toEqual([]);
         assertions.push(passed('cleanup-complete', cleanup));
 
-        const report: ScenarioReport = {
-          schemaVersion: 1,
-          scenarioId: minimalAgentScenario.id,
-          tier: minimalAgentScenario.tier,
-          status: 'passed',
-          fixture: minimalAgentScenario.fixture,
-          isolationKey: minimalAgentScenario.isolationKey,
-          packageManager: { name: 'pnpm', version: install.stderr.match(/pnpm v([\d.]+)/)?.[1] ?? 'unknown' },
-          registry: { tag: inject('tag'), artifactDigest: inject('registryArtifactDigest') },
-          assertions: [...assertions, passed('report-written', { reportRoot })],
-          startedAt: startedAt.toISOString(),
-          endedAt: endedAt.toISOString(),
-          durationMs: endedAt.getTime() - startedAt.getTime(),
-          diagnostics: { transcriptPath, buildLogPath },
-          build: build.result,
-          artifact: { path: copiedRoot, digest: inspected.manifest.artifact.contentDigest, relocated: true },
-          protocol: { events: protocol.events, transcriptPath },
-          cleanup,
-        };
-        const reportPaths = await writeScenarioReport(reportRoot, report);
-        const assertionEvidence = Object.fromEntries(
-          report.assertions.map(assertion => [assertion.id, assertion.evidence]),
-        );
+        const assertionEvidence = Object.fromEntries(assertions.map(assertion => [assertion.id, assertion.evidence]));
         await recordAssertionEvidence(minimalAgentScenario, assertionEvidence);
         await recordAssertionEvidence(copiedArtifactScenario, {
           'artifact-relocated': assertionEvidence['artifact-relocated'],
           'source-independent': assertionEvidence['source-independent'],
           'protocol-success': assertionEvidence['protocol-success'],
-        });
-        expect(JSON.parse(await readFile(reportPaths.jsonPath, 'utf8'))).toMatchObject({
-          scenarioId: minimalAgentScenario.id,
-          status: 'passed',
         });
         expect(protocol.result.stderr).toContain('minimal experiment fixture initialized');
         expect(protocol.events.map(event => event.type)).toEqual([
