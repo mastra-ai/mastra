@@ -413,7 +413,7 @@ describe('transcript reducer message entries', () => {
   });
 });
 
-describe('transcript reducer prependOlder', () => {
+describe('transcript reducer mergeWindow', () => {
   it('prepends only messages older than the oldest entry already on screen', () => {
     // On screen: newest window (msg-3, msg-4). Grown fetch returns an older
     // window that overlaps at msg-3 (the anchor).
@@ -431,7 +431,7 @@ describe('transcript reducer prependOlder', () => {
       dbMessage('msg-4', 'assistant', [{ type: 'text', text: 'fourth' }]),
     ];
 
-    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: grown });
 
     expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3', 'msg-4']);
   });
@@ -446,7 +446,7 @@ describe('transcript reducer prependOlder', () => {
       dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
     ];
 
-    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: grown });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: grown });
     const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
 
     expect(ids).toEqual(['msg-1', 'msg-2']);
@@ -471,7 +471,7 @@ describe('transcript reducer prependOlder', () => {
       dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }]),
     ];
 
-    const next = transcriptReducer(state, { type: 'prependOlder', messages: grown });
+    const next = transcriptReducer(state, { type: 'mergeWindow', messages: grown });
     const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
 
     // Older history joins the front; the live message stays at the tail.
@@ -482,8 +482,72 @@ describe('transcript reducer prependOlder', () => {
     const onScreen = createInitialTranscript({
       messages: [dbMessage('msg-1', 'user', [{ type: 'text', text: 'only' }])],
     });
-    const next = transcriptReducer(onScreen, { type: 'prependOlder', messages: [] });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: [] });
     expect(next).toBe(onScreen);
+  });
+
+  it('is a no-op when the window is already fully on screen', () => {
+    const messages = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+    ];
+    const onScreen = createInitialTranscript({ messages });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages });
+    expect(next).toBe(onScreen);
+  });
+
+  it('appends messages the run produced while the transcript was unmounted', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('kickoff', 'user', [{ type: 'text', text: 'review this PR' }])],
+    });
+
+    const refreshed = [
+      dbMessage('kickoff', 'user', [{ type: 'text', text: 'review this PR' }]),
+      dbMessage('reply-1', 'assistant', [{ type: 'text', text: 'reading the diff' }]),
+      dbMessage('reply-2', 'assistant', [{ type: 'text', text: 'here is the review' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: refreshed });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['kickoff', 'reply-1', 'reply-2']);
+  });
+
+  it('fills a gap between two on-screen messages', () => {
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+        dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+      ],
+    });
+
+    const refreshed = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
+      dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+    ];
+
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: refreshed });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3']);
+  });
+
+  it('keeps the streaming entry for a message the window also carries', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'partial' }]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'persisted prefix' }])],
+    });
+
+    expect(next.entries[0]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
+    expect(messageParts(next.entries[0])).toEqual([{ type: 'text', text: 'partial' }]);
   });
 });
 

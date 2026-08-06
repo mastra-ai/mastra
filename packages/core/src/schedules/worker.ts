@@ -7,11 +7,11 @@ import { PullTransport } from '../worker/transport/pull-transport';
 import type { WorkerTransport } from '../worker/transport/transport';
 import { MastraWorker } from '../worker/worker';
 import type { WorkerDeps } from '../worker/worker';
+import { parseFsAgentScheduleRowId } from './define';
 import type {
   ScheduleEffective,
   ScheduleHooks,
   ScheduleIfIdle,
-  SchedulePrepareContext,
   SchedulePrepareResult,
   ScheduleRunStatus,
   ScheduleTriggerInfo,
@@ -289,29 +289,50 @@ export async function executeAgentSchedule(
     ? await loadScheduleRef(mastra, scheduleId, target, log)
     : scheduleRefFromTarget(scheduleId, target);
 
-  const rowDefaults: ScheduleEffective = buildEffectiveFromTarget(target);
+  // 1. Prepare stages. Each may return overrides to merge, `null` to skip the
+  // fire, or nothing to leave the parameters alone — so they run through one
+  // loop rather than repeating the same merge/skip/error handling per stage.
+  //
+  // A handler-mode file-based schedule (`schedules/*.ts` exporting a handler
+  // instead of a prompt) is just the first such stage. Handlers are functions,
+  // so they can't live on the JSON schedule row; Mastra resolves them
+  // in-process by row id. The Mastra-level `prepare` hook runs after, giving it
+  // the last word.
+  const fsHandler = mastra.__getFsAgentScheduleHandler?.(scheduleId);
 
-  // 1. prepare hook
-  let prepared: SchedulePrepareResult | null | undefined;
+  const prepareStages: Array<() => Promise<SchedulePrepareResult | null | undefined | void>> = [];
+  if (fsHandler) {
+    prepareStages.push(() =>
+      Promise.resolve(
+        fsHandler({
+          mastra,
+          agentId,
+          scheduleId,
+          key: parseFsAgentScheduleRowId(scheduleId)?.key ?? scheduleId,
+          trigger,
+        }),
+      ),
+    );
+  }
   if (hooks?.prepare) {
+    prepareStages.push(() => Promise.resolve(hooks.prepare!({ mastra, agentId, schedule: scheduleRef, trigger })));
+  }
+
+  let effective: ScheduleEffective = buildEffectiveFromTarget(target);
+  for (const stage of prepareStages) {
+    let result: SchedulePrepareResult | null | undefined | void;
     try {
-      const prepareCtx: SchedulePrepareContext = {
-        mastra,
-        agentId,
-        schedule: scheduleRef,
-        trigger,
-      };
-      prepared = await hooks.prepare(prepareCtx);
+      result = await stage();
     } catch (err) {
       await safeHookCall(log, () =>
-        hooks.onError?.({
+        hooks?.onError?.({
           mastra,
           agentId,
           schedule: scheduleRef,
           trigger,
           phase: 'prepare',
           error: err instanceof Error ? err : new Error(String(err)),
-          effective: rowDefaults,
+          effective,
         }),
       );
       return {
@@ -320,24 +341,47 @@ export async function executeAgentSchedule(
         reason: err instanceof Error ? err.message : String(err),
       };
     }
+
+    if (result === null) {
+      // The stage explicitly asked to skip this fire.
+      await safeHookCall(log, () =>
+        hooks?.onFinish?.({
+          mastra,
+          agentId,
+          schedule: scheduleRef,
+          trigger,
+          outcome: 'skipped',
+          effective,
+        }),
+      );
+      return { status: 'fired', outcome: 'skipped' };
+    }
+
+    effective = mergeEffective(effective, result ?? undefined);
   }
 
-  if (prepared === null) {
-    // Hook explicitly asked to skip this fire.
+  // 2. Handler-mode rows persist an empty prompt because the handler supplies
+  // it. If nothing filled it in, firing would send the agent an empty message,
+  // so fail loud with a reason that names the cause instead.
+  //
+  // Scoped to handler-mode fires on purpose: rows from other sources always
+  // carry a prompt, and widening this would silently change how pre-existing
+  // schedules behave.
+  if (fsHandler && (typeof effective.prompt !== 'string' || effective.prompt.trim() === '')) {
+    const reason = 'handler returned no prompt and the schedule has no stored prompt';
     await safeHookCall(log, () =>
-      hooks?.onFinish?.({
+      hooks?.onError?.({
         mastra,
         agentId,
         schedule: scheduleRef,
         trigger,
-        outcome: 'skipped',
-        effective: rowDefaults,
+        phase: 'prepare',
+        error: new Error(reason),
+        effective,
       }),
     );
-    return { status: 'fired', outcome: 'skipped' };
+    return { status: 'invalid-input', outcome: 'failed', reason };
   }
-
-  const effective: ScheduleEffective = mergeEffective(rowDefaults, prepared);
 
   // Run-level marker carried on the signal / agent run so consumers
   // (typing status, UI badges) can detect that this run was
@@ -347,7 +391,7 @@ export async function executeAgentSchedule(
     ...(effective.threadId ? { threadId: effective.threadId } : {}),
   };
 
-  // 2. threaded vs threadless
+  // 3. threaded vs threadless
   if (effective.threadId) {
     if (!effective.resourceId) {
       const reason = 'resourceId required when threadId is set';
