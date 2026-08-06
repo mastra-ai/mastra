@@ -1279,6 +1279,30 @@ describe('TokenCounter', () => {
     });
   });
 
+  describe('tool approval (approval-requested)', () => {
+    it('counts a pending approval as zero content tokens instead of throwing', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'approval-requested',
+              toolCallId: 'tool-1',
+              toolName: 'deleteFile',
+              args: { path: 'fixture.txt' },
+              approval: { id: 'approval-1' },
+            },
+          },
+        ],
+      });
+      const emptyMessage = createMessage({ format: 2, parts: [] });
+
+      expect(counter.countMessage(message)).toBe(counter.countMessage(emptyMessage));
+    });
+  });
+
   describe('countObservations', () => {
     it('delegates to countString', () => {
       const counter = new TokenCounter();

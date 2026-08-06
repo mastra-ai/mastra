@@ -1759,6 +1759,11 @@ export class TokenCounter {
         return { tokens, overheadDelta, toolResultDelta };
       }
 
+      if (invocation.state === 'approval-requested') {
+        // A pending approval is control metadata and has no model-visible tool output.
+        return { tokens, overheadDelta, toolResultDelta };
+      }
+
       if (invocation.state === 'output-denied') {
         // A declined approval carries no tool result; count its denial reason like a small result
         // so token accounting stays consistent (and doesn't throw on the new state).
