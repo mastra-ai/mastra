@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Removed the `attributes` field and the `TraceAttributes` type from `TracesListViewTrace`.
