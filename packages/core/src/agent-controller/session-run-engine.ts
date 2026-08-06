@@ -182,51 +182,32 @@ function formatToolProgressOutput(progress: unknown): string {
 }
 
 const ABORT_STREAM_GRACE_MS = 5_000;
-const abortDeadline = Symbol('abort-deadline');
+const abortBailed = Symbol('abort-bailed');
 
 /**
- * Yields `stream`'s chunks, but once `signal` fires gives the stream `graceMs`
- * to wind down on its own before bailing out. Without the deadline, an
- * upstream await that never settles (e.g. a hung model call) leaves the run
+ * Resolves `graceMs` after an abort is requested for the session's run. Raced
+ * against the chunk-consuming loop: a hung upstream await (e.g. a model call
+ * that never settles) ignores the abort signal and would otherwise leave the
  * loop suspended forever with the session stuck in `running` — the only
- * recovery is a server restart.
+ * recovery being a server restart. `guard` cancels the deadline once the loop
+ * settles on its own (the value still resolves, but the race is already won).
  */
-async function* withAbortDeadline(
-  stream: AsyncIterable<StreamChunk>,
-  signal: AbortSignal | undefined,
-  graceMs: number,
-): AsyncGenerator<StreamChunk> {
-  if (!signal) {
-    yield* stream;
-    return;
+async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: number): Promise<typeof abortBailed> {
+  await run.waitForAbortRequest(guard);
+  if (!guard.aborted) {
+    await new Promise<void>(resolve => {
+      const timer = setTimeout(resolve, graceMs);
+      guard.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
   }
-  const iterator = stream[Symbol.asyncIterator]();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let resolveDeadline = () => {};
-  const deadline = new Promise<typeof abortDeadline>(resolve => {
-    resolveDeadline = () => resolve(abortDeadline);
-  });
-  const armDeadline = () => {
-    timer = setTimeout(resolveDeadline, graceMs);
-  };
-  if (signal.aborted) armDeadline();
-  else signal.addEventListener('abort', armDeadline, { once: true });
-  try {
-    while (true) {
-      const winner = await Promise.race([iterator.next(), deadline]);
-      if (winner === abortDeadline) {
-        // return() on an async generator queues behind the hung next(), so
-        // fire-and-forget: the leaked iterator settles (or not) on its own.
-        void Promise.resolve(iterator.return?.()).catch(() => {});
-        return;
-      }
-      if (winner.done) return;
-      yield winner.value;
-    }
-  } finally {
-    clearTimeout(timer);
-    signal.removeEventListener('abort', armDeadline);
-  }
+  return abortBailed;
 }
 
 type StreamState = {
@@ -378,27 +359,41 @@ export class SessionRunEngine {
     let result: { message: MastraDBMessage; suspended?: boolean } | undefined;
     let error = false;
     let aborted = false;
+    let bailed = false;
 
-    const abortSignal = this.#session.run.getAbortSignal();
-    for await (const chunk of withAbortDeadline(response.fullStream, abortSignal, ABORT_STREAM_GRACE_MS)) {
-      result = await this.processStreamChunk(state, chunk, requestContext);
-      if (chunk.type === 'error') {
-        error = true;
+    const consume = async (): Promise<void> => {
+      for await (const chunk of response.fullStream) {
+        if (bailed) return;
+        result = await this.processStreamChunk(state, chunk, requestContext);
+        if (chunk.type === 'error') {
+          error = true;
+        }
+        if (chunk.type === 'abort') {
+          aborted = true;
+        }
+        if (
+          result ||
+          chunk.type === 'finish' ||
+          chunk.type === 'error' ||
+          chunk.type === 'abort' ||
+          chunk.type === 'tool-call-suspended' ||
+          this.#session.run.isAbortRequested()
+        ) {
+          result ??= this.finishStreamState(state);
+          break;
+        }
       }
-      if (chunk.type === 'abort') {
-        aborted = true;
-      }
-      if (
-        result ||
-        chunk.type === 'finish' ||
-        chunk.type === 'error' ||
-        chunk.type === 'abort' ||
-        chunk.type === 'tool-call-suspended' ||
-        this.#session.run.isAbortRequested()
-      ) {
-        result ??= this.finishStreamState(state);
-        break;
-      }
+    };
+
+    const bailGuard = new AbortController();
+    try {
+      const outcome = await Promise.race([
+        consume(),
+        abortDeadline(this.#session.run, bailGuard.signal, ABORT_STREAM_GRACE_MS),
+      ]);
+      bailed = outcome === abortBailed;
+    } finally {
+      bailGuard.abort();
     }
 
     result ??= this.finishStreamState(state);
@@ -1089,9 +1084,11 @@ export class SessionRunEngine {
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
     let currentRun: StreamState | undefined;
+    let bailed = false;
 
-    try {
+    const consume = async (): Promise<void> => {
       for await (const chunk of subscription.stream) {
+        if (bailed) return;
         if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
           break;
@@ -1161,12 +1158,32 @@ export class SessionRunEngine {
           currentRun = undefined;
         }
       }
+    };
+
+    try {
+      const bailGuard = new AbortController();
+      try {
+        const outcome = await Promise.race([
+          consume(),
+          abortDeadline(this.#session.run, bailGuard.signal, ABORT_STREAM_GRACE_MS),
+        ]);
+        bailed = outcome === abortBailed;
+      } finally {
+        bailGuard.abort();
+      }
 
       // Graceful stream close without explicit terminal chunk.
       if (currentRun && this.#session.stream.isCurrent({ subscription })) {
         const streamResult = this.finishStreamState(currentRun);
         await this.finishSubscribedStreamRun({ suspended: streamResult.suspended });
         currentRun = undefined;
+      }
+
+      // An abort-deadline bail leaves the hung subscription undrained; detach
+      // it so the next message re-subscribes a fresh consumer (same reason as
+      // the abort-chunk path above).
+      if (bailed && this.#session.stream.isCurrent({ subscription })) {
+        this.#session.stream.detach();
       }
     } catch (error) {
       if (this.#session.stream.isCurrent({ subscription })) {

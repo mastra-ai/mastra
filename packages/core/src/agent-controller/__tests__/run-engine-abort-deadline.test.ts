@@ -80,6 +80,55 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(result?.message.content.parts).toEqual([{ type: 'text', text: 'partial' }]);
   });
 
+  it('Given a run that ends on a terminal chunk, Then the source stream is still cleaned up', async () => {
+    const { engine } = createHarness();
+    let cleanedUp = false;
+
+    await engine.processStream({
+      fullStream: (async function* () {
+        try {
+          yield chunk({ type: 'text-start', payload: { id: 't1' } });
+          yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+          yield chunk({ type: 'text-start', payload: { id: 't2' } });
+        } finally {
+          cleanedUp = true;
+        }
+      })(),
+    });
+
+    await new Promise(resolve => setImmediate(resolve));
+    expect(cleanedUp).toBe(true);
+  });
+
+  it('Given a subscribed thread stream hung mid-run, When the run is aborted, Then it finalizes as aborted and detaches the subscription', async () => {
+    vi.useFakeTimers();
+    const { engine, events, session } = createHarness();
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'text-start', payload: { id: 't1' } });
+        yield chunk({ type: 'text-delta', payload: { id: 't1', text: 'partial' } });
+        await new Promise(() => {});
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    const processed = engine.processSubscribedThreadStream(subscription);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events).toContainEqual({ type: 'agent_start' });
+
+    session.abortRun();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await processed;
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(session.run.isRunning()).toBe(false);
+    expect(session.stream.isOpen()).toBe(false);
+  });
+
   it('Given a stream that reacts to the abort signal in time, Then the deadline never fires', async () => {
     const { engine, events, session } = createHarness();
     const abortController = session.run.ensureAbortController();
