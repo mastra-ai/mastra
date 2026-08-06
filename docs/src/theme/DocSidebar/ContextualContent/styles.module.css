@@ -1,5 +1,7 @@
 .header {
-  padding: 0.25rem var(--ifm-menu-link-padding-horizontal) 0.75rem;
+  padding: 0 var(--ifm-menu-link-padding-horizontal);
+  margin-bottom: 1rem;
+  transition: all 150ms ease-in-out;
 }
 
 .backButton {
@@ -8,7 +10,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: var(--ifm-menu-link-padding-vertical) 0;
+  padding: 0.6rem 0;
   border: 0;
   color: var(--ifm-menu-color);
   background: transparent;
@@ -16,28 +18,32 @@
   font-weight: var(--ifm-font-weight-semibold);
   text-align: center;
   cursor: pointer;
+  line-height: 1;
+  transition: all 150ms ease-in-out;
 }
 
 .backArrow {
   position: absolute;
   left: 0;
   transition: all 150ms ease-in-out;
+  background: var(--ifm-menu-link-sublist-icon) center;
+  filter: var(--ifm-menu-link-sublist-icon-filter);
+  background-size: 100% 100%;
+  transform-origin: center;
+  transform: rotate(-90deg);
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 @media (min-width: 997px) {
   .backArrow {
-    left: -0.25rem;
+    left: -0.5rem;
   }
 }
 
 .backButton:hover,
 .backButton:focus-visible {
   color: var(--ifm-menu-color-active);
-}
-
-.backButton:hover .backArrow,
-.backButton:focus-visible .backArrow {
-  transform: translateX(-0.25rem);
 }
 
 @media (prefers-reduced-motion: reduce) {

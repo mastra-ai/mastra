@@ -2,6 +2,7 @@ import React, { type ReactNode } from 'react'
 import { ThemeClassNames } from '@docusaurus/theme-common'
 import DocSidebarItems from '@theme/DocSidebarItems'
 import type { PropSidebarItem } from '@docusaurus/plugin-content-docs'
+import { cn } from '../../../lib/utils'
 import { ContextualSidebarPaneProvider } from '../../contextual-sidebar-context'
 
 import styles from './styles.module.css'
@@ -17,11 +18,14 @@ type Props = Readonly<{
 export default function ContextualContent({ activePath, items, label, onBack, onItemClick }: Props): ReactNode {
   return (
     <>
-      <div className={styles.header}>
+      <div
+        className={cn(
+          styles.header,
+          'rounded-lg border-[0.5px] border-(--border) text-(--mastra-text-secondary) hover:bg-(--mastra-surface-2) dark:bg-(--mastra-surface-4) hover:text-(--mastra-text-primary)',
+        )}
+      >
         <button className={styles.backButton} type="button" aria-label={`Back to global sidebar`} onClick={onBack}>
-          <span className={styles.backArrow} aria-hidden="true">
-            ←
-          </span>
+          <span className={styles.backArrow} aria-hidden="true"></span>
           <span className={styles.backLabel}>{label}</span>
         </button>
       </div>

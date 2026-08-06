@@ -1,9 +1,46 @@
 @media (min-width: 62.25rem) {
-  .menu {
+  .scrollContainer {
+    position: relative;
+    display: flex;
     flex-grow: 1;
-    padding: 0.5rem;
+    min-height: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    padding-left: 0.5rem;
     margin-top: 0.5rem;
   }
+
+  .menu {
+    flex-grow: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
+  }
+
+  .menu[data-sidebar-pane='contextual'] {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  .bottomFade {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0;
+    left: 0;
+    height: 3rem;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--ifm-navbar-background-color));
+    opacity: 0;
+    transition: opacity 150ms ease-in-out;
+  }
+
+  .bottomFade[data-visible='true'] {
+    opacity: 1;
+  }
+
+  .bottomFadeWithAnnouncementBar {
+    bottom: var(--docusaurus-announcement-bar-height);
+  }
+
   @supports (scrollbar-gutter: stable) {
     .menu {
       padding: 0.5rem 0 0.5rem 0.5rem;
