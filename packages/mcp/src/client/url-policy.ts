@@ -228,12 +228,17 @@ export async function fetchFollowingAllowedRedirects(
     assertHostAllowed(nextUrl, allowedHosts, `A redirect from "${currentUrl.host}" pointed at it; the hop was not followed.`);
 
     const methodUpper = method.toUpperCase();
-    if (response.status === 303 || ((response.status === 301 || response.status === 302) && methodUpper === 'POST')) {
+    const dropsBody =
+      response.status === 303 || ((response.status === 301 || response.status === 302) && methodUpper === 'POST');
+    if (dropsBody) {
       method = 'GET';
       body = undefined;
       headers.delete('content-type');
       headers.delete('content-length');
-    } else if ((response.status === 307 || response.status === 308) && body != null && typeof body !== 'string') {
+    } else if (body != null && typeof body !== 'string') {
+      // Any hop that preserves the body (307/308 always; 301/302 for non-POST
+      // methods) would re-send an already consumed one-shot body, so guard on
+      // "the body is preserved", not on specific status codes.
       throw new MastraError({
         id: 'MCP_CLIENT_REDIRECT_BODY_NOT_REPLAYABLE',
         domain: ErrorDomain.MCP,

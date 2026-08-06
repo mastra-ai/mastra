@@ -215,6 +215,22 @@ describe('fetchFollowingAllowedRedirects', () => {
     ).rejects.toThrow(/not replayable/);
   });
 
+  it('throws on a 302 that preserves a non-replayable body (non-POST method) instead of re-sending it', async () => {
+    // A 302 only switches to GET for POST; a PUT keeps its method and body, so
+    // a consumed one-shot body must fail loudly rather than be re-sent empty.
+    const impl = vi.fn().mockResolvedValueOnce(redirectResponse(302, 'https://b.example/next'));
+    const streamBody = new ReadableStream();
+    await expect(
+      fetchFollowingAllowedRedirects(
+        impl,
+        'https://a.example/x',
+        { method: 'PUT', body: streamBody, duplex: 'half' } as RequestInit,
+        allowed,
+      ),
+    ).rejects.toThrow(/not replayable/);
+    expect(impl).toHaveBeenCalledTimes(1);
+  });
+
   it('strips the Authorization header on a hop to a different host but keeps it same-host', async () => {
     const crossHost = vi
       .fn()
