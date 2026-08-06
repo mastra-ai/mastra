@@ -19,8 +19,21 @@ export function isHumanActor(actorId: string | undefined): actorId is string {
   return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
 }
 
-function actorProfile(actorId: string, actors: Record<string, AuditActorProfile>): AuditActorProfile {
-  return actors[actorId] ?? { id: actorId, name: actorId };
+function actorProfile(actorId: string, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
+  return actors[actorId];
+}
+
+function externalAuthorProfile(item: WorkItem): AuditActorProfile | undefined {
+  const author = item.metadata['author'];
+  if (typeof author !== 'string' || !author.trim()) return undefined;
+  const name = author.trim();
+  const isGithubSource = item.source === 'github-issue' || item.source === 'github-pr';
+  if (!isGithubSource) return { id: `external:${name}`, name };
+  return {
+    id: `github:${name}`,
+    name,
+    avatarUrl: `https://github.com/${encodeURIComponent(name)}.png?size=64`,
+  };
 }
 
 function targetsWorkItem(event: AuditEvent, workItemId: string): boolean {
@@ -54,22 +67,27 @@ export function workItemHumanActorIds(item: WorkItem): string[] {
 export function workItemActivity(item: WorkItem, page: AuditEventPage | undefined): WorkItemActivity {
   const actors = page?.actors ?? {};
   const events = page?.events.filter(event => targetsWorkItem(event, item.id)) ?? [];
-  const latestHumanEvent = events.find(event => event.actorType === 'human' && isHumanActor(event.actorId));
-  if (latestHumanEvent) {
-    return {
-      events,
-      lastWorker: actorProfile(latestHumanEvent.actorId, actors),
-    };
-  }
 
+  const latestHumanEvent = events.find(event => event.actorType === 'human' && isHumanActor(event.actorId));
   const latestStage = latestStageWorker(item);
   const sessionActorId = Object.values(item.sessions)
     .map(session => session.startedBy)
     .find(isHumanActor);
   const createdBy = isHumanActor(item.createdBy) ? item.createdBy : undefined;
-  const actorId = latestStage?.actorId ?? sessionActorId ?? createdBy;
-  return {
-    events,
-    ...(actorId ? { lastWorker: actorProfile(actorId, actors) } : {}),
-  };
+
+  // Try each source in order; only pick one that has a resolvable profile.
+  const candidateActorIds = [latestHumanEvent?.actorId, latestStage?.actorId, sessionActorId, createdBy].filter(
+    isHumanActor,
+  );
+  for (const actorId of candidateActorIds) {
+    const profile = actorProfile(actorId, actors);
+    if (profile) return { events, lastWorker: profile };
+  }
+
+  // Nothing internal resolves — fall back to the external author (e.g. the
+  // GitHub PR/issue opener) so review cards created by the rule dispatcher
+  // still show *someone*. Only when there's no external author either do we
+  // render the card without attribution.
+  const external = externalAuthorProfile(item);
+  return { events, ...(external ? { lastWorker: external } : {}) };
 }

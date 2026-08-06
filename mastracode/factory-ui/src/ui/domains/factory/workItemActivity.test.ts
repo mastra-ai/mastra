@@ -113,7 +113,7 @@ describe('workItemActivity', () => {
     expect(activity.events.map(candidate => candidate.id)).toEqual(['automation-event', 'human-event']);
   });
 
-  it('falls back to the latest human stage actor when no audit event is available', () => {
+  it('falls back to the latest human stage actor when it resolves to a real profile', () => {
     const activity = workItemActivity(
       {
         ...item,
@@ -122,10 +122,43 @@ describe('workItemActivity', () => {
           { stage: 'review', enteredAt: '2026-08-03T09:00:00.000Z', by: 'factory-rule-dispatcher' },
         ],
       },
+      {
+        events: [],
+        actors: { 'user-ada': { id: 'user-ada', name: 'Ada Lovelace' } },
+      },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'user-ada', name: 'Ada Lovelace' });
+  });
+
+  it('does not attribute a card to a raw user id when the profile cannot be resolved', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'user-mystery',
+      },
       undefined,
     );
 
-    expect(activity.lastWorker).toEqual({ id: 'user-ada', name: 'user-ada' });
+    expect(activity.lastWorker).toBeUndefined();
+  });
+
+  it('falls back to the external PR author when no human internal actor is resolvable', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'github-pr',
+        metadata: { author: 'octocat', number: 42 },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({
+      id: 'github:octocat',
+      name: 'octocat',
+      avatarUrl: 'https://github.com/octocat.png?size=64',
+    });
   });
 
   it('falls back to the human session owner and its resolved profile for review cards', () => {
