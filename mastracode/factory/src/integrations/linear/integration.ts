@@ -86,6 +86,8 @@ export interface LinearIssue {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  /** Display name of the Linear user who created the issue, when Linear returns one. */
+  creator: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;
@@ -175,6 +177,7 @@ interface IssuesQueryData {
       state: { name: string; type: string };
       project: { id: string };
       assignee: { name: string } | null;
+      creator: { name: string } | null;
       team: { key: string } | null;
       labels: { nodes: Array<{ name: string }> };
     }>;
@@ -206,6 +209,7 @@ interface IssueDetailQueryData {
     state: { name: string; type: string };
     project: { id: string };
     assignee: { name: string } | null;
+    creator: { name: string } | null;
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
     comments: IssueCommentsPage;
@@ -791,6 +795,7 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
+            creator { name }
             team { key }
             labels { nodes { name } }
           }
@@ -816,6 +821,7 @@ export class LinearIntegration implements FactoryIntegration {
         stateType: node.state.type,
         priorityLabel: node.priorityLabel,
         assignee: node.assignee?.name ?? null,
+        creator: node.creator?.name ?? null,
         team: node.team?.key ?? null,
         labels: node.labels.nodes.map(label => label.name),
         createdAt: node.createdAt,
@@ -878,6 +884,7 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
+            creator { name }
             team { key }
             labels { nodes { name } }
             comments(first: $commentsFirst) {
@@ -910,6 +917,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateType: issue.state.type,
       priorityLabel: issue.priorityLabel,
       assignee: issue.assignee?.name ?? null,
+      creator: issue.creator?.name ?? null,
       team: issue.team?.key ?? null,
       labels: issue.labels.nodes.map(label => label.name),
       createdAt: issue.createdAt,
@@ -1006,7 +1014,7 @@ function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,
-    author: null,
+    author: issue.creator,
     state: issue.state,
     stateType: issue.stateType,
     priority: issue.priorityLabel,
