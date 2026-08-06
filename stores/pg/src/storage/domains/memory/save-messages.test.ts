@@ -92,7 +92,8 @@ class RecordingDbClient implements DbClient {
     throw new Error('not implemented');
   }
 
-  async manyOrNone<T = any>(): Promise<T[]> {
+  async manyOrNone<T = any>(query?: string): Promise<T[]> {
+    if (query?.includes('information_schema.columns')) return [];
     throw new Error('not implemented');
   }
 
@@ -330,5 +331,30 @@ describe('MemoryPG.saveThread', () => {
       updatedAt.toISOString(),
       updatedAt.toISOString(),
     ]);
+  });
+});
+
+describe('MemoryPG.saveResource', () => {
+  it('binds UTC strings for both timestamp column variants', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const createdAt = new Date('2025-07-01T12:34:56.789Z');
+    const updatedAt = new Date('2025-07-02T01:02:03.456Z');
+
+    await memory.saveResource({
+      resource: {
+        id: 'resource-1',
+        workingMemory: 'Test memory',
+        metadata: {},
+        createdAt,
+        updatedAt,
+      },
+    });
+
+    expect(client.queries).toHaveLength(1);
+    expect(client.queries[0]!.values![3]).toBe(createdAt.toISOString());
+    expect(client.queries[0]!.values![4]).toBe(updatedAt.toISOString());
+    expect(client.queries[0]!.values![5]).toBe(createdAt.toISOString());
+    expect(client.queries[0]!.values![6]).toBe(updatedAt.toISOString());
   });
 });

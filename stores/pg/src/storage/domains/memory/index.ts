@@ -1679,11 +1679,15 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    const createdAt = toUtcISOString(resource.createdAt);
+    const updatedAt = toUtcISOString(resource.updatedAt);
     await this.#db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
         metadata: JSON.stringify(resource.metadata),
+        createdAt,
+        updatedAt,
       },
     });
 
