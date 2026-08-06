@@ -755,7 +755,7 @@ describe('PlatformGithubIntegration', () => {
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('maps pull request author from the Platform reconcile response', async () => {
+  it('maps pull request relevance from the Platform reconcile response', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
       json({
         title: 'Ship intake',
@@ -765,6 +765,8 @@ describe('PlatformGithubIntegration', () => {
         merged: true,
         created_at: '2026-07-01T00:00:00Z',
         user: { login: 'ada' },
+        assignees: [{ login: 'linus' }],
+        requested_reviewers: [{ login: 'margaret' }],
         merged_by: { login: 'grace' },
         head: { ref: 'feat/intake' },
         base: { ref: 'main' },
@@ -780,6 +782,8 @@ describe('PlatformGithubIntegration', () => {
       state: 'closed',
       draft: false,
       merged: true,
+      assignees: ['linus'],
+      requestedReviewers: ['margaret'],
       headBranch: 'feat/intake',
       baseBranch: 'main',
       author: 'ada',

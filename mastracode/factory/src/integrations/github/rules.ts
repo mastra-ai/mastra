@@ -53,6 +53,14 @@ function boolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+function actorLogins(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(actor => {
+    const login = string(object(actor)?.login);
+    return login ? [login] : [];
+  });
+}
+
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
@@ -265,6 +273,7 @@ export class GithubRules {
               url: string(issue?.html_url)!,
               ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
               ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
+              assignees: actorLogins(issue?.assignees),
             },
           }
         : {}),
@@ -294,6 +303,8 @@ export class GithubRules {
               state: string(pullRequest?.state) === 'closed' ? ('closed' as const) : ('open' as const),
               draft: boolean(pullRequest?.draft) ?? false,
               merged: boolean(pullRequest?.merged) ?? false,
+              assignees: actorLogins(pullRequest?.assignees),
+              requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
               headBranch: string(object(pullRequest?.head)?.ref) ?? '',
               baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
             },
@@ -405,6 +416,8 @@ export interface ReconcilePullRequestState {
   state: 'open' | 'closed';
   draft: boolean;
   merged: boolean;
+  assignees?: string[];
+  requestedReviewers?: string[];
   headBranch: string;
   baseBranch: string;
   author?: string;
@@ -442,6 +455,14 @@ export interface ReconcileSweepSummary {
 export type GithubPullRequestReconciler = (repositories: ReconcileRepository[]) => Promise<ReconcileSweepSummary>;
 
 const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
+
+function sameStrings(left: unknown, right: string[] | undefined): boolean {
+  if (right === undefined) return true;
+  if (!Array.isArray(left)) return false;
+  const leftValues = new Set(left.flatMap(value => (typeof value === 'string' ? [value] : [])));
+  const rightValues = new Set(right);
+  return leftValues.size === rightValues.size && [...leftValues].every(value => rightValues.has(value));
+}
 
 /**
  * Extracts the PR number a work item tracks, but only when the item belongs
@@ -489,6 +510,8 @@ export function reconciledClosedEvent(
         state: 'closed',
         draft: state.draft,
         merged: state.merged,
+        assignees: (state.assignees ?? []).map(login => ({ login })),
+        requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
         head: { ref: state.headBranch },
         base: { ref: state.baseBranch },
       },
@@ -580,7 +603,9 @@ export function createGithubPullRequestReconciler(
               (metadata.state === 'open' || metadata.state === 'closed') &&
               typeof metadata.draft === 'boolean' &&
               typeof metadata.merged === 'boolean' &&
-              typeof metadata.author === 'string';
+              typeof metadata.author === 'string' &&
+              Array.isArray(metadata.assignees) &&
+              Array.isArray(metadata.requestedReviewers);
             if ((stage === 'done' || stage === 'canceled') && hasReconciledMetadata) continue;
             const cards = cardsByNumber.get(pullRequestNumber) ?? [];
             cards.push(item);
@@ -605,7 +630,9 @@ export function createGithubPullRequestReconciler(
             const statusChanged =
               metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
             const authorChanged = state.author !== undefined && metadata.author !== state.author;
-            if (!statusChanged && !authorChanged) continue;
+            const assigneesChanged = !sameStrings(metadata.assignees, state.assignees);
+            const reviewersChanged = !sameStrings(metadata.requestedReviewers, state.requestedReviewers);
+            if (!statusChanged && !authorChanged && !assigneesChanged && !reviewersChanged) continue;
             try {
               await options.storage.update({
                 orgId: card.orgId,
@@ -617,6 +644,8 @@ export function createGithubPullRequestReconciler(
                     draft: state.draft,
                     merged: state.merged,
                     ...(state.author ? { author: state.author } : {}),
+                    ...(state.assignees ? { assignees: state.assignees } : {}),
+                    ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
                   },
                 },
               });
