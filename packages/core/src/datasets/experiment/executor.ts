@@ -243,13 +243,32 @@ async function executeAgent(
   // auth middleware or the Studio "Run Experiment" field) but no threadId would throw
   // AGENT_MEMORY_MISSING_RESOURCE_ID downstream — the runner owns no conversation, so
   // it injects a fresh thread per item, mirroring the multi-turn evals precedent
-  // (runAgentTurns). An explicit MASTRA_THREAD_ID_KEY wins via requestContext
-  // precedence, so no injection happens then; memory-less agents are left untouched.
+  // (runAgentTurns). When an explicit MASTRA_THREAD_ID_KEY is present we decline to
+  // inject and let the context key resolve downstream; memory-less agents are left
+  // untouched. Truthiness (not null-ness) checks match the downstream `||` resolution
+  // in prepare-memory-step: an empty-string resourceId skipped memory before this fix
+  // and must keep doing so.
   const contextResourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
   const shouldInjectThread =
-    contextResourceId != null && requestContext?.[MASTRA_THREAD_ID_KEY] == null && agent.hasOwnMemory();
+    Boolean(contextResourceId) &&
+    !requestContext?.[MASTRA_THREAD_ID_KEY] &&
+    typeof agent.hasOwnMemory === 'function' &&
+    agent.hasOwnMemory();
   const memoryOption = shouldInjectThread
-    ? { memory: { thread: randomUUID(), resource: String(contextResourceId) } }
+    ? {
+        memory: {
+          thread: {
+            id: randomUUID(),
+            ...(experimentId ? { metadata: { experimentId } } : {}),
+          },
+          resource: String(contextResourceId),
+          // The runner's threads are ephemeral bookkeeping, not user conversations:
+          // suppress title generation to avoid an extra LLM call per item (and per
+          // retry), and skip history recall — each thread is brand new anyway.
+          // Mirrors the ephemeral subagent-delegation precedent (issue #18738).
+          options: { lastMessages: false as const, generateTitle: false },
+        },
+      }
     : undefined;
 
   // Build a fresh matcher per item run so ordered consumption is deterministic and
@@ -277,7 +296,7 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
-          ...(memoryOption ?? {}),
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(versions ? { versions } : {}),
@@ -288,7 +307,7 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
-          ...(memoryOption ?? {}),
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),

@@ -123,6 +123,7 @@ async function listThreadsForResource(memory: MockMemory, resourceId: string) {
 describe('experiment executor memory-thread injection (#20663)', () => {
   it('SC1: memory-enabled agent + lone resourceId succeeds with a distinct thread per item', async () => {
     const { agent, memory } = createMemoryAgent(createV2Model());
+    const generateSpy = vi.spyOn(agent, 'generate');
     const ds = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
@@ -139,6 +140,16 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     expect(new Set(threads.map(t => t.id)).size).toBe(ITEM_INPUTS.length);
     for (const thread of threads) {
       expect(thread.resourceId).toBe('user-1');
+      // Injected threads are tagged with the experiment id for traceability.
+      expect(thread.metadata).toMatchObject({ experimentId: expect.any(String) });
+    }
+
+    // Contract check the mock cannot surface: injected threads are ephemeral
+    // bookkeeping, so title generation and history recall must be suppressed
+    // (MockMemory never titles threads, so only the passed option proves this).
+    for (const call of generateSpy.mock.calls) {
+      const options = (call as unknown[])[1] as { memory?: { options?: Record<string, unknown> } };
+      expect(options?.memory?.options).toMatchObject({ generateTitle: false, lastMessages: false });
     }
   });
 
@@ -176,13 +187,14 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     expect(threads).toHaveLength(0);
   });
 
-  it('SC2b: memory-less agent + resourceId — no injection, run succeeds unchanged', async () => {
+  it('SC2b: memory-less agent + resourceId — no memory option is injected, run succeeds unchanged', async () => {
     const agent = new Agent({
       id: 'memory-agent',
       name: 'No Memory Agent',
       instructions: 'test agent',
       model: createV2Model(),
     });
+    const generateSpy = vi.spyOn(agent, 'generate');
     const ds = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
@@ -193,6 +205,41 @@ describe('experiment executor memory-thread injection (#20663)', () => {
 
     expect(summary.failedCount).toBe(0);
     expect(summary.succeededCount).toBe(ITEM_INPUTS.length);
+
+    // The contract, not just the outcome: the executor must not pass a memory
+    // option for a memory-less agent (deleting the hasOwnMemory() gate would
+    // still produce failedCount === 0 with MockMemory-less agents otherwise).
+    expect(generateSpy).toHaveBeenCalledTimes(ITEM_INPUTS.length);
+    for (const call of generateSpy.mock.calls) {
+      const options = (call as unknown[])[1];
+      expect(options).not.toHaveProperty('memory');
+    }
+  });
+
+  it('SC2c: empty-string resourceId — no injection, run stays memory-less as before the fix', async () => {
+    const { agent, memory } = createMemoryAgent(createV2Model());
+    const generateSpy = vi.spyOn(agent, 'generate');
+    const ds = await setupDataset(agent);
+
+    const summary = await ds.startExperiment({
+      targetType: 'agent',
+      targetId: 'memory-agent',
+      requestContext: { [MASTRA_RESOURCE_ID_KEY]: '' },
+    });
+
+    // An empty-string resourceId is falsy downstream (prepare-memory-step skips
+    // memory entirely), so injecting a thread here would turn a previously
+    // succeeding memory-less run into a per-item failure.
+    expect(summary.failedCount).toBe(0);
+    expect(summary.succeededCount).toBe(ITEM_INPUTS.length);
+
+    for (const call of generateSpy.mock.calls) {
+      const options = (call as unknown[])[1];
+      expect(options).not.toHaveProperty('memory');
+    }
+
+    const { threads } = await memory.listThreads({ filter: {} });
+    expect(threads).toHaveLength(0);
   });
 
   it('SC3: explicit threadId in context wins — no per-item injection, all items share the supplied thread', async () => {
