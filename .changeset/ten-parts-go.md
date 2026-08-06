@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-During the create step correctly initialize git with user's default global config instead of an empty one.
+Fixed Git initialization during project creation. Git now uses the user's global Git configuration.
