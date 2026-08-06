@@ -391,6 +391,7 @@ export interface ReconcilePullRequestState {
   merged: boolean;
   headBranch: string;
   baseBranch: string;
+  author?: string;
   createdAt?: string;
   mergedBy?: string;
 }
@@ -540,14 +541,14 @@ export function createGithubPullRequestReconciler(
     for (const repository of scoped) {
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
-      let numbers: Set<number>;
+      let cardsByNumber: Map<number, WorkItemRow[]>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
           repositoryExternalId: String(repository.id),
         });
         if (projects.length === 0) continue;
-        numbers = new Set<number>();
+        cardsByNumber = new Map<number, WorkItemRow[]>();
         for (const project of projects) {
           const items = await options.storage.list({
             orgId: project.orgId,
@@ -557,14 +558,17 @@ export function createGithubPullRequestReconciler(
             const stage = item.stages[0];
             if (stage === 'done' || stage === 'canceled') continue;
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
-            if (pullRequestNumber) numbers.add(pullRequestNumber);
+            if (!pullRequestNumber) continue;
+            const cards = cardsByNumber.get(pullRequestNumber) ?? [];
+            cards.push(item);
+            cardsByNumber.set(pullRequestNumber, cards);
           }
         }
       } catch (error) {
         recordFailure(repository, error);
         continue;
       }
-      for (const pullRequestNumber of numbers) {
+      for (const [pullRequestNumber, cards] of cardsByNumber) {
         try {
           const state = await fetchPullRequest({
             installationId: repository.installationId,
@@ -572,7 +576,23 @@ export function createGithubPullRequestReconciler(
             number: pullRequestNumber,
           });
           summary.checked += 1;
-          if (!state || state.state !== 'closed') continue;
+          if (!state) continue;
+          if (state.author) {
+            for (const card of cards) {
+              if (card.metadata?.author === state.author) continue;
+              try {
+                await options.storage.update({
+                  orgId: card.orgId,
+                  id: card.id,
+                  userId: 'factory-rule-dispatcher',
+                  patch: { metadata: { author: state.author } },
+                });
+              } catch (error) {
+                recordFailure(repository, error, pullRequestNumber);
+              }
+            }
+          }
+          if (state.state !== 'closed') continue;
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;

@@ -1140,6 +1140,7 @@ export class GithubIntegration implements FactoryIntegration {
         merged: pullRequest.merged,
         headBranch: pullRequest.headBranch,
         baseBranch: pullRequest.baseBranch,
+        ...(pullRequest.author ? { author: pullRequest.author } : {}),
         ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
       };
     } catch {

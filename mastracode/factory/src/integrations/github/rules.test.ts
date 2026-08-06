@@ -732,6 +732,7 @@ describe('createGithubPullRequestReconciler', () => {
       merged: true,
       headBranch: 'feature',
       baseBranch: 'main',
+      author: 'pr-author',
       createdAt: '2030-01-01T00:00:00Z',
       mergedBy: 'maintainer',
     };
@@ -739,7 +740,7 @@ describe('createGithubPullRequestReconciler', () => {
 
   async function createCard(
     context: Awaited<ReturnType<typeof setup>>,
-    input: { number: number; url?: string | null; stages?: string[] },
+    input: { number: number; url?: string | null; stages?: string[]; metadata?: Record<string, unknown> },
   ) {
     return context.workItems.upsert({
       orgId: 'org-1',
@@ -755,7 +756,7 @@ describe('createGithubPullRequestReconciler', () => {
         title: `PR ${input.number}`,
         stages: input.stages ?? ['review'],
         sessions: {},
-        metadata: {},
+        metadata: input.metadata ?? {},
       },
     });
   }
@@ -827,6 +828,38 @@ describe('createGithubPullRequestReconciler', () => {
     });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('silently backfills missing or stale authors on open pull request cards', async () => {
+    const context = await setup('read');
+    const missing = await createCard(context, { number: 18, metadata: { repository: 'acme/repo' } });
+    const stale = await createCard(context, {
+      number: 19,
+      metadata: { author: 'old-author', repository: 'acme/repo' },
+    });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
+      ...mergedState(input.number),
+      state: 'open' as const,
+      merged: false,
+      author: `author-${input.number}`,
+    }));
+
+    await expect(createReconciler(context, fetchPullRequest)([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 2,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
+
+    await expect(context.workItems.get({ orgId: 'org-1', id: missing.item.id })).resolves.toMatchObject({
+      metadata: { author: 'author-18', repository: 'acme/repo' },
+    });
+    await expect(context.workItems.get({ orgId: 'org-1', id: stale.item.id })).resolves.toMatchObject({
+      metadata: { author: 'author-19', repository: 'acme/repo' },
+    });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
 

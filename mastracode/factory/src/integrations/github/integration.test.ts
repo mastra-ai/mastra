@@ -577,6 +577,7 @@ describe('GithubIntegration merge reconciler', () => {
       merged: true,
       headBranch: 'feat/intake',
       baseBranch: 'main',
+      author: 'ada',
       createdAt: '2026-07-01T00:00:00Z',
     });
   });
