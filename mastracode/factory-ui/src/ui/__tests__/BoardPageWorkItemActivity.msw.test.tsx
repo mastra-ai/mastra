@@ -205,8 +205,14 @@ describe('Board work-item activity', () => {
     stubBoardEndpoints();
     renderBoard('review');
 
-    await expectActivity('Grace Hopper', 'Created the item', false);
+    const createdAt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
+      new Date(reviewItem.createdAt),
+    );
+    await expectActivity('Grace Hopper', `Created at: ${createdAt}`, false);
     // The synthetic created event resolves to the external PR opener.
-    expect(screen.getByLabelText('Work item activity')).toHaveTextContent('octocat');
+    const popup = screen.getByLabelText('Work item activity');
+    expect(popup).toHaveTextContent('octocat');
+    expect(popup).not.toHaveTextContent('Created the item');
+    expect(within(popup).getByText(`Created at: ${createdAt}`)).toHaveAttribute('datetime', reviewItem.createdAt);
   });
 });

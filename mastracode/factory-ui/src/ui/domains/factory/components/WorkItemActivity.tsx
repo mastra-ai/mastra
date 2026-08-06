@@ -1,13 +1,19 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 
+const CREATED_ACTION = 'factory.work_item.created';
+const timestampFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
 const ACTION_LABELS: Record<string, string> = {
-  'factory.work_item.created': 'Created the item',
   'factory.work_item.assigned': 'Assigned the item',
   'factory.work_item.updated': 'Updated the item',
   'factory.work_item.stage_moved': 'Moved the item',
@@ -42,6 +48,7 @@ function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<st
   const actor = eventActor(event, actors);
   if (!actor) return null;
   const modelId = event.actorType === 'agent' ? metadataString(event, 'modelId') : undefined;
+  const isCreated = event.action === CREATED_ACTION;
   return (
     <li className="flex items-start gap-2">
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
@@ -51,10 +58,20 @@ function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<st
           {modelId ? <span className="text-icon3 font-normal"> · {modelId}</span> : null}
         </span>
         <span className="text-ui-xs text-icon3 flex items-baseline justify-between gap-3">
-          <span className="min-w-0 truncate capitalize">{actionLabel(event.action)}</span>
-          <time className="shrink-0" dateTime={event.occurredAt}>
-            {relativeTime(event.occurredAt)}
-          </time>
+          <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate capitalize')}>
+            {isCreated ? (
+              <time dateTime={event.occurredAt}>
+                Created at: {timestampFormatter.format(new Date(event.occurredAt))}
+              </time>
+            ) : (
+              actionLabel(event.action)
+            )}
+          </span>
+          {isCreated ? null : (
+            <time className="shrink-0" dateTime={event.occurredAt}>
+              {relativeTime(event.occurredAt)}
+            </time>
+          )}
         </span>
       </div>
     </li>
