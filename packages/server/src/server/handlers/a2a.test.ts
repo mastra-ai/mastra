@@ -21,6 +21,7 @@ import {
   handleMessageSend,
   handleMessageStream,
   handleTaskCancel,
+  resolveA2AProtocolVersion,
 } from './a2a';
 
 class MockAgent extends Agent {
@@ -2782,6 +2783,29 @@ describe('A2A Handler', () => {
     });
   });
 
+  describe('A2A protocol version negotiation', () => {
+    it.each([
+      [undefined, '0.3'],
+      ['', '0.3'],
+      ['0.3', '0.3'],
+      ['1.0', '1.0'],
+    ] as const)('resolves %s to protocol version %s', (header, expected) => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: header === undefined ? undefined : { 'A2A-Version': header },
+      });
+
+      expect(resolveA2AProtocolVersion(request)).toBe(expected);
+    });
+
+    it('rejects unsupported protocol versions', () => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: { 'A2A-Version': '2.0' },
+      });
+
+      expect(() => resolveA2AProtocolVersion(request)).toThrow('Version not supported: 2.0');
+    });
+  });
+
   describe('AGENT_EXECUTION_ROUTE', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
@@ -2821,6 +2845,32 @@ describe('A2A Handler', () => {
         error: {
           code: -32001,
           message: 'Task not found: missing-task',
+        },
+      });
+    });
+
+    it('returns a protocol error for unsupported A2A versions', async () => {
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '2.0' },
+        }),
+        id: 2,
+        method: 'tasks/get',
+        params: { id: 'missing-task' },
+      });
+
+      expect(await response.json()).toEqual({
+        jsonrpc: '2.0',
+        id: 2,
+        error: {
+          code: -32009,
+          message: 'Version not supported: 2.0',
+          data: { version: '2.0' },
         },
       });
     });

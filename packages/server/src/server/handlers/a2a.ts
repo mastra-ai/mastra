@@ -1524,6 +1524,22 @@ export async function getAgentExecutionHandler({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
+export type A2AProtocolVersion = '0.3' | '1.0';
+
+export function resolveA2AProtocolVersion(request?: Request): A2AProtocolVersion {
+  const version = request?.headers.get('A2A-Version')?.trim();
+
+  if (!version || version === '0.3') {
+    return '0.3';
+  }
+
+  if (version === '1.0') {
+    return '1.0';
+  }
+
+  throw MastraA2AError.versionNotSupported(version);
+}
+
 export const GET_AGENT_CARD_ROUTE = createRoute({
   method: 'GET',
   path: '/.well-known/:agentId/agent-card.json',
@@ -1562,9 +1578,16 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, ...bodyParams }) => {
+  handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
     const { id: requestId, method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
+
+    try {
+      resolveA2AProtocolVersion(request);
+    } catch (error) {
+      return createA2AJsonResponse(normalizeError(error, requestId));
+    }
+
     const result = await getAgentExecutionHandler({
       requestId,
       mastra,
