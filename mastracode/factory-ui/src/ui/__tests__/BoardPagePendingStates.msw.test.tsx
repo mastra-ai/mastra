@@ -10,7 +10,9 @@ import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import type { GithubIssue } from '../domains/factory/services/factory';
+import type { LinearIssue } from '../domains/factory/services/linear';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -183,6 +185,101 @@ function renderWorkBoard() {
 }
 
 describe('Board card pending states', () => {
+  it('shows only Linear candidates after switching Work intake from Issues to Linear', async () => {
+    const githubIssue: GithubIssue = {
+      number: 42,
+      title: 'Investigate GitHub intake failure',
+      url: 'https://github.com/acme/app/issues/42',
+      author: 'octocat',
+      labels: ['auto-triaged'],
+      comments: 0,
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+    };
+    const linearIssue: LinearIssue = {
+      id: 'linear-issue-1',
+      identifier: 'ENG-42',
+      title: 'Fix Linear intake sync',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: 'ada',
+      team: 'ENG',
+      labels: ['bug'],
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+    };
+
+    const githubWorkItem = {
+      ...manualWorkItem,
+      id: 'github-intake-item',
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: 'github-issue:99',
+        url: 'https://github.com/acme/app/issues/99',
+      },
+      title: 'Persisted GitHub intake item',
+    };
+    const linearWorkItem = {
+      ...manualWorkItem,
+      id: 'linear-intake-item',
+      externalSource: {
+        integrationId: 'linear',
+        type: 'issue',
+        externalId: 'linear-issue:ENG-99',
+        url: 'https://linear.app/acme/issue/ENG-99',
+      },
+      title: 'Persisted Linear intake item',
+    };
+
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [githubWorkItem, linearWorkItem, manualWorkItem] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['linear-project-1'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
+        HttpResponse.json({
+          issues: new URL(request.url).searchParams.has('label') ? [githubIssue] : [],
+          nextPage: null,
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
+        HttpResponse.json({ issues: [linearIssue], nextCursor: null }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Investigate GitHub intake failure')).toBeVisible();
+    expect(screen.getByText('Persisted GitHub intake item')).toBeVisible();
+    expect(screen.queryByText('Persisted Linear intake item')).not.toBeInTheDocument();
+    expect(screen.getByText('Plan onboarding')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Linear' }));
+
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Fix Linear intake sync')).toBeVisible();
+    expect(screen.getByText('Persisted Linear intake item')).toBeVisible();
+    expect(screen.queryByText('Persisted GitHub intake item')).not.toBeInTheDocument();
+    expect(screen.getByText('Plan onboarding')).toBeVisible();
+    await waitFor(() => expect(screen.queryByText('Investigate GitHub intake failure')).not.toBeInTheDocument());
+  });
+
   it('shows "Moving to …" on the card while a menu move is in flight, then clears it', async () => {
     const { transitionGate } = stubBoardEndpoints();
     const user = userEvent.setup();
@@ -375,6 +472,18 @@ describe('Board card pending states', () => {
   it('opens GitHub and Linear intake issues in their external provider', async () => {
     stubBoardEndpoints();
     server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['linear-project-1'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({
           workItems: [
@@ -419,7 +528,8 @@ describe('Board card pending states', () => {
     expect(githubLink).toHaveAttribute('target', '_blank');
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('button', { name: 'Actions for Linear intake issue' }));
+    await user.click(screen.getByRole('button', { name: 'Linear' }));
+    await user.click(await screen.findByRole('button', { name: 'Actions for Linear intake issue' }));
     const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
     expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
     expect(linearLink).toHaveAttribute('target', '_blank');

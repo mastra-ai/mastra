@@ -1817,17 +1817,52 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
     // The VM stays alive for the next session, but the released session's
     // work is scrubbed off it before it enters the pool.
-    expect(reattachSandbox).toHaveBeenCalledWith('sb-live');
-    expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
-    expect(sourceControlStorage.sandboxPoolRows).toEqual([
-      expect.objectContaining({
-        orgId: 'org1',
-        projectRepositoryId: 'p1',
-        userId: 'u1',
+    await vi.waitFor(() => {
+      expect(reattachSandbox).toHaveBeenCalledWith('sb-live');
+      expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
+      expect(sourceControlStorage.sandboxPoolRows).toEqual([
+        expect.objectContaining({
+          orgId: 'org1',
+          projectRepositoryId: 'p1',
+          userId: 'u1',
+          sandboxId: 'sb-live',
+          sandboxWorkdir: '/workspace/hello',
+        }),
+      ]);
+    });
+  });
+
+  it('deletes the session without waiting for the sandbox scrub to finish', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(
+      tables.sessions.find(row => row.sessionId === sessionId)!,
+      {
         sandboxId: 'sb-live',
         sandboxWorkdir: '/workspace/hello',
-      }),
-    ]);
+      },
+    );
+    // Scrubbing a large checkout takes minutes on a real VM.
+    let finishScrub!: () => void;
+    const scrubbing = new Promise<void>(resolve => {
+      finishScrub = resolve;
+    });
+    recycleClaimedWorkdir.mockImplementationOnce(async () => {
+      await scrubbing;
+    });
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    // The workspace is gone from the user's list while the VM is still busy.
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+    // Nothing can claim the sandbox until the scrub completes.
+    expect(sourceControlStorage.sandboxPoolRows).toEqual([]);
+
+    finishScrub();
+    await vi.waitFor(() => expect(sourceControlStorage.sandboxPoolRows).toHaveLength(1));
   });
 
   it('does not expose another user or organization session', async () => {

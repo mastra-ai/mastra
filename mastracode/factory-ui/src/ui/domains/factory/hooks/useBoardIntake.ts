@@ -53,7 +53,7 @@ export function useBoardIntake({
 
   // Only the active intake feed fetches; the other feeds load on switch.
   const issues = useProjectIssuesQuery(active === 'github' ? projectRepositoryId : undefined);
-  const triageIssues = useProjectIssuesQuery(!review ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
+  const triageIssues = useProjectIssuesQuery(active === 'github' ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
   const pulls = useProjectPullRequestsQuery(active === 'github-prs' ? projectRepositoryId : undefined);
   const linearIssues = useLinearIssuesQuery(active === 'linear' ? factoryProjectId : undefined);
 
@@ -65,7 +65,7 @@ export function useBoardIntake({
       ? (pulls.data ?? []).map(pullRequestCandidate)
       : [
           ...intakeIssues.map(issueCandidate),
-          ...(triageIssues.data ?? []).map(issueCandidate),
+          ...(active === 'github' ? (triageIssues.data ?? []).map(issueCandidate) : []),
           ...(active === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
         ];
     return all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
@@ -85,6 +85,6 @@ export function useBoardIntake({
       (active === 'github' && issues.isPending) ||
       (active === 'github-prs' && pulls.isPending) ||
       (active === 'linear' && linearIssues.isPending),
-    isTriagePending: !review && triageIssues.isPending,
+    isTriagePending: !review && active === 'github' && triageIssues.isPending,
   };
 }

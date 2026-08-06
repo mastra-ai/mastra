@@ -703,6 +703,9 @@ describe('GithubSignals', () => {
                 lastObservedContentHash: 'aggregate-hash',
                 lastObservedThreadContentHash: 'thread-hash',
                 lastObservedHeadSha: 'head-sha',
+                lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+                lastObservedCommentAuthor: 'coderabbitai[bot]',
+                lastObservedCommentIsBot: true,
               },
             ],
           },
@@ -730,6 +733,9 @@ describe('GithubSignals', () => {
       lastObservedContentHash: 'aggregate-hash',
       lastObservedThreadContentHash: 'thread-hash',
       lastObservedHeadSha: 'head-sha',
+      lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+      lastObservedCommentAuthor: 'coderabbitai[bot]',
+      lastObservedCommentIsBot: true,
       lastSyncStatus: 'skipped',
     });
   });
@@ -2458,6 +2464,170 @@ describe('GithubSignals', () => {
       latestCommentIsBot: true,
     });
     expect(botNoise).not.toHaveBeenCalled();
+  });
+
+  it('ignores transient unknown mergeability recomputes', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-mergeability-noise',
+      resourceId: 'resource-mergeability-noise',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-mergeability-noise',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'blocked-hash',
+                lastObservedThreadContentHash: 'thread-hash',
+                lastObservedHeadSha: 'head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const mergeableStates = ['unknown', 'blocked'];
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Test PR',
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:00:00.000Z',
+        contentHash: `${mergeableStates[0]}-hash`,
+        threadContentHash: 'thread-hash',
+        headSha: 'head-sha',
+        mergeableState: mergeableStates.shift(),
+        ciState: 'success' as const,
+        reviewStateHash: 'reviews-0',
+      })),
+    };
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription.lastObservedMergeableState).toBe('blocked');
+  });
+
+  it('ignores observed bot comment edits without suppressing other thread activity', async () => {
+    const firstCommentUrl = 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-1';
+    const secondCommentUrl = 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-2';
+    const thread: StorageThreadType = {
+      id: 'thread-bot-edit',
+      resourceId: 'resource-bot-edit',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-bot-edit',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:01:00.000Z',
+                lastObservedContentHash: 'content-hash',
+                lastObservedThreadContentHash: 'thread-hash',
+                lastObservedHeadSha: 'head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+                lastObservedCommentUrl: firstCommentUrl,
+                lastObservedCommentAuthor: 'coderabbitai[bot]',
+                lastObservedCommentIsBot: true,
+              },
+            ],
+          },
+        },
+      },
+    };
+    const comments = [
+      {
+        url: firstCommentUrl,
+        body: 'Updated walkthrough for the same comment',
+        updatedAt: '2026-01-01T00:02:00.000Z',
+        threadContentHash: 'edited-bot-comment-hash',
+      },
+      {
+        url: firstCommentUrl,
+        body: 'Updated walkthrough for the same comment',
+        githubUpdatedAt: '2026-01-01T00:03:00.000Z',
+        updatedAt: '2026-01-01T00:02:00.000Z',
+        threadContentHash: 'updated-pr-body-hash',
+      },
+      {
+        url: secondCommentUrl,
+        body: 'A new review comment',
+        githubUpdatedAt: '2026-01-01T00:04:00.000Z',
+        updatedAt: '2026-01-01T00:04:00.000Z',
+        threadContentHash: 'new-bot-comment-hash',
+      },
+    ];
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        const comment = comments.shift()!;
+        return {
+          title: 'Test PR',
+          state: 'open',
+          githubUpdatedAt: comment.githubUpdatedAt ?? comment.updatedAt,
+          contentHash: `${comment.threadContentHash}-aggregate`,
+          threadContentHash: comment.threadContentHash,
+          headSha: 'head-sha',
+          mergeableState: 'blocked',
+          ciState: 'success' as const,
+          reviewStateHash: 'reviews-0',
+          latestCommentAuthor: 'coderabbitai[bot]',
+          latestCommentAuthorType: 'Bot',
+          latestCommentIsBot: true,
+          latestCommentBody: comment.body,
+          latestCommentUrl: comment.url,
+          latestCommentUpdatedAt: comment.updatedAt,
+        };
+      }),
+    };
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [expect.objectContaining({ kind: 'pull-request-activity', priority: 'high' })],
+      expect.anything(),
+    );
   });
 
   it('suppresses activity notifications from unauthorized commenters', async () => {

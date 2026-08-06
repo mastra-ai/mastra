@@ -152,7 +152,7 @@ describe('defaultFactoryRules', () => {
       sourceKey: 'linear:ENG-42',
       title: 'ENG-42: Fix intake sync',
       stage: 'triage',
-      metadata: { linearIssueId: 'issue-1', linearIssueIdentifier: 'ENG-42' },
+      metadata: { linearIssueId: 'issue-1', identifier: 'ENG-42' },
     });
   });
 

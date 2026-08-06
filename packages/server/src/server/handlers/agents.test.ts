@@ -1796,6 +1796,48 @@ describe('Agent Routes Authorization', () => {
       ).toBe(true);
     });
 
+    it('should preserve transient on non-state signals', () => {
+      for (const transient of [true, false]) {
+        const result = sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: 'steer once, do not retain', transient },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.success && result.data.signal.transient).toBe(transient);
+      }
+    });
+
+    it('should reject any supplied transient value on state signals', () => {
+      for (const transient of [true, false]) {
+        expect(
+          sendAgentSignalBodySchema.safeParse({
+            signal: { type: 'state', contents: 'full state snapshot', transient },
+            resourceId: 'user-a',
+            threadId: 'thread-a',
+          }).success,
+        ).toBe(false);
+      }
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      // JSON cannot carry undefined, so an in-process undefined value is equivalent to omission.
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot', transient: undefined },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
     it('should reject idle behavior when targeting a run', () => {
       expect(
         sendAgentSignalBodySchema.safeParse({

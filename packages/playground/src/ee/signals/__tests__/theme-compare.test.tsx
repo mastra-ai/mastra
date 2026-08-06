@@ -1,0 +1,250 @@
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SankeySignals } from '../sankey-signals';
+import { timelineTickPositions } from '../snapshot-timeline-data';
+import { computeThemeShareDeltas, themeShareSeries } from '../theme-compare-data';
+import {
+  earlierThemeFlowResponse,
+  fourStageThemeFlowResponse,
+  landmarkThemeSnapshotsResponse,
+  multiThemeSnapshotsResponse,
+} from './fixtures/theme-flow';
+import { server } from '@/test/msw-server';
+
+const BASE_URL = window.location.origin;
+
+class ChartResizeObserver implements ResizeObserver {
+  constructor(private readonly callback: ResizeObserverCallback) {}
+
+  observe(target: Element) {
+    const size = { blockSize: 680, inlineSize: 800 };
+    const entry = {
+      target,
+      contentRect: new DOMRectReadOnly(0, 0, 800, 680),
+      borderBoxSize: [size],
+      contentBoxSize: [size],
+      devicePixelContentBoxSize: [size],
+    } satisfies ResizeObserverEntry;
+    this.callback([entry], this);
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+}
+
+function renderSankeySignals() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <SankeySignals entityId="support-agent" signalNames={['goal', 'outcome', 'behavior', 'sentiment']} />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', ChartResizeObserver);
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe('computeThemeShareDeltas', () => {
+  describe('when a theme is present at A but missing at B', () => {
+    it('marks the theme gone with its full negative share delta', () => {
+      const deltas = computeThemeShareDeltas(earlierThemeFlowResponse, fourStageThemeFlowResponse, 'goal');
+      const legacy = deltas.find(delta => delta.label === 'Legacy support request');
+
+      expect(legacy).toMatchObject({ isGone: true, isNew: false, toShare: 0 });
+      expect(legacy?.fromShare).toBeCloseTo(4 / 50);
+      expect(legacy?.delta).toBeCloseTo(-4 / 50);
+    });
+
+    it('marks the mirrored comparison as new', () => {
+      const deltas = computeThemeShareDeltas(fourStageThemeFlowResponse, earlierThemeFlowResponse, 'goal');
+      const legacy = deltas.find(delta => delta.label === 'Legacy support request');
+
+      expect(legacy).toMatchObject({ isNew: true, isGone: false, fromShare: 0 });
+    });
+
+    it('orders themes by absolute share movement', () => {
+      const deltas = computeThemeShareDeltas(earlierThemeFlowResponse, fourStageThemeFlowResponse, 'goal');
+
+      const magnitudes = deltas.map(delta => Math.abs(delta.delta));
+      expect(magnitudes).toEqual([...magnitudes].sort((left, right) => right - left));
+    });
+
+    it('carries the theme id from whichever side still has the theme', () => {
+      const deltas = computeThemeShareDeltas(earlierThemeFlowResponse, fourStageThemeFlowResponse, 'goal');
+
+      expect(deltas.find(delta => delta.label === 'Legacy support request')?.themeId).toBe('theme-goal-legacy');
+      expect(deltas.find(delta => delta.label === 'Resolve support request')?.themeId).toBe('theme-goal-support');
+    });
+  });
+});
+
+describe('themeShareSeries', () => {
+  describe('when some flows in the run are not loaded yet', () => {
+    it('keeps unloaded slots undefined while reporting shares for loaded flows', () => {
+      const series = themeShareSeries(
+        [earlierThemeFlowResponse, undefined, fourStageThemeFlowResponse],
+        'goal',
+        'Legacy support request',
+      );
+
+      expect(series[0]).toBeCloseTo(4 / 50);
+      expect(series[1]).toBeUndefined();
+      expect(series[2]).toBe(0);
+    });
+  });
+});
+
+describe('timelineTickPositions', () => {
+  describe('when snapshots carry bursty cutoff timestamps', () => {
+    it('places ticks proportionally to cutoff time with the endpoints pinned', () => {
+      const positions = timelineTickPositions(landmarkThemeSnapshotsResponse.snapshots);
+
+      expect(positions[0]).toBe(0);
+      expect(positions[4]).toBe(100);
+      // Landmark 4 (Jul 7 18:00 of a Jul 1 04:00 → Jul 8 00:00 range) sits in
+      // the final burst rather than at the 75% index position.
+      expect(positions[3]).toBeGreaterThan(90);
+    });
+  });
+
+  describe('when snapshots have no cutoff timestamps', () => {
+    it('falls back to even index spacing', () => {
+      const positions = timelineTickPositions(multiThemeSnapshotsResponse.snapshots);
+
+      expect(positions).toEqual([0, 100]);
+    });
+  });
+});
+
+describe('SankeySignals compare mode', () => {
+  describe('when the user switches to compare mode', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(multiThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          return HttpResponse.json(snapshotId === 'snapshot-3' ? earlierThemeFlowResponse : fourStageThemeFlowResponse);
+        }),
+      );
+    });
+
+    it('replaces the flow chart with A/B delta columns for every signal', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+      expect(screen.queryByRole('region', { name: 'Trace signal theme flow' })).toBeNull();
+      for (const signalName of ['Goal', 'Outcome', 'Behavior', 'Sentiment']) {
+        expect(within(comparison).getByRole('region', { name: `${signalName} changes` })).not.toBeNull();
+      }
+    });
+
+    it('compares the first and last landmarks by default with date, trace, and theme summaries', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+      expect(await within(comparison).findByText('Jun 24–Jul 1, 2026 · 50 traces · 10 themes')).not.toBeNull();
+      expect(within(comparison).getByText('Jul 1–8, 2026 · 50 traces · 9 themes')).not.toBeNull();
+      expect(within(comparison).queryByText(/snapshot \d/)).toBeNull();
+    });
+
+    it('shows a gone theme with its share movement and no status badge', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+
+      const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
+      const legacyRow = within(goalColumn).getByTitle('Legacy support request').closest('li');
+      if (!legacyRow) throw new Error('Legacy support request row was not rendered');
+      expect(within(legacyRow).getByText('-8pp')).not.toBeNull();
+      expect(within(legacyRow).getByText('8% → 0%')).not.toBeNull();
+      expect(within(legacyRow).queryByText('GONE')).toBeNull();
+      expect(within(goalColumn).queryByText('NEW')).toBeNull();
+      // Marker dots render as HTML overlays, not stretched svg circles.
+      expect(legacyRow.querySelectorAll('circle')).toHaveLength(0);
+    });
+
+    it('opens the theme details panel when a delta card is clicked', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
+      fireEvent.click(
+        await within(goalColumn).findByRole('button', { name: 'View theme details for Legacy support request' }),
+      );
+
+      expect(await screen.findByRole('dialog', { name: 'Legacy support request' })).not.toBeNull();
+    });
+
+    it('moves point B by default even when the clicked tick is nearer to point A', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+
+      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
+      const firstTick = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ })[0]!;
+      fireEvent.click(firstTick);
+
+      expect(
+        await within(comparison).findByText('Pick two different landmarks on the timeline to compare them.'),
+      ).not.toBeNull();
+    });
+
+    it('moves point A after the user arms it', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+
+      const pointA = within(comparison).getByRole('button', { name: /Point A/ });
+      fireEvent.click(pointA);
+      expect(pointA.getAttribute('aria-pressed')).toBe('true');
+
+      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
+      const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
+      fireEvent.click(ticks[ticks.length - 1]!);
+
+      expect(
+        await within(comparison).findByText('Pick two different landmarks on the timeline to compare them.'),
+      ).not.toBeNull();
+    });
+
+    it('returns to the flow chart when the user switches back', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      await screen.findByRole('region', { name: 'Snapshot comparison' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Flow' }));
+
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
+      expect(screen.queryByRole('region', { name: 'Snapshot comparison' })).toBeNull();
+    });
+  });
+});
