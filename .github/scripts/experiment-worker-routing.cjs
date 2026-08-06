@@ -43,7 +43,7 @@ function scheduledJobEnabled(job) {
 
 function dispatchedJobEnabled({ tier, scenario = '', job }) {
   if (scenario) {
-    return scenarioOwners[scenario] === job || (!scenarioOwners[scenario] && job === (tier === 'pr' ? 'pr' : 'full'));
+    return scenarioOwners[scenario] === job || (!scenarioOwners[scenario] && job === 'full');
   }
   if (tier === 'pr') return job === 'pr';
   if (tier === 'full') return job === 'full' || job === 'browser';

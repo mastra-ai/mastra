@@ -176,7 +176,9 @@ jobs:
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
           const e2eChanged = affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
-            file.startsWith('e2e-tests/') ||
+            (file.startsWith('e2e-tests/') &&
+              !file.startsWith('e2e-tests/experiment-worker/') &&
+              !file.startsWith('e2e-tests/_local-registry-setup/')) ||
             file.startsWith('packages/playground/e2e/') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
@@ -203,7 +205,7 @@ jobs:
                 { encoding: 'utf8' },
               )
             : '';
-          const experimentWorkerChanged = experimentWorkerE2eChanged(changedFiles, experimentEntryDiff);
+          const experimentWorkerChanged = experimentWorkerE2eChanged(nonMarkdownChangedFiles, experimentEntryDiff);
 
           output(`memory_changed=${memoryChanged}\n`);
           output(`e2e_changed=${e2eChanged}\n`);

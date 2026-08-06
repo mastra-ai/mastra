@@ -79,6 +79,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
@@ -125,6 +127,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
@@ -176,6 +180,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
@@ -223,8 +229,8 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with: { name: experiment-worker-registry, path: '${{ runner.temp }}/experiment-worker-registry' }
+        with:
+          persist-credentials: false
       - run: node scripts/gated-interface.mjs remote-sandbox
         working-directory: ./e2e-tests/experiment-worker
         env:
@@ -252,8 +258,8 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with: { name: experiment-worker-registry, path: '${{ runner.temp }}/experiment-worker-registry' }
+        with:
+          persist-credentials: false
       - run: node scripts/gated-interface.mjs object-store
         working-directory: ./e2e-tests/experiment-worker
         env:
@@ -282,8 +288,8 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with: { name: experiment-worker-registry, path: '${{ runner.temp }}/experiment-worker-registry' }
+        with:
+          persist-credentials: false
       - run: node scripts/gated-interface.mjs real-model
         working-directory: ./e2e-tests/experiment-worker
         env:
@@ -311,8 +317,8 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with: { name: experiment-worker-registry, path: '${{ runner.temp }}/experiment-worker-registry' }
+        with:
+          persist-credentials: false
       - run: node scripts/gated-interface.mjs hosted-proxy
         working-directory: ./e2e-tests/experiment-worker
         env:
