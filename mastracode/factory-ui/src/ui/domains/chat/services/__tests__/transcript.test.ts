@@ -706,6 +706,67 @@ describe('transcript reducer mergeWindow', () => {
     },
   );
 
+  it('adopts trailing parts the gap swallowed when the run ended before reconnect', () => {
+    // The stream died mid-turn: the live entry holds a cut-off text and a tool
+    // stuck at call. The run finished during the gap, so the refetched window
+    // is the only carrier of the extended text, the result and the final text.
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('live-1', 'assistant', [
+          { type: 'text', text: 'working' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+          },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('persisted-1', 'assistant', [
+          { type: 'text', text: 'working on it' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'final answer' },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0])).toEqual([
+      { type: 'text', text: 'working on it' },
+      expect.objectContaining({ toolInvocation: expect.objectContaining({ state: 'result', result: 'ok' }) }),
+      { type: 'text', text: 'final answer' },
+    ]);
+  });
+
+  it('returns the same state when the window matches the on-screen turn exactly', () => {
+    // Routine revalidation must stay a referential no-op or every refetch
+    // rerenders the whole transcript.
+    const parts: MastraMessagePart[] = [
+      { type: 'text', text: 'done' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+      },
+    ];
+    const onScreen = createInitialTranscript({ messages: [dbMessage('assistant-1', 'assistant', parts)] });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [dbMessage('assistant-1', 'assistant', parts)],
+    });
+
+    expect(next).toBe(onScreen);
+  });
+
   it('does not duplicate a turn the window carries under its persisted id', () => {
     // A streamed turn keeps its display id; the persisted copy arrives under a
     // different id but shares the toolCallId. Merge must heal in place, not

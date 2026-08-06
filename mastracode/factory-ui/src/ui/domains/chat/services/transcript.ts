@@ -113,12 +113,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** Token usage snapshot from usage_update events. */
 export interface UsageSnapshot {
@@ -615,7 +610,7 @@ function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[
 function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   if (messages.length === 0) return state;
 
-  const reconciled = reconcileToolResults(state, messages);
+  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(state, messages), messages);
 
   // A streamed turn and its persisted copy carry different message ids (the
   // engine mints display ids independently of what MessageList persists), so
@@ -680,6 +675,62 @@ export function isTerminalInvocationState(state: ToolInvocationMessagePart['tool
 }
 
 /**
+ * Adopt the persisted copy of a streamed turn when it strictly extends what is
+ * on screen. When the run ends inside an SSE gap the refetched window is the
+ * only carrier of the turn's trailing parts (text after the last tool result) —
+ * reconcileToolResults alone would heal the tool but drop that text. Adoption
+ * only fires when nothing on screen would be lost; a live turn ahead of the
+ * snapshot fails the prefix check and keeps its streamed parts.
+ */
+function adoptCoveringWindowCopies(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  let changed = false;
+  const entries = state.entries.map(entry => {
+    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+    const onScreenParts = entry.message.content.parts;
+    const toolCallIds = new Set(toolCallIdsOf(onScreenParts));
+    const copy = messages.find(
+      message =>
+        message.role === 'assistant' &&
+        (message.id === entry.id ||
+          (toolCallIds.size > 0 && toolCallIdsOf(message.content.parts).some(id => toolCallIds.has(id)))),
+    );
+    if (!copy) return entry;
+    const covers = windowCopyCovers(onScreenParts, copy.content.parts);
+    const identical = covers && windowCopyCovers(copy.content.parts, onScreenParts);
+    if (!covers || identical) return entry;
+    changed = true;
+    return {
+      ...entry,
+      message: { ...entry.message, content: { ...entry.message.content, parts: copy.content.parts } },
+    };
+  });
+
+  return changed ? { ...state, entries } : state;
+}
+
+/**
+ * True when adopting `persisted` loses nothing from `onScreen`: parts match
+ * positionally, text may only extend, tool parts keep their toolCallId and
+ * never regress from a terminal state. Snapshot streams mirror the same
+ * MessageList that persists, so positional comparison is sound.
+ */
+function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessagePart[]): boolean {
+  if (persisted.length < onScreen.length) return false;
+  return onScreen.every((part, index) => {
+    const counterpart = persisted[index];
+    if (part.type === 'text' && counterpart.type === 'text') return counterpart.text.startsWith(part.text);
+    if (part.type === 'tool-invocation' && counterpart.type === 'tool-invocation') {
+      if (part.toolInvocation.toolCallId !== counterpart.toolInvocation.toolCallId) return false;
+      return (
+        !isTerminalInvocationState(part.toolInvocation.state) ||
+        isTerminalInvocationState(counterpart.toolInvocation.state)
+      );
+    }
+    return JSON.stringify(counterpart) === JSON.stringify(part);
+  });
+}
+
+/**
  * Fold terminal tool results from the refetched window into entries already on
  * screen. The stream can lose a `tool_end` (SSE drop — the server does not
  * replay missed events), leaving an on-screen part stuck at `call` and its row
@@ -731,8 +782,7 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
 function isChannelOriginSignal(message: MastraDBMessage): boolean {
   const signal = message.content.metadata?.signal as { providerOptions?: unknown } | undefined;
   const dataPart = (message.content.parts ?? []).find(part => part.type === 'data-user-message') as
-    | { data?: { providerOptions?: unknown } }
-    | undefined;
+    { data?: { providerOptions?: unknown } } | undefined;
 
   for (const candidate of [signal?.providerOptions, dataPart?.data?.providerOptions]) {
     if (!candidate || typeof candidate !== 'object') continue;
