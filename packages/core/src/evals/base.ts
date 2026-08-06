@@ -212,6 +212,11 @@ interface ScorerRun<TInput = any, TOutput = any> {
 
   /** Live target metadata to merge into emitted score metadata when available. */
   targetMetadata?: Record<string, unknown>;
+
+  /** @internal Framework controls that must not affect scorer execution or returned results. */
+  _internal?: {
+    emitObservabilityScore?: boolean;
+  };
 }
 
 // Prompt object definition with conditional typing
@@ -902,6 +907,8 @@ class MastraScorer<
   }
 
   async run(input: ScorerRun<TInput, TRunOutput>): Promise<ScorerRunResult<TAccumulatedResults, TInput, TRunOutput>> {
+    const { _internal, ...scorerInput } = input;
+
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
       throw new MastraError({
@@ -918,7 +925,7 @@ class MastraScorer<
 
     // Apply prepareRun transformation before span creation to reduce data
     // flowing into both the observability span and the scorer pipeline.
-    const prepared = this.config.prepareRun ? await this.config.prepareRun(input) : input;
+    const prepared = this.config.prepareRun ? await this.config.prepareRun(scorerInput) : scorerInput;
 
     let runId = prepared.runId;
     if (!runId) {
@@ -1062,7 +1069,11 @@ class MastraScorer<
       },
     });
 
-    if (this.#mastra?.observability.addScore && typeof scorerResult.score === 'number') {
+    if (
+      _internal?.emitObservabilityScore !== false &&
+      this.#mastra?.observability.addScore &&
+      typeof scorerResult.score === 'number'
+    ) {
       try {
         const targetTraceId = input.targetTraceId ?? input.targetCorrelationContext?.traceId;
         const targetSpanId = input.targetSpanId ?? input.targetCorrelationContext?.spanId;

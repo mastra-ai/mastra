@@ -37,9 +37,7 @@
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 stream response",
           "files": []
         }
       },
@@ -61,6 +59,42 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "workflowExecutor",
+                  "description": "Executes a workflow",
+                  "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "workflowId": {
+                        "type": "string"
+                      },
+                      "input": {
+                        "type": ["string", "number", "integer", "boolean", "object", "null"]
+                      },
+                      "suspendedToolRunId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "description": "The runId of the suspended tool"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "type": ["string", "number", "integer", "boolean", "object", "null"]
+                      }
+                    },
+                    "required": ["workflowId", "input"],
+                    "additionalProperties": false
+                  }
+                }
+              ],
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -103,9 +137,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 stream response",
               "warnings": []
             }
           },
@@ -453,9 +485,7 @@
                   }
                 ],
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 stream response",
                   "toolCalls": []
                 }
               },
@@ -500,9 +530,7 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 stream response",
                       "toolCalls": []
                     }
                   },
@@ -530,9 +558,7 @@
                           "environment": "test"
                         },
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          }
+                          "text": "Mock V2 stream response"
                         }
                       }
                     }
