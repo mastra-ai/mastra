@@ -200,6 +200,11 @@ const config: Config = {
     ],
   ],
   themeConfig: {
+    docs: {
+      sidebar: {
+        autoCollapseCategories: true,
+      },
+    },
     image: 'img/og-image.png',
     colorMode: {
       respectPrefersColorScheme: true,

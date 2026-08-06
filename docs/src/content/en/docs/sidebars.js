@@ -47,9 +47,6 @@ const sidebars = {
             id: 'agents/overview',
           },
           collapsed: true,
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -92,9 +89,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'workflows/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {
@@ -159,9 +153,6 @@ const sidebars = {
             type: 'doc',
             id: 'harness/overview',
           },
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -225,9 +216,6 @@ const sidebars = {
             type: 'doc',
             id: 'memory/overview',
           },
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -286,9 +274,6 @@ const sidebars = {
             type: 'doc',
             id: 'workspace/overview',
           },
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -323,9 +308,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'capabilities/channels/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {
@@ -372,9 +354,6 @@ const sidebars = {
             type: 'doc',
             id: 'browser/overview',
           },
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -412,9 +391,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'connections/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {
@@ -459,9 +435,6 @@ const sidebars = {
             type: 'doc',
             id: 'studio/overview',
           },
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -491,9 +464,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'server/mastra-server',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {
@@ -539,9 +509,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'server/auth/index',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {
@@ -626,9 +593,6 @@ const sidebars = {
             type: 'doc',
             id: 'deployment/overview',
           },
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -684,9 +648,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'observability/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {
@@ -822,9 +783,6 @@ const sidebars = {
             type: 'doc',
             id: 'observability/metrics/overview',
           },
-          customProps: {
-            contextualSidebar: true,
-          },
           items: [
             {
               type: 'doc',
@@ -839,9 +797,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'evals/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {
@@ -887,9 +842,6 @@ const sidebars = {
           link: {
             type: 'doc',
             id: 'datasets/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
           },
           items: [
             {

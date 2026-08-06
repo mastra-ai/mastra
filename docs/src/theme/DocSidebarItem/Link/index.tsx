@@ -8,8 +8,6 @@ import IconExternalLink from '@theme/Icon/ExternalLink'
 import type { Props } from '@theme/DocSidebarItem/Link'
 import SidebarBadge from '@site/src/components/SidebarBadge'
 
-import { isPlainPrimaryClick } from '../../contextual-sidebar'
-import { useIsContextualSidebarPane } from '../../contextual-sidebar-context'
 import styles from './styles.module.css'
 import { getBadgeType } from '../utils'
 
@@ -40,7 +38,6 @@ export default function DocSidebarItemLink({
   const { href, label, className, autoAddBaseUrl } = item
   const isActive = isActiveSidebarItem(item, activePath)
   const isInternalLink = isInternalUrl(href)
-  const isContextualSidebarPane = useIsContextualSidebarPane()
 
   return (
     <li
@@ -60,13 +57,7 @@ export default function DocSidebarItemLink({
         aria-current={isActive ? 'page' : undefined}
         to={href}
         {...(isInternalLink && {
-          onClick: onItemClick
-            ? event => {
-                if (!isContextualSidebarPane || isPlainPrimaryClick(event)) {
-                  onItemClick(item)
-                }
-              }
-            : undefined,
+          onClick: onItemClick ? () => onItemClick(item) : undefined,
         })}
         {...props}
       >

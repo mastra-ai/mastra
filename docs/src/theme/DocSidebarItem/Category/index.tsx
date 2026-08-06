@@ -16,12 +16,6 @@ import type { Props } from '@theme/DocSidebarItem/Category'
 import SidebarBadge from '@site/src/components/SidebarBadge'
 
 import type { PropSidebarItemCategory, PropSidebarItemLink } from '@docusaurus/plugin-content-docs'
-import { isPlainPrimaryClick } from '../../contextual-sidebar'
-import {
-  useContextualSidebar,
-  useIsContextualSidebarEnabled,
-  useIsContextualSidebarPane,
-} from '../../contextual-sidebar-context'
 import styles from './styles.module.css'
 import { getBadgeType } from '../utils'
 
@@ -144,12 +138,6 @@ function DocSidebarItemCategoryCollapsible({
   ...props
 }: Props): ReactNode {
   const { items, label, collapsible, className, href } = item
-  const isContextualSidebarEnabled = useIsContextualSidebarEnabled()
-  const isContextualSidebarCategory = Boolean(
-    isContextualSidebarEnabled && href && item.customProps?.contextualSidebar === true,
-  )
-  const isContextualSidebarPane = useIsContextualSidebarPane()
-  const { enterSidebar } = useContextualSidebar()
   // Get tags from customProps in sidebar config
   const tags = item?.customProps?.tags
   const badgeType = getBadgeType(tags)
@@ -170,7 +158,7 @@ function DocSidebarItemCategoryCollapsible({
       if (!collapsible) {
         return false
       }
-      return isActive && !isContextualSidebarCategory ? false : item.collapsed
+      return isActive ? false : item.collapsed
     },
   })
 
@@ -181,7 +169,7 @@ function DocSidebarItemCategoryCollapsible({
     setCollapsed(toCollapsed)
   }
   useAutoExpandActiveCategory({
-    isActive: isActive && !isContextualSidebarCategory,
+    isActive,
     collapsed,
     updateCollapsed,
     activePath,
@@ -193,14 +181,6 @@ function DocSidebarItemCategoryCollapsible({
   }, [collapsible, expandedItem, index, setCollapsed, autoCollapseCategories])
 
   const handleItemClick: ComponentProps<'a'>['onClick'] = e => {
-    if ((isContextualSidebarCategory || isContextualSidebarPane) && !isPlainPrimaryClick(e)) {
-      return
-    }
-    if (isContextualSidebarCategory) {
-      enterSidebar(item)
-      onItemClick?.(item)
-      return
-    }
     onItemClick?.(item)
     if (collapsible) {
       if (href) {
@@ -230,11 +210,10 @@ function DocSidebarItemCategoryCollapsible({
         ThemeClassNames.docs.docSidebarItemCategoryLevel(level),
         'menu__list-item',
         {
-          'menu__list-item--collapsed': collapsed && !isContextualSidebarCategory,
+          'menu__list-item--collapsed': collapsed,
         },
         className,
       )}
-      data-contextual-sidebar={isContextualSidebarCategory ? 'true' : undefined}
     >
       <div
         className={clsx('menu__list-item-collapsible', {
@@ -243,7 +222,7 @@ function DocSidebarItemCategoryCollapsible({
       >
         <Link
           className={clsx(styles.categoryLink, 'menu__link', {
-            'menu__link--sublist': collapsible && !isContextualSidebarCategory,
+            'menu__link--sublist': collapsible,
             'menu__link--sublist-caret': !href && collapsible,
             'menu__link--active': isActive,
           })}
@@ -251,14 +230,14 @@ function DocSidebarItemCategoryCollapsible({
           aria-current={isCurrentPage ? 'page' : undefined}
           role={collapsible && !href ? 'button' : undefined}
           aria-expanded={collapsible && !href ? !collapsed : undefined}
-          href={isContextualSidebarCategory ? href : collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback}
+          href={collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback}
           {...props}
         >
           <span title={label} className={styles.categoryLinkLabel}>
             {label} {badgeType && <SidebarBadge type={badgeType} />}
           </span>
         </Link>
-        {href && collapsible && !isContextualSidebarCategory && (
+        {href && collapsible && (
           <CollapseButton
             collapsed={collapsed}
             categoryLabel={label}
@@ -270,17 +249,15 @@ function DocSidebarItemCategoryCollapsible({
         )}
       </div>
 
-      {!isContextualSidebarCategory && (
-        <Collapsible lazy as="ul" className="menu__list" collapsed={collapsed}>
-          <DocSidebarItems
-            items={items}
-            tabIndex={collapsed ? -1 : 0}
-            onItemClick={onItemClick}
-            activePath={activePath}
-            level={level + 1}
-          />
-        </Collapsible>
-      )}
+      <Collapsible lazy as="ul" className="menu__list" collapsed={collapsed}>
+        <DocSidebarItems
+          items={items}
+          tabIndex={collapsed ? -1 : 0}
+          onItemClick={onItemClick}
+          activePath={activePath}
+          level={level + 1}
+        />
+      </Collapsible>
     </li>
   )
 }
