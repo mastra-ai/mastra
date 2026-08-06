@@ -47,11 +47,13 @@ function isInstance(
 /**
  * Delays (ms) between attempts to rehydrate a trace from storage when an
  * annotation (score/feedback) targets a span that has not been flushed by
- * the configured exporters yet. Exporters buffer and flush asynchronously
- * (batch size / batch wait), so an annotation emitted right after a span
- * ends can race the flush and be silently dropped. ~900ms worst case.
+ * the configured exporters yet. Exporters buffer and flush asynchronously:
+ * by default they flush at 1000 spans or after a 5000ms wait
+ * (`maxBatchWaitMs`), so an annotation emitted right after a span ends can
+ * race the flush and be silently dropped. The schedule below sums to
+ * ~5.85s, covering the default flush interval with margin.
  */
-const RECORDED_TRACE_LOOKUP_RETRY_DELAYS_MS = [50, 100, 250, 500];
+const RECORDED_TRACE_LOOKUP_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000, 2000];
 
 /**
  * Top-level observability entrypoint. Manages a registry of ObservabilityInstance
