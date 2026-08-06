@@ -5,14 +5,11 @@ import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { server } from '../../../e2e/ui/msw-server';
-import { queryKeys } from '../../api/keys';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import {
-  deriveConnectionStatus,
-  useAgentControllerConnection,
-} from '../../ui/domains/chat/hooks/useAgentControllerConnection';
-import { reconnectRefetchInterval } from '../useAgentControllerSessionSync';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { queryKeys } from '../../../../../api/keys';
+import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
+import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';
@@ -467,5 +464,55 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
     expect(result.current.state?.threadId).toBe('state-thread-2');
+  });
+
+  it('given the stream drops and recovers, then the resource message windows are invalidated to close the event gap', async () => {
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        if (onStream.mock.calls.length === 1) {
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                setTimeout(() => controller.error(new Error('stream dropped')), 0);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { client, result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+
+    const messagesKey = queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'thread-x', 100);
+    const otherResourceKey = queryKeys.agentControllerThreadMessages(controllerId, 'other-resource', 'thread-y', 100);
+    client.setQueryData(messagesKey, []);
+    client.setQueryData(otherResourceKey, []);
+
+    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2), { timeout: 2500 });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
+    expect(client.getQueryState(otherResourceKey)?.isInvalidated).toBe(false);
   });
 });
