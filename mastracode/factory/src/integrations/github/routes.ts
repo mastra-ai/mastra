@@ -21,6 +21,7 @@ import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import { resolveFactoryDefaultModelId } from '../../session/factory-session.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -129,24 +130,6 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
-}
-
-/**
- * Resolve the Factory project's default model for a triage run. Best-effort:
- * a missing project or an uninitialized storage domain simply means "no
- * default", never a failed run.
- */
-async function resolveFactoryDefaultModelId(
-  projects: FactoryProjectsStorage | undefined,
-  factoryProjectId: string | undefined,
-): Promise<string | undefined> {
-  if (!projects || !factoryProjectId) return undefined;
-  try {
-    const project = await projects.getById({ id: factoryProjectId });
-    return project?.defaultModelId ?? undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
