@@ -148,7 +148,7 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
   ) {
     return `factory/pr-${pullRequestNumber}`;
   }
-  const linearIdentifier = metadata.linearIssueIdentifier ?? metadata.identifier;
+  const linearIdentifier = metadata.identifier ?? metadata.linearIssueIdentifier;
   if (item.externalSource?.integrationId === 'linear' && typeof linearIdentifier === 'string') {
     return `factory/linear-${linearIdentifier.toLowerCase()}`;
   }

@@ -51,7 +51,7 @@ const linearWorkItem = {
     url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
   },
   title: 'ENG-42: Fix intake sync',
-  metadata: { linearIssueIdentifier: 'ENG-42' },
+  metadata: { identifier: 'ENG-42' },
 };
 
 /**

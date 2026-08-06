@@ -20,13 +20,15 @@ describe('factoryRuleBranch', () => {
     updatedAt: new Date(),
   };
 
-  it('supports Linear issue metadata', () => {
-    expect(
-      factoryRuleBranch({
-        ...item,
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'issue-1' },
-        metadata: { linearIssueIdentifier: 'ENG-42' },
-      }),
-    ).toBe('factory/linear-eng-42');
+  it('supports canonical and legacy Linear issue metadata', () => {
+    const linearItem = {
+      ...item,
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'issue-1' },
+    };
+
+    expect(factoryRuleBranch({ ...linearItem, metadata: { identifier: 'ENG-42' } })).toBe('factory/linear-eng-42');
+    expect(factoryRuleBranch({ ...linearItem, metadata: { linearIssueIdentifier: 'ENG-43' } })).toBe(
+      'factory/linear-eng-43',
+    );
   });
 });

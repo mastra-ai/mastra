@@ -119,19 +119,13 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
   const { factoryProjectId, externalSource, metadata, ...rest } = item;
-  const rawMetadata = metadata ?? {};
-  const linearIssueIdentifier = rawMetadata.linearIssueIdentifier;
-  const normalizedMetadata =
-    rawMetadata.identifier === undefined && typeof linearIssueIdentifier === 'string'
-      ? { ...rawMetadata, identifier: linearIssueIdentifier }
-      : rawMetadata;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
     url: externalSource?.url ?? null,
-    metadata: normalizedMetadata,
+    metadata: metadata ?? {},
   };
 }
 
