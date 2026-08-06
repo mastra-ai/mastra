@@ -844,8 +844,7 @@ export class PlatformSandbox extends MastraSandbox {
     // has evicted it via a transport failure. Serving `getInfo()` from
     // local state here removes the per-poll `GET /sandbox/:id` hit that
     // otherwise triggers a Railway GraphQL call + `sandboxExec` awk on
-    // `/proc/net/if_inet6` inside the proxy. See
-    // `.scratch/factory-deploy/issue-workspace-getinfo-hits-proxy-when-registry-populated.md`.
+    // `/proc/net/if_inet6` inside the proxy.
     //
     // Note: this does NOT probe the sidecar. If the sandbox has been
     // destroyed out-of-band the next exec will fail transport, evict the
