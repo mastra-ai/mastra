@@ -51,6 +51,8 @@ export type SetURLSearchParamsLike = (
 ) => void;
 
 export interface UseTraceUrlStateOptions {
+  /** Date preset used when the URL does not contain an explicit preset. */
+  defaultDatePreset?: TraceDatePreset;
   /** Called after `handleRemoveAll` clears all filter URL params. Use this to reset page-local
    *  UI state (e.g. a "group by thread" toggle) without wrapping the handler. */
   onRemoveAll?: () => void;
@@ -128,11 +130,13 @@ export function useTraceUrlState(
   setSearchParams: SetURLSearchParamsLike,
   options?: UseTraceUrlStateOptions,
 ): UseTraceUrlStateResult {
-  const { onRemoveAll } = options ?? {};
+  const { defaultDatePreset = 'last-24h', onRemoveAll } = options ?? {};
   const datePreset = useMemo<TraceDatePreset>(() => {
     const value = searchParams.get(TRACE_DATE_PRESET_PARAM);
-    return value && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset) ? (value as TraceDatePreset) : 'last-24h';
-  }, [searchParams]);
+    return value && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset)
+      ? (value as TraceDatePreset)
+      : defaultDatePreset;
+  }, [defaultDatePreset, searchParams]);
 
   const dateFromParamRaw = searchParams.get(TRACE_DATE_FROM_PARAM);
   const dateToParamRaw = searchParams.get(TRACE_DATE_TO_PARAM);
@@ -160,6 +164,8 @@ export function useTraceUrlState(
   // clobber each other).
   const datePresetRef = useRef(datePreset);
   datePresetRef.current = datePreset;
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
 
   const traceIdParam = searchParams.get(TRACE_ID_PARAM) || undefined;
   const spanIdParam = searchParams.get(SPAN_ID_PARAM) || undefined;
@@ -347,19 +353,15 @@ export function useTraceUrlState(
     (value: Date | undefined, type: 'from' | 'to') => {
       if (datePresetRef.current !== 'custom') return;
       const param = type === 'from' ? TRACE_DATE_FROM_PARAM : TRACE_DATE_TO_PARAM;
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (value) {
-            next.set(param, value.toISOString());
-          } else {
-            next.delete(param);
-          }
-          clearSelectionParams(next);
-          return next;
-        },
-        { replace: true },
-      );
+      const next = new URLSearchParams(searchParamsRef.current);
+      if (value) {
+        next.set(param, value.toISOString());
+      } else {
+        next.delete(param);
+      }
+      clearSelectionParams(next);
+      searchParamsRef.current = next;
+      setSearchParams(next, { replace: true });
     },
     [setSearchParams],
   );
@@ -369,30 +371,28 @@ export function useTraceUrlState(
       // Update ref synchronously so any onDateChange fired by the picker in the
       // same tick (for non-custom presets) sees the new value and skips.
       datePresetRef.current = preset;
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (preset === 'last-24h') {
-            // Default — clear all date params.
-            next.delete(TRACE_DATE_PRESET_PARAM);
-            next.delete(TRACE_DATE_FROM_PARAM);
-            next.delete(TRACE_DATE_TO_PARAM);
-          } else if (preset === 'custom') {
-            next.set(TRACE_DATE_PRESET_PARAM, 'custom');
-            // Keep existing dateFrom/dateTo for the user to adjust.
-          } else {
-            // `last-*` or 'all' — only the preset is stored; dates are derived.
-            next.set(TRACE_DATE_PRESET_PARAM, preset);
-            next.delete(TRACE_DATE_FROM_PARAM);
-            next.delete(TRACE_DATE_TO_PARAM);
-          }
-          clearSelectionParams(next);
-          return next;
-        },
-        { replace: true },
-      );
+      const next = new URLSearchParams(searchParamsRef.current);
+      if (preset === defaultDatePreset) {
+        // Default — clear all date params.
+        next.delete(TRACE_DATE_PRESET_PARAM);
+        next.delete(TRACE_DATE_FROM_PARAM);
+        next.delete(TRACE_DATE_TO_PARAM);
+      } else if (preset === 'custom') {
+        next.set(TRACE_DATE_PRESET_PARAM, 'custom');
+        if (!next.has(TRACE_DATE_FROM_PARAM) && selectedDateFrom) {
+          next.set(TRACE_DATE_FROM_PARAM, selectedDateFrom.toISOString());
+        }
+      } else {
+        // `last-*` or 'all' — only the preset is stored; dates are derived.
+        next.set(TRACE_DATE_PRESET_PARAM, preset);
+        next.delete(TRACE_DATE_FROM_PARAM);
+        next.delete(TRACE_DATE_TO_PARAM);
+      }
+      clearSelectionParams(next);
+      searchParamsRef.current = next;
+      setSearchParams(next, { replace: true });
     },
-    [setSearchParams],
+    [defaultDatePreset, selectedDateFrom, setSearchParams],
   );
 
   const handleListModeChange = useCallback(

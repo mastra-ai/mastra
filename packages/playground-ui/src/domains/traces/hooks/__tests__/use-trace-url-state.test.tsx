@@ -3,6 +3,7 @@ import { act, cleanup, render } from '@testing-library/react';
 import { useCallback, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { TraceDatePreset } from '../../index';
 import type { SetURLSearchParamsLike, UseTraceUrlStateResult } from '../use-trace-url-state';
 import { useTraceUrlState } from '../use-trace-url-state';
 
@@ -12,20 +13,59 @@ let api: UseTraceUrlStateResult;
 let currentSearch: string;
 const setSpy = vi.fn();
 
-function Harness({ initial }: { initial: string }) {
+function Harness({ initial, defaultDatePreset }: { initial: string; defaultDatePreset?: TraceDatePreset }) {
   const [params, setParams] = useState(() => new URLSearchParams(initial));
   currentSearch = params.toString();
   const setSearchParams = useCallback<SetURLSearchParamsLike>(next => {
     setSpy(next);
     setParams(prev => (typeof next === 'function' ? next(new URLSearchParams(prev)) : new URLSearchParams(next)));
   }, []);
-  api = useTraceUrlState(params, setSearchParams);
+  api = useTraceUrlState(params, setSearchParams, defaultDatePreset ? { defaultDatePreset } : undefined);
   return null;
 }
 
 afterEach(() => {
   cleanup();
   setSpy.mockClear();
+  vi.restoreAllMocks();
+});
+
+describe('useTraceUrlState date state', () => {
+  describe('when a consumer configures a different default date preset', () => {
+    it('uses that preset without adding it to the URL', () => {
+      render(<Harness initial="" defaultDatePreset="last-7d" />);
+
+      expect(api.datePreset).toBe('last-7d');
+      expect(currentSearch).toBe('');
+    });
+
+    it('stores a non-default preset and clears it when the default is restored', () => {
+      render(<Harness initial="" defaultDatePreset="last-7d" />);
+
+      act(() => api.handleDatePresetChange('last-14d'));
+      expect(new URLSearchParams(currentSearch).get('datePreset')).toBe('last-14d');
+
+      act(() => api.handleDatePresetChange('last-7d'));
+      expect(new URLSearchParams(currentSearch).get('datePreset')).toBeNull();
+    });
+
+    it('keeps both custom dates when the picker updates them synchronously', () => {
+      render(<Harness initial="" defaultDatePreset="last-7d" />);
+      const dateFrom = new Date('2026-07-20T04:00:00.000Z');
+      const dateTo = new Date('2026-07-26T03:59:00.000Z');
+
+      act(() => {
+        api.handleDatePresetChange('custom');
+        api.handleDateChange(dateFrom, 'from');
+        api.handleDateChange(dateTo, 'to');
+      });
+
+      const params = new URLSearchParams(currentSearch);
+      expect(params.get('datePreset')).toBe('custom');
+      expect(params.get('dateFrom')).toBe(dateFrom.toISOString());
+      expect(params.get('dateTo')).toBe(dateTo.toISOString());
+    });
+  });
 });
 
 describe('useTraceUrlState.handleSpanChangeWithTab', () => {
