@@ -217,6 +217,38 @@ describe('PluginManager', () => {
     expect(manager.getPluginTools().runtime_tool?.description).toBe('mastra-code');
   });
 
+  it('publishes runtime accessors to a manager constructed without one', async () => {
+    // The injected-manager shape: `MastraCodeConfig.pluginManager` instances are
+    // built without runtime accessors, and createMastraCode publishes its own
+    // via setRuntime. Without that publish, plugins see undefined accessors.
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.injected',
+        tools: context => ({
+          injected_tool: {
+            tool: { id: 'injected_tool', description: context.getController?.()?.id ?? 'no-controller' }
+          }
+        })
+      };`,
+    );
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+
+    await manager.installLocal(pluginDir, 'project');
+    expect(manager.getPluginTools().injected_tool?.description).toBe('no-controller');
+
+    manager.setRuntime({ getController: () => ({ id: 'mastra-code' }) as never });
+    await manager.reload();
+
+    expect(manager.getPluginTools().injected_tool?.description).toBe('mastra-code');
+  });
+
   it('exposes processors and signal providers from active plugins only, tagged with their owner', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

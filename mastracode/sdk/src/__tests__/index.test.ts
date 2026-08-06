@@ -611,6 +611,7 @@ describe('createMastraCode', () => {
         { id: 'acme.plugin', status: 'active', toolNames: ['plugin_tool'], instructions: 'Use plugin policy.' },
       ]),
       getPluginTools: vi.fn(() => ({ plugin_tool: { id: 'plugin_tool' } })),
+      setRuntime: vi.fn(),
       onReload: vi.fn(),
       getPluginSignalProviders: vi.fn(() => []),
     };
@@ -989,6 +990,7 @@ describe('createMastraCode', () => {
     const pluginManager = {
       reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
       getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
       onReload: vi.fn(),
       getPluginSignalProviders: vi.fn(() => []),
       getPluginProcessors: vi.fn(() => entries),
@@ -1037,6 +1039,7 @@ describe('createMastraCode', () => {
     const pluginManager = {
       reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
       getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
       onReload: vi.fn(),
       getPluginSignalProviders: vi.fn(() => [{ pluginId: 'acme.plugin', versionStamp: 'v1', value: provider }]),
       getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
@@ -1079,6 +1082,7 @@ describe('createMastraCode', () => {
     const pluginManager = {
       reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
       getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
       onReload: vi.fn(() => unsubscribeReload),
       getPluginSignalProviders: vi.fn(() => [{ pluginId: 'acme.plugin', versionStamp: 'v1', value: provider }]),
       getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
@@ -1103,6 +1107,7 @@ describe('createMastraCode', () => {
     const pluginManager = {
       reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
       getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
       onReload: vi.fn(),
       getPluginSignalProviders: vi.fn(() => []),
       getPluginProcessors: vi.fn(() => {

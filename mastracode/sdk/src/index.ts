@@ -645,11 +645,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         projectRoot: project.rootPath,
         configDir,
         homeDir,
-        runtime: {
-          getController: () => pluginRuntimeController,
-          getActiveSession: () => activeSession,
-        },
       }));
+  // Publish the runtime accessors to whichever manager is in play — including an
+  // injected one, which would otherwise hand plugins `undefined` for
+  // `getController`/`getActiveSession`. Lazy closures: both locals are assigned
+  // after the controller is constructed below.
+  pluginManager?.setRuntime({
+    getController: () => pluginRuntimeController,
+    getActiveSession: () => activeSession,
+  });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
 

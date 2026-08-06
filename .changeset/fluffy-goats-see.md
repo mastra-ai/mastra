@@ -9,7 +9,7 @@ Added `processors` and `signalProviders` to the Mastra Code plugin contract, so 
 A plugin can now extend the agent pipeline directly. Pass a bare array for input processors, or an object for both lanes:
 
 ```ts
-import { defineMastraCodePlugin } from '@mastra/code-sdk/plugin';
+import { defineMastraCodePlugin } from 'mastracode/plugin';
 
 export default defineMastraCodePlugin({
   id: 'acme.audit',
@@ -17,7 +17,7 @@ export default defineMastraCodePlugin({
 });
 ```
 
-Plugin processors run last among the processors Mastra Code configures, in a slot that isn't configurable, and are resolved before every LLM call. Enabling, disabling, or updating a plugin applies on the next request instead of requiring a restart.
+Plugin processors run after the processors Mastra Code configures and before the channel and memory layers the Agent appends. The slot isn't configurable, and the processors are resolved before every LLM call. Enabling, disabling, or updating a plugin applies on the next request instead of requiring a restart.
 
 **Signal providers**
 
