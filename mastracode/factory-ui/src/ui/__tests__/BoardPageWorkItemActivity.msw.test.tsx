@@ -1,8 +1,8 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -61,6 +61,21 @@ const relevanceWorkItems = [
     url: `https://github.com/acme/app/issues/${30 + index}`,
   },
 }));
+
+const linearWorkItem = {
+  ...workItem,
+  id: 'linear-work-item',
+  createdBy: 'factory-rule-dispatcher',
+  title: 'Linear planning item',
+  stages: ['planning'],
+  metadata: { identifier: 'ENG-42', creator: 'Linear Ada', assignee: 'Linear Grace' },
+  externalSource: {
+    integrationId: 'linear',
+    type: 'issue',
+    externalId: 'linear:ENG-42',
+    url: 'https://linear.app/acme/issue/ENG-42',
+  },
+};
 
 const reviewItem = {
   ...workItem,
@@ -268,9 +283,12 @@ function stubBoardEndpoints() {
   );
 }
 
-function renderBoard(board: 'work' | 'review') {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/${board}`] });
-  return renderWithProviders(<RouterProvider router={router} />);
+function renderBoard(board: 'work' | 'review', search = '') {
+  const router = createMemoryRouter(createAppRoutes(), {
+    initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
+  });
+  const rendered = renderWithProviders(<RouterProvider router={router} />);
+  return { ...rendered, router };
 }
 
 async function expectActivity(name: string, eventLabel: string, avatarAvailable = true) {
@@ -329,12 +347,17 @@ describe('Board work-item activity', () => {
       ),
     );
     const user = userEvent.setup();
-    renderBoard('work');
+    const { router } = renderBoard('work');
 
     await screen.findByText('Authored issue');
-    await user.click(screen.getByLabelText('Filter by teammate'));
+    await user.click(screen.getByRole('combobox'));
+    await user.type(await screen.findByPlaceholderText('Search teammates...'), 'octo');
+    expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
 
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get('teammate')).toBe('github:octocat');
+    });
     expect(screen.getByText('Authored issue')).toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
@@ -342,9 +365,95 @@ describe('Board work-item activity', () => {
     await user.click(screen.getByLabelText('Filter by relevance'));
     await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Authored' }));
     expect(screen.queryByRole('menuitemcheckbox', { name: 'Review requested' })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get('relevance')).toBe('worked,assigned');
+    });
 
     expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
+  });
+
+  it('restores work filters from a shared URL', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: relevanceWorkItems }),
+      ),
+    );
+
+    renderBoard('work', '?teammate=github%3Aoctocat&relevance=assigned');
+
+    expect(await screen.findByText('Assigned issue')).toBeInTheDocument();
+    expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
+  });
+
+  it('loads and matches Linear teammates while GitHub intake is active', async () => {
+    stubBoardEndpoints();
+    const linearIssuesRequested = vi.fn();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['linear-project'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => {
+        linearIssuesRequested();
+        return HttpResponse.json({
+          issues: [
+            {
+              id: 'linear-42',
+              identifier: 'ENG-42',
+              title: 'Linear planning item',
+              url: 'https://linear.app/acme/issue/ENG-42',
+              state: 'Todo',
+              stateType: 'unstarted',
+              priorityLabel: 'High',
+              assignee: 'Linear Grace',
+              creator: 'Linear Ada',
+              team: 'Engineering',
+              labels: [],
+              createdAt: '2026-08-01T09:00:00.000Z',
+              updatedAt: '2026-08-01T09:00:00.000Z',
+            },
+          ],
+          nextCursor: null,
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [linearWorkItem] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBoard('work');
+
+    await screen.findByText('Linear planning item');
+    await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
+    await user.click(screen.getByRole('combobox'));
+    await user.type(await screen.findByPlaceholderText('Search teammates...'), 'Linear Ada');
+    await user.click(await screen.findByRole('option', { name: /Linear Ada.*linear/i }));
+
+    expect(screen.getByText('Linear planning item')).toBeInTheDocument();
+  });
+
+  it('shows a filter-specific work empty state without a zero task ring', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: relevanceWorkItems }),
+      ),
+    );
+
+    renderBoard('work', '?teammate=github%3Anobody');
+
+    expect(await screen.findByText('No work items match filters')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/visible board tasks in Intake/)).not.toBeInTheDocument();
   });
 
   it('shows the latest human worker, initial fallback, and synthetic created event on review cards', async () => {
@@ -380,7 +489,7 @@ describe('Board work-item activity', () => {
     renderBoard('review');
 
     await screen.findByText('Authored PR');
-    await user.click(screen.getByLabelText('Filter by teammate'));
+    await user.click(screen.getByRole('combobox'));
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
@@ -396,13 +505,26 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    await user.click(screen.getByLabelText('Filter by teammate'));
+    await user.click(screen.getByRole('combobox'));
     await user.click(await screen.findByRole('option', { name: /Ada Lovelace/ }));
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
     expect(screen.queryByText('Assigned PR')).not.toBeInTheDocument();
     expect(screen.queryByText('Requested PR')).not.toBeInTheDocument();
+  });
+
+  it('shows a filter-specific review empty state', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: relevanceReviewItems }),
+      ),
+    );
+
+    renderBoard('review', '?teammate=github%3Anobody');
+
+    expect(await screen.findByText('No pull requests match filters')).toBeInTheDocument();
   });
 
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {

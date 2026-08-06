@@ -4,8 +4,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
 import { useCompleteAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
@@ -29,7 +28,8 @@ import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
 import {
   boardParticipants,
-  boardRelevanceOptions,
+  boardRelevanceFromQuery,
+  boardRelevanceQueryValue,
   candidateMatchesRelevance,
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
@@ -101,10 +101,9 @@ function BoardContent({
   const factoryProjectId = factory.id;
   const review = kind === 'review';
   const stages = boardStages(kind);
-  const [selectedParticipantId, setSelectedParticipantId] = useState<string>();
-  const [selectedRelevanceTypes, setSelectedRelevanceTypes] = useState<ReadonlySet<BoardRelevanceType>>(
-    () => new Set(boardRelevanceOptions(kind).map(option => option.id)),
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedParticipantId = searchParams.get('teammate') || undefined;
+  const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
@@ -122,20 +121,31 @@ function BoardContent({
   const activityPage = activity.data;
   const participants = boardParticipants({
     items: items.all,
-    candidates: intake.candidates,
+    candidates: intake.participantCandidates,
     activityPage,
     currentUser: auth.data?.user,
   });
   const filteredCandidates = intake.candidates.filter(candidate =>
     candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes),
   );
+  const setParticipant = (participantId: string | undefined) => {
+    const next = new URLSearchParams(searchParams);
+    if (participantId) next.set('teammate', participantId);
+    else {
+      next.delete('teammate');
+      next.delete('relevance');
+    }
+    setSearchParams(next, { replace: true });
+  };
   const setRelevanceType = (type: BoardRelevanceType, selected: boolean) => {
-    setSelectedRelevanceTypes(current => {
-      const next = new Set(current);
-      if (selected) next.add(type);
-      else next.delete(type);
-      return next;
-    });
+    const nextTypes = new Set(selectedRelevanceTypes);
+    if (selected) nextTypes.add(type);
+    else nextTypes.delete(type);
+    const next = new URLSearchParams(searchParams);
+    const value = boardRelevanceQueryValue(nextTypes, kind);
+    if (value) next.set('relevance', value);
+    else next.delete('relevance');
+    setSearchParams(next, { replace: true });
   };
   const loadingStages = boardLoadingStages({
     stages,
@@ -161,18 +171,24 @@ function BoardContent({
     );
   }
 
-  const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
+  const unfilteredWorkItemsForStage = (stage: (typeof stages)[number]['id']) =>
     items.visible.filter(item => {
       if (!itemAppearsInStage(item, stage, stages)) return false;
-      if (!workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes)) return false;
       if (stage !== 'intake' || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
       return false;
     });
+  const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
+    unfilteredWorkItemsForStage(stage).filter(item =>
+      workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes),
+    );
   const mutationError = runs.error ?? items.mutationError;
   const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
+  const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
+  const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
+  const filtersExcludeAll = selectedParticipantId !== undefined && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -187,7 +203,7 @@ function BoardContent({
         selectedParticipantId={selectedParticipantId}
         selectedTypes={selectedRelevanceTypes}
         currentUserId={auth.data?.user?.userId}
-        onParticipantChange={setSelectedParticipantId}
+        onParticipantChange={setParticipant}
         onTypeChange={setRelevanceType}
       />
       <ScrollArea
@@ -294,7 +310,12 @@ function BoardContent({
                   <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
                 )}
                 {!loading && !composerOpen && taskCount === 0 && (
-                  <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={intake.active !== undefined} />
+                  <BoardColumnEmptyState
+                    stage={stage.id}
+                    kind={kind}
+                    hasIntakeSource={intake.active !== undefined}
+                    filtersExcludeAll={filtersExcludeAll}
+                  />
                 )}
                 {stage.id === 'intake' && (
                   <IntakeColumnExtras
