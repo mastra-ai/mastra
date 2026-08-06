@@ -16,6 +16,8 @@ import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
 import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.js';
 import { browserWizardExportScenario } from './browser-wizard-export.js';
+import { browserWizardViewportPickerScenario } from './browser-wizard-viewport-picker.js';
+import { browserWizardViewportScenario } from './browser-wizard-viewport.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
@@ -184,6 +186,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-toggle-attach': browserToggleAttachScenario,
   'browser-wizard-browserbase': browserWizardBrowserbaseScenario,
   'browser-wizard-export': browserWizardExportScenario,
+  'browser-wizard-viewport': browserWizardViewportScenario,
+  'browser-wizard-viewport-picker': browserWizardViewportPickerScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,

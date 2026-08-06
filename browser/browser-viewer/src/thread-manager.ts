@@ -14,6 +14,25 @@ import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, BrowserServer, CDPSession, Page } from 'playwright-core';
 import type { BrowserViewerConfig } from './types';
 
+/** Default viewport applied when a config leaves `viewport` absent. */
+export const DEFAULT_VIEWPORT = { width: 1280, height: 720 } as const;
+
+/**
+ * Resolve the viewport passed to Playwright's `newContext`.
+ *
+ * - `undefined` (absent): use the {@link DEFAULT_VIEWPORT} default.
+ * - `null`: forward as-is — a deliberate "match window / no emulation" signal
+ *   that Playwright honors by not emulating a fixed viewport.
+ * - `{ width, height }`: forward as-is.
+ *
+ * Branching on `undefined` (rather than `??`) is what preserves an explicit
+ * `null`; `??` would collapse `null` back into the default and silently break
+ * match-window mode.
+ */
+export function resolveViewport(viewport: BrowserViewerConfig['viewport']): { width: number; height: number } | null {
+  return viewport === undefined ? { ...DEFAULT_VIEWPORT } : viewport;
+}
+
 /**
  * Extended session info for BrowserViewer.
  */
@@ -215,7 +234,9 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
       // Create context and initial page
       const context = await browser.newContext({
-        viewport: this.browserConfig.viewport ?? { width: 1280, height: 720 },
+        // See resolveViewport: `null` (match window) is forwarded as-is; only an
+        // absent viewport falls back to the default size.
+        viewport: resolveViewport(this.browserConfig.viewport),
       });
 
       await context.newPage();

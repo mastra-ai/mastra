@@ -1,3 +1,4 @@
+import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { handleBrowserCommand } from '../browser.js';
@@ -35,7 +36,7 @@ function createContext() {
       enabled: false,
       provider: 'stagehand' as const,
       headless: true,
-      viewport: { width: 1280, height: 720 },
+      viewport: { width: 1280, height: 720 } as BrowserSettings['viewport'],
       profile: '/tmp/mastracode-browser-profile',
       stagehand: { env: 'LOCAL' as const },
     },
@@ -102,5 +103,108 @@ describe('handleBrowserCommand', () => {
     expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
     expect(settings.browser.enabled).toBe(true);
     expect(ctx.showInfo).toHaveBeenCalledWith('Browser enabled (Stagehand).');
+  });
+
+  it('set viewport 1440x900 persists a fixed viewport object', async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['set', 'viewport', '1440x900']);
+
+    expect(settings.browser.viewport).toEqual({ width: 1440, height: 900 });
+    expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+    expect(ctx.showError).not.toHaveBeenCalled();
+  });
+
+  it("set viewport window persists the 'window' sentinel", async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
+
+    expect(settings.browser.viewport).toBe('window');
+    expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+    expect(ctx.showError).not.toHaveBeenCalled();
+  });
+
+  it("set viewport match is an alias for the 'window' sentinel", async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['set', 'viewport', 'match']);
+
+    expect(settings.browser.viewport).toBe('window');
+    expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+  });
+
+  it('set viewport with a bogus value shows an error and does not mutate settings', async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['set', 'viewport', 'bogus']);
+
+    expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+    expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalled();
+  });
+
+  it('set viewport 0x0 is rejected as invalid', async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['set', 'viewport', '0x0']);
+
+    expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+    expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalled();
+  });
+
+  // An unsafe integer must be rejected here, matching the safe-integer check in
+  // the persisted-settings path (parseViewport). Otherwise `/browser set` would
+  // accept and save a value that is silently reset to the default on reload.
+  it('set viewport with an unsafe integer is rejected as invalid', async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['set', 'viewport', '9999999999999999x720']);
+
+    expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+    expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalled();
+  });
+
+  it('clear viewport resets to the 1280x720 default', async () => {
+    const { ctx, settings } = createContext();
+    settings.browser.viewport = 'window';
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['clear', 'viewport']);
+
+    expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+    expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+  });
+
+  it('status renders a fixed viewport', async () => {
+    const { ctx, settings } = createContext();
+    settings.browser.enabled = true;
+    settings.browser.viewport = { width: 1440, height: 900 };
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['status']);
+
+    const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0]).join('\n');
+    expect(output).toContain('1440x900');
+  });
+
+  it('status renders match window for the window sentinel', async () => {
+    const { ctx, settings } = createContext();
+    settings.browser.enabled = true;
+    settings.browser.viewport = 'window';
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['status']);
+
+    const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0]).join('\n');
+    expect(output).toContain('match window');
   });
 });

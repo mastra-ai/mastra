@@ -133,7 +133,7 @@ export interface BrowserSettings {
   /** Whether to run headless (no visible browser window). */
   headless: boolean;
   /** Browser viewport dimensions. */
-  viewport?: { width: number; height: number };
+  viewport?: { width: number; height: number } | 'window';
   /** CDP URL for connecting to an existing browser. */
   cdpUrl?: string;
   /** Path to a Chrome/Chromium user data directory (profile). */
@@ -340,6 +340,9 @@ const DEFAULTS: GlobalSettings = {
   observability: { resources: {}, localTracing: false },
 };
 
+/** Default fixed viewport used when none is configured or persisted data is malformed. */
+const DEFAULT_VIEWPORT: { width: number; height: number } = { width: 1280, height: 720 };
+
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
@@ -511,12 +514,36 @@ const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser'
 const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
 
 /**
+ * Validate a persisted viewport value.
+ *
+ * Accepts the `'window'` sentinel (match the real window, no emulation) or a
+ * fixed `{ width, height }` object. A fixed viewport is only honored when both
+ * dimensions are positive safe integers; any partial, zero, negative, or
+ * fractional value falls back to the complete {@link DEFAULT_VIEWPORT} rather
+ * than producing a hybrid (e.g. a valid width paired with a defaulted height).
+ */
+function parseViewport(raw: unknown): BrowserSettings['viewport'] {
+  if (raw === 'window') return 'window';
+  if (raw && typeof raw === 'object') {
+    const { width, height } = raw as Record<string, unknown>;
+    if (isPositiveSafeInteger(width) && isPositiveSafeInteger(height)) {
+      return { width, height };
+    }
+  }
+  return { ...DEFAULT_VIEWPORT };
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
 function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
-  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
+  const parsedViewport = parseViewport(raw.viewport);
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
   const rawAgentBrowser =
@@ -533,10 +560,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
     profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
     executablePath:
       typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
-    viewport: {
-      width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
-      height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
-    },
+    viewport: parsedViewport,
     scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
     stagehand: {
       env:
@@ -1068,8 +1092,12 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
   // when a profile is set. Otherwise use the user's setting (or provider default).
   const scope = profile ? ('shared' as const) : settings.scope;
 
+  // Map the persisted 'window' sentinel to Playwright viewport: null
+  // (follow the real browser window with no fixed emulation).
+  const launchViewport = viewport === 'window' ? null : viewport;
+
   // Common launch options (no CDP)
-  const launchConfig = { headless, viewport, profile, executablePath, scope } as const;
+  const launchConfig = { headless, viewport: launchViewport, profile, executablePath, scope } as const;
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');

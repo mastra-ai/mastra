@@ -153,7 +153,7 @@ export class StagehandBrowser extends MastraBrowser {
       stagehandOptions.localBrowserLaunchOptions = {
         cdpUrl: wsUrl,
         headless: this.headless,
-        viewport: config.viewport,
+        viewport: config.viewport ?? undefined,
         userDataDir: config.profile,
         executablePath: config.executablePath,
         preserveUserDataDir: config.preserveUserDataDir,
@@ -161,7 +161,7 @@ export class StagehandBrowser extends MastraBrowser {
     } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
         headless: this.headless,
-        viewport: config.viewport,
+        viewport: config.viewport ?? undefined,
         userDataDir: config.profile,
         executablePath: config.executablePath,
         preserveUserDataDir: config.preserveUserDataDir,

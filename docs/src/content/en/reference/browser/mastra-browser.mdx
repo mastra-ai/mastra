@@ -49,8 +49,9 @@ export const browserAgent = new Agent({
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions. Controls the size of the browser window.',
+    type: '{ width: number; height: number } | null',
+    description:
+      'Browser viewport dimensions. Set to `null` to match the real browser window with no viewport emulation, so the page follows the window as it resizes.',
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },
@@ -136,6 +137,18 @@ export const browserAgent = new Agent({
   },
 ]}
 />
+
+### Match the browser window
+
+Set `viewport` to `null` to disable viewport emulation. The page then uses the real browser window size and follows it as the window resizes. This is useful for headed sessions where you want the page to fill the visible window.
+
+```typescript title="src/mastra/agents/index.ts"
+const browser = new AgentBrowser({
+  headless: false,
+  viewport: null,
+  scope: 'thread',
+})
+```
 
 ## Properties
 

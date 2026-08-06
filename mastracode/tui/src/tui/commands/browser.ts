@@ -43,6 +43,54 @@ function askInline(
 }
 
 /**
+ * Default fixed viewport, used by /browser clear viewport and clear-all.
+ */
+const DEFAULT_VIEWPORT = { width: 1280, height: 720 } as const;
+
+/**
+ * Named viewport presets offered by the wizard and documented in help text.
+ * A `null` viewport means "match window" (persisted as the 'window' sentinel).
+ */
+const VIEWPORT_PRESETS: Array<{
+  label: string;
+  description: string;
+  viewport: { width: number; height: number } | null | 'custom';
+}> = [
+  { label: 'Desktop', description: '1280x720', viewport: { width: 1280, height: 720 } },
+  { label: 'Desktop Large', description: '1440x900', viewport: { width: 1440, height: 900 } },
+  { label: 'Laptop', description: '1366x768', viewport: { width: 1366, height: 768 } },
+  { label: 'Tablet', description: '768x1024', viewport: { width: 768, height: 1024 } },
+  { label: 'Mobile', description: '390x844', viewport: { width: 390, height: 844 } },
+  { label: 'Match window', description: 'Follow the real browser window (no fixed size)', viewport: null },
+  { label: 'Custom', description: 'Enter width x height', viewport: 'custom' },
+];
+
+/**
+ * Render a viewport value for status output: `1280x720` or `match window`.
+ */
+function formatViewport(viewport: BrowserSettings['viewport']): string {
+  if (viewport === 'window') return 'match window';
+  if (viewport) return `${viewport.width}x${viewport.height}`;
+  return `${DEFAULT_VIEWPORT.width}x${DEFAULT_VIEWPORT.height}`;
+}
+
+/**
+ * Parse a `<w>x<h>` viewport string. Returns null when the input is not a
+ * valid pair of positive safe integers (rejects 0x0, negatives, non-numeric,
+ * and values beyond Number.MAX_SAFE_INTEGER). This mirrors the safe-integer
+ * validation in the persisted-settings path (parseViewport in settings.ts) so
+ * a value accepted by `/browser set` is not silently reset on reload.
+ */
+function parseViewportSize(input: string): { width: number; height: number } | null {
+  const match = input.trim().match(/^(\d+)\s*[x×]\s*(\d+)$/i);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0) return null;
+  return { width, height };
+}
+
+/**
  * Helper to show an inline text input and return the answer.
  */
 async function askText(ctx: SlashCommandContext, question: string, defaultValue?: string): Promise<string | null> {
@@ -151,18 +199,21 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           '  profile <path>       - Browser profile directory\n' +
           '  executablePath <path> - Browser executable path\n' +
           '  storageState <path>  - Playwright storage state file (agent-browser only)\n' +
-          '  cdpUrl <url>         - CDP WebSocket URL\n\n' +
+          '  cdpUrl <url>         - CDP WebSocket URL\n' +
+          '  viewport <WxH|window> - Viewport size, or "window" to match the real window\n\n' +
           'To remove a setting, use: /browser clear <key>\n\n' +
           'Examples:\n' +
           '  /browser set profile ~/.mastracode/browser-profile-stagehand\n' +
-          '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n' +
+          '  /browser set viewport 1440x900\n' +
+          '  /browser set viewport window',
       );
       return;
     }
 
-    const validKeys = ['profile', 'executablepath', 'storagestate', 'cdpurl'];
+    const validKeys = ['profile', 'executablepath', 'storagestate', 'cdpurl', 'viewport'];
     if (!validKeys.includes(key)) {
-      ctx.showError(`Unknown key: ${args[1]}. Valid keys: profile, executablePath, storageState, cdpUrl`);
+      ctx.showError(`Unknown key: ${args[1]}. Valid keys: profile, executablePath, storageState, cdpUrl, viewport`);
       return;
     }
 
@@ -176,6 +227,24 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     const expandedValue = value.trim().replace(/^~/, process.env.HOME || '~');
 
     switch (key) {
+      case 'viewport': {
+        const lower = value.trim().toLowerCase();
+        if (lower === 'window' || lower === 'match') {
+          settings.browser.viewport = 'window';
+          saveSettings(settings);
+          ctx.showInfo('Set viewport = match window\nRun /browser on to apply.');
+          return;
+        }
+        const parsed = parseViewportSize(value);
+        if (!parsed) {
+          ctx.showError('Invalid viewport. Use <width>x<height> (e.g. 1440x900) or "window".');
+          return;
+        }
+        settings.browser.viewport = parsed;
+        saveSettings(settings);
+        ctx.showInfo(`Set viewport = ${parsed.width}x${parsed.height}\nRun /browser on to apply.`);
+        return;
+      }
       case 'profile':
         settings.browser.profile = expandedValue;
         // Auto-set preserveUserDataDir for Stagehand when profile is configured
@@ -254,6 +323,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       }
       if (!activeIsBrowserbase) {
         lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
+        lines.push(`  Viewport: ${formatViewport(activeSettings.viewport)}`);
       }
       if (activeSettings.executablePath) lines.push(`  Executable: ${activeSettings.executablePath}`);
       if (activeSettings.profile) lines.push(`  Profile: ${activeSettings.profile}`);
@@ -273,6 +343,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       }
       if (!fileIsBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
+        lines.push(`  Viewport: ${formatViewport(browser.viewport)}`);
       }
       if (browser.executablePath) lines.push(`  Executable: ${browser.executablePath}`);
       if (browser.profile) lines.push(`  Profile: ${browser.profile}`);
@@ -296,6 +367,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       }
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
+        lines.push(`  Viewport: ${formatViewport(browser.viewport)}`);
       }
       if (browser.executablePath) {
         lines.push(`  Executable: ${browser.executablePath}`);
@@ -404,8 +476,11 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       case 'cdpurl':
         delete settings.browser.cdpUrl;
         break;
+      case 'viewport':
+        settings.browser.viewport = { ...DEFAULT_VIEWPORT };
+        break;
       default:
-        ctx.showError(`Unknown field: ${field}. Valid fields: profile, executablePath, storageState, cdpUrl`);
+        ctx.showError(`Unknown field: ${field}. Valid fields: profile, executablePath, storageState, cdpUrl, viewport`);
         return;
     }
 
@@ -476,8 +551,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       '  off, disable   Disable browser',
       '  status         Show current configuration',
       '  clear          Reset all settings to defaults',
-      '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl',
-      '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl',
+      '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl, viewport',
+      '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl, viewport',
       '  export storageState <path>  Export session cookies/localStorage (agent-browser)',
     ];
     ctx.showInfo(help.join('\n'));
@@ -643,6 +718,40 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
   }
 
+  // Step 7: Viewport (skip for Browserbase - cloud runs its own sizing)
+  let viewport: BrowserSettings['viewport'] = browser.viewport ?? { ...DEFAULT_VIEWPORT };
+  if (!isBrowserbase) {
+    const viewportChoice = await askInline(
+      ctx,
+      'Viewport size:',
+      VIEWPORT_PRESETS.map(preset => ({ label: preset.label, description: preset.description })),
+    );
+
+    if (!viewportChoice) {
+      ctx.showInfo('Browser setup cancelled.');
+      return;
+    }
+
+    const chosen = VIEWPORT_PRESETS.find(preset => preset.label === viewportChoice);
+    if (chosen?.viewport === 'custom') {
+      const sizeInput = await askText(ctx, 'Enter viewport as <width>x<height> (e.g. 1440x900):');
+      if (sizeInput === null) {
+        ctx.showInfo('Browser setup cancelled.');
+        return;
+      }
+      const parsed = parseViewportSize(sizeInput);
+      if (!parsed) {
+        ctx.showError('Invalid viewport size. Keeping the previous viewport.');
+      } else {
+        viewport = parsed;
+      }
+    } else if (chosen?.viewport === null) {
+      viewport = 'window';
+    } else if (chosen) {
+      viewport = chosen.viewport;
+    }
+  }
+
   // Build new browser settings
   // Auto-set preserveUserDataDir when profile is configured for Stagehand
   if (provider === 'stagehand' && profile && stagehandSettings) {
@@ -653,7 +762,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     enabled: true,
     provider,
     headless,
-    viewport: browser.viewport ?? { width: 1280, height: 720 },
+    viewport,
     cdpUrl,
     profile,
     executablePath,

@@ -816,6 +816,8 @@ describe('createBrowserFromSettings — recording tools gating', () => {
       }
       expect(tools[providerToolName], `expected provider tool ${providerToolName} to be present`).toBeDefined();
     },
+    // Constructing a real provider browser can exceed the 5s default on a cold cache.
+    30000,
   );
 
   it('does NOT expose recording tools when StagehandBrowser is constructed directly', async () => {
@@ -835,4 +837,91 @@ describe('createBrowserFromSettings — recording tools gating', () => {
       expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
   });
+});
+
+describe('browser viewport parsing/persistence', () => {
+  function writeBrowser(filePath: string, viewport: unknown): void {
+    writeFileSync(
+      filePath,
+      JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {}, browser: { viewport } }),
+      'utf-8',
+    );
+  }
+
+  it("round-trips the 'window' sentinel for match-window", () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, 'window');
+      expect(loadSettings(filePath).browser.viewport).toBe('window');
+    });
+  });
+
+  it('round-trips a valid fixed viewport object', () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, { width: 1440, height: 900 });
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1440, height: 900 });
+    });
+  });
+
+  it('falls back to the 1280x720 default on a malformed string viewport', () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, 'garbage');
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1280, height: 720 });
+    });
+  });
+
+  it('falls back to the 1280x720 default on a malformed object viewport', () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, { width: 'x' });
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1280, height: 720 });
+    });
+  });
+
+  // A partial/zero/negative/fractional dimension must fall back to the COMPLETE
+  // default, never a hybrid (e.g. a valid width paired with a defaulted height).
+  it.each([
+    ['partial (width only)', { width: 1440 }],
+    ['partial (height only)', { height: 900 }],
+    ['zero width', { width: 0, height: 720 }],
+    ['zero height', { width: 1280, height: 0 }],
+    ['negative width', { width: -1280, height: 720 }],
+    ['negative height', { width: 1280, height: -720 }],
+    ['fractional width', { width: 1280.5, height: 720 }],
+    ['fractional height', { width: 1280, height: 720.5 }],
+    ['NaN width', { width: NaN, height: 720 }],
+    ['empty object', {}],
+  ])('falls back to the complete 1280x720 default on %s', (_label, viewport) => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, viewport);
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1280, height: 720 });
+    });
+  });
+});
+
+describe('createBrowserFromSettings — viewport mapping', () => {
+  function makeBrowserSettings(overrides: Partial<BrowserSettings> = {}): BrowserSettings {
+    return { enabled: true, provider: 'stagehand', headless: true, ...overrides } as BrowserSettings;
+  }
+
+  // Reads the viewport off the real constructed provider instance (not a mock).
+  // For StagehandBrowser, `config.viewport` is exactly the value that feeds
+  // `localBrowserLaunchOptions.viewport` (via `?? undefined`) — see
+  // browser/stagehand/src/stagehand-browser.ts. So asserting `config.viewport`
+  // here confirms the launch-option value, and the null->undefined hand-off to
+  // Stagehand is covered separately in stagehand-browser.test.ts.
+  function readConfigViewport(browser: unknown): unknown {
+    return (browser as { config: { viewport?: unknown } }).config.viewport;
+  }
+
+  it("maps the 'window' sentinel to viewport: null at the provider boundary", async () => {
+    const browser = await createBrowserFromSettings(makeBrowserSettings({ viewport: 'window' }));
+    expect(browser).toBeDefined();
+    // null (not a defaulted 1280x720) must reach the provider so match-window works.
+    expect(readConfigViewport(browser)).toBeNull();
+  }, 30000);
+
+  it('passes a fixed viewport object through unchanged', async () => {
+    const browser = await createBrowserFromSettings(makeBrowserSettings({ viewport: { width: 1440, height: 900 } }));
+    expect(browser).toBeDefined();
+    expect(readConfigViewport(browser)).toEqual({ width: 1440, height: 900 });
+  }, 30000);
 });

@@ -55,6 +55,11 @@ export const browserProfileProviderMismatchScenario = {
 
       await runtime.waitForScreenText(/Profile directory path:/i, terminal, 8_000);
       terminal.write('\r');
+
+      // Step 7 (non-Browserbase): viewport picker. Accept the default preset
+      // (Desktop 1280x720) so the flow reaches the provider-mismatch confirm.
+      await runtime.waitForScreenText(/Viewport size:/i, terminal, 8_000);
+      terminal.write('\r');
     }
 
     await chooseAgentBrowserWithSeededProfile();
