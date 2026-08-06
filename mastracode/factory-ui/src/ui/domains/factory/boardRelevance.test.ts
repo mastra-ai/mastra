@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { issueCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
 import {
   boardParticipants,
+  boardRelevanceFromQuery,
   boardRelevanceOptions,
+  boardRelevanceQueryValue,
   candidateMatchesRelevance,
   workItemMatchesRelevance,
   workItemRelevance,
@@ -147,6 +149,15 @@ describe('board relevance', () => {
       'github.com/octocat.png',
     );
     expect(participants.some(participant => participant.name === 'user-current')).toBe(false);
+  });
+
+  it('parses and serializes shareable relevance query values', () => {
+    expect([...boardRelevanceFromQuery(null, 'work')]).toEqual(['worked', 'authored', 'assigned']);
+    expect([...boardRelevanceFromQuery('assigned,review-requested', 'work')]).toEqual(['assigned']);
+    expect([...boardRelevanceFromQuery('none', 'review')]).toEqual([]);
+    expect(boardRelevanceQueryValue(new Set(['worked', 'assigned']), 'work')).toBe('worked,assigned');
+    expect(boardRelevanceQueryValue(new Set(), 'review')).toBe('none');
+    expect(boardRelevanceQueryValue(new Set(['worked', 'authored', 'assigned']), 'work')).toBeUndefined();
   });
 
   it('offers review-requested only on review boards', () => {

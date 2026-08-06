@@ -1,7 +1,7 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { ListFilter, UsersRound } from 'lucide-react';
 
 import type { BoardKind } from '../boardStages';
@@ -30,30 +30,33 @@ export function BoardRelevanceFilters({
   const options = boardRelevanceOptions(kind);
   const selectedLabels = options.filter(option => selectedTypes.has(option.id)).map(option => option.label);
   const relevanceLabel = selectedLabels.length === options.length ? 'All relevance' : selectedLabels.join(', ');
+  const teammateOptions = [
+    {
+      label: 'All teammates',
+      value: ALL_TEAMMATES,
+      start: <UsersRound size={14} aria-hidden />,
+    },
+    ...participants.map(participant => ({
+      label: participant.name,
+      value: participant.id,
+      description: participant.id === `factory:${currentUserId}` ? `${participant.source} · you` : participant.source,
+      start: <Avatar src={participant.avatarUrl} name={participant.name} size="sm" />,
+    })),
+  ];
 
   return (
     <div className="flex flex-wrap items-center gap-2" aria-label="Board filters">
-      <Select
+      <Combobox
+        options={teammateOptions}
         value={selectedParticipantId ?? ALL_TEAMMATES}
         onValueChange={value => onParticipantChange(value === ALL_TEAMMATES ? undefined : value)}
-      >
-        <SelectTrigger size="sm" variant="outline" className="w-auto min-w-44" aria-label="Filter by teammate">
-          <UsersRound size={14} aria-hidden />
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL_TEAMMATES}>All teammates</SelectItem>
-          {participants.map(participant => (
-            <SelectItem key={participant.id} value={participant.id}>
-              <span className="flex items-center gap-2">
-                <Avatar src={participant.avatarUrl} name={participant.name} size="sm" />
-                <span>{participant.name}</span>
-                {participant.id === `factory:${currentUserId}` ? <span className="text-icon3">(you)</span> : null}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        placeholder="All teammates"
+        searchPlaceholder="Search teammates..."
+        emptyText="No teammate found."
+        size="sm"
+        variant="outline"
+        className="w-auto min-w-44"
+      />
 
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>

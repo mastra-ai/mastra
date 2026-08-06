@@ -7,6 +7,33 @@ import { isHumanActor, workItemHumanActorIds } from './workItemActivity';
 export const BOARD_RELEVANCE_TYPES = ['worked', 'authored', 'assigned', 'review-requested'] as const;
 export type BoardRelevanceType = (typeof BOARD_RELEVANCE_TYPES)[number];
 
+const NO_RELEVANCE = 'none';
+
+function isBoardRelevanceType(value: string): value is BoardRelevanceType {
+  return BOARD_RELEVANCE_TYPES.some(type => type === value);
+}
+
+export function boardRelevanceFromQuery(value: string | null, kind: BoardKind): ReadonlySet<BoardRelevanceType> {
+  const available = boardRelevanceOptions(kind).map(option => option.id);
+  if (value === null) return new Set(available);
+  if (value === NO_RELEVANCE) return new Set();
+  const selected = value
+    .split(',')
+    .filter(isBoardRelevanceType)
+    .filter(type => available.includes(type));
+  return selected.length > 0 ? new Set(selected) : new Set(available);
+}
+
+export function boardRelevanceQueryValue(
+  selectedTypes: ReadonlySet<BoardRelevanceType>,
+  kind: BoardKind,
+): string | undefined {
+  const available = boardRelevanceOptions(kind).map(option => option.id);
+  const selected = available.filter(type => selectedTypes.has(type));
+  if (selected.length === available.length) return undefined;
+  return selected.length > 0 ? selected.join(',') : NO_RELEVANCE;
+}
+
 export interface BoardParticipant extends AuditActorProfile {
   source: 'factory' | 'github' | 'linear';
 }
