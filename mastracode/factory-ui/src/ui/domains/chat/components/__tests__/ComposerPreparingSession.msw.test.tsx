@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import assert from 'node:assert';
-import { MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
+import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -66,6 +66,7 @@ function stubPreparingSession({
   const firstDispatchFinished = new Promise<void>(resolve => {
     releaseFirstDispatch = resolve;
   });
+  let sse: ReadableStreamDefaultController<Uint8Array> | null = null;
   const sentMessages: string[] = [];
   const result: PreparingSession = {
     finishWorkspace: releaseWorkspace,
@@ -165,15 +166,25 @@ function stubPreparingSession({
     http.get(
       `${API}/sessions/:resourceId/stream`,
       () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              sse = controller;
+            },
+            cancel() {},
+          }),
+          {
+            headers: { 'content-type': 'text/event-stream' },
+          },
+        ),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
       sentMessages.push(readSentMessage(await request.json()));
       if (holdFirstDispatch && sentMessages.length === 1) await firstDispatchFinished;
       if (failDispatch) return HttpResponse.json({ message: 'Sandbox is gone' }, { status: 500 });
+      // real dispatch runs an agent turn; agent_end is what releases the pending latch
+      sse?.enqueue(new TextEncoder().encode('data: {"type":"agent_end"}\n\n'));
       return HttpResponse.json({ ok: true });
     }),
     http.post(`${API}/sessions/:resourceId/steer`, () => {
@@ -195,6 +206,7 @@ function ThreadSurface() {
   useThreadPageKickoffs();
   return (
     <>
+      <Link to="/away">go-away</Link>
       <Transcript />
       <Composer />
     </>
@@ -216,6 +228,10 @@ function renderThread() {
               </ChatSessionTestProvider>
             </MainSidebarProvider>
           }
+        />
+        <Route
+          path="/away"
+          element={<Link to={`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`}>go-thread</Link>}
         />
       </Routes>
     </MemoryRouter>,
@@ -435,6 +451,34 @@ describe('Composer while a session prepares its workspace', () => {
     await waitForMutationsIdle(client);
 
     await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug', 'follow up']));
+    expect(session.steerAttempts).toBe(0);
+  });
+
+  it('re-echoes a queued message after navigating away and back while the session prepares', async () => {
+    const session = stubPreparingSession();
+    const user = userEvent.setup();
+
+    const { client } = renderThread();
+
+    const message = () => screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message()).toBeEnabled());
+    await waitFor(() => expect(screen.getByText('Preparing workspace…')).toBeInTheDocument());
+
+    await user.type(message(), 'fix the login bug');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
+
+    await user.click(screen.getByText('go-away'));
+    expect(screen.queryByText('fix the login bug')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('go-thread'));
+    await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
+
+    session.finishWorkspace();
+    await waitForMutationsIdle(client);
+
+    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug']));
+    expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
     expect(session.steerAttempts).toBe(0);
   });
 

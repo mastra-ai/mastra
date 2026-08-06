@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useEffect, useEffectEvent, useReducer } from 'react';
+import { useEffect, useEffectEvent, useReducer, useState } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
@@ -78,6 +78,8 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
   );
 }
 
+let transcriptInstances = 0;
+
 function ChatTranscriptValueProvider({
   children,
   threadId,
@@ -90,6 +92,8 @@ function ChatTranscriptValueProvider({
   loadMore: LoadMoreHistory;
 }) {
   const connection = useChatConnection();
+  // useId would repeat across remounts at the same tree position; adoption needs a fresh id per mount
+  const [instanceId] = useState(() => `transcript-${++transcriptInstances}`);
   const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
 
   const effectiveTranscript: TranscriptState = {
@@ -102,6 +106,7 @@ function ChatTranscriptValueProvider({
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,
+    instanceId,
     localUser,
     reset,
     resolvePrompt,

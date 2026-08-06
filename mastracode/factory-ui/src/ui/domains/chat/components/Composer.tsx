@@ -92,7 +92,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const { busy, localUser, reset, clearPending, pushNotice, instanceId } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
@@ -175,14 +175,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     });
     if (accepted.length === 0) return;
     const additions = await Promise.all(
-      accepted.map(
-        async (file): Promise<PendingImage> => ({
-          id: `pending-image-${pendingImageSeq++}`,
-          data: await readFileAsBase64(file),
-          mediaType: file.type,
-          filename: file.name || undefined,
-        }),
-      ),
+      accepted.map(async (file): Promise<PendingImage> => ({
+        id: `pending-image-${pendingImageSeq++}`,
+        data: await readFileAsBase64(file),
+        mediaType: file.type,
+        filename: file.name || undefined,
+      })),
     );
     setImages(prev => [...prev, ...additions]);
   };
@@ -214,7 +212,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const queueUntilSessionReady = (threadId: string, text: string) => {
     localUser(text, false);
     void queueThreadPageKickoff({ resourceId, projectPath, threadId }, text, {
-      echoed: true,
+      echoOwner: instanceId,
       timeoutMs: PREPARING_SESSION_TIMEOUT_MS,
     }).catch(error => {
       // thread page owns dispatch errors; unclaimed timeout has no UI owner
@@ -374,11 +372,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           return;
         }
         await runComposerCommand(text);
-        return;
-      }
-      if (images.length > 0) {
-        updateDraft(text);
-        pushNotice('Remove the attached images to send while the session is preparing.');
         return;
       }
       queueUntilSessionReady(preparingThreadId, text);

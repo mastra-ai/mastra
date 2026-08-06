@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { claimThreadPageKickoffs, queueThreadPageKickoff } from './threadPageReadiness';
+import { adoptThreadPageKickoffEchoes, claimThreadPageKickoffs, queueThreadPageKickoff } from './threadPageReadiness';
 
 const key = { resourceId: 'resource-a', projectPath: '/worktree/a', threadId: 'thread-a' };
 
@@ -34,23 +34,32 @@ describe('thread page kickoff', () => {
     await expect(completed).rejects.toThrow('Timed out waiting for thread thread-a to complete its kickoff');
   });
 
-  it('keeps the timeout active until a claimed kickoff completes', async () => {
-    const completed = queueThreadPageKickoff(key, 'hello', { timeoutMs: 10 });
+  it('disarms the preparation timeout at claim so a slow dispatch cannot be misreported as never coming online', async () => {
+    vi.useFakeTimers();
+    try {
+      const completed = queueThreadPageKickoff(key, 'hello', { timeoutMs: 10 });
+      const [kickoff] = claimThreadPageKickoffs(key);
 
-    expect(claimThreadPageKickoffs(key)).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(50);
+      kickoff?.complete();
 
-    await expect(completed).rejects.toThrow('Timed out waiting for thread thread-a to complete its kickoff');
+      await expect(completed).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('marks a kickoff whose message the caller already showed, and leaves the others to be echoed', async () => {
-    const echoed = queueThreadPageKickoff(key, 'shown', { echoed: true, timeoutMs: 100 });
-    const plain = queueThreadPageKickoff(key, 'unshown', { timeoutMs: 100 });
+  it('re-echoes queued messages to a new transcript instance but never twice to the same one', async () => {
+    const first = queueThreadPageKickoff(key, 'shown', { echoOwner: 'transcript-1', timeoutMs: 100 });
+    const second = queueThreadPageKickoff(key, 'unshown', { timeoutMs: 100 });
+
+    expect(adoptThreadPageKickoffEchoes(key, 'transcript-1')).toEqual(['unshown']);
+    expect(adoptThreadPageKickoffEchoes(key, 'transcript-1')).toEqual([]);
+    expect(adoptThreadPageKickoffEchoes(key, 'transcript-2')).toEqual(['shown', 'unshown']);
 
     const kickoffs = claimThreadPageKickoffs(key);
-
-    expect(kickoffs.map(kickoff => kickoff.echoed)).toEqual([true, false]);
     kickoffs.forEach(kickoff => kickoff.complete());
-    await expect(Promise.all([echoed, plain])).resolves.toEqual([undefined, undefined]);
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
   });
 
   it('queues concurrent kickoffs for the same thread in order', async () => {
