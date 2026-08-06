@@ -534,7 +534,8 @@ describe('Mock OM Agent Integration', () => {
     // Since #16523, observation also fires at step 0 when the threshold is exceeded —
     // with this suite's very low threshold the first generate can produce multiple
     // cycles (and boundaries) on its own, so count boundaries instead of expecting none.
-    const firstBoundaryCount = firstRecord!.activeObservations!.match(/--- message boundary/g)?.length ?? 0;
+    const boundaryPattern = /--- message boundary \(([^)]+)\) ---/g;
+    const firstBoundaryCount = [...firstRecord!.activeObservations!.matchAll(boundaryPattern)].length;
 
     // Second generate — appends observations with a boundary
     await boundaryAgent.generate('Can you also help me with another task?', { memory: memoryOpts });
@@ -544,7 +545,7 @@ describe('Mock OM Agent Integration', () => {
     expect(secondRecord).toBeTruthy();
 
     // Appending must have inserted at least one NEW message boundary delimiter with a date
-    const boundaryMatches = [...secondRecord!.activeObservations!.matchAll(/--- message boundary \(([^)]+)\) ---/g)];
+    const boundaryMatches = [...secondRecord!.activeObservations!.matchAll(boundaryPattern)];
     expect(boundaryMatches.length).toBeGreaterThan(firstBoundaryCount);
 
     // The newest boundary belongs to the most recent append
