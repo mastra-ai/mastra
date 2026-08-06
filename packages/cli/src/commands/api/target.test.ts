@@ -42,6 +42,7 @@ describe('resolveTarget', () => {
     vi.clearAllMocks();
     delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
     delete process.env.MASTRA_PROJECT_ID;
+    delete process.env.MASTRA_ORGANIZATION_ID;
     fetchMock.mockRejectedValue(new Error('local unavailable'));
     mocks.getToken.mockResolvedValue('platform-token');
     mocks.loadProjectConfig.mockResolvedValue(null);
@@ -50,6 +51,7 @@ describe('resolveTarget', () => {
   afterEach(() => {
     delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
     delete process.env.MASTRA_PROJECT_ID;
+    delete process.env.MASTRA_ORGANIZATION_ID;
     vi.unstubAllGlobals();
   });
 
@@ -161,6 +163,94 @@ describe('resolveTarget', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('uses the hosted learning endpoint with env credentials for learning routes', async () => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/learning/entities')).resolves.toEqual({
+      baseUrl: 'https://output.signals.mastra.ai',
+      headers: {
+        Authorization: 'Bearer env-token',
+        'X-Mastra-Project-Id': 'env-project',
+      },
+      fallbackHeaders: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'env-project',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('uses CLI auth and project config when learning env credentials are unavailable', async () => {
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+
+    await expect(
+      resolveTarget(options(), fetchMock as typeof fetch, '/learning/entities/agent_1/theme-snapshots'),
+    ).resolves.toEqual({
+      baseUrl: 'https://output.signals.mastra.ai',
+      headers: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'project-1',
+        'X-Mastra-Organization-Id': 'org-1',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('prefers the env organization ID over project config for learning routes', async () => {
+    process.env.MASTRA_ORGANIZATION_ID = 'env-org';
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/learning/entities')).resolves.toEqual({
+      baseUrl: 'https://output.signals.mastra.ai',
+      headers: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'project-1',
+        'X-Mastra-Organization-Id': 'env-org',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('does not send the organization header for observability routes', async () => {
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/v1/traces')).resolves.toEqual({
+      baseUrl: 'https://observability.mastra.ai',
+      headers: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Project-Id': 'project-1',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
+  });
+
+  it('uses explicit --url for learning paths instead of the hosted endpoint', async () => {
+    await expect(
+      resolveTarget(
+        options({ url: 'https://learning-dev.example.com', header: ['Authorization: Bearer custom'] }),
+        fetchMock as typeof fetch,
+        '/learning/entities',
+      ),
+    ).resolves.toEqual({
+      baseUrl: 'https://learning-dev.example.com',
+      headers: { Authorization: 'Bearer custom' },
+      timeoutMs: 30_000,
+    });
   });
 
   it('uses explicit --url for observability paths instead of hosted endpoint', async () => {
@@ -291,6 +381,82 @@ describe('resolveTarget', () => {
   it.each(['-1', 'not-a-number'])(`defaults invalid timeout %s to 30 seconds`, async timeout => {
     await expect(resolveTarget(options({ url: 'https://runtime.example.com', timeout }))).resolves.toMatchObject({
       timeoutMs: 30_000,
+    });
+  });
+
+  describe('platform-hosted --url', () => {
+    it.each([
+      ['https://shipyard.factory.mastra.cloud', 'production factory'],
+      ['https://shipyard.studio.mastra.cloud', 'production studio'],
+      ['https://shipyard.factory.staging.mastra.cloud', 'staging factory'],
+      ['https://shipyard.studio.staging.mastra.cloud', 'staging studio'],
+    ])('attaches Bearer from stored credentials for %s (%s)', async url => {
+      await expect(resolveTarget(options({ url }))).resolves.toEqual({
+        baseUrl: url,
+        headers: { Authorization: 'Bearer platform-token' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['https://shipyard.server.mastra.cloud', 'production user-provided server'],
+      ['https://shipyard.server.staging.mastra.cloud', 'staging user-provided server'],
+      ['https://runtime.example.com', 'arbitrary custom URL'],
+      ['http://shipyard.factory.mastra.cloud', 'non-HTTPS platform host'],
+    ])('does not attach Bearer for %s (%s)', async url => {
+      await expect(resolveTarget(options({ url }))).resolves.toEqual({
+        baseUrl: url,
+        headers: {},
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('respects an explicit Authorization header for platform-hosted URLs', async () => {
+      await expect(
+        resolveTarget(
+          options({
+            url: 'https://shipyard.factory.mastra.cloud',
+            header: ['Authorization: Bearer override'],
+          }),
+        ),
+      ).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: { Authorization: 'Bearer override' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('matches an explicit Authorization header case-insensitively', async () => {
+      await expect(
+        resolveTarget(
+          options({
+            url: 'https://shipyard.factory.mastra.cloud',
+            header: ['authorization: Bearer override'],
+          }),
+        ),
+      ).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: { authorization: 'Bearer override' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('omits Authorization when no stored credentials are available', async () => {
+      mocks.getToken.mockRejectedValueOnce(new Error('not logged in'));
+
+      await expect(resolveTarget(options({ url: 'https://shipyard.factory.mastra.cloud' }))).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: {},
+        timeoutMs: 30_000,
+      });
     });
   });
 

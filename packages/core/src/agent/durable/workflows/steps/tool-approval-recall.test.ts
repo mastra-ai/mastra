@@ -24,6 +24,7 @@ import { createDurableToolCallStep } from './tool-call';
 vi.mock('../../utils/resolve-runtime', () => ({
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(true),
+  rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../stream-adapter', () => ({

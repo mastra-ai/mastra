@@ -1,6 +1,6 @@
 {
   "name": "workspace-compat-e2e-test",
-  "version": "0.0.64",
+  "version": "0.0.67",
   "private": true,
   "type": "module",
   "scripts": {

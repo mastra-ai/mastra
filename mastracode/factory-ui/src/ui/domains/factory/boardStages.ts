@@ -1,5 +1,5 @@
 import type { WorkItem } from './services/workItems';
-import { BOARD_STAGES, stageLabel } from './stages';
+import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
 import type { BoardStageId } from './stages';
 
 export type BoardKind = 'work' | 'review';
@@ -58,4 +58,13 @@ export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {
 
 export function itemStageLabel(item: WorkItem, stage: string): string {
   return itemStageOptions(item).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
+}
+
+/** Furthest stage the item currently sits in; items with no known stage read as Intake, like the board columns. */
+export function currentItemStageLabel(item: WorkItem): string {
+  const options = itemStageOptions(item);
+  // Stages off this item's board sort after every column, so keeping them would beat the real one
+  const onBoard = item.stages.filter(stage => options.some(candidate => candidate.id === stage));
+  const furthest = onBoard.sort((a, b) => stageOrder(b) - stageOrder(a)).at(0);
+  return itemStageLabel(item, furthest ?? 'intake');
 }

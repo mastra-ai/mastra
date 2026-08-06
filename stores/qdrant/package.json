@@ -1,6 +1,6 @@
 {
   "name": "@mastra/qdrant",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Qdrant vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.17.0"
+    "@qdrant/js-client-rest": "^1.18.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

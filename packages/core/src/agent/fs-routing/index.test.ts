@@ -691,4 +691,106 @@ describe('assembleAgentFromFsEntry', () => {
       expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('scorers/ are ignored'));
     });
   });
+
+  describe('schedules', () => {
+    const heartbeat = { cron: '*/5 * * * *', prompt: 'Check system health and report any failures.' };
+
+    it('attaches discovered schedules with their path-derived keys', () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'support',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        schedules: [
+          { key: 'heartbeat', schedule: heartbeat },
+          { key: 'billing/sweep', schedule: { cron: '0 3 * * *', prompt: 'Sweep unpaid invoices.' } },
+        ],
+      });
+
+      expect(agent.getDeclaredSchedules().map(s => s.key)).toEqual(['heartbeat', 'billing/sweep']);
+      expect(agent.getDeclaredSchedules()[0]!.definition).toBe(heartbeat);
+    });
+
+    it('defaults to no declared schedules', () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'support',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+      });
+
+      expect(agent.getDeclaredSchedules()).toEqual([]);
+    });
+
+    it('accepts a handler-mode schedule with no prompt', () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'support',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        schedules: [{ key: 'sweep', schedule: { cron: '0 3 * * *', handler: async () => ({ prompt: 'go' }) } }],
+      });
+
+      expect(agent.getDeclaredSchedules()).toHaveLength(1);
+    });
+
+    it('throws on an invalid schedule definition, naming the file', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'support',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          schedules: [{ key: 'broken', schedule: { cron: 'nope', prompt: 'hi' } }],
+        }),
+      ).toThrowError(/agents\/support\/schedules\/broken/);
+    });
+
+    it('throws when two files resolve to the same schedule key', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'support',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          schedules: [
+            { key: 'heartbeat', schedule: heartbeat },
+            { key: 'heartbeat', schedule: heartbeat },
+          ],
+        }),
+      ).toThrowError(/duplicate schedule "heartbeat"/);
+    });
+
+    it('throws when a subagent declares schedules', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'parent',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          subagents: [
+            {
+              name: 'child',
+              config: { model: 'openai/gpt-4o', description: 'child agent' },
+              instructionsMd: 'hi',
+              schedules: [{ key: 'heartbeat', schedule: heartbeat }],
+            },
+          ],
+        }),
+      ).toThrowError(/only supported on root agents/);
+    });
+
+    it('warns and ignores schedules/ when config.ts exports a new Agent()', () => {
+      const onWarn = vi.fn();
+      const coded = new Agent({
+        id: 'support',
+        name: 'support',
+        instructions: 'Code-defined.',
+        model: 'openai/gpt-4o',
+      });
+
+      const result = assembleAgentFromFsEntry(
+        { name: 'support', config: coded, schedules: [{ key: 'heartbeat', schedule: heartbeat }] },
+        { onWarn },
+      );
+
+      expect(result).toBe(coded);
+      expect(result.getDeclaredSchedules()).toEqual([]);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('schedules/ are ignored'));
+    });
+  });
 });
