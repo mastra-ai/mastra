@@ -46,6 +46,9 @@ function setState(subscription: SharedSubscription, state: SseConnectionState) {
  */
 function ensureConnected(session: AgentControllerSession, subscription: SharedSubscription) {
   if (subscription.connecting || subscription.state === 'connected') return;
+  // Hidden tabs must not hold a stream: browsers cap HTTP/1.1 at 6 connections
+  // per host, so a few background tabs starve every other request to the app.
+  if (document.visibilityState === 'hidden') return;
 
   subscription.unsubscribe?.();
   subscription.unsubscribe = undefined;
@@ -63,7 +66,7 @@ function ensureConnected(session: AgentControllerSession, subscription: SharedSu
     .then(
       sub => {
         subscription.connecting = false;
-        if (subscription.disposed) {
+        if (subscription.disposed || document.visibilityState === 'hidden') {
           sub.unsubscribe();
           return;
         }
@@ -126,7 +129,21 @@ export function useAgentControllerEvents({
     handleState(subscription.state);
     ensureConnected(session, subscription);
 
+    // Release the stream while the tab is hidden and reconnect on return; the
+    // dropped → connected transition already refetches what the gap missed.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        subscription.unsubscribe?.();
+        subscription.unsubscribe = undefined;
+        if (subscription.state === 'connected') setState(subscription, 'dropped');
+      } else {
+        ensureConnected(session, subscription);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       subscription.eventListeners.delete(handleEvent);
       subscription.stateListeners.delete(handleState);
       if (subscription.eventListeners.size > 0 || subscription.stateListeners.size > 0) return;
