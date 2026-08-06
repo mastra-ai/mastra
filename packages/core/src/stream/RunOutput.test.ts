@@ -196,6 +196,34 @@ describe('WorkflowRunOutput', () => {
     expect((finish?.payload as { workflowStatus?: string }).workflowStatus).toBe('failed');
   });
 
+  it('rejects result/usage and closes consumers when the pipeline errors after resume()', async () => {
+    // First leg of the run: stream ends cleanly (e.g. the run suspends).
+    const first = createControlledStream();
+    const output = new WorkflowRunOutput({ runId: 'run-1', workflowId: 'workflow-1', stream: first.stream });
+    first.controller.close();
+    await drain(output.fullStream.getReader());
+
+    // The run is resumed with a fresh stream, which then fails mid-run.
+    const second = createControlledStream();
+    output.resume(second.stream);
+
+    const reader = output.fullStream.getReader();
+    const resultPromise = output.result;
+    const usagePromise = output.usage;
+
+    second.controller.error(new Error('resume boom'));
+
+    // The re-armed result/usage promises reject instead of hanging forever.
+    await expect(resultPromise).rejects.toThrow('resume boom');
+    await expect(usagePromise).rejects.toThrow('resume boom');
+
+    // The post-resume consumer receives a terminal failed finish and closes.
+    const chunks = await drain(reader);
+    const finish = chunks.filter(c => c.type === 'workflow-finish').at(-1);
+    expect(finish).toBeDefined();
+    expect((finish?.payload as { workflowStatus?: string }).workflowStatus).toBe('failed');
+  });
+
   it('does not stop other fullStream subscribers when one subscriber cancels (#19743)', async () => {
     let enqueue: (chunk: WorkflowStreamEvent) => void = () => {};
     let closeSource: () => void = () => {};
