@@ -1,4 +1,4 @@
-name: Experiment Worker E2E
+name: Experiments E2E
 
 on:
   workflow_dispatch:

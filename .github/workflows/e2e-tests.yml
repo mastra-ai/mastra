@@ -79,10 +79,10 @@ jobs:
           path: ${{ runner.temp }}/mastra-e2e-registry
           retention-days: 1
 
-  e2e-experiment-worker-pr:
+  e2e-experiments:
     needs: publish-e2e-registry
     if: inputs.experiment_worker_e2e_changed
-    name: E2E experiment worker PR
+    name: E2E experiments
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     permissions:

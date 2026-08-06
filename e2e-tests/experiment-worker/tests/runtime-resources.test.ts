@@ -86,7 +86,8 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       expect(run.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
       await recordAssertionEvidence(workspaceSkillAgentScenario, {
         'workspace-inherited': completed,
-        'skill-visible': completed,
+        'skill-discovered': completed,
+        'skill-prompt-injected': completed,
       });
     },
     workspaceSkillAgentScenario.timeoutMs,
@@ -109,8 +110,8 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       expect(run.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
       await recordAssertionEvidence(workspaceSandboxScenario, {
         'filesystem-write': completed,
-        'sandbox-read': completed,
-        'skill-discovery': completed,
+        'sandbox-command': completed,
+        'skill-listed': completed,
       });
     },
     workspaceSandboxScenario.timeoutMs,
@@ -153,9 +154,10 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       );
       expect(recovered.result.exitCode).toBe(0);
       await recordAssertionEvidence(sandboxCancellationScenario, {
-        'sandbox-cancelled': cancelled.events.at(-1)?.payload,
+        'sandbox-command-started': descendant,
+        'terminal-cancelled': cancelled.events.at(-1)?.payload,
         'descendant-terminated': !isProcessAlive(pid),
-        'fresh-process-recovery': recovered.result.exitCode,
+        'success-after-cancel': recovered.result.exitCode,
       });
     },
     sandboxCancellationScenario.timeoutMs,
@@ -190,9 +192,9 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       expect(workflow.result.exitCode).toBe(0);
       await recordAssertionEvidence(kitchenSinkScenario, {
         'import-heavy-build': manifest.artifact.contentDigest,
-        'agent-runtime': agent.events.at(-1)?.payload,
-        'workflow-runtime': workflow.events.at(-1)?.payload,
-        'no-studio-required': true,
+        'selected-agent-executed': agent.events.at(-1)?.payload,
+        'selected-workflow-executed': workflow.events.at(-1)?.payload,
+        'studio-not-launched': true,
       });
     },
     kitchenSinkScenario.timeoutMs,
@@ -236,10 +238,10 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       const vectorStoreExists = await pathExists(join(artifactRoot, 'vector-store.db'));
       expect(vectorStoreExists).toBe(true);
       await recordAssertionEvidence(persistenceIsolationScenario, {
-        'application-storage-write': completed,
-        'vector-runtime': vectorStoreExists,
-        'experiment-persistence-empty': true,
-        'score-persistence-empty': true,
+        'application-storage-written': completed,
+        'vector-adapter-executed': vectorStoreExists,
+        'experiment-records-absent': true,
+        'score-records-absent': true,
       });
     },
     persistenceIsolationScenario.timeoutMs,

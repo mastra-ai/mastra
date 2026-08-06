@@ -75,8 +75,8 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('agent-owned-skill');
       expect(output).not.toContain('sandbox-echo-skill');
       await recordAssertionEvidence(workspaceOwnedOverrideScenario, {
-        'agent-workspace-wins': output,
-        'global-workspace-excluded': !output.includes('sandbox-echo-skill'),
+        'agent-workspace-overrides-global': output,
+        'global-workspace-marker-absent': !output.includes('sandbox-echo-skill'),
       });
     },
     workspaceOwnedOverrideScenario.timeoutMs,
@@ -119,10 +119,10 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(outputs.filter(output => output.includes('tenant-b-skill'))).toHaveLength(1);
       expect(outputs.every(output => !output.includes('workspace marker missing'))).toBe(true);
       await recordAssertionEvidence(workspaceDynamicScenario, {
-        'same-key-isolated': outputs,
+        'concurrent-items': outputs,
+        'same-key-consistent': outputs.filter(output => output.includes('tenant-a-skill')),
         'different-key-isolated': outputs,
-        'concurrent-terminal': run.events.at(-1)?.payload,
-        'resolver-cleanup': true,
+        'workspace-cleanup': run.events.at(-1)?.payload,
       });
     },
     workspaceDynamicScenario.timeoutMs,
@@ -173,9 +173,9 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('readOnlyRejected');
       expect(output).toContain('true');
       await recordAssertionEvidence(workspaceMountsScenario, {
-        'mount-routing': output,
-        'read-only-enforced': output,
-        'invalid-path-rejected': output,
+        'multi-mount-routing': output,
+        'read-only-mount': output,
+        'workspace-cleanup': run.events.at(-1)?.payload,
       });
     },
     workspaceMountsScenario.timeoutMs,
@@ -205,8 +205,8 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('number');
       expect(run.result.exitCode).toBe(0);
       await recordAssertionEvidence(workspaceLspScenario, {
-        'lsp-launch': output,
-        'lsp-query': output,
+        'language-server-launched': output,
+        'lsp-hover': output,
         'lsp-shutdown': run.result.exitCode,
       });
     },
@@ -233,9 +233,10 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(events[0]).toMatch(/^launch:/);
       expect(events.at(-1)).toBe('close');
       await recordAssertionEvidence(workspaceBrowserScenario, {
-        'browser-lazy': output,
-        'browser-command': output,
-        'browser-close': events,
+        'browser-lazy-before-command': output,
+        'browser-launched-for-thread': output,
+        'browser-cli-executed': output,
+        'browser-closed-on-shutdown': events,
       });
     },
     workspaceBrowserScenario.timeoutMs,
@@ -259,9 +260,10 @@ describe('experiment worker full-tier workspace lifecycle', () => {
       expect(output).toContain('"invalidConfigs":3');
       expect(run.result.exitCode).toBe(0);
       await recordAssertionEvidence(workspaceFailuresScenario, {
-        'init-failure': output,
-        'shutdown-failure': output,
-        'invalid-workspace-config': output,
+        'initialization-failure-reported': output,
+        'shutdown-failure-reported': output,
+        'invalid-configurations-rejected': output,
+        'worker-clean-exit': run.result.exitCode,
       });
     },
     workspaceFailuresScenario.timeoutMs,

@@ -154,11 +154,11 @@ describe('experiment worker Postgres lifecycle', () => {
       const connectionReuse = await docker(['exec', containerName, 'psql', '-U', 'postgres', '-tAc', 'SELECT 1']);
       expect(connectionReuse).toBe('1');
       await recordAssertionEvidence(postgresScenario, {
-        'postgres-stateful': { threads: Number(threads) },
-        'experiment-persistence-disabled': { tables },
-        'score-persistence-disabled': { tables },
-        'shutdown-bounded': true,
+        'application-state-persisted': { threads: Number(threads) },
+        'experiment-persistence-absent': { tables },
+        'bounded-shutdown': true,
         'connection-reuse': connectionReuse,
+        'docker-cleanup': containerName,
       });
     },
     postgresScenario.timeoutMs,

@@ -73,10 +73,11 @@ describe('experiment worker native transitive dependency behavior', () => {
       expect(completed).toContain('"matchCount":1');
       expect(run.events.at(-1)?.payload).toMatchObject({ status: 'completed' });
       await recordAssertionEvidence(nativeDuckdbScenario, {
-        'native-external-declared': dependencyNames,
-        'strict-pnpm-install': workspaceConfig,
-        'native-runtime-success': completed,
-        'relocation-safe': artifactRoot,
+        'isolated-install-root': artifactRoot,
+        'native-dependency-declared': dependencyNames,
+        'portable-hoisted-layout': workspaceConfig,
+        'artifact-relocated': artifactRoot,
+        'native-vector-executed': completed,
       });
     },
     nativeDuckdbScenario.timeoutMs,

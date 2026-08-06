@@ -80,12 +80,29 @@ describe('experiment worker installed project shapes', () => {
 
         const cleanup = await resources.cleanup();
         expect(cleanup.remainingPaths).toEqual([]);
-        await recordAssertionEvidence(shape.scenario, {
-          'package-manager-install': shape.packageManager,
-          'worker-build': build.result.exitCode,
+        const commonEvidence = {
+          'isolated-install-root': projectRoot,
           'artifact-relocated': artifactRoot,
-          'protocol-success': run.events.at(-1)?.payload,
-        });
+        };
+        if (shape.scenario === npmMinimalScenario) {
+          await recordAssertionEvidence(shape.scenario, {
+            ...commonEvidence,
+            'npm-install': build.result.exitCode,
+            'minimal-environment': run.events.at(-1)?.payload,
+          });
+        } else if (shape.scenario === yarnMinimalScenario) {
+          await recordAssertionEvidence(shape.scenario, {
+            ...commonEvidence,
+            'yarn-berry-node-modules': build.result.exitCode,
+            'minimal-environment': run.events.at(-1)?.payload,
+          });
+        } else {
+          await recordAssertionEvidence(shape.scenario, {
+            ...commonEvidence,
+            'workspace-package-imported': run.events.at(-1)?.payload,
+            'source-independent': artifactRoot,
+          });
+        }
       },
       shape.scenario.timeoutMs,
     );

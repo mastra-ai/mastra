@@ -110,8 +110,8 @@ beforeAll(async () => {
   const secondStableFiles = await stableFiles(secondBuild.artifactRoot, second, [projectRoot, secondBuildRoot]);
   expect(firstStableFiles).toEqual(secondStableFiles);
   repeatabilityEvidence = {
-    'repeat-build-stable': firstStableFiles,
-    'repeat-build-volatile': { first: first.build, second: second.build },
+    'repeated-build-stable-contract': firstStableFiles,
+    'volatile-build-metadata': { first: first.build, second: second.build },
   };
 
   artifactRoot = resources.trackPath(
@@ -141,7 +141,7 @@ describe('experiment worker portability and process isolation', () => {
     expect(second.result.exitCode).toBe(0);
     concurrencyEvidence = {
       'concurrent-workers': [first.request.experimentId, second.request.experimentId],
-      'immutable-artifact': manifest.artifact.contentDigest,
+      'artifact-immutable': manifest.artifact.contentDigest,
     };
   });
 
@@ -157,8 +157,10 @@ describe('experiment worker portability and process isolation', () => {
     await recordAssertionEvidence(portabilityIsolationScenario, {
       ...repeatabilityEvidence,
       ...concurrencyEvidence,
-      'abrupt-termination': 'SIGKILL',
-      'fresh-process-recovery': recovered.events.at(-1)?.payload,
+      'abrupt-termination-recovery': {
+        signal: 'SIGKILL',
+        recovered: recovered.events.at(-1)?.payload,
+      },
     });
   });
 });

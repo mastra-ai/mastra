@@ -58,7 +58,7 @@ describe('experiment worker installed-boundary diagnostics', () => {
     try {
       await expectBuildFailure('malformed-approvals', /Invalid pnpm allowBuilds entries: esbuild/);
       await recordAssertionEvidence(malformedApprovalsScenario, {
-        'invalid-approval-diagnostic': 'Invalid pnpm allowBuilds entries: esbuild',
+        'invalid-pnpm-approval-diagnostic': 'Invalid pnpm allowBuilds entries: esbuild',
       });
     } finally {
       await writeFile(join(projectRoot, 'pnpm-workspace.yaml'), workspaceSource);
@@ -85,7 +85,7 @@ describe('experiment worker installed-boundary diagnostics', () => {
     try {
       await expectStartupFailure('import-failure', /fixture constructor import failure/);
       await recordAssertionEvidence(importFailureScenario, {
-        'import-failure-diagnostic': 'fixture constructor import failure',
+        'customer-import-diagnostic': 'fixture constructor import failure',
       });
     } finally {
       await writeFile(join(projectRoot, 'src', 'mastra', 'index.ts'), mastraSource);
