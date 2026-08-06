@@ -7,89 +7,25 @@ packages:
 
 # Harness overview
 
-During a run, an agent executes a model-and-tool loop. The harness gives this loop a lifecycle beyond one connected request.
+A harness lets an agent pursue long-running, complex goals while keeping its work durable, visible, and steerable. It preserves progress across retries and interruptions, while giving people and other systems a way to inspect progress, add context, approve actions, redirect the agent, or stop it.
 
-## Give an agent a lifecycle
+In Mastra, harness refers to a set of capabilities for managing an agent beyond a single uninterrupted run. You can adopt these capabilities individually or combine them as needed.
 
-A regular [`Agent`](/docs/agents/overview) can reason through several model and tool steps during one `generate()` or `stream()` call. The application invokes the call. A result returns after the agent completes its loop.
+[`AgentController`](/docs/harness/agent-controller) is a harness designed for interactive agent applications. It extends the base [`Agent`](/docs/agents/overview) loop with isolated sessions for each user or task, persistent threads and state, switchable modes and models, tool permissions and approvals, subagent orchestration, and streams for events and display state.
 
-A harness controls what happens around and between those calls, including idle time and incoming events. It also defines what remains after an interruption. The agent defines how work is performed. Its harness governs when and how that work continues.
-
-An agent becomes long-running when its thread or objective outlives one connected invocation. It may spend much of that time idle, then resume when a task finishes or new information arrives.
-
-## What a harness controls
-
-### Start work
-
-[Schedules](/docs/long-running-agents/schedules) start agent work at recurring times. A schedule can create an isolated run or send a prompt into an existing thread.
-
-[Signals](/docs/long-running-agents/signals) start or update work when information arrives. A message or application event can wake an idle thread instead of waiting for another call to `stream()`.
-
-### Continue work
-
-[Background tasks](/docs/long-running-agents/background-tasks) let slow tool calls, workflows, and subagents finish without blocking the current agent loop. A completed task stores its result and gives the agent another opportunity to act on it.
-
-[Goals](/docs/long-running-agents/goals) keep a thread-scoped objective active across loop iterations and messages. The agent continues until a judge decides the objective is complete or the run budget is exhausted.
-
-Background tasks allow operations to finish later, while goals keep objectives active until they're complete.
-
-### Bring in new context
-
-Signals deliver information to an agent thread outside the original invocation. New input can wake an idle agent or enter an active run. It can also wait for the following turn.
-
-Use a [signal provider](/docs/long-running-agents/signal-providers) when Mastra should track subscriptions to external resources such as GitHub pull requests, Slack channels, or continuous integration builds. Send a signal directly when your application already knows which thread should receive the event.
-
-### Preserve work
-
-[Durable agents](/docs/long-running-agents/durable-agents) preserve run state and publish stream events independently of the client connection. A client can disconnect and reconnect to the same run, and execution can recover after a process restart.
-
-Long-running describes how long the agent remains responsible for work. Durable describes what happens to that work when its connection or process is interrupted.
-
-### Build an agent experience
-
-[AgentController](/docs/harness/agent-controller) is an opinionated harness for interactive applications. It combines persistent sessions and threads with modes, tool approvals, subagents, channels, and typed events.
-
-Use it to build applications such as coding agents or research workspaces where users return to ongoing work. The other harness capabilities work independently for scheduled, event-driven, or background agents without an interactive interface.
-
-## How the pieces work together
-
-A harness is usually a composition of capabilities. A pull request agent could receive GitHub events through a signal provider and wake the relevant thread with a signal. A goal could keep the review active while background tasks run checks. Durable execution could preserve the run when the application deploys again.
-
-Each capability controls one part of the lifecycle. Combine only the parts the agent needs.
+Agent harnesses are useful wherever work continues over time. Common examples include coding agents that carry changes through CI and review, software factories that coordinate many tasks in parallel, SRE agents that adapt as incidents evolve, and go-to-market agents that respond as accounts, signals, and conversations change.
 
 ## When to use a harness
 
-Add a harness when one or more of these are true:
+Choose a starting point based on what the agent needs. You may use one capability or several.
 
-- Work should continue after the initiating client disconnects.
-- A slow tool or subagent should run without blocking the current loop.
-- An objective should persist across model calls or user turns.
-- A timer or incoming event should start or update work.
-- A run should recover after a process restart or network interruption.
-- An application needs persistent sessions, modes, approvals, or thread state.
-
-For a request-response interaction where the client remains connected until completion, use [`Agent.generate()`](/reference/agents/generate) or [`Agent.stream()`](/reference/agents/stream).
-
-## Get started
-
-Choose a capability based on what the agent needs to accomplish:
-
-| Need | Start here |
-| - | - |
-| Run slow tools or delegated work without blocking | [Background tasks](/docs/long-running-agents/background-tasks) |
-| Keep working toward a persistent objective | [Goals](/docs/long-running-agents/goals) |
-| Run an agent at recurring times | [Schedules](/docs/long-running-agents/schedules) |
-| Wake or update a thread with new input | [Signals](/docs/long-running-agents/signals) |
-| Connect external events to subscribed threads | [Signal providers](/docs/long-running-agents/signal-providers) |
-| Preserve runs and streams through interruptions | [Durable agents](/docs/long-running-agents/durable-agents) |
-| Build a persistent interactive agent application | [AgentController](/docs/harness/agent-controller) |
-
-## Next steps
-
-- [Background tasks](/docs/long-running-agents/background-tasks)
-- [Durable agents](/docs/long-running-agents/durable-agents)
-- [Goals](/docs/long-running-agents/goals)
-- [Schedules](/docs/long-running-agents/schedules)
-- [Signals](/docs/long-running-agents/signals)
-- [Signal providers](/docs/long-running-agents/signal-providers)
-- [AgentController](/docs/harness/agent-controller)
+| If you want to | Start here | Why |
+| - | - | - |
+| Keep a run available through client disconnects or server restarts | [Durable Agents](/docs/long-running-agents/durable-agents) | Persist run state and let clients reconnect to its stream. |
+| Run slow tools, workflows, or subagents without blocking | [Background Tasks](/docs/long-running-agents/background-tasks) | Finish work asynchronously and return its result to the agent. |
+| Keep an agent working until it reaches an objective | [Goals](/docs/long-running-agents/goals) | Evaluate a thread-scoped objective until it's complete or reaches its run budget. |
+| Start work automatically at recurring times | [Schedules](/docs/long-running-agents/schedules) | Start isolated runs or send prompts into an existing thread on a cron schedule. |
+| Add context, redirect active work, or wake an idle thread | [Signals](/docs/long-running-agents/signals) | Deliver input now or hold it for the next turn. |
+| React to changes in GitHub, Slack, continuous integration, or another external system | [Signal Providers](/docs/long-running-agents/signal-providers) | Track subscriptions and forward matching events to agent threads. |
+| Build an interactive product with sessions, modes, state, approvals, and events | [AgentController](/docs/harness/agent-controller) | Host isolated sessions around a shared agent runtime. |
+| Let users steer, queue follow-up work, or stop an interactive run | [AgentController](/docs/harness/agent-controller) | Expose run controls through each session. |
