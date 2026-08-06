@@ -1998,6 +1998,47 @@ describe('GithubSignals', () => {
     );
   });
 
+  it('stops per-thread polling on shutdown', async () => {
+    vi.useFakeTimers();
+    const thread: StorageThreadType = {
+      id: 'thread-shutdown',
+      resourceId: 'resource-shutdown',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 1,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({ githubUpdatedAt: '2026-01-01T00:00:00.000Z' })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+
+    await processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(true);
+
+    processor.stop();
+
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(syncClient.syncPullRequest).not.toHaveBeenCalled();
+  });
+
   it('only keeps one active polling thread at a time', async () => {
     vi.useFakeTimers();
     const firstThread: StorageThreadType = {

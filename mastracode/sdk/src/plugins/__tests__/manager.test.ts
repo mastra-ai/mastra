@@ -13,14 +13,33 @@ import { findMastraCodePackageRoot } from '../package-link.js';
 import { loadPluginRegistry } from '../registry.js';
 
 const mastracodePackageRoot = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
+const SDK_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 let tempDir: string | undefined;
+let tempResolvableDir: string | undefined;
+
+/**
+ * Fixtures that import from `@mastra/core` have to sit somewhere Node can
+ * resolve it from, which `os.tmpdir()` is not. Inside the package's own
+ * `node_modules` keeps them out of both `tsc` and vitest's globs.
+ */
+function makeResolvableDir(): string {
+  const parent = path.join(SDK_ROOT, 'node_modules', '.mc-test-plugins');
+  fs.mkdirSync(parent, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(parent, 'manager-'));
+  tempResolvableDir = dir;
+  return dir;
+}
 
 afterEach(() => {
   vi.clearAllMocks();
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
+  }
+  if (tempResolvableDir) {
+    fs.rmSync(tempResolvableDir, { recursive: true, force: true });
+    tempResolvableDir = undefined;
   }
 });
 
@@ -114,6 +133,37 @@ describe('PluginManager', () => {
     ).toBeUndefined();
   });
 
+  it('moves the version stamp when config changes, not just when source changes', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.stamp',
+        config: { answerModel: { type: 'model', default: 'default-model' } },
+        tools: context => ({ stamp_tool: { tool: { id: 'stamp_tool', description: context.config.answerModel } } })
+      };`,
+    );
+    const manager = new PluginManager({ projectRoot, homeDir });
+
+    await manager.installLocal(pluginDir, 'project');
+    const installed = (await manager.listPlugins())[0]?.versionStamp;
+    expect(installed).toBeTruthy();
+
+    // A reload with nothing changed must not move the stamp: consumers that own
+    // long-lived instances keep them only while the stamp holds still.
+    await manager.reload();
+    expect((await manager.listPlugins())[0]?.versionStamp).toBe(installed);
+
+    // Config edits fire a reload without touching a single file, and the plugin
+    // is handed different values — so the stamp has to move.
+    await manager.setConfigValue('acme.stamp', 'project', 'answerModel', 'chosen-model');
+    expect((await manager.listPlugins())[0]?.versionStamp).not.toBe(installed);
+  });
+
   it('hot reloads local plugin source changes into the stable tools object', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
@@ -131,6 +181,95 @@ describe('PluginManager', () => {
 
     await waitUntil(() => pluginTools.hot_tool?.description === 'second');
     expect(manager.getPluginTools()).toBe(pluginTools);
+  });
+
+  it('keeps runtime accessors available to plugin resolvers across reloads', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.runtime',
+        tools: context => ({
+          runtime_tool: {
+            tool: { id: 'runtime_tool', description: context.getController?.()?.id ?? 'no-controller' }
+          }
+        })
+      };`,
+    );
+
+    let controller: { id: string } | undefined;
+    const manager = new PluginManager({
+      projectRoot,
+      homeDir,
+      runtime: { getController: () => controller as never },
+    });
+
+    await manager.installLocal(pluginDir, 'project');
+    expect(manager.getPluginTools().runtime_tool?.description).toBe('no-controller');
+
+    controller = { id: 'mastra-code' };
+    await manager.reload();
+
+    expect(manager.getPluginTools().runtime_tool?.description).toBe('mastra-code');
+  });
+
+  it('exposes processors and signal providers from active plugins only, tagged with their owner', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const contributorDir = makeResolvableDir();
+    const disabledDir = path.join(tempDir, 'disabled');
+    const writeContributor = (dir: string, id: string, marker: string, withProvider: boolean) => {
+      fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'src/index.ts'),
+        `${withProvider ? `import { SignalProvider } from '@mastra/core/signals';\n` : ''}export default {
+          id: '${id}',
+          processors: {
+            input: [{ id: '${marker}-in', processInputStep: async () => {} }],
+            output: [{ id: '${marker}-out', processOutputStep: async ({ messageList }) => messageList }]
+          },
+          ${
+            withProvider ? `signalProviders: [new (class extends SignalProvider { id = '${marker}-signals'; })()],` : ''
+          }
+        };`,
+      );
+    };
+    writeContributor(contributorDir, 'acme.contributor', 'contributor', true);
+    writeContributor(disabledDir, 'acme.disabled', 'disabled', false);
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.installLocal(contributorDir, 'project');
+    await manager.installLocal(disabledDir, 'project');
+
+    expect(manager.getPluginProcessors().input.map(entry => [entry.pluginId, entry.value.id])).toEqual([
+      ['acme.contributor', 'contributor-in'],
+      ['acme.disabled', 'disabled-in'],
+    ]);
+    expect(manager.getPluginProcessors().output.map(entry => entry.value.id)).toEqual([
+      'contributor-out',
+      'disabled-out',
+    ]);
+    expect(manager.getPluginSignalProviders().map(entry => [entry.pluginId, entry.value.id])).toEqual([
+      ['acme.contributor', 'contributor-signals'],
+    ]);
+
+    await manager.setEnabled('acme.disabled', 'project', false);
+
+    expect(manager.getPluginProcessors().input.map(entry => entry.pluginId)).toEqual(['acme.contributor']);
+    expect(manager.getPluginProcessors().output.map(entry => entry.pluginId)).toEqual(['acme.contributor']);
+    expect(manager.getPluginSignalProviders().map(entry => entry.pluginId)).toEqual(['acme.contributor']);
+
+    // Accessors read the current load, so a reload keeps serving them. Phase 4b
+    // is what decides whether the *instances* behind them are kept or cycled.
+    await manager.reload();
+
+    expect(manager.getPluginProcessors().input.map(entry => entry.value.id)).toEqual(['contributor-in']);
+    expect(manager.getPluginSignalProviders().map(entry => entry.value.id)).toEqual(['contributor-signals']);
   });
 
   it('does not expose tools for plugins blocked by project config', async () => {
@@ -202,10 +341,14 @@ describe('PluginManager', () => {
     manager.onGithubPluginsUpdated(updateListener);
     await manager.reload();
     expect(pluginTools.github_tool?.description).toBe('first');
+    const stampBeforeUpdate = (await manager.listPlugins())[0]?.versionStamp;
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(pluginTools.github_tool?.description).toBe('second');
+    // The stamp for a GitHub plugin is its checkout's HEAD, so taking an update
+    // moves it — which is what tells the signal lane to cycle its providers.
+    expect((await manager.listPlugins())[0]?.versionStamp).not.toBe(stampBeforeUpdate);
     expect(updateListener).toHaveBeenCalledTimes(1);
     expect(updateListener).toHaveBeenCalledWith(['acme.github']);
     expect(execaMock).toHaveBeenCalledWith(
@@ -226,6 +369,51 @@ describe('PluginManager', () => {
     expect(fs.realpathSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(
       fs.realpathSync(mastracodePackageRoot),
     );
+  });
+
+  it('moves the version stamp when a GitHub plugin is installed over its own checkout', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    let head = 'old';
+    execaMock.mockImplementation(async (command: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: head };
+      if (command === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        head = 'new';
+        writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+        fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+    const stampBeforeReinstall = (await manager.listPlugins())[0]?.versionStamp;
+
+    await manager.installGithub('https://github.com/acme/plugin', 'project');
+
+    // Reinstalling replaces the checkout at the same path, so a cached head from
+    // the previous install would report a different commit as no change and
+    // leave the plugin's signal providers running on the old code.
+    expect((await manager.listPlugins())[0]?.versionStamp).not.toBe(stampBeforeReinstall);
   });
 
   it('reports post-reload display names when an update renames a plugin', async () => {
@@ -536,6 +724,9 @@ describe('PluginManager', () => {
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(execaMock.mock.calls.map(call => (call[0] === 'corepack' ? call[1][1] : call[1][0]))).toEqual([
+      // Reload stamps the plugin, which reads the checkout's HEAD once and
+      // caches it; the poller keeps that cache current from then on.
+      'rev-parse',
       'rev-parse',
       'fetch',
       'rev-parse',
