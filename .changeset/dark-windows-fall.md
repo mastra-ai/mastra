@@ -35,4 +35,6 @@ The file default-exports a string, a system message, or a function returning one
 
 **Precedence**
 
-A function `config.instructions` still wins over both files, then `instructions.ts` wins over `instructions.md`, which still wins over a static `config.instructions`. Nothing that resolved instructions before resolves them differently now. Defining instructions in more than one place logs a warning naming both sources and which one wins.
+A function `config.instructions` still wins over both files, then `instructions.ts` wins over `instructions.md`, which still wins over a static `config.instructions`. Defining instructions in more than one place logs a warning naming both sources and which one wins.
+
+One upgrade case needs a rename. If an agent directory already holds an unrelated `instructions.ts`, for example a helper that `config.ts` imports, Mastra now reads that file as the agent's instructions instead of its old source, and the build fails if the file has no default export.
