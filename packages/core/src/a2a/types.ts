@@ -1,5 +1,17 @@
-import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
+import type { AgentCard, Message, Task } from '@a2a-js/sdk';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+
+/**
+ * Minimal JSON-RPC 2.0 message base. A2A protocol v1 (`@a2a-js/sdk` v1) no
+ * longer exports a `JSONRPCMessage` type from its root — JSON-RPC framing now
+ * lives in the transport/compat layers — so we declare the base shape locally.
+ */
+export interface JSONRPCMessage {
+  /** JSON-RPC protocol version. Always "2.0". */
+  jsonrpc?: '2.0';
+  /** Request/response correlation id. */
+  id?: number | string | null;
+}
 
 /**
  * Represents a JSON-RPC error object.

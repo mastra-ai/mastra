@@ -1,8 +1,9 @@
 import { MastraA2AError } from '@mastra/core/a2a';
 
-import type { JSONRPCError, JSONRPCResponse, Message, Part } from '@mastra/core/a2a';
+import type { JSONRPCError, JSONRPCResponse } from '@mastra/core/a2a';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { IMastraLogger } from '@mastra/core/logger';
+import type { A2AWireMessage, A2AWirePart } from './wire-types';
 
 export function normalizeError(
   error: any,
@@ -56,27 +57,36 @@ export function createSuccessResponse<T>(id: number | string | null, result: T):
   };
 }
 
-export function convertToCoreMessage(message: Message): CoreMessage {
+export function convertToCoreMessage(message: A2AWireMessage): CoreMessage {
   return {
-    role: message.role === 'user' ? 'user' : 'assistant',
-    content: message.parts.map(msg => convertToCoreMessagePart(msg)),
+    role: message.role === 'ROLE_USER' ? 'user' : 'assistant',
+    content: message.parts.map(part => convertToCoreMessagePart(part)),
   };
 }
 
-function convertToCoreMessagePart(part: Part) {
-  switch (part.kind) {
-    case 'text':
-      return {
-        type: 'text',
-        text: part.text,
-      } as const;
-    case 'file':
-      return {
-        type: 'file',
-        data: 'uri' in part.file ? new URL(part.file.uri) : part.file.bytes,
-        mimeType: part.file.mimeType!,
-      } as const;
-    case 'data':
-      throw new Error('Data parts are not supported in core messages');
+function convertToCoreMessagePart(part: A2AWirePart) {
+  // v1 wire parts are discriminated by which content key is present
+  // (`text` | `raw` | `url` | `data`) rather than a `kind` field.
+  if ('text' in part) {
+    return {
+      type: 'text',
+      text: part.text,
+    } as const;
   }
+  if ('url' in part) {
+    return {
+      type: 'file',
+      data: new URL(part.url),
+      mimeType: part.mediaType!,
+    } as const;
+  }
+  if ('raw' in part) {
+    return {
+      type: 'file',
+      data: part.raw,
+      mimeType: part.mediaType!,
+    } as const;
+  }
+  // Data parts have no CoreMessage equivalent.
+  throw new Error('Data parts are not supported in core messages');
 }
