@@ -158,6 +158,11 @@ const sidebars = {
           items: [
             {
               type: 'doc',
+              id: 'harness/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
               id: 'long-running-agents/durable-agents',
               label: 'Durable Agents',
               customProps: {
