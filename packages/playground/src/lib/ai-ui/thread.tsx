@@ -36,6 +36,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
@@ -47,6 +48,7 @@ import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
+const EMPTY_SUGGESTED_PROMPTS: string[] = [];
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously, so
@@ -105,6 +107,7 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   threadId?: string;
+  suggestedPrompts?: string[];
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
@@ -120,6 +123,7 @@ export const Thread = ({
   agentName,
   agentId,
   threadId,
+  suggestedPrompts,
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
@@ -155,7 +159,7 @@ export const Thread = ({
               style={{ overflowAnchor: 'none' }}
             >
               {isEmpty ? (
-                <ThreadWelcome agentName={agentName} />
+                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
               ) : (
                 <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
                   <ThreadRailLayer turns={threadRailTurns} />
@@ -227,13 +231,15 @@ export const Thread = ({
 
 export interface ThreadWelcomeProps {
   agentName?: string;
+  suggestedPrompts?: string[];
 }
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
   return (
     <div className="flex w-full grow flex-col items-center pt-[15vh]">
       <Avatar name={agentName || 'Agent'} size="lg" />
       <p className="mt-4 font-medium">How can I help you today?</p>
+      <SuggestedPromptList prompts={suggestedPrompts} />
     </div>
   );
 };
