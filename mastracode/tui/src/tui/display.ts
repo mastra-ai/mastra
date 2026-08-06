@@ -144,7 +144,12 @@ export function notifyForInputRequest(state: TUIState, event: AgentControllerEve
       } else if (event.toolName === 'ask_user') {
         notify(state, 'ask_question', String(payload.question ?? ''));
       } else if (event.toolName === 'submit_plan') {
-        notify(state, 'plan_approval', 'Plan requires your approval');
+        const planPath = String(payload.path ?? '');
+        notify(
+          state,
+          'plan_approval',
+          planPath ? `Plan "${planPath}" requires approval` : 'Plan requires your approval',
+        );
       }
     }
   } catch (err) {

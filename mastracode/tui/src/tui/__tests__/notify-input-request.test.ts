@@ -124,6 +124,27 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
     expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
     expect(mocks.sendNotification).toHaveBeenCalledWith(
       'plan_approval',
+      expect.objectContaining({ message: 'Plan "plans/my-plan.md" requires approval' }),
+    );
+    releaseBlocker.resolve();
+  });
+
+  it('falls back to a generic plan approval message when the payload has no path', async () => {
+    const { listener, releaseBlocker } = createHarness();
+
+    void listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    void listener({
+      type: 'tool_suspended',
+      toolCallId: 't-plan-nopath',
+      toolName: 'submit_plan',
+      suspendPayload: {},
+    });
+
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
+    expect(mocks.sendNotification).toHaveBeenCalledWith(
+      'plan_approval',
       expect.objectContaining({ message: 'Plan requires your approval' }),
     );
     releaseBlocker.resolve();
