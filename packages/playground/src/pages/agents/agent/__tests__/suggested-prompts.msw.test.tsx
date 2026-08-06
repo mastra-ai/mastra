@@ -3,9 +3,8 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import AgentPage from '../index';
 import { StudioConfigContext } from '@/domains/configuration';
@@ -16,13 +15,6 @@ const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'agent-1';
 const THREAD_ID = 'thread-1';
 const SUGGESTED_PROMPT = 'Check the weather';
-
-vi.mock('@/domains/agents/agent-sidebar', () => ({
-  AgentSidebar: () => <div data-testid="stub-sidebar" />,
-}));
-vi.mock('@/domains/agents/components/browser-view', () => ({
-  BrowserViewPanel: () => null,
-}));
 
 const createGate = () => {
   let release = () => {};
