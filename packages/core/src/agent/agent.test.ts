@@ -6425,8 +6425,13 @@ describe('sub-agent tool input schema coercion', () => {
     expect(r.toolResults[0]?.payload?.result?.text).toBe('child answer');
   });
 
-  it('allows null/undefined maxSteps', async () => {
+  it('allows null maxSteps', async () => {
     const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: null }));
+    expect(r.invocations).toContain('child-ran');
+  });
+
+  it('allows omitted maxSteps', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello' }));
     expect(r.invocations).toContain('child-ran');
   });
 
@@ -6436,8 +6441,26 @@ describe('sub-agent tool input schema coercion', () => {
     expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
   });
 
+  it('rejects non-integer maxSteps sent as a string', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: '5.5' }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+
   it('rejects maxSteps below minimum of 3', async () => {
     const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 1 }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+
+  it('rejects maxSteps below minimum of 3 sent as a string', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: '1' }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+
+  it('rejects non-numeric string maxSteps', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 'ten' }));
     expect(r.invocations).not.toContain('child-ran');
     expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
   });

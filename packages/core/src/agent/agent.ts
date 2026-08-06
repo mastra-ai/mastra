@@ -242,7 +242,7 @@ const createSubAgentInputSchema = () =>
       .or(z.string().transform(Number))
       .pipe(z.number().int().min(3))
       .nullish()
-      .describe('Maximum number of execution steps for the sub-agent'),
+      .describe('Maximum number of execution steps for the sub-agent (integer, minimum 3)'),
     // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
     // to return a proper llm response
   });
