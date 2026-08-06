@@ -88,6 +88,23 @@ export class IssueReconcileWorker extends MastraWorker {
       .catch(() => ({ acquired: false }));
     if (!lease.acquired) return;
 
+    // A sweep that traverses many projects/orgs can outrun the lease TTL;
+    // renew periodically so a replica can't grab the expired lease and start
+    // an overlapping sweep partway through this one.
+    const renewalTimer = setInterval(
+      () => {
+        void this.#leaseProvider
+          .renewLease(this.#leaseKey, this.#leaseOwner, this.#leaseTtlMs)
+          .catch(error => {
+            this.deps?.logger.warn(`${this.#integrationId} issue reconcile lease renewal failed`, {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+      },
+      Math.max(1_000, Math.floor(this.#leaseTtlMs / 3)),
+    );
+    renewalTimer.unref?.();
+
     try {
       const startedAt = Date.now();
       const { errors, ...counts } = await this.#reconcile();
@@ -105,6 +122,7 @@ export class IssueReconcileWorker extends MastraWorker {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
+      clearInterval(renewalTimer);
       await this.#leaseProvider.releaseLease(this.#leaseKey, this.#leaseOwner).catch(() => undefined);
     }
   }

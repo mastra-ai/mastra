@@ -13,11 +13,13 @@ const EMPTY_SUMMARY: IssueReconcileSummary = {
   errors: [],
 };
 
-function workerDeps(leaseProvider?: Partial<{ acquireLease: unknown; releaseLease: unknown }>): WorkerDeps {
+function workerDeps(
+  leaseProvider?: Partial<{ acquireLease: unknown; releaseLease: unknown; renewLease: unknown }>,
+): WorkerDeps {
   const pubsub = {
     acquireLease: leaseProvider?.acquireLease ?? vi.fn(async () => ({ acquired: true })),
     releaseLease: leaseProvider?.releaseLease ?? vi.fn(async () => undefined),
-    renewLease: vi.fn(async () => true),
+    renewLease: leaseProvider?.renewLease ?? vi.fn(async () => true),
     getLeaseOwner: vi.fn(async () => undefined),
     transferLease: vi.fn(async () => true),
   };
@@ -82,6 +84,58 @@ describe('IssueReconcileWorker', () => {
     await worker.stop();
 
     expect(releaseLease).toHaveBeenCalledTimes(1);
+  });
+
+  it('renews the lease during a sweep longer than the lease TTL', async () => {
+    // 60s interval → 180s lease TTL → 60s renewal cadence.
+    const intervalMs = 60_000;
+    const leaseTtlMs = intervalMs * 3;
+    const renewLease = vi.fn(async () => true);
+    const releaseLease = vi.fn(async () => undefined);
+
+    // A slow sweep: resolves 5 renewal cadences after it starts.
+    const reconcile = vi.fn(async () => {
+      await vi.advanceTimersByTimeAsync(leaseTtlMs + intervalMs);
+      return EMPTY_SUMMARY;
+    });
+
+    const worker = new IssueReconcileWorker({ integrationId: 'linear', reconcile, intervalMs });
+    await worker.init(workerDeps({ renewLease, releaseLease }));
+
+    await worker.start();
+    // Advance past the sweep completion.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(leaseTtlMs + intervalMs);
+
+    // The sweep spanned 240s at a 60s renewal cadence, so renewLease must
+    // have fired at least twice while the sweep was in flight.
+    expect(renewLease.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const call of renewLease.mock.calls) {
+      expect(call).toEqual(['linear:issue-reconcile', expect.any(String), leaseTtlMs]);
+    }
+    expect(releaseLease).toHaveBeenCalledTimes(1);
+
+    await worker.stop();
+  });
+
+  it('stops renewing the lease once the sweep finishes', async () => {
+    const renewLease = vi.fn(async () => true);
+    const reconcile = vi.fn(async () => EMPTY_SUMMARY);
+    const worker = new IssueReconcileWorker({ integrationId: 'linear', reconcile, intervalMs: 60_000 });
+    await worker.init(workerDeps({ renewLease }));
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const renewalsAfterFirstSweep = renewLease.mock.calls.length;
+    // Advance well past several renewal cadences with no active sweep.
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    await worker.stop();
+
+    // Between sweeps the timer is cleared, so no extra renewals should
+    // have accumulated relative to how many sweeps ran.
+    expect(renewLease.mock.calls.length - renewalsAfterFirstSweep).toBeLessThanOrEqual(reconcile.mock.calls.length);
   });
 
   it('rejects a non-positive interval', () => {

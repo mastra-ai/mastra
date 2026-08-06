@@ -599,3 +599,21 @@ describe('GithubIntegration merge reconciler', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('GithubIntegration workers', () => {
+  it('registers the issue reconciler alongside the PR reconciler', () => {
+    const github = new GithubIntegration(validConfig());
+    const context = {
+      controller: {},
+      storage: {
+        generic: {},
+        sourceControl: {},
+        projects: { listAll: async () => [] },
+        intake: {},
+      },
+      rules: { config: {}, workItems: {} },
+    } as any;
+
+    expect(github.workers(context).map(worker => worker.name)).toContain('github-issue-reconcile');
+  });
+});
