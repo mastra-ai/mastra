@@ -6,7 +6,7 @@ export interface ThreadPageReadinessKey {
 
 interface PendingKickoff {
   message: string;
-  echoed: boolean;
+  echoOwner: string | null;
   resolve: () => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -14,14 +14,12 @@ interface PendingKickoff {
 
 export interface ClaimedThreadKickoff {
   message: string;
-  /** Message already rendered before the kickoff was queued. */
-  echoed: boolean;
   complete: () => void;
   fail: (error: Error) => void;
 }
 
 export interface QueueThreadPageKickoffOptions {
-  echoed?: boolean;
+  echoOwner?: string | null;
   timeoutMs?: number;
 }
 
@@ -37,13 +35,13 @@ function keyOf({ resourceId, projectPath, threadId }: ThreadPageReadinessKey): s
 export function queueThreadPageKickoff(
   key: ThreadPageReadinessKey,
   message: string,
-  { echoed = false, timeoutMs = 60_000 }: QueueThreadPageKickoffOptions = {},
+  { echoOwner = null, timeoutMs = 60_000 }: QueueThreadPageKickoffOptions = {},
 ): Promise<void> {
   const readinessKey = keyOf(key);
   return new Promise((resolve, reject) => {
     const kickoff: PendingKickoff = {
       message,
-      echoed,
+      echoOwner,
       resolve,
       reject,
       timeout: setTimeout(() => {
@@ -62,21 +60,29 @@ export function queueThreadPageKickoff(
   });
 }
 
-/** Claims all kickoffs queued for this exact mounted session/thread. */
+/** A remounted transcript lost its local echoes; a new owner id re-echoes them. */
+export function adoptThreadPageKickoffEchoes(key: ThreadPageReadinessKey, ownerId: string): string[] {
+  const queued = pendingKickoffs.get(keyOf(key)) ?? [];
+  const adopted: string[] = [];
+  for (const kickoff of queued) {
+    if (kickoff.echoOwner === ownerId) continue;
+    kickoff.echoOwner = ownerId;
+    adopted.push(kickoff.message);
+  }
+  return adopted;
+}
+
+/** Claims all kickoffs queued for this exact mounted session/thread. Claiming disarms the preparation timeout. */
 export function claimThreadPageKickoffs(key: ThreadPageReadinessKey): ClaimedThreadKickoff[] {
   const readinessKey = keyOf(key);
   const kickoffs = pendingKickoffs.get(readinessKey) ?? [];
   pendingKickoffs.delete(readinessKey);
-  return kickoffs.map(kickoff => ({
-    message: kickoff.message,
-    echoed: kickoff.echoed,
-    complete: () => {
-      clearTimeout(kickoff.timeout);
-      kickoff.resolve();
-    },
-    fail: error => {
-      clearTimeout(kickoff.timeout);
-      kickoff.reject(error);
-    },
-  }));
+  return kickoffs.map(kickoff => {
+    clearTimeout(kickoff.timeout);
+    return {
+      message: kickoff.message,
+      complete: kickoff.resolve,
+      fail: kickoff.reject,
+    };
+  });
 }
