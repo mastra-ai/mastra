@@ -23,6 +23,10 @@ function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): bo
   return context.actor.type === 'github' && context.actor.trusted;
 }
 
+function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): string | undefined {
+  return context.actor.type === 'github' ? context.actor.login : undefined;
+}
+
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
@@ -151,6 +155,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
     },
   } as const;
 }
@@ -175,6 +180,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
     },
   } as const;
 }
@@ -247,6 +253,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
       linearPriority: context.issue.priorityLabel,
       linearAssignee: context.issue.assignee,
       linearTeam: context.issue.team,
+      ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
     },
   } as const;
 }

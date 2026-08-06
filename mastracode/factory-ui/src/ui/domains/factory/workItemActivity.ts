@@ -53,7 +53,7 @@ function externalAuthorProfile(item: WorkItem): AuditActorProfile | undefined {
     };
   }
   if (item.source === 'linear-issue') {
-    const assignee = metadataString(item.metadata, 'assignee');
+    const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'linearAssignee');
     if (!assignee) return undefined;
     return { id: `linear:${assignee}`, name: assignee };
   }

@@ -213,6 +213,20 @@ describe('workItemActivity', () => {
     expect(activity.extraActors).toEqual({ 'linear:grace': { id: 'linear:grace', name: 'grace' } });
   });
 
+  it('accepts legacy Linear metadata that stored the assignee under `linearAssignee`', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'linear-issue',
+        metadata: { identifier: 'ENG-42', linearAssignee: 'grace' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'linear:grace', name: 'grace' });
+  });
+
   it('prepends a synthetic created event when the audit page has none', () => {
     const activity = workItemActivity(
       {

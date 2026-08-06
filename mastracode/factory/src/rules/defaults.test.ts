@@ -401,6 +401,23 @@ describe('defaultFactoryRules', () => {
     });
   });
 
+  it('stamps the GitHub author login on issue and PR intake metadata', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
+      metadata: { author: 'author' },
+    });
+    expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
+      metadata: { author: 'author' },
+    });
+  });
+
+  it('mirrors the Linear assignee under `assignee` for provider-agnostic attribution', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.linear.issueObserved?.onEvent?.(linearContext())).toMatchObject({
+      metadata: { linearAssignee: 'ada', assignee: 'ada' },
+    });
+  });
+
   it('moves the merged Review card to Done and carries a session-only message', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestMerged');
