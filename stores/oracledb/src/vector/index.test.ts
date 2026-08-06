@@ -317,9 +317,9 @@ describe('OracleVector vector memory support', () => {
     expect(vectorIndexAttempts).toBe(2);
     expect(metadataIndexAttempts).toBe(2);
     expect(registryRow).toMatchObject({ indexType: 'hnsw', accuracy: 91 });
-    expect(execute.mock.calls.filter(call => String(call[0]).includes('CREATE TABLE "MASTRA_VEC_RETRYABLE_INDEX"'))).toHaveLength(
-      1,
-    );
+    expect(
+      execute.mock.calls.filter(call => String(call[0]).includes('CREATE TABLE "MASTRA_VEC_RETRYABLE_INDEX"')),
+    ).toHaveLength(1);
     const updateCall = execute.mock.calls.find(call => String(call[0]).includes('UPDATE "MASTRA_VECTOR_INDEXES"'));
     expect(updateCall?.[1]).toMatchObject({
       indexName: 'retryable_index',
@@ -582,7 +582,11 @@ describe('OracleVector operation branches', () => {
     });
     expect(scoredResults[0]?.vector).toEqual([1, 0, 1, 0, 1, 0, 1, 0]);
     expect(connection.execute.mock.calls.some(call => String(call[0]).includes('WITH vector_scores'))).toBe(true);
-    expect(connection.execute.mock.calls.some(call => String(call[0]).includes('FETCH APPROX FIRST 1 ROWS ONLY WITH TARGET ACCURACY 90'))).toBe(true);
+    expect(
+      connection.execute.mock.calls.some(call =>
+        String(call[0]).includes('FETCH APPROX FIRST 1 ROWS ONLY WITH TARGET ACCURACY 90'),
+      ),
+    ).toBe(true);
     expect(connection.commit).toHaveBeenCalled();
   });
 
@@ -602,12 +606,12 @@ describe('OracleVector operation branches', () => {
       }),
     ).rejects.toThrow(/sparseVectors/i);
     await expect(vector.query({ indexName: 'hot_index', topK: 1 } as any)).rejects.toThrow(/queryVector or filter/i);
-    await expect(
-      vector.query({ indexName: 'hot_index', queryVector: [1, Number.NaN, 3], topK: 1 }),
-    ).rejects.toThrow(/non-finite/i);
-    await expect(
-      vector.updateVector({ indexName: 'hot_index', id: 'id-1', update: {} } as any),
-    ).rejects.toThrow(/No updates provided/i);
+    await expect(vector.query({ indexName: 'hot_index', queryVector: [1, Number.NaN, 3], topK: 1 })).rejects.toThrow(
+      /non-finite/i,
+    );
+    await expect(vector.updateVector({ indexName: 'hot_index', id: 'id-1', update: {} } as any)).rejects.toThrow(
+      /No updates provided/i,
+    );
     await expect(
       vector.updateVector({
         indexName: 'hot_index',
@@ -662,9 +666,9 @@ describe('OracleVector operation branches', () => {
     await vector.disconnect();
 
     expect(connection.execute.mock.calls.some(call => String(call[0]).includes('DROP TABLE'))).toBe(true);
-    expect(connection.execute.mock.calls.some(call => String(call[0]).includes('DELETE FROM "MASTRA_VECTOR_INDEXES"'))).toBe(
-      true,
-    );
+    expect(
+      connection.execute.mock.calls.some(call => String(call[0]).includes('DELETE FROM "MASTRA_VECTOR_INDEXES"')),
+    ).toBe(true);
     expect(connection.commit).toHaveBeenCalled();
     expect(poolManager.close).not.toHaveBeenCalled();
   });
@@ -935,7 +939,9 @@ describe('OracleVector operation branches', () => {
     const { vector } = createVectorWithConnection(connection);
     cacheIndex(vector);
 
-    await expect(vector.query({ indexName: 'hot_index', filter: { tenant: 'a' }, includeVector: true })).resolves.toEqual([
+    await expect(
+      vector.query({ indexName: 'hot_index', filter: { tenant: 'a' }, includeVector: true }),
+    ).resolves.toEqual([
       { id: 'json-string', score: 0.9, metadata: { source: 'string' }, vector: [1, 2, 3] },
       { id: 'json-null', score: 0.8, metadata: {}, vector: [3, 2, 1] },
       { id: 'json-object', score: 0.7, metadata: { source: 'object' }, vector: [] },
@@ -972,15 +978,15 @@ describe('OracleVector operation branches', () => {
     const { vector } = createVectorWithConnection(failingConnection);
     cacheIndex(vector);
 
-    await expect(vector.query({ indexName: 'hot_index', sparseVector: { indices: [], values: [] } as any })).rejects.toThrow(
-      /sparseVector/i,
-    );
-    await expect(vector.query({ indexName: 'hot_index', queryVector: [1, 0, 0], minScore: Number.NaN })).rejects.toThrow(
-      /minScore/i,
-    );
-    await expect(vector.query({ indexName: 'hot_index', queryVector: [1, 0, 0], queryMode: 'fast' as any })).rejects.toThrow(
-      /queryMode/i,
-    );
+    await expect(
+      vector.query({ indexName: 'hot_index', sparseVector: { indices: [], values: [] } as any }),
+    ).rejects.toThrow(/sparseVector/i);
+    await expect(
+      vector.query({ indexName: 'hot_index', queryVector: [1, 0, 0], minScore: Number.NaN }),
+    ).rejects.toThrow(/minScore/i);
+    await expect(
+      vector.query({ indexName: 'hot_index', queryVector: [1, 0, 0], queryMode: 'fast' as any }),
+    ).rejects.toThrow(/queryMode/i);
     await expect(
       vector.createIndex({
         indexName: 'bad_index_type',
@@ -1027,8 +1033,12 @@ describe('OracleVector operation branches', () => {
     };
     const { vector } = createVectorWithConnection(connection);
 
-    await expect(vector.configureVectorMemory({ size: '64M', scope: 'BAD' as any })).rejects.toThrow(/vector memory scope/i);
-    await expect(vector.configureVectorMemory({ size: '64M', scope: 'spfile' })).rejects.toThrow(/VECTOR_MEMORY_SIZE=64M/i);
+    await expect(vector.configureVectorMemory({ size: '64M', scope: 'BAD' as any })).rejects.toThrow(
+      /vector memory scope/i,
+    );
+    await expect(vector.configureVectorMemory({ size: '64M', scope: 'spfile' })).rejects.toThrow(
+      /VECTOR_MEMORY_SIZE=64M/i,
+    );
     expect(connection.execute).toHaveBeenCalledWith('ALTER SYSTEM SET VECTOR_MEMORY_SIZE = 64M SCOPE=SPFILE');
   });
 });

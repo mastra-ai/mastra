@@ -38,7 +38,10 @@ import type { MemoryContext } from './utils';
 // off the hot path accumulate here before being swapped into active state.
 // Depends on observational.ts for the row shape, SELECT clause, and insert helper.
 
-export async function updateBufferedObservations(ctx: MemoryContext, input: UpdateBufferedObservationsInput): Promise<void> {
+export async function updateBufferedObservations(
+  ctx: MemoryContext,
+  input: UpdateBufferedObservationsInput,
+): Promise<void> {
   try {
     await ctx.db.tx(async (_client, connection) => {
       const row = await lockOMRow(ctx, connection, input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
@@ -89,11 +92,16 @@ export async function updateBufferedObservations(ctx: MemoryContext, input: Upda
   }
 }
 
-export async function swapBufferedToActive(ctx: MemoryContext, input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+export async function swapBufferedToActive(
+  ctx: MemoryContext,
+  input: SwapBufferedToActiveInput,
+): Promise<SwapBufferedToActiveResult> {
   try {
     return await ctx.db.tx(async (_client, connection) => {
       const row = await lockOMRow(ctx, connection, input.id, 'SWAP_BUFFERED_TO_ACTIVE');
-      const chunks = input.bufferedChunks?.length ? input.bufferedChunks : parseBufferedChunks(row.bufferedObservationChunks);
+      const chunks = input.bufferedChunks?.length
+        ? input.bufferedChunks
+        : parseBufferedChunks(row.bufferedObservationChunks);
 
       if (chunks.length === 0) {
         return emptySwapResult();
@@ -108,7 +116,9 @@ export async function swapBufferedToActive(ctx: MemoryContext, input: SwapBuffer
       const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
       // Keep each activated chunk readable inside one CLOB while preserving the observation timestamp boundary.
       const existingActive = stringOrEmpty(row.activeObservations);
-      const newActive = existingActive ? `${existingActive}${boundary}${activation.activatedContent}` : activation.activatedContent;
+      const newActive = existingActive
+        ? `${existingActive}${boundary}${activation.activatedContent}`
+        : activation.activatedContent;
       const pendingTokens = Math.max(0, numberOrZero(row.pendingMessageTokens) - activation.activatedMessageTokens);
 
       const result = await connection.execute(
@@ -125,7 +135,9 @@ export async function swapBufferedToActive(ctx: MemoryContext, input: SwapBuffer
           activeObservations: nullableClobBind(newActive),
           observationTokens: activation.activatedTokens,
           pendingMessageTokens: pendingTokens,
-          bufferedObservationChunks: nullableJsonBind(activation.remainingChunks.length > 0 ? activation.remainingChunks : null),
+          bufferedObservationChunks: nullableJsonBind(
+            activation.remainingChunks.length > 0 ? activation.remainingChunks : null,
+          ),
           lastObservedAt,
           updatedAt: new Date(),
         },
@@ -140,7 +152,10 @@ export async function swapBufferedToActive(ctx: MemoryContext, input: SwapBuffer
   }
 }
 
-export async function updateBufferedReflection(ctx: MemoryContext, input: UpdateBufferedReflectionInput): Promise<void> {
+export async function updateBufferedReflection(
+  ctx: MemoryContext,
+  input: UpdateBufferedReflectionInput,
+): Promise<void> {
   try {
     await ctx.db.tx(async (_client, connection) => {
       const result = await connection.execute(
@@ -195,7 +210,9 @@ export async function swapBufferedReflectionToActive(
       // The buffered reflection replaces the lines it summarized, but any
       // observations added after reflection started are preserved below it.
       const unreflectedContent = currentObservations.split('\n').slice(reflectedLineCount).join('\n').trim();
-      const newObservations = unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
+      const newObservations = unreflectedContent
+        ? `${bufferedReflection}\n\n${unreflectedContent}`
+        : bufferedReflection;
       const now = new Date();
       // Derive the carried-over fields from the row we just locked (FOR UPDATE
       // above) instead of input.currentRecord, which can be stale if another
@@ -247,7 +264,12 @@ export async function swapBufferedReflectionToActive(
   }
 }
 
-async function lockOMRow(ctx: MemoryContext, connection: Connection, id: string, operation: string): Promise<ObservationalMemoryRow> {
+async function lockOMRow(
+  ctx: MemoryContext,
+  connection: Connection,
+  id: string,
+  operation: string,
+): Promise<ObservationalMemoryRow> {
   // Observational memory updates are incremental and order-sensitive, so
   // mutating paths derive their next state from a locked row.
   const result = await connection.execute<ObjectRow>(
@@ -332,7 +354,9 @@ function calculateBufferedActivation(
   const remainingChunks = chunks.slice(chunksToActivate);
   const activatedContent = activatedChunks.map(chunk => chunk.observations).join('\n\n');
   const activatedTokens = Math.round(activatedChunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0));
-  const activatedMessageTokens = Math.round(activatedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0));
+  const activatedMessageTokens = Math.round(
+    activatedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0),
+  );
   const activatedMessageIds = activatedChunks.flatMap(chunk => chunk.messageIds ?? []);
   const latestChunkHints = activatedChunks.at(-1);
 

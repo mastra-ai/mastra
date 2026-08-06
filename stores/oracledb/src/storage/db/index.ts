@@ -110,7 +110,9 @@ export class OracleDB {
   }
 
   async execute<T extends ObjectRow = ObjectRow>(sql: string, binds: OracleQueryBinds = {}): Promise<T[]> {
-    return this.config.poolManager.withConnection(async connection => new OracleConnectionClient(connection).execute<T>(sql, binds));
+    return this.config.poolManager.withConnection(async connection =>
+      new OracleConnectionClient(connection).execute<T>(sql, binds),
+    );
   }
 
   async executeMany<T = unknown>(
@@ -217,9 +219,10 @@ export class OracleDB {
     compositePrimaryKey?: string[];
   }): Promise<void> {
     // Oracle does not support CREATE TABLE IF NOT EXISTS, so ORA-00955 is the idempotency path.
-    await this.executeDdl(generateOracleTableSQL({ tableName, schema, schemaName: this.config.schemaName, compositePrimaryKey }), [
-      -955,
-    ]);
+    await this.executeDdl(
+      generateOracleTableSQL({ tableName, schema, schemaName: this.config.schemaName, compositePrimaryKey }),
+      [-955],
+    );
   }
 
   async alterTable({
@@ -317,11 +320,19 @@ export class OracleDB {
     );
   }
 
-  async load<R extends ObjectRow = ObjectRow>({ tableName, keys, schema, orderBy }: OracleLoadOperation): Promise<R | null> {
+  async load<R extends ObjectRow = ObjectRow>({
+    tableName,
+    keys,
+    schema,
+    orderBy,
+  }: OracleLoadOperation): Promise<R | null> {
     const tableSchema = schemaForTable(tableName, schema);
     const { sql, binds } = whereFromKeys(keys, 'k');
     const orderClause = orderBy ?? (tableSchema.createdAt ? ` ORDER BY ${formatColumnName('createdAt')} DESC` : '');
-    return this.oneOrNone<R>(`SELECT * FROM ${this.table(tableName)} WHERE ${sql}${orderClause} FETCH FIRST 1 ROW ONLY`, binds);
+    return this.oneOrNone<R>(
+      `SELECT * FROM ${this.table(tableName)} WHERE ${sql}${orderClause} FETCH FIRST 1 ROW ONLY`,
+      binds,
+    );
   }
 
   async createIndex(options: OracleCreateIndexOptions): Promise<void> {
@@ -394,8 +405,10 @@ export function parseOracleJson<T = unknown>(value: unknown): T | undefined {
 
 export type OracleIndexType = 'normal' | 'bitmap';
 
-export interface OracleCreateIndexOptions
-  extends Omit<CreateIndexOptions, 'concurrent' | 'method' | 'opclass' | 'storage'> {
+export interface OracleCreateIndexOptions extends Omit<
+  CreateIndexOptions,
+  'concurrent' | 'method' | 'opclass' | 'storage'
+> {
   /**
    * Oracle index type. `normal` creates a standard B-tree/function-based index.
    * `bitmap` is useful for low-cardinality columns, but should be avoided for
@@ -428,7 +441,8 @@ const SIMPLE_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*$/;
 const LOWERCASE_SQL_IDENTIFIER = /^[a-z][a-z0-9_]*$/;
 const QUOTED_IDENTIFIER = /^"([A-Za-z][A-Za-z0-9_]*)"$/;
 const ORDERED_COLUMN = /^(.*?)(?:\s+(ASC|DESC))?$/i;
-const UNSAFE_SQL = /;|--|\/\*|\*\/|\0|\b(CREATE|ALTER|DROP|TRUNCATE|INSERT|UPDATE|DELETE|MERGE|GRANT|REVOKE|COMMIT|ROLLBACK|EXECUTE|BEGIN|END)\b/i;
+const UNSAFE_SQL =
+  /;|--|\/\*|\*\/|\0|\b(CREATE|ALTER|DROP|TRUNCATE|INSERT|UPDATE|DELETE|MERGE|GRANT|REVOKE|COMMIT|ROLLBACK|EXECUTE|BEGIN|END)\b/i;
 const RESERVED_COLUMN_NAMES = new Set(['references', 'size']);
 const LONG_TEXT_COLUMNS = new Set([
   'activeObservations',
@@ -676,12 +690,7 @@ function whereFromKeys(keys: Record<string, unknown>, bindPrefix: string): { sql
   return { sql, binds };
 }
 
-function prepareValue(
-  tableName: TABLE_NAMES,
-  columnName: string,
-  value: unknown,
-  column?: StorageColumn,
-): unknown {
+function prepareValue(tableName: TABLE_NAMES, columnName: string, value: unknown, column?: StorageColumn): unknown {
   // Respect Mastra's schema types first, then fall back to safe primitive binds.
   if (column?.type === 'jsonb') {
     if (value === null && column.nullable) return null;
@@ -838,7 +847,9 @@ function resolveColumnName(table: string, column: string): string {
 
 function canonicalTableName(table: string): string {
   const normalized = normalizeIdentifier(table, 'table name');
-  return Object.keys(COLUMN_MAP).find(knownTable => normalizeIdentifier(knownTable, 'table name') === normalized) ?? table;
+  return (
+    Object.keys(COLUMN_MAP).find(knownTable => normalizeIdentifier(knownTable, 'table name') === normalized) ?? table
+  );
 }
 
 function indexAttributes(options: OracleCreateIndexOptions): string {

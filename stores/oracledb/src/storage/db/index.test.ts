@@ -188,9 +188,9 @@ describe('OracleDB facade', () => {
     await expect(
       db.merge({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS], keys: [], record: thread }),
     ).rejects.toThrow(/at least one key/);
-    await expect(
-      db.load({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS], keys: {} }),
-    ).rejects.toThrow(/At least one key/);
+    await expect(db.load({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS], keys: {} })).rejects.toThrow(
+      /At least one key/,
+    );
     await expect(
       db.load({
         tableName: TABLE_THREADS,

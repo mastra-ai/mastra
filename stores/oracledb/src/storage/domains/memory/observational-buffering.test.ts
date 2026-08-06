@@ -88,7 +88,9 @@ function createFakeCtx(): MemoryContext {
   });
   const connection = { execute } as unknown as Connection;
   const db = {
-    tx: vi.fn(async (callback: (client: unknown, connection: Connection) => Promise<unknown>) => callback({}, connection)),
+    tx: vi.fn(async (callback: (client: unknown, connection: Connection) => Promise<unknown>) =>
+      callback({}, connection),
+    ),
   };
   return { db, schemaName: undefined } as unknown as MemoryContext;
 }

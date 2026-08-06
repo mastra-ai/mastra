@@ -141,7 +141,9 @@ describe('ScoresOracle CLOB migration recovery', () => {
 
   it('re-runs the copy on retry when the first attempt failed during the UPDATE copy', async () => {
     const scores = createScoresOracle();
-    const { db, executeDdlCalls, noneCalls, exists } = createFakeScoresDb({ reason: true }, sql => sql.includes('UPDATE'));
+    const { db, executeDdlCalls, noneCalls, exists } = createFakeScoresDb({ reason: true }, sql =>
+      sql.includes('UPDATE'),
+    );
     (scores as any).db = db;
 
     await expect((scores as any).migrateScoreTextColumnToClob('reason')).rejects.toThrow(/simulated DML failure/);

@@ -128,7 +128,9 @@ function buildOperatorExpression(path: string, operator: string, value: unknown,
     case '$elemMatch':
       return buildElemMatchExpression(path, value, collector);
     case '$exists':
-      return value ? `JSON_EXISTS(metadata, '${assertJsonPath(path)}')` : `NOT JSON_EXISTS(metadata, '${assertJsonPath(path)}')`;
+      return value
+        ? `JSON_EXISTS(metadata, '${assertJsonPath(path)}')`
+        : `NOT JSON_EXISTS(metadata, '${assertJsonPath(path)}')`;
     case '$regex':
       return buildRegexExpression(path, String(value), '', collector);
     case '$contains':
@@ -193,7 +195,9 @@ function buildElemMatchExpression(path: string, value: unknown, collector: BindC
 
     if (isPlainObject(operand)) {
       return Object.entries(operand)
-        .map(([operator, operatorOperand]) => elemMatchCondition(nestedPath, operator, operatorOperand, collector, passing))
+        .map(([operator, operatorOperand]) =>
+          elemMatchCondition(nestedPath, operator, operatorOperand, collector, passing),
+        )
         .join(' && ');
     }
 

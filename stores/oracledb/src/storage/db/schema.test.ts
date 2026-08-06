@@ -227,10 +227,22 @@ describe('Oracle storage index DDL', () => {
       /at least one/i,
     );
     expect(() =>
-      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], unique: true, type: 'bitmap' } as any),
+      generateOracleIndexSQL({
+        name: 'bad',
+        table: TABLE_THREADS,
+        columns: ['id'],
+        unique: true,
+        type: 'bitmap',
+      } as any),
     ).toThrow(/unique and bitmap/i);
     expect(() =>
-      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], reverse: true, type: 'bitmap' } as any),
+      generateOracleIndexSQL({
+        name: 'bad',
+        table: TABLE_THREADS,
+        columns: ['id'],
+        reverse: true,
+        type: 'bitmap',
+      } as any),
     ).toThrow(/reverse and bitmap/i);
     expect(() =>
       generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], where: 'DROP TABLE x' } as any),

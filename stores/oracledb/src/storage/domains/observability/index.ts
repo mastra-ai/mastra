@@ -41,7 +41,13 @@ import { createOracleIndex, filterIndexesForTables, OracleDB } from '../../db';
 import type { OracleCreateIndexOptions } from '../../db';
 import type { OracleDomainConfig } from '../../types';
 import * as logsOps from './logs';
-import { getDefaultObservabilityIndexDefinitions, LOG_EVENTS_TABLE, logEventsTableSql, SPAN_NULLABLE_COLUMNS, SPAN_SCHEMA } from './schema';
+import {
+  getDefaultObservabilityIndexDefinitions,
+  LOG_EVENTS_TABLE,
+  logEventsTableSql,
+  SPAN_NULLABLE_COLUMNS,
+  SPAN_SCHEMA,
+} from './schema';
 import * as scoresOps from './scores-bridge';
 import * as spansOps from './spans';
 

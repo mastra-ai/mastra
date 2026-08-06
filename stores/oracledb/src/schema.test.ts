@@ -1,8 +1,4 @@
-import {
-  TABLE_AGENTS,
-  TABLE_MCP_CLIENTS,
-  TABLE_SCORER_DEFINITIONS,
-} from '@mastra/core/storage';
+import { TABLE_AGENTS, TABLE_MCP_CLIENTS, TABLE_SCORER_DEFINITIONS } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { exportSchemas } from './schema';

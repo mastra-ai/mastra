@@ -223,10 +223,7 @@ export class MCPClientsOracle extends MCPClientsStorage {
       setClauses.push(`${CLIENT_UPDATED_AT} = :updatedAt`);
       binds.updatedAt = new Date();
 
-      await this.db.none(
-        `UPDATE ${this.table(TABLE_MCP_CLIENTS)} SET ${setClauses.join(', ')} WHERE id = :id`,
-        binds,
-      );
+      await this.db.none(`UPDATE ${this.table(TABLE_MCP_CLIENTS)} SET ${setClauses.join(', ')} WHERE id = :id`, binds);
 
       const updatedClient = await this.getById(id);
       if (!updatedClient) {
@@ -377,12 +374,7 @@ export class MCPClientsOracle extends MCPClientsStorage {
       );
       return row ? this.parseVersionRow(row) : null;
     } catch (error) {
-      throw this.storageError(
-        'GET_MCP_CLIENT_VERSION_BY_NUMBER',
-        'FAILED',
-        { mcpClientId, versionNumber },
-        error,
-      );
+      throw this.storageError('GET_MCP_CLIENT_VERSION_BY_NUMBER', 'FAILED', { mcpClientId, versionNumber }, error);
     }
   }
 
@@ -406,7 +398,13 @@ export class MCPClientsOracle extends MCPClientsStorage {
     try {
       this.validatePagination(page, perPageInput, 20);
     } catch (error) {
-      throw this.storageError('LIST_MCP_CLIENT_VERSIONS', 'INVALID_INPUT', { page, mcpClientId }, error, ErrorCategory.USER);
+      throw this.storageError(
+        'LIST_MCP_CLIENT_VERSIONS',
+        'INVALID_INPUT',
+        { page, mcpClientId },
+        error,
+        ErrorCategory.USER,
+      );
     }
 
     const perPage = normalizePerPage(perPageInput, 20);
@@ -475,11 +473,19 @@ export class MCPClientsOracle extends MCPClientsStorage {
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
-      await this.db.none(`DELETE FROM ${this.table(TABLE_MCP_CLIENT_VERSIONS)} WHERE ${VERSION_MCP_CLIENT_ID} = :entityId`, {
-        entityId,
-      });
+      await this.db.none(
+        `DELETE FROM ${this.table(TABLE_MCP_CLIENT_VERSIONS)} WHERE ${VERSION_MCP_CLIENT_ID} = :entityId`,
+        {
+          entityId,
+        },
+      );
     } catch (error) {
-      throw this.storageError('DELETE_MCP_CLIENT_VERSIONS_BY_MCP_CLIENT_ID', 'FAILED', { mcpClientId: entityId }, error);
+      throw this.storageError(
+        'DELETE_MCP_CLIENT_VERSIONS_BY_MCP_CLIENT_ID',
+        'FAILED',
+        { mcpClientId: entityId },
+        error,
+      );
     }
   }
 

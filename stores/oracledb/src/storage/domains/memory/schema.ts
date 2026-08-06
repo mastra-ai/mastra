@@ -117,9 +117,11 @@ async function createTables(ctx: MemoryContext, connection: Connection): Promise
     )`,
     [-955],
   );
-  await executeDdl(connection, `ALTER TABLE ${table(ctx, TABLE_MESSAGES)} ADD (${MESSAGE_RESOURCE_ID} VARCHAR2(512))`, [
-    -1430,
-  ]);
+  await executeDdl(
+    connection,
+    `ALTER TABLE ${table(ctx, TABLE_MESSAGES)} ADD (${MESSAGE_RESOURCE_ID} VARCHAR2(512))`,
+    [-1430],
+  );
 
   await executeDdl(
     connection,

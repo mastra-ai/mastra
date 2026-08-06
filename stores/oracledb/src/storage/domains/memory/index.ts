@@ -3,7 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MemoryStorage, TABLE_MESSAGES, TABLE_OBSERVATIONAL_MEMORY, TABLE_RESOURCES, TABLE_THREADS } from '@mastra/core/storage';
+import {
+  MemoryStorage,
+  TABLE_MESSAGES,
+  TABLE_OBSERVATIONAL_MEMORY,
+  TABLE_RESOURCES,
+  TABLE_THREADS,
+} from '@mastra/core/storage';
 import type {
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
@@ -79,7 +85,12 @@ const DEFAULT_VECTOR_REGISTRY_TABLE = 'MASTRA_VECTOR_INDEXES';
 export class MemoryOracle extends MemoryStorage {
   readonly supportsObservationalMemory = true;
   // Memory owns all tables needed for normal message history plus observational memory state.
-  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, TABLE_OBSERVATIONAL_MEMORY] as const;
+  static readonly MANAGED_TABLES = [
+    TABLE_THREADS,
+    TABLE_MESSAGES,
+    TABLE_RESOURCES,
+    TABLE_OBSERVATIONAL_MEMORY,
+  ] as const;
 
   private readonly db: OracleDB;
   private readonly schemaName?: string;
@@ -92,7 +103,11 @@ export class MemoryOracle extends MemoryStorage {
     super();
     this.db = new OracleDB(config);
     this.schemaName = config.schemaName;
-    this.messageBatchSize = normalizeBatchSize(config.messageBatchSize, 'messageBatchSize', DEFAULT_MESSAGE_SAVE_BATCH_SIZE);
+    this.messageBatchSize = normalizeBatchSize(
+      config.messageBatchSize,
+      'messageBatchSize',
+      DEFAULT_MESSAGE_SAVE_BATCH_SIZE,
+    );
     this.skipDefaultIndexes = config.skipDefaultIndexes;
     this.indexes = filterIndexesForTables(config.indexes, MemoryOracle.MANAGED_TABLES);
     this.vectorRegistryTableName = config.vectorRegistryTableName
@@ -138,7 +153,11 @@ export class MemoryOracle extends MemoryStorage {
     return saveThread(this.ctx, args);
   }
 
-  async updateThread(args: { id: string; title: string; metadata: Record<string, unknown> }): Promise<StorageThreadType> {
+  async updateThread(args: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<StorageThreadType> {
     return updateThread(this.ctx, args);
   }
 
@@ -198,7 +217,13 @@ export class MemoryOracle extends MemoryStorage {
   async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
     if (!sourceThread) {
-      throw storageError('CLONE_THREAD', 'FAILED', { threadId: args.sourceThreadId }, new Error(`Thread ${args.sourceThreadId} not found`), ErrorCategory.USER);
+      throw storageError(
+        'CLONE_THREAD',
+        'FAILED',
+        { threadId: args.sourceThreadId },
+        new Error(`Thread ${args.sourceThreadId} not found`),
+        ErrorCategory.USER,
+      );
     }
 
     const sourceMessages = await this.messagesForClone(args);
@@ -256,7 +281,13 @@ export class MemoryOracle extends MemoryStorage {
           await insertThreadRow(this.ctx, client, thread);
         } catch (error) {
           if (isOracleErrorCode(error, [-1])) {
-            throw storageError('CLONE_THREAD', 'DESTINATION_EXISTS', { threadId: newThreadId }, error, ErrorCategory.USER);
+            throw storageError(
+              'CLONE_THREAD',
+              'DESTINATION_EXISTS',
+              { threadId: newThreadId },
+              error,
+              ErrorCategory.USER,
+            );
           }
           throw error;
         }
@@ -274,7 +305,9 @@ export class MemoryOracle extends MemoryStorage {
     const options = args.options;
     const messageIds = options?.messageFilter?.messageIds;
     if (messageIds?.length) {
-      return (await this.listMessagesById({ messageIds })).messages.filter(message => message.threadId === args.sourceThreadId);
+      return (await this.listMessagesById({ messageIds })).messages.filter(
+        message => message.threadId === args.sourceThreadId,
+      );
     }
 
     const output = await this.listMessages({

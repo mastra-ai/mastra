@@ -80,7 +80,11 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
       this.defaultIndexConfig = { type: 'none', accuracy: 95, ...config.defaultIndexConfig };
       const defaultMetadataIndexes = config.defaultMetadataIndexes ?? DEFAULT_METADATA_INDEXES;
       const defaultVectorFormat = normalizeVectorFormat(config.defaultVectorFormat ?? DEFAULT_VECTOR_FORMAT);
-      this.upsertBatchSize = normalizeBatchSize(config.upsertBatchSize, 'upsertBatchSize', DEFAULT_VECTOR_UPSERT_BATCH_SIZE);
+      this.upsertBatchSize = normalizeBatchSize(
+        config.upsertBatchSize,
+        'upsertBatchSize',
+        DEFAULT_VECTOR_UPSERT_BATCH_SIZE,
+      );
 
       this.registry = new IndexRegistry({
         schemaName,

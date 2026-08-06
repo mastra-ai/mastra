@@ -1,9 +1,5 @@
 import { ErrorCategory } from '@mastra/core/error';
-import {
-  normalizePerPage,
-  TABLE_WORKFLOW_SNAPSHOT,
-  WorkflowsStorage,
-} from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
@@ -179,7 +175,13 @@ export class WorkflowsOracle extends WorkflowsStorage {
     }
   }
 
-  async loadWorkflowSnapshot({ workflowName, runId }: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunState | null> {
     try {
       const row = await this.db.oneOrNone<{ snapshot: unknown }>(
         `SELECT snapshot AS "snapshot" FROM ${this.table()} WHERE workflow_name = :workflowName AND run_id = :runId`,
@@ -209,7 +211,10 @@ export class WorkflowsOracle extends WorkflowsStorage {
       const count = usePagination
         ? Number(
             (
-              await this.db.one<{ count: number }>(`SELECT COUNT(*) AS "count" FROM ${this.table()} ${whereClause}`, binds)
+              await this.db.one<{ count: number }>(
+                `SELECT COUNT(*) AS "count" FROM ${this.table()} ${whereClause}`,
+                binds,
+              )
             ).count ?? 0,
           )
         : 0;
@@ -228,7 +233,13 @@ export class WorkflowsOracle extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({ runId, workflowName }: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
     try {
       const conditions = ['run_id = :runId'];
       const binds: Record<string, unknown> = { runId };
@@ -273,10 +284,7 @@ export class WorkflowsOracle extends WorkflowsStorage {
       [-955],
     );
 
-    await this.db.executeDdl(
-      `ALTER TABLE ${this.table()} ADD (${WORKFLOW_RESOURCE_ID} VARCHAR2(512))`,
-      [-1430],
-    );
+    await this.db.executeDdl(`ALTER TABLE ${this.table()} ADD (${WORKFLOW_RESOURCE_ID} VARCHAR2(512))`, [-1430]);
   }
 
   private async createIndexes(): Promise<void> {

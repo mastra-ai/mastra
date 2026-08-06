@@ -202,10 +202,7 @@ Example filter:
 
 ```typescript
 {
-  $and: [
-    { resourceId: { $eq: 'resource-456' } },
-    { category: { $in: ['docs', 'memory'] } }
-  ]
+  $and: [{ resourceId: { $eq: 'resource-456' } }, { category: { $in: ['docs', 'memory'] } }];
 }
 ```
 
@@ -290,7 +287,17 @@ import { exportSchemas } from '@mastra/oracledb';
 
 const ddl = exportSchemas({
   schemaName: 'APP_SCHEMA',
-  domains: ['migrations', 'memory', 'workflows', 'observability', 'scores', 'scorerDefinitions', 'mcpClients', 'agents', 'vector'],
+  domains: [
+    'migrations',
+    'memory',
+    'workflows',
+    'observability',
+    'scores',
+    'scorerDefinitions',
+    'mcpClients',
+    'agents',
+    'vector',
+  ],
   vector: {
     indexes: [{ indexName: 'memory_messages', dimension: 1536 }],
   },
@@ -344,6 +351,7 @@ pnpm build:core
 You will get cryptic `Cannot find module` errors if this is missing.
 
 **3. Docker setup** — Docker Compose requires the Docker daemon to be running. On a fresh Linux install you may need:
+
 ```bash
 sudo systemctl start docker
 ```

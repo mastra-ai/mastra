@@ -96,7 +96,9 @@ export async function listLogs(
 
       const sourceFilter = filters.executionSource ?? filters.source;
       if (sourceFilter !== undefined) {
-        conditions.push(`COALESCE(${logQcol('l', 'executionSource')}, ${logQcol('l', 'source')}) = ${addBind(binds, sourceFilter)}`);
+        conditions.push(
+          `COALESCE(${logQcol('l', 'executionSource')}, ${logQcol('l', 'source')}) = ${addBind(binds, sourceFilter)}`,
+        );
       }
 
       addLogJsonObjectFilter(conditions, binds, 'l', 'metadata', logFilters.metadata);
@@ -140,7 +142,9 @@ export async function listLogs(
 }
 
 function logMergeSql(schemaName: string | undefined): string {
-  const sourceColumns = LOG_COLUMNS.map(columnName => `:${logBindName(columnName)} AS ${logCol(columnName)}`).join(', ');
+  const sourceColumns = LOG_COLUMNS.map(columnName => `:${logBindName(columnName)} AS ${logCol(columnName)}`).join(
+    ', ',
+  );
   const insertColumns = LOG_COLUMNS.map(columnName => logCol(columnName)).join(', ');
   const insertValues = LOG_COLUMNS.map(columnName => `source.${logCol(columnName)}`).join(', ');
 
@@ -180,10 +184,14 @@ function addLogDateRangeFilter(
   range?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean },
 ): void {
   if (range?.start) {
-    conditions.push(`${logQcol(tableAlias, 'timestamp')} ${range.startExclusive ? '>' : '>='} ${addBind(binds, range.start)}`);
+    conditions.push(
+      `${logQcol(tableAlias, 'timestamp')} ${range.startExclusive ? '>' : '>='} ${addBind(binds, range.start)}`,
+    );
   }
   if (range?.end) {
-    conditions.push(`${logQcol(tableAlias, 'timestamp')} ${range.endExclusive ? '<' : '<='} ${addBind(binds, range.end)}`);
+    conditions.push(
+      `${logQcol(tableAlias, 'timestamp')} ${range.endExclusive ? '<' : '<='} ${addBind(binds, range.end)}`,
+    );
   }
 }
 

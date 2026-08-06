@@ -172,11 +172,7 @@ export async function getTraceLight(
   }
 }
 
-export async function updateSpan(
-  db: OracleDB,
-  schemaName: string | undefined,
-  args: UpdateSpanArgs,
-): Promise<void> {
+export async function updateSpan(db: OracleDB, schemaName: string | undefined, args: UpdateSpanArgs): Promise<void> {
   const { traceId, spanId } = args;
   try {
     await batchUpdateSpans(db, schemaName, { records: [args] });

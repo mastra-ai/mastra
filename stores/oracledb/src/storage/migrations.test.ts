@@ -158,9 +158,9 @@ describe('OracleMigrationRegistry', () => {
     await expect(registry.run([{ id: 'V002_EMPTY_NAME', name: '   ', run: validRun }])).rejects.toThrow(
       /name must be provided/i,
     );
-    await expect(
-      registry.run([{ id: 'V002_LONG_NAME', name: 'X'.repeat(513), run: validRun }]),
-    ).rejects.toThrow(/512 characters or fewer/i);
+    await expect(registry.run([{ id: 'V002_LONG_NAME', name: 'X'.repeat(513), run: validRun }])).rejects.toThrow(
+      /512 characters or fewer/i,
+    );
     await expect(
       registry.run([
         {

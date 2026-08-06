@@ -105,7 +105,9 @@ describe('updateMessages semantic-recall invalidation (CR-14)', () => {
     const client = { none, manyOrNone, executeMany } as unknown as OracleTxClient;
     const ctx = createCtx(existingMessages, client);
 
-    await expect(updateMessages(ctx, { messages: [{ id: 'msg-content', content: { content: 'updated' } }] })).resolves.toBeDefined();
+    await expect(
+      updateMessages(ctx, { messages: [{ id: 'msg-content', content: { content: 'updated' } }] }),
+    ).resolves.toBeDefined();
 
     expect(manyOrNone).toHaveBeenCalled();
     // No vector tables were resolved (registry lookup failed with ORA-00942),

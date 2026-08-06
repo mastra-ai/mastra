@@ -286,7 +286,12 @@ export { ScorerDefinitionsOracle } from './domains/scorer-definitions';
 export { ScoresOracle } from './domains/scores';
 export { WorkflowsOracle } from './domains/workflows';
 export { DEFAULT_ORACLE_MIGRATIONS_TABLE, OracleMigrationRegistry, oracleMigrationTableSql } from './migrations';
-export type { OracleMigration, OracleMigrationRecord, OracleMigrationResult, OracleMigrationRunOptions } from './migrations';
+export type {
+  OracleMigration,
+  OracleMigrationRecord,
+  OracleMigrationResult,
+  OracleMigrationRunOptions,
+} from './migrations';
 export type { OracleStoreConfig } from './types';
 
 function stableStringify(value: unknown): string {

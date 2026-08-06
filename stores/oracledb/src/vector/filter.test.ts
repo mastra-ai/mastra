@@ -23,9 +23,9 @@ describe('buildMetadataWhereClause', () => {
     });
 
     expect(filter.sql).toContain(' OR ');
-    expect(filter.sql).toContain("RETURNING NUMBER NULL ON ERROR) >= :b0");
+    expect(filter.sql).toContain('RETURNING NUMBER NULL ON ERROR) >= :b0');
     expect(filter.sql).toContain('IN (:b1, :b2)');
-    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.kind[*]?(@ == $b3)' PASSING :b3 AS \"b3\")");
+    expect(filter.sql).toContain('JSON_EXISTS(metadata, \'$.kind[*]?(@ == $b3)\' PASSING :b3 AS "b3")');
   });
 
   it('supports direct array values, single-object logical filters, nested paths, dates, and RegExp values', () => {
@@ -37,7 +37,7 @@ describe('buildMetadataWhereClause', () => {
     });
 
     expect(filter.sql).toContain('IN (:b0, :b1)');
-    expect(filter.sql).toContain("$.profile.tier.name");
+    expect(filter.sql).toContain('$.profile.tier.name');
     expect(filter.sql).toContain('REGEXP_LIKE');
     expect(filter.sql).toContain(", 'i'");
     expect(Object.values(filter.binds)).toEqual(
@@ -82,9 +82,9 @@ describe('buildMetadataWhereClause', () => {
       chunks: { $elemMatch: { score: { $gte: 0.9 } } },
     });
 
-    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.tags[*]?(@ == $b0)' PASSING :b0 AS \"b0\")");
-    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.tags?(@.size() == $b2)' PASSING :b2 AS \"b2\")");
-    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.chunks[*]?(@.score >= $b3)' PASSING :b3 AS \"b3\")");
+    expect(filter.sql).toContain('JSON_EXISTS(metadata, \'$.tags[*]?(@ == $b0)\' PASSING :b0 AS "b0")');
+    expect(filter.sql).toContain('JSON_EXISTS(metadata, \'$.tags?(@.size() == $b2)\' PASSING :b2 AS "b2")');
+    expect(filter.sql).toContain('JSON_EXISTS(metadata, \'$.chunks[*]?(@.score >= $b3)\' PASSING :b3 AS "b3")');
   });
 
   it('supports regex and contains filters', () => {
@@ -95,7 +95,7 @@ describe('buildMetadataWhereClause', () => {
 
     expect(filter.sql).toContain('REGEXP_LIKE');
     expect(filter.sql).toContain('LIKE');
-    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.text[*]?(@ == $b2)' PASSING :b2 AS \"b2\")");
+    expect(filter.sql).toContain('JSON_EXISTS(metadata, \'$.text[*]?(@ == $b2)\' PASSING :b2 AS "b2")');
     expect(filter.binds).toEqual({ b0: 'oracle.*database', b1: 'vector\\_search', b2: 'Vector_Search' });
   });
 
@@ -104,8 +104,10 @@ describe('buildMetadataWhereClause', () => {
       tags: { $contains: 'premium' },
     });
 
-    expect(filter.sql).toContain("LOWER(JSON_VALUE(metadata, '$.tags' RETURNING VARCHAR2(4000) NULL ON ERROR)) LIKE '%' || :b0 || '%'");
-    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.tags[*]?(@ == $b1)' PASSING :b1 AS \"b1\")");
+    expect(filter.sql).toContain(
+      "LOWER(JSON_VALUE(metadata, '$.tags' RETURNING VARCHAR2(4000) NULL ON ERROR)) LIKE '%' || :b0 || '%'",
+    );
+    expect(filter.sql).toContain('JSON_EXISTS(metadata, \'$.tags[*]?(@ == $b1)\' PASSING :b1 AS "b1")');
     expect(filter.binds).toEqual({ b0: 'premium', b1: 'premium' });
   });
 
@@ -161,7 +163,9 @@ describe('buildMetadataWhereClause', () => {
       },
     });
 
-    expect(filter.sql).toContain("REGEXP_LIKE(JSON_VALUE(metadata, '$.source' RETURNING VARCHAR2(4000) NULL ON ERROR), :b0, 'i')");
+    expect(filter.sql).toContain(
+      "REGEXP_LIKE(JSON_VALUE(metadata, '$.source' RETURNING VARCHAR2(4000) NULL ON ERROR), :b0, 'i')",
+    );
     expect(filter.sql).toContain('false');
     expect(filter.sql).toContain('@.category <= $');
     expect(filter.sql).toContain('@.category != $');

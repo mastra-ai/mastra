@@ -374,10 +374,7 @@ function addScoreMetadataTagsFilter(
       `EXISTS (SELECT 1 FROM JSON_TABLE(${scoreQcol(
         tableAlias,
         'metadata',
-      )}, '$.tags[*]' COLUMNS (tag VARCHAR2(4000) PATH '$')) tag_filter WHERE tag_filter.tag = ${addBind(
-        binds,
-        tag,
-      )})`,
+      )}, '$.tags[*]' COLUMNS (tag VARCHAR2(4000) PATH '$')) tag_filter WHERE tag_filter.tag = ${addBind(binds, tag)})`,
     );
   }
 }

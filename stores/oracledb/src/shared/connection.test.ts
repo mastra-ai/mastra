@@ -144,11 +144,7 @@ describe('Oracle shared connection helpers', () => {
     try {
       const retryError = Object.assign(new Error('ORA-00054: resource busy'), { errorNum: 54 });
       const retryConnection = {
-        execute: vi
-          .fn()
-          .mockRejectedValueOnce(retryError)
-          .mockRejectedValueOnce(retryError)
-          .mockResolvedValueOnce({}),
+        execute: vi.fn().mockRejectedValueOnce(retryError).mockRejectedValueOnce(retryError).mockResolvedValueOnce({}),
       };
       const retryPromise = executeDdl(retryConnection as any, 'CREATE INDEX X ON T (id)');
       await vi.advanceTimersByTimeAsync(350);

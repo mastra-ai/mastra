@@ -82,7 +82,10 @@ export async function listMessagesById(
   }
 }
 
-export async function listMessages(ctx: MemoryContext, args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+export async function listMessages(
+  ctx: MemoryContext,
+  args: StorageListMessagesInput,
+): Promise<StorageListMessagesOutput> {
   const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
   const threadIds = (Array.isArray(threadId) ? threadId : [threadId]).filter(
     (id): id is string => typeof id === 'string' && id.trim().length > 0,
@@ -160,7 +163,13 @@ export async function saveMessages(
     for (const threadId of threadIds) {
       const thread = await ctx.getThreadById({ threadId });
       if (!thread) {
-        throw storageError('SAVE_MESSAGES', 'FAILED', { threadId }, new Error(`Thread ${threadId} not found`), ErrorCategory.USER);
+        throw storageError(
+          'SAVE_MESSAGES',
+          'FAILED',
+          { threadId },
+          new Error(`Thread ${threadId} not found`),
+          ErrorCategory.USER,
+        );
       }
     }
 
@@ -184,7 +193,11 @@ export async function saveMessages(
  * message-less cloned thread committed. Does not verify that the owning
  * thread exists; `saveMessages` checks that before opening its transaction.
  */
-export async function insertMessageBatch(ctx: MemoryContext, client: OracleTxClient, messages: MastraDBMessage[]): Promise<void> {
+export async function insertMessageBatch(
+  ctx: MemoryContext,
+  client: OracleTxClient,
+  messages: MastraDBMessage[],
+): Promise<void> {
   const threadIds = new Set<string>();
   const stringExecuteManyOptions: oracledb.ExecuteManyOptions = {
     bindDefs: {
@@ -459,7 +472,10 @@ async function listMessagesWithWhere(
       const baseThreadIds = new Set(baseFilter.threadIds ?? []);
       const returnedThreadMessageIds = new Set(
         finalMessages
-          .filter(message => baseThreadIds.size === 0 || (message.threadId !== undefined && baseThreadIds.has(message.threadId)))
+          .filter(
+            message =>
+              baseThreadIds.size === 0 || (message.threadId !== undefined && baseThreadIds.has(message.threadId)),
+          )
           .map(message => message.id),
       );
       const hasMore = perPageInput !== false && returnedThreadMessageIds.size < total && offset + perPage < total;
@@ -598,7 +614,9 @@ function sortMessages(messages: MastraDBMessage[], field: string, direction: str
     if (typeof aValue === 'number' && typeof bValue === 'number') {
       return direction === 'ASC' ? aValue - bValue : bValue - aValue;
     }
-    return direction === 'ASC' ? String(aValue).localeCompare(String(bValue)) : String(bValue).localeCompare(String(aValue));
+    return direction === 'ASC'
+      ? String(aValue).localeCompare(String(bValue))
+      : String(bValue).localeCompare(String(aValue));
   });
 }
 

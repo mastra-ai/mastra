@@ -54,7 +54,10 @@ export async function upsert(
       // deleteFilter + upsert is treated as one transaction to avoid partially refreshed indexes.
       if (deleteFilter && Object.keys(deleteFilter).length > 0) {
         const filter = buildMetadataWhereClause(deleteFilter);
-        await connection.execute(`DELETE FROM ${indexInfo.qualifiedTableName} ${filter.sql}`, asBindParameters(filter.binds));
+        await connection.execute(
+          `DELETE FROM ${indexInfo.qualifiedTableName} ${filter.sql}`,
+          asBindParameters(filter.binds),
+        );
       }
 
       const mergeSql = `
@@ -198,7 +201,11 @@ export async function deleteVector(
   return withConnection(async connection => {
     const indexInfo = await registry.getIndexMetadata(connection, indexName);
     try {
-      await connection.execute(`DELETE FROM ${indexInfo.qualifiedTableName} WHERE vector_id = :id`, { id }, { autoCommit: true });
+      await connection.execute(
+        `DELETE FROM ${indexInfo.qualifiedTableName} WHERE vector_id = :id`,
+        { id },
+        { autoCommit: true },
+      );
     } catch (error) {
       await rollbackQuietly(connection);
       throw error;

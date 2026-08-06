@@ -95,15 +95,18 @@ export class IndexRegistry {
     this.defaultIndexConfig = config.defaultIndexConfig;
   }
 
-  async createIndex(withConnection: WithConnection, {
-    indexName,
-    dimension,
-    metric,
-    vectorFormat,
-    indexConfig,
-    buildIndex = true,
-    metadataIndexes,
-  }: OracleCreateIndexParams): Promise<void> {
+  async createIndex(
+    withConnection: WithConnection,
+    {
+      indexName,
+      dimension,
+      metric,
+      vectorFormat,
+      indexConfig,
+      buildIndex = true,
+      metadataIndexes,
+    }: OracleCreateIndexParams,
+  ): Promise<void> {
     try {
       const logicalIndexName = normalizeLogicalIndexName(indexName);
       const normalizedFormat = normalizeVectorFormat(vectorFormat ?? this.defaultVectorFormat);
@@ -115,201 +118,264 @@ export class IndexRegistry {
       validateVectorFormatDimension(normalizedFormat, dimension);
       validateMetricForFormat(normalizedMetric, normalizedFormat, mergedConfig.type);
 
-      await this.withIndexLock(logicalIndexName, () => withConnection(async connection => {
-        await this.ensureRegistry(connection);
-        const existing = await this.getRegistryEntry(connection, logicalIndexName);
-        if (existing) {
-          // Re-running createIndex is allowed when the existing table shape matches the requested shape.
-          const tableExists = await this.vectorTableExists(connection, existing.tableName);
-          const tableName = tableExists ? existing.tableName : tableNameForIndex(logicalIndexName, this.tablePrefix);
-          if (tableExists) {
-            this.assertCompatibleExistingIndex(existing, logicalIndexName, dimension, normalizedMetric, normalizedFormat);
-          } else {
-            await this.createVectorTable(connection, logicalIndexName, dimension, normalizedFormat);
-            await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, unbuiltConfig);
-            this.clearIndexMetadata(logicalIndexName);
-          }
-
-          await this.createMetadataIndexes(
-            connection,
-            logicalIndexName,
-            metadataIndexes ?? this.defaultMetadataIndexes,
-            tableName,
-          );
-
-          if (buildIndex && mergedConfig.type !== 'none') {
-            const createdIndex = await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig, tableName);
-            if (!createdIndex && (!tableExists || !vectorIndexRegistryConfigMatches(existing, normalizedMetric, mergedConfig))) {
-              throw vectorIndexAlreadyExistsError('CREATE_INDEX', logicalIndexName, existing);
+      await this.withIndexLock(logicalIndexName, () =>
+        withConnection(async connection => {
+          await this.ensureRegistry(connection);
+          const existing = await this.getRegistryEntry(connection, logicalIndexName);
+          if (existing) {
+            // Re-running createIndex is allowed when the existing table shape matches the requested shape.
+            const tableExists = await this.vectorTableExists(connection, existing.tableName);
+            const tableName = tableExists ? existing.tableName : tableNameForIndex(logicalIndexName, this.tablePrefix);
+            if (tableExists) {
+              this.assertCompatibleExistingIndex(
+                existing,
+                logicalIndexName,
+                dimension,
+                normalizedMetric,
+                normalizedFormat,
+              );
+            } else {
+              await this.createVectorTable(connection, logicalIndexName, dimension, normalizedFormat);
+              await this.upsertRegistry(
+                connection,
+                logicalIndexName,
+                dimension,
+                normalizedMetric,
+                normalizedFormat,
+                unbuiltConfig,
+              );
+              this.clearIndexMetadata(logicalIndexName);
             }
-            if (createdIndex) {
-              await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
+
+            await this.createMetadataIndexes(
+              connection,
+              logicalIndexName,
+              metadataIndexes ?? this.defaultMetadataIndexes,
+              tableName,
+            );
+
+            if (buildIndex && mergedConfig.type !== 'none') {
+              const createdIndex = await this.createVectorIndex(
+                connection,
+                logicalIndexName,
+                normalizedMetric,
+                mergedConfig,
+                tableName,
+              );
+              if (
+                !createdIndex &&
+                (!tableExists || !vectorIndexRegistryConfigMatches(existing, normalizedMetric, mergedConfig))
+              ) {
+                throw vectorIndexAlreadyExistsError('CREATE_INDEX', logicalIndexName, existing);
+              }
+              if (createdIndex) {
+                await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
+              }
             }
-          }
-          const finalInfo =
-            buildIndex && mergedConfig.type !== 'none'
-              ? {
-                  ...existing,
-                  tableName,
-                  metric: normalizedMetric,
-                  indexType: mergedConfig.type,
-                  accuracy: mergedConfig.accuracy ?? 95,
-                }
-              : tableExists
-                ? { ...existing, tableName }
-                : {
-                    indexName: logicalIndexName,
+            const finalInfo =
+              buildIndex && mergedConfig.type !== 'none'
+                ? {
+                    ...existing,
                     tableName,
-                    dimension,
                     metric: normalizedMetric,
-                    indexType: builtConfig.type,
-                    vectorFormat: normalizedFormat,
-                    accuracy: builtConfig.accuracy ?? 95,
-                  };
-          this.cacheIndexMetadata(logicalIndexName, {
-            ...finalInfo,
-            qualifiedTableName: qualifyName(tableName, this.schemaName),
-          });
-          return;
-        }
+                    indexType: mergedConfig.type,
+                    accuracy: mergedConfig.accuracy ?? 95,
+                  }
+                : tableExists
+                  ? { ...existing, tableName }
+                  : {
+                      indexName: logicalIndexName,
+                      tableName,
+                      dimension,
+                      metric: normalizedMetric,
+                      indexType: builtConfig.type,
+                      vectorFormat: normalizedFormat,
+                      accuracy: builtConfig.accuracy ?? 95,
+                    };
+            this.cacheIndexMetadata(logicalIndexName, {
+              ...finalInfo,
+              qualifiedTableName: qualifyName(tableName, this.schemaName),
+            });
+            return;
+          }
 
-        const tableName = tableNameForIndex(logicalIndexName, this.tablePrefix);
-        if (await this.vectorTableExists(connection, tableName)) {
-          // Oracle identifier normalization can collapse two distinct logical names (e.g. "foo" and
-          // "FOO") onto the same physical table. Check the registry for a row already claiming this
-          // table under a different index name so the error explains the real cause instead of the
-          // generic "registry metadata is missing" message below.
-          const collidingIndexName = await this.findRegistryEntryByTableName(connection, tableName);
-          if (collidingIndexName && collidingIndexName !== logicalIndexName) {
+          const tableName = tableNameForIndex(logicalIndexName, this.tablePrefix);
+          if (await this.vectorTableExists(connection, tableName)) {
+            // Oracle identifier normalization can collapse two distinct logical names (e.g. "foo" and
+            // "FOO") onto the same physical table. Check the registry for a row already claiming this
+            // table under a different index name so the error explains the real cause instead of the
+            // generic "registry metadata is missing" message below.
+            const collidingIndexName = await this.findRegistryEntryByTableName(connection, tableName);
+            if (collidingIndexName && collidingIndexName !== logicalIndexName) {
+              throw asMastraError(
+                'CREATE_INDEX',
+                'IDENTIFIER_COLLISION',
+                { indexName: logicalIndexName, tableName, collidingIndexName },
+                new Error(
+                  `Logical index name "${logicalIndexName}" collides with existing index "${collidingIndexName}" after Oracle identifier normalization (both map to table "${tableName}"). Choose a different index name.`,
+                ),
+                ErrorCategory.USER,
+              );
+            }
+
+            // A physical table without registry metadata is unsafe because describe/query cannot validate dimensions.
             throw asMastraError(
               'CREATE_INDEX',
-              'IDENTIFIER_COLLISION',
-              { indexName: logicalIndexName, tableName, collidingIndexName },
+              'REGISTRY_MISSING',
+              { indexName: logicalIndexName, tableName },
               new Error(
-                `Logical index name "${logicalIndexName}" collides with existing index "${collidingIndexName}" after Oracle identifier normalization (both map to table "${tableName}"). Choose a different index name.`,
+                `Oracle vector table "${tableName}" already exists, but registry metadata for "${logicalIndexName}" is missing. Delete the stale table or restore the registry entry before creating the index.`,
               ),
               ErrorCategory.USER,
             );
           }
 
-          // A physical table without registry metadata is unsafe because describe/query cannot validate dimensions.
-          throw asMastraError(
-            'CREATE_INDEX',
-            'REGISTRY_MISSING',
-            { indexName: logicalIndexName, tableName },
-            new Error(
-              `Oracle vector table "${tableName}" already exists, but registry metadata for "${logicalIndexName}" is missing. Delete the stale table or restore the registry entry before creating the index.`,
-            ),
-            ErrorCategory.USER,
+          await this.createVectorTable(connection, logicalIndexName, dimension, normalizedFormat);
+          await this.upsertRegistry(
+            connection,
+            logicalIndexName,
+            dimension,
+            normalizedMetric,
+            normalizedFormat,
+            unbuiltConfig,
           );
-        }
+          this.clearIndexMetadata(logicalIndexName);
+          await this.createMetadataIndexes(
+            connection,
+            logicalIndexName,
+            metadataIndexes ?? this.defaultMetadataIndexes,
+          );
 
-        await this.createVectorTable(connection, logicalIndexName, dimension, normalizedFormat);
-        await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, unbuiltConfig);
-        this.clearIndexMetadata(logicalIndexName);
-        await this.createMetadataIndexes(
-          connection,
-          logicalIndexName,
-          metadataIndexes ?? this.defaultMetadataIndexes,
-        );
-
-        if (buildIndex && mergedConfig.type !== 'none') {
-          const createdIndex = await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig);
-          if (!createdIndex) {
-            throw vectorIndexAlreadyExistsError('CREATE_INDEX', logicalIndexName, {
-              metric: normalizedMetric,
-              indexType: mergedConfig.type,
-            });
+          if (buildIndex && mergedConfig.type !== 'none') {
+            const createdIndex = await this.createVectorIndex(
+              connection,
+              logicalIndexName,
+              normalizedMetric,
+              mergedConfig,
+            );
+            if (!createdIndex) {
+              throw vectorIndexAlreadyExistsError('CREATE_INDEX', logicalIndexName, {
+                metric: normalizedMetric,
+                indexType: mergedConfig.type,
+              });
+            }
+            await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
           }
-          await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
-        }
-        this.cacheIndexMetadata(logicalIndexName, {
-          indexName: logicalIndexName,
-          tableName,
-          dimension,
-          metric: normalizedMetric,
-          indexType: builtConfig.type,
-          vectorFormat: normalizedFormat,
-          accuracy: builtConfig.accuracy ?? 95,
-          qualifiedTableName: qualifyName(tableName, this.schemaName),
-        });
-      }));
+          this.cacheIndexMetadata(logicalIndexName, {
+            indexName: logicalIndexName,
+            tableName,
+            dimension,
+            metric: normalizedMetric,
+            indexType: builtConfig.type,
+            vectorFormat: normalizedFormat,
+            accuracy: builtConfig.accuracy ?? 95,
+            qualifiedTableName: qualifyName(tableName, this.schemaName),
+          });
+        }),
+      );
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw asMastraError('CREATE_INDEX', 'FAILED', { indexName }, error);
     }
   }
 
-  async buildIndex(withConnection: WithConnection, { indexName, metric, indexConfig }: OracleBuildIndexParams): Promise<void> {
+  async buildIndex(
+    withConnection: WithConnection,
+    { indexName, metric, indexConfig }: OracleBuildIndexParams,
+  ): Promise<void> {
     const logicalIndexName = normalizeLogicalIndexName(indexName);
     // Locked like createIndex/deleteIndex so a concurrent build/rebuild on the same logical index
     // cannot interleave DROP/CREATE VECTOR INDEX statements against each other.
-    return this.withIndexLock(logicalIndexName, () => withConnection(async connection => {
-      const indexInfo = await this.getIndexMetadata(connection, logicalIndexName);
-      const existingBuiltConfig = indexInfo.indexType === 'none' ? undefined : {
-        type: indexInfo.indexType,
-        accuracy: indexInfo.accuracy,
-      };
-      const mergedConfig = this.mergeIndexConfig(indexConfig ?? existingBuiltConfig);
+    return this.withIndexLock(logicalIndexName, () =>
+      withConnection(async connection => {
+        const indexInfo = await this.getIndexMetadata(connection, logicalIndexName);
+        const existingBuiltConfig =
+          indexInfo.indexType === 'none'
+            ? undefined
+            : {
+                type: indexInfo.indexType,
+                accuracy: indexInfo.accuracy,
+              };
+        const mergedConfig = this.mergeIndexConfig(indexConfig ?? existingBuiltConfig);
 
-      // `none` is a valid exact-search mode, so buildIndex becomes a no-op for those indexes.
-      if (mergedConfig.type === 'none') return;
+        // `none` is a valid exact-search mode, so buildIndex becomes a no-op for those indexes.
+        if (mergedConfig.type === 'none') return;
 
-      const normalizedMetric = normalizeMetric(metric ?? indexInfo.metric);
-      validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat, mergedConfig.type);
-      const createdIndex = await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig, indexInfo.tableName);
-      if (!createdIndex) {
-        const explicitlyRequestedConfig = metric !== undefined || indexConfig !== undefined;
-        const registryConfigChanged = !vectorIndexRegistryConfigMatches(indexInfo, normalizedMetric, mergedConfig);
-        if (explicitlyRequestedConfig || registryConfigChanged) {
-          throw vectorIndexAlreadyExistsError('BUILD_INDEX', logicalIndexName, indexInfo);
+        const normalizedMetric = normalizeMetric(metric ?? indexInfo.metric);
+        validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat, mergedConfig.type);
+        const createdIndex = await this.createVectorIndex(
+          connection,
+          logicalIndexName,
+          normalizedMetric,
+          mergedConfig,
+          indexInfo.tableName,
+        );
+        if (!createdIndex) {
+          const explicitlyRequestedConfig = metric !== undefined || indexConfig !== undefined;
+          const registryConfigChanged = !vectorIndexRegistryConfigMatches(indexInfo, normalizedMetric, mergedConfig);
+          if (explicitlyRequestedConfig || registryConfigChanged) {
+            throw vectorIndexAlreadyExistsError('BUILD_INDEX', logicalIndexName, indexInfo);
+          }
+          return;
         }
-        return;
-      }
-      await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
-      this.cacheIndexMetadata(logicalIndexName, {
-        ...indexInfo,
-        metric: normalizedMetric,
-        indexType: mergedConfig.type,
-        accuracy: mergedConfig.accuracy ?? 95,
-      });
-    })).catch(error => {
+        await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
+        this.cacheIndexMetadata(logicalIndexName, {
+          ...indexInfo,
+          metric: normalizedMetric,
+          indexType: mergedConfig.type,
+          accuracy: mergedConfig.accuracy ?? 95,
+        });
+      }),
+    ).catch(error => {
       if (error instanceof MastraError) throw error;
       throw asMastraError('BUILD_INDEX', 'FAILED', { indexName }, error);
     });
   }
 
-  async rebuildIndex(withConnection: WithConnection, { indexName, metric, indexConfig }: OracleRebuildIndexParams): Promise<void> {
+  async rebuildIndex(
+    withConnection: WithConnection,
+    { indexName, metric, indexConfig }: OracleRebuildIndexParams,
+  ): Promise<void> {
     const logicalIndexName = normalizeLogicalIndexName(indexName);
     // Locked like createIndex/deleteIndex so a concurrent build/rebuild on the same logical index
     // cannot interleave DROP/CREATE VECTOR INDEX statements against each other.
-    return this.withIndexLock(logicalIndexName, () => withConnection(async connection => {
-      const indexInfo = await this.getIndexMetadata(connection, logicalIndexName);
-      const normalizedMetric = normalizeMetric(metric ?? indexInfo.metric);
-      const mergedConfig = this.mergeIndexConfig(indexConfig ?? {
-        type: indexInfo.indexType,
-        accuracy: indexInfo.accuracy,
-      });
-      validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat, mergedConfig.type);
+    return this.withIndexLock(logicalIndexName, () =>
+      withConnection(async connection => {
+        const indexInfo = await this.getIndexMetadata(connection, logicalIndexName);
+        const normalizedMetric = normalizeMetric(metric ?? indexInfo.metric);
+        const mergedConfig = this.mergeIndexConfig(
+          indexConfig ?? {
+            type: indexInfo.indexType,
+            accuracy: indexInfo.accuracy,
+          },
+        );
+        validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat, mergedConfig.type);
 
-      if (mergedConfig.type === 'none') return;
+        if (mergedConfig.type === 'none') return;
 
-      await this.dropVectorIndex(connection, logicalIndexName, indexInfo.tableName);
-      const createdIndex = await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig, indexInfo.tableName);
-      if (!createdIndex) {
-        // The DROP above should have cleared the way for a fresh CREATE VECTOR INDEX; a `false`
-        // return means the index still exists (e.g. a racing writer recreated it), so the registry
-        // must not be advanced to describe a physical index that does not match this config.
-        throw vectorIndexAlreadyExistsError('REBUILD_INDEX', logicalIndexName, indexInfo);
-      }
-      await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
-      this.cacheIndexMetadata(logicalIndexName, {
-        ...indexInfo,
-        metric: normalizedMetric,
-        indexType: mergedConfig.type,
-        accuracy: mergedConfig.accuracy ?? 95,
-      });
-    })).catch(error => {
+        await this.dropVectorIndex(connection, logicalIndexName, indexInfo.tableName);
+        const createdIndex = await this.createVectorIndex(
+          connection,
+          logicalIndexName,
+          normalizedMetric,
+          mergedConfig,
+          indexInfo.tableName,
+        );
+        if (!createdIndex) {
+          // The DROP above should have cleared the way for a fresh CREATE VECTOR INDEX; a `false`
+          // return means the index still exists (e.g. a racing writer recreated it), so the registry
+          // must not be advanced to describe a physical index that does not match this config.
+          throw vectorIndexAlreadyExistsError('REBUILD_INDEX', logicalIndexName, indexInfo);
+        }
+        await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
+        this.cacheIndexMetadata(logicalIndexName, {
+          ...indexInfo,
+          metric: normalizedMetric,
+          indexType: mergedConfig.type,
+          accuracy: mergedConfig.accuracy ?? 95,
+        });
+      }),
+    ).catch(error => {
       if (error instanceof MastraError) throw error;
       throw asMastraError('REBUILD_INDEX', 'FAILED', { indexName }, error);
     });
@@ -317,24 +383,26 @@ export class IndexRegistry {
 
   async deleteIndex(withConnection: WithConnection, { indexName }: DeleteIndexParams): Promise<void> {
     const logicalIndexName = normalizeLogicalIndexName(indexName);
-    return this.withIndexLock(logicalIndexName, () => withConnection(async connection => {
-      await this.ensureRegistry(connection);
-      const registryRow = await this.getRegistryEntry(connection, logicalIndexName);
-      const tableName = registryRow
-        ? qualifyName(registryRow.tableName, this.schemaName)
-        : this.qualifiedTableName(logicalIndexName);
+    return this.withIndexLock(logicalIndexName, () =>
+      withConnection(async connection => {
+        await this.ensureRegistry(connection);
+        const registryRow = await this.getRegistryEntry(connection, logicalIndexName);
+        const tableName = registryRow
+          ? qualifyName(registryRow.tableName, this.schemaName)
+          : this.qualifiedTableName(logicalIndexName);
 
-      await executeOracleDdl(connection, `DROP TABLE ${tableName} CASCADE CONSTRAINTS PURGE`, [-942]);
-      await connection.execute(
-        `DELETE FROM ${this.qualifiedRegistryTable()} WHERE index_name IN (:indexName, :legacyIndexName)`,
-        {
-          indexName: logicalIndexName,
-          legacyIndexName: safeLegacyCanonicalIndexName(logicalIndexName),
-        },
-      );
-      await connection.commit();
-      this.clearIndexMetadata(logicalIndexName);
-    })).catch(error => {
+        await executeOracleDdl(connection, `DROP TABLE ${tableName} CASCADE CONSTRAINTS PURGE`, [-942]);
+        await connection.execute(
+          `DELETE FROM ${this.qualifiedRegistryTable()} WHERE index_name IN (:indexName, :legacyIndexName)`,
+          {
+            indexName: logicalIndexName,
+            legacyIndexName: safeLegacyCanonicalIndexName(logicalIndexName),
+          },
+        );
+        await connection.commit();
+        this.clearIndexMetadata(logicalIndexName);
+      }),
+    ).catch(error => {
       if (error instanceof MastraError) throw error;
       throw asMastraError('DELETE_INDEX', 'FAILED', { indexName }, error);
     });
@@ -625,7 +693,10 @@ export class IndexRegistry {
     this.indexInfoCache.delete(safeLegacyCanonicalIndexName(logicalIndexName));
   }
 
-  async getRegistryEntry(connection: Connection, indexName: string): Promise<Omit<IndexInfo, 'qualifiedTableName' | 'count'> | null> {
+  async getRegistryEntry(
+    connection: Connection,
+    indexName: string,
+  ): Promise<Omit<IndexInfo, 'qualifiedTableName' | 'count'> | null> {
     const logicalIndexName = normalizeLogicalIndexName(indexName);
     const legacyIndexName = safeLegacyCanonicalIndexName(logicalIndexName);
     // Prefer exact logical names, then fall back to the legacy uppercase registry key.
@@ -656,7 +727,8 @@ export class IndexRegistry {
       metric: normalizeMetric(String(registryRow.metric)),
       indexType: normalizeIndexType(String(registryRow.indexType)),
       vectorFormat: normalizeVectorFormat(String(registryRow.vectorFormat ?? DEFAULT_VECTOR_FORMAT)),
-      accuracy: registryRow.accuracy === null || registryRow.accuracy === undefined ? undefined : Number(registryRow.accuracy),
+      accuracy:
+        registryRow.accuracy === null || registryRow.accuracy === undefined ? undefined : Number(registryRow.accuracy),
     };
   }
 
@@ -735,8 +807,9 @@ export class IndexRegistry {
     }
   }
 
-  mergeIndexConfig(indexConfig?: OracleVectorIndexConfig): Required<Pick<OracleVectorIndexConfig, 'type'>> &
-    OracleVectorIndexConfig {
+  mergeIndexConfig(
+    indexConfig?: OracleVectorIndexConfig,
+  ): Required<Pick<OracleVectorIndexConfig, 'type'>> & OracleVectorIndexConfig {
     const type = normalizeIndexType(indexConfig?.type ?? this.defaultIndexConfig.type ?? 'none');
     const accuracy = indexConfig?.accuracy ?? this.defaultIndexConfig.accuracy;
     if (accuracy !== undefined) validateAccuracy(accuracy);
@@ -817,7 +890,7 @@ function createInsufficientVectorMemoryError(
       `Oracle could not create the ${indexType} vector index "${indexName}" because the current container's Vector Pool is out of space (ORA-51962). ` +
         'HNSW indexes live in the Oracle Vector Pool, controlled by VECTOR_MEMORY_SIZE. ' +
         'Increase it once with DBA privileges, for example: ALTER SYSTEM SET VECTOR_MEMORY_SIZE = 512M SCOPE=MEMORY. ' +
-        'From this adapter you can also run vector.configureVectorMemory({ size: "512M" }) using a privileged connection. '
+        'From this adapter you can also run vector.configureVectorMemory({ size: "512M" }) using a privileged connection. ',
     ),
     cause,
   );

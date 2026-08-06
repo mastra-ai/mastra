@@ -124,10 +124,9 @@ describe('MemoryOracle message consistency', () => {
         }),
       ]),
     );
-    expect(executeMany).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE "MASTRA_THREADS"'),
-      [{ updatedAt: expect.any(Date), threadId: 'thread-1' }],
-    );
+    expect(executeMany).toHaveBeenCalledWith(expect.stringContaining('UPDATE "MASTRA_THREADS"'), [
+      { updatedAt: expect.any(Date), threadId: 'thread-1' },
+    ]);
   });
 
   it('uses the configured vector registry table for semantic-recall cleanup', async () => {

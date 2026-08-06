@@ -234,7 +234,9 @@ export class ScorerDefinitionsOracle extends ScorerDefinitionsStorage {
 
       if (metadata !== undefined) {
         const existingMetadata =
-          existingScorer.metadata && typeof existingScorer.metadata === 'object' && !Array.isArray(existingScorer.metadata)
+          existingScorer.metadata &&
+          typeof existingScorer.metadata === 'object' &&
+          !Array.isArray(existingScorer.metadata)
             ? existingScorer.metadata
             : {};
         // Discovery metadata is mutable on the parent row; scorer model/rubric
@@ -404,10 +406,7 @@ export class ScorerDefinitionsOracle extends ScorerDefinitionsStorage {
     }
   }
 
-  async getVersionByNumber(
-    scorerDefinitionId: string,
-    versionNumber: number,
-  ): Promise<ScorerDefinitionVersion | null> {
+  async getVersionByNumber(scorerDefinitionId: string, versionNumber: number): Promise<ScorerDefinitionVersion | null> {
     try {
       const row = await this.db.oneOrNone<ScorerDefinitionVersionRow>(
         `${this.versionSelect()} FROM ${this.table(
@@ -436,12 +435,7 @@ export class ScorerDefinitionsOracle extends ScorerDefinitionsStorage {
       );
       return row ? this.parseVersionRow(row) : null;
     } catch (error) {
-      throw this.storageError(
-        'GET_LATEST_SCORER_DEFINITION_VERSION',
-        'FAILED',
-        { scorerDefinitionId },
-        error,
-      );
+      throw this.storageError('GET_LATEST_SCORER_DEFINITION_VERSION', 'FAILED', { scorerDefinitionId }, error);
     }
   }
 
@@ -541,9 +535,7 @@ export class ScorerDefinitionsOracle extends ScorerDefinitionsStorage {
   async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       await this.db.none(
-        `DELETE FROM ${this.table(
-          TABLE_SCORER_DEFINITION_VERSIONS,
-        )} WHERE ${VERSION_SCORER_DEFINITION_ID} = :entityId`,
+        `DELETE FROM ${this.table(TABLE_SCORER_DEFINITION_VERSIONS)} WHERE ${VERSION_SCORER_DEFINITION_ID} = :entityId`,
         { entityId },
       );
     } catch (error) {

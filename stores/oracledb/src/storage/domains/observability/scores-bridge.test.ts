@@ -14,7 +14,9 @@ function createOracleDb(connectionOverrides: Record<string, unknown> = {}) {
     ...connectionOverrides,
   };
   const poolManager = {
-    withConnection: vi.fn(async (callback: (connection: typeof connection) => Promise<unknown>) => callback(connection)),
+    withConnection: vi.fn(async (callback: (connection: typeof connection) => Promise<unknown>) =>
+      callback(connection),
+    ),
   };
 
   return { db: new OracleDB({ poolManager: poolManager as any }), connection };
@@ -46,9 +48,7 @@ describe('batchCreateScores transaction (CR-08)', () => {
 
   it('leaves zero rows persisted when one score in the batch fails to insert', async () => {
     const { db, connection } = createOracleDb();
-    connection.execute
-      .mockResolvedValueOnce({ rows: [] })
-      .mockRejectedValueOnce(new Error('insert failed'));
+    connection.execute.mockResolvedValueOnce({ rows: [] }).mockRejectedValueOnce(new Error('insert failed'));
 
     const args: BatchCreateScoresArgs = {
       scores: [createScoreRecord({ scoreId: 'score-1' }), createScoreRecord({ scoreId: 'score-2' })],

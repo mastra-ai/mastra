@@ -79,7 +79,11 @@ function transformScoreRow(row: ScoreRow): ScoreRowData {
  * Appends multi-tenant scope conditions to a score query. Mutates `conditions`/`binds`.
  * Mirrors the PG scores domain so organizationId/projectId scoping behaves the same across stores.
  */
-function applyTenancyFilters(conditions: string[], binds: Record<string, unknown>, filters?: ScoreTenancyFilters): void {
+function applyTenancyFilters(
+  conditions: string[],
+  binds: Record<string, unknown>,
+  filters?: ScoreTenancyFilters,
+): void {
   if (filters?.organizationId !== undefined) {
     conditions.push(`${SCORE_ORGANIZATION_ID} = :organizationId`);
     binds.organizationId = filters.organizationId;
@@ -125,7 +129,9 @@ export class ScoresOracle extends ScoresStorage {
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const row = await this.db.oneOrNone<ScoreRow>(`${this.selectScores()} FROM ${this.table()} WHERE id = :id`, { id });
+      const row = await this.db.oneOrNone<ScoreRow>(`${this.selectScores()} FROM ${this.table()} WHERE id = :id`, {
+        id,
+      });
       return row ? transformScoreRow(row) : null;
     } catch (error) {
       throw this.storageError('GET_SCORE_BY_ID', 'FAILED', { id }, error);
@@ -399,7 +405,9 @@ export class ScoresOracle extends ScoresStorage {
       tableName: TABLE_SCORERS,
       columnName,
     };
-    const ownerPredicate = this.schemaName ? 'owner = UPPER(:schemaName)' : `owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')`;
+    const ownerPredicate = this.schemaName
+      ? 'owner = UPPER(:schemaName)'
+      : `owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')`;
     if (this.schemaName) binds.schemaName = this.schemaName;
 
     const row = await this.db.oneOrNone<{ dataType: string }>(
@@ -415,7 +423,9 @@ export class ScoresOracle extends ScoresStorage {
       tableName: TABLE_SCORERS,
       columnName,
     };
-    const ownerPredicate = this.schemaName ? 'owner = UPPER(:schemaName)' : `owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')`;
+    const ownerPredicate = this.schemaName
+      ? 'owner = UPPER(:schemaName)'
+      : `owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')`;
     if (this.schemaName) binds.schemaName = this.schemaName;
 
     const row = await this.db.oneOrNone<{ nullable: string }>(
@@ -434,7 +444,9 @@ export class ScoresOracle extends ScoresStorage {
       tableName: TABLE_SCORERS,
       columnName,
     };
-    const ownerPredicate = this.schemaName ? 'owner = UPPER(:schemaName)' : `owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')`;
+    const ownerPredicate = this.schemaName
+      ? 'owner = UPPER(:schemaName)'
+      : `owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')`;
     if (this.schemaName) binds.schemaName = this.schemaName;
 
     const row = await this.db.oneOrNone<{ exists: number }>(
@@ -470,7 +482,9 @@ export class ScoresOracle extends ScoresStorage {
       // original column is safe - and required, or a retry after a failed
       // copy would DROP the only column holding the data and RENAME an
       // empty CLOB into its place.
-      await this.db.none(`UPDATE ${this.table()} SET ${tempColumn} = TO_CLOB(${oldColumn}) WHERE ${oldColumn} IS NOT NULL`);
+      await this.db.none(
+        `UPDATE ${this.table()} SET ${tempColumn} = TO_CLOB(${oldColumn}) WHERE ${oldColumn} IS NOT NULL`,
+      );
       await this.db.executeDdl(`ALTER TABLE ${this.table()} DROP COLUMN ${oldColumn}`);
     }
 

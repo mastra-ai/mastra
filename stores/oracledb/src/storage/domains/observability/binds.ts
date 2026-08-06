@@ -35,7 +35,9 @@ export function spanRecordBinds(record: SpanMutationRecord): Record<string, unkn
   );
 }
 
-export function bindDefsForColumns(columns: readonly SpanColumn[]): NonNullable<oracledb.ExecuteManyOptions['bindDefs']> {
+export function bindDefsForColumns(
+  columns: readonly SpanColumn[],
+): NonNullable<oracledb.ExecuteManyOptions['bindDefs']> {
   return Object.fromEntries(columns.map(columnName => [columnName, bindDefForColumn(columnName)])) as Record<
     string,
     oracledb.BindDefinition
@@ -84,11 +86,12 @@ export function logBindName(columnName: LogColumn): string {
   return `b_${columnName}`;
 }
 
-export function bindDefsForLogColumns(columns: readonly LogColumn[]): NonNullable<oracledb.ExecuteManyOptions['bindDefs']> {
-  return Object.fromEntries(columns.map(columnName => [logBindName(columnName), bindDefForLogColumn(columnName)])) as Record<
-    string,
-    oracledb.BindDefinition
-  >;
+export function bindDefsForLogColumns(
+  columns: readonly LogColumn[],
+): NonNullable<oracledb.ExecuteManyOptions['bindDefs']> {
+  return Object.fromEntries(
+    columns.map(columnName => [logBindName(columnName), bindDefForLogColumn(columnName)]),
+  ) as Record<string, oracledb.BindDefinition>;
 }
 
 export function bindDefForLogColumn(columnName: LogColumn): oracledb.BindDefinition {

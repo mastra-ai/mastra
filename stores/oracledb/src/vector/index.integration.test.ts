@@ -257,11 +257,7 @@ describeIntegration('OracleVector integration', () => {
 
     const indexName = 'oracle_bulk_vectors';
     const ids = Array.from({ length: 500 }, (_, index) => `bulk-vector-${index}`);
-    const vectors = ids.map((_, index) => [
-      (index + 1) / 500,
-      (500 - index) / 500,
-      ((index % 11) + 1) / 11,
-    ]);
+    const vectors = ids.map((_, index) => [(index + 1) / 500, (500 - index) / 500, ((index % 11) + 1) / 11]);
     const metadata = ids.map((id, index) => ({ id, group: index % 5, bulk: true }));
 
     try {

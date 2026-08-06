@@ -213,7 +213,12 @@ export async function updateThread(
 
     const updatedThread = await ctx.getThreadById({ threadId: id });
     if (!updatedThread) {
-      throw storageError('UPDATE_THREAD', 'FAILED', { threadId: id, title }, new Error(`Thread ${id} not found after update`));
+      throw storageError(
+        'UPDATE_THREAD',
+        'FAILED',
+        { threadId: id, title },
+        new Error(`Thread ${id} not found after update`),
+      );
     }
     return updatedThread;
   } catch (error) {
@@ -236,7 +241,10 @@ export async function deleteThread(ctx: MemoryContext, { threadId }: { threadId:
   }
 }
 
-export async function listThreads(ctx: MemoryContext, args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+export async function listThreads(
+  ctx: MemoryContext,
+  args: StorageListThreadsInput,
+): Promise<StorageListThreadsOutput> {
   const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
   try {
@@ -288,7 +296,10 @@ export async function listThreads(ctx: MemoryContext, args: StorageListThreadsIn
   }
 }
 
-function threadWhereClause(filter?: StorageListThreadsInput['filter']): { sql: string; binds: Record<string, unknown> } {
+function threadWhereClause(filter?: StorageListThreadsInput['filter']): {
+  sql: string;
+  binds: Record<string, unknown>;
+} {
   const conditions: string[] = [];
   const binds: Record<string, unknown> = {};
   if (filter?.resourceId) {

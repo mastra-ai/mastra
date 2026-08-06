@@ -22,7 +22,10 @@ function loadEnvFile(): void {
       if (separator === -1) continue;
 
       const key = trimmed.slice(0, separator).trim();
-      const value = trimmed.slice(separator + 1).trim().replace(/^["']|["']$/g, '');
+      const value = trimmed
+        .slice(separator + 1)
+        .trim()
+        .replace(/^["']|["']$/g, '');
       process.env[key] ??= value;
     }
 

@@ -941,7 +941,6 @@ function optionalVisibility(value: unknown): StorageAgentType['visibility'] | un
   return undefined;
 }
 
-
 function normalizeLegacyTools(value: unknown): unknown {
   if (!isLegacyToolArray(value)) return value;
   return Object.fromEntries(value.map(toolName => [toolName, {}]));

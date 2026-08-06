@@ -277,8 +277,5 @@ function checksumMigration(input: {
 }): string {
   // The checksum covers migration identity/description so accidental edits to
   // versioned migrations are caught before any DDL runs.
-  return createHash('sha256')
-    .update(JSON.stringify(input))
-    .digest('hex')
-    .toUpperCase();
+  return createHash('sha256').update(JSON.stringify(input)).digest('hex').toUpperCase();
 }

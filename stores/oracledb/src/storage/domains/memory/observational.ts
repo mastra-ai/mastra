@@ -12,7 +12,14 @@ import type {
 } from '@mastra/core/storage';
 import type { Connection } from 'oracledb';
 
-import { asBindParameters, executeOptions, jsonBind, nullableClobBind, nullableJsonBind, rows } from '../../../shared/connection';
+import {
+  asBindParameters,
+  executeOptions,
+  jsonBind,
+  nullableClobBind,
+  nullableJsonBind,
+  rows,
+} from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
 import { toDate, parseOptionalJsonObject, parseOptionalStringArray } from '../../domain-utils';
 import {
@@ -140,7 +147,13 @@ export async function getObservationalMemoryHistory(
   try {
     ctx.validatePaginationInput(options?.offset ?? 0, limit);
   } catch (error) {
-    throw storageError('GET_OBSERVATIONAL_MEMORY_HISTORY', 'INVALID_INPUT', { resourceId, limit }, error, ErrorCategory.USER);
+    throw storageError(
+      'GET_OBSERVATIONAL_MEMORY_HISTORY',
+      'INVALID_INPUT',
+      { resourceId, limit },
+      error,
+      ErrorCategory.USER,
+    );
   }
 
   try {
@@ -172,7 +185,12 @@ export async function getObservationalMemoryHistory(
       return rows(result).map(row => parseOMRow(row as ObservationalMemoryRow));
     });
   } catch (error) {
-    throw storageError('GET_OBSERVATIONAL_MEMORY_HISTORY', 'FAILED', { threadId: threadId ?? '', resourceId, limit }, error);
+    throw storageError(
+      'GET_OBSERVATIONAL_MEMORY_HISTORY',
+      'FAILED',
+      { threadId: threadId ?? '', resourceId, limit },
+      error,
+    );
   }
 }
 
@@ -212,21 +230,37 @@ export async function initializeObservationalMemory(
     });
     return record;
   } catch (error) {
-    throw storageError('INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED', { threadId: input.threadId ?? '', resourceId: input.resourceId }, error);
+    throw storageError(
+      'INITIALIZE_OBSERVATIONAL_MEMORY',
+      'FAILED',
+      { threadId: input.threadId ?? '', resourceId: input.resourceId },
+      error,
+    );
   }
 }
 
-export async function insertObservationalMemoryRecord(ctx: MemoryContext, record: ObservationalMemoryRecord): Promise<void> {
+export async function insertObservationalMemoryRecord(
+  ctx: MemoryContext,
+  record: ObservationalMemoryRecord,
+): Promise<void> {
   try {
     await ctx.db.tx(async (_client, connection) => {
       await insertOMRecord(ctx, connection, record);
     });
   } catch (error) {
-    throw storageError('INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED', { id: record.id, resourceId: record.resourceId }, error);
+    throw storageError(
+      'INSERT_OBSERVATIONAL_MEMORY_RECORD',
+      'FAILED',
+      { id: record.id, resourceId: record.resourceId },
+      error,
+    );
   }
 }
 
-export async function updateActiveObservations(ctx: MemoryContext, input: UpdateActiveObservationsInput): Promise<void> {
+export async function updateActiveObservations(
+  ctx: MemoryContext,
+  input: UpdateActiveObservationsInput,
+): Promise<void> {
   try {
     await ctx.db.tx(async (_client, connection) => {
       const result = await connection.execute(
@@ -317,7 +351,8 @@ export async function setBufferingObservationFlag(
 ): Promise<void> {
   try {
     await ctx.db.tx(async (_client, connection) => {
-      const setTokens = lastBufferedAtTokens !== undefined ? `, ${OM_LAST_BUFFERED_AT_TOKENS} = :lastBufferedAtTokens` : '';
+      const setTokens =
+        lastBufferedAtTokens !== undefined ? `, ${OM_LAST_BUFFERED_AT_TOKENS} = :lastBufferedAtTokens` : '';
       const binds: Record<string, unknown> = {
         id,
         isBuffering: boolToNumber(isBuffering),
@@ -347,7 +382,11 @@ export async function setBufferingReflectionFlag(ctx: MemoryContext, id: string,
   await updateOMFlag(ctx, id, OM_IS_BUFFERING_REFLECTION, isBuffering, 'SET_BUFFERING_REFLECTION_FLAG');
 }
 
-export async function clearObservationalMemory(ctx: MemoryContext, threadId: string | null, resourceId: string): Promise<void> {
+export async function clearObservationalMemory(
+  ctx: MemoryContext,
+  threadId: string | null,
+  resourceId: string,
+): Promise<void> {
   try {
     const lookupKey = getOMKey(threadId, resourceId);
     await ctx.db.none(`DELETE FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)} WHERE ${OM_LOOKUP_KEY} = :lookupKey`, {
@@ -369,7 +408,10 @@ export async function setPendingMessageTokens(ctx: MemoryContext, id: string, to
   }
 }
 
-export async function updateObservationalMemoryConfig(ctx: MemoryContext, input: UpdateObservationalMemoryConfigInput): Promise<void> {
+export async function updateObservationalMemoryConfig(
+  ctx: MemoryContext,
+  input: UpdateObservationalMemoryConfigInput,
+): Promise<void> {
   try {
     await ctx.db.tx(async (_client, connection) => {
       // Lock current config before deep-merging so concurrent observers do not
@@ -525,7 +567,13 @@ export async function insertOMRecord(
   );
 }
 
-async function updateOMFlag(ctx: MemoryContext, id: string, column: string, value: boolean, operation: string): Promise<void> {
+async function updateOMFlag(
+  ctx: MemoryContext,
+  id: string,
+  column: string,
+  value: boolean,
+  operation: string,
+): Promise<void> {
   try {
     await updateOMColumns(ctx, id, operation, { [column]: boolToNumber(value) });
   } catch (error) {
@@ -534,7 +582,12 @@ async function updateOMFlag(ctx: MemoryContext, id: string, column: string, valu
   }
 }
 
-async function updateOMColumns(ctx: MemoryContext, id: string, operation: string, columns: Record<string, unknown>): Promise<void> {
+async function updateOMColumns(
+  ctx: MemoryContext,
+  id: string,
+  operation: string,
+  columns: Record<string, unknown>,
+): Promise<void> {
   await ctx.db.tx(async (_client, connection) => {
     const setParts = Object.keys(columns).map((column, index) => `${column} = :value${index}`);
     const binds = Object.fromEntries(Object.values(columns).map((value, index) => [`value${index}`, value]));

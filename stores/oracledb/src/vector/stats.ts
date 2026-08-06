@@ -37,7 +37,9 @@ export async function describeIndex(
   withConnection: WithConnection,
   { indexName }: DescribeIndexParams,
 ): Promise<IndexStats> {
-  return withConnection(async connection => getIndexInfo(registry, connection, indexName) as unknown as IndexStats).catch(error => {
+  return withConnection(
+    async connection => getIndexInfo(registry, connection, indexName) as unknown as IndexStats,
+  ).catch(error => {
     if (error instanceof MastraError) throw error;
     throw asMastraError('DESCRIBE_INDEX', 'FAILED', { indexName }, error);
   });
@@ -56,7 +58,9 @@ export async function getIndexStatus(
     const indexObjectName = indexNameForTable(indexInfo.tableName, 'VECTOR_IDX');
     const owner = ownerName ? normalizeIdentifier(ownerName, 'index owner name') : registry.schemaName;
     const ownerPredicate = owner ? ':ownerName' : "SYS_CONTEXT('USERENV','CURRENT_SCHEMA')";
-    const binds: BindParameters = owner ? { ownerName: owner, indexName: indexObjectName } : { indexName: indexObjectName };
+    const binds: BindParameters = owner
+      ? { ownerName: owner, indexName: indexObjectName }
+      : { indexName: indexObjectName };
     const result = await connection.execute<ObjectRow>(
       `
       SELECT
