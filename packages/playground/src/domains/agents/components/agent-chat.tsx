@@ -13,6 +13,10 @@ interface AvailableSuggestedPromptsOptions {
   isMessagesLoading: boolean;
 }
 
+/**
+ * Keeps existing-thread prompts hidden until message history has loaded, so
+ * they do not briefly appear before the conversation replaces the welcome UI.
+ */
 const getAvailableSuggestedPrompts = ({
   suggestedPrompts,
   isNewThread,

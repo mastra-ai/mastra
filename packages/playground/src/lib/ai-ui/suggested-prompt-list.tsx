@@ -7,6 +7,7 @@ interface SuggestedPromptListProps {
   prompts: string[];
 }
 
+/** Renders agent-configured prompts as chat actions that respect send permissions. */
 export const SuggestedPromptList = ({ prompts }: SuggestedPromptListProps) => {
   const send = useChatSend();
   const { isRunning, canSendWhileStreaming } = useChatRunning();
