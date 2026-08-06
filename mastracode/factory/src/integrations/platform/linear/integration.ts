@@ -1,6 +1,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -8,8 +9,10 @@ import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } f
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
+import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
@@ -354,6 +357,20 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       canComment: connection !== null && this.canPostComments(connection),
       checkedAt: Date.now(),
     };
+  }
+
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (process.env.MASTRACODE_LINEAR_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
+    const reconcile = attachLinearIssueReconciler(this as unknown as LinearIntegration, ctx);
+    if (!reconcile) return [];
+    const intervalMs = Number(process.env.MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS);
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {}),
+      }),
+    ];
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

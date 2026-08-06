@@ -47,6 +47,8 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
+import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { buildGithubRoutes } from './routes.js';
@@ -1110,15 +1112,21 @@ export class GithubIntegration implements FactoryIntegration {
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
-    const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
-    if (!reconcile) return [];
+    const pullRequests = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
+    const issues = attachGithubIssueReconciler(this, ctx);
     const intervalMs = Number(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    const interval = Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {};
     return [
-      new GithubReconcileWorker({
-        reconcile,
-        sourceControl: ctx.storage.sourceControl,
-        ...(Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {}),
-      }),
+      ...(pullRequests
+        ? [
+            new GithubReconcileWorker({
+              reconcile: pullRequests,
+              sourceControl: ctx.storage.sourceControl,
+              ...interval,
+            }),
+          ]
+        : []),
+      ...(issues ? [new IssueReconcileWorker({ integrationId: this.id, reconcile: issues, ...interval })] : []),
     ];
   }
 
