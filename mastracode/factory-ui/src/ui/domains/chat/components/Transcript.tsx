@@ -6,6 +6,7 @@ import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeB
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -37,6 +38,7 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { isTerminalInvocationState } from '../services/transcript';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { Markdown } from '../../../ui/Markdown';
 
@@ -741,37 +743,49 @@ export function TranscriptEntries({
     ),
   );
 
+  const renderEntry = (entry: TimelineEntry): ReactNode => {
+    switch (entry.kind) {
+      case 'message':
+        return (
+          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
+        );
+      case 'notice':
+        return <NoticeCard entry={entry} />;
+      case 'approval':
+        return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
+      case 'notification':
+        return <NotificationCard entry={entry} />;
+      case 'notification_summary':
+        return <NotificationSummaryCard entry={entry} />;
+      case 'suspension':
+        return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
+          <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+        ) : null;
+      case 'subagent':
+        return <SubagentCard entry={entry} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <>
       {entries.map(entry => {
-        switch (entry.kind) {
-          case 'message':
-            return (
-              <MessageBubble
-                key={entry.id}
-                entry={entry}
-                suspensions={suspensions}
-                isSubmitting={isSubmitting}
-                onRespond={onRespond}
-              />
-            );
-          case 'notice':
-            return <NoticeCard key={entry.id} entry={entry} />;
-          case 'approval':
-            return <ApprovalCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
-          case 'notification':
-            return <NotificationCard key={entry.id} entry={entry} />;
-          case 'notification_summary':
-            return <NotificationSummaryCard key={entry.id} entry={entry} />;
-          case 'suspension':
-            return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
-              <SuspensionCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-            ) : null;
-          case 'subagent':
-            return <SubagentCard key={entry.id} entry={entry} />;
-          default:
-            return null;
-        }
+        const rendered = renderEntry(entry);
+        if (!rendered) return null;
+
+        return (
+          <MessageScrollerItem
+            key={entry.id}
+            messageId={entry.id}
+            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
+            // Estimated off-screen heights would make the prepend anchor restore
+            // the wrong offset — measure the real thing.
+            className="[content-visibility:visible]"
+          >
+            {rendered}
+          </MessageScrollerItem>
+        );
       })}
     </>
   );
@@ -983,17 +997,30 @@ function FileAttachment({ part }: { part: FilePart }) {
   return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
+/** Terminal status carried by the persisted part, if it reached one. */
+function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation']): 'done' | 'error' | undefined {
+  if (!isTerminalInvocationState(invocation.state)) return undefined;
+  if (invocation.state !== 'result') return 'error';
+  return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
+}
+
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
   const invocation = part.toolInvocation;
-  const failed = invocation.state === 'output-error' || invocation.state === 'output-denied';
   const persistedResult = 'result' in invocation ? invocation.result : undefined;
+  // Persisted terminal state beats the live overlay: `tool_end` can be lost in
+  // an SSE gap (no server replay), and a terminal part never regresses — the
+  // overlay's 'running' would otherwise spin forever.
+  const terminalStatus = terminalInvocationStatus(invocation);
+  const result = terminalStatus
+    ? (persistedResult ?? invocation.errorText ?? runtime?.result)
+    : (runtime?.result ?? persistedResult ?? invocation.errorText);
   return {
     toolCallId: invocation.toolCallId,
     toolName: invocation.toolName,
     argsText: runtime?.argsText ?? '',
     args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
-    status: runtime?.status ?? (failed ? 'error' : invocation.state === 'result' ? 'done' : 'running'),
-    result: runtime?.result ?? persistedResult ?? invocation.errorText,
+    status: terminalStatus ?? runtime?.status ?? 'running',
+    result,
     output: runtime?.output ?? '',
   };
 }

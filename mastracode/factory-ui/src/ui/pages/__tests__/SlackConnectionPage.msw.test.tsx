@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { ConnectedChannelAccount } from '../../domains/settings/services/channelAccounts';
+import { OverlaysProvider } from '../../lib/overlays';
 import { SlackConnectionPage } from '../SlackConnectionPage';
 
 const slackLink: ConnectedChannelAccount = {
@@ -42,16 +43,18 @@ function renderPage(slackWorkItemsEnabled = false) {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/settings/connections/slack']}>
       <MainSidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
-        <Routes>
-          <Route path="/factories/:factoryId/settings/connections/slack" element={<SlackConnectionPage />} />
-        </Routes>
+        <OverlaysProvider>
+          <Routes>
+            <Route path="/factories/:factoryId/settings/connections/slack" element={<SlackConnectionPage />} />
+          </Routes>
+        </OverlaysProvider>
       </MainSidebarProvider>
     </MemoryRouter>,
   );
 }
 
 describe('SlackConnectionPage', () => {
-  it('given Slack is not configured on the server, when rendered, then it names the missing env instead of a parse error', async () => {
+  it('given an old server with no channel route, when rendered, then it shows the not-configured card instead of a parse error', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
         HttpResponse.html('<!doctype html><html><body>app shell</body></html>'),
@@ -61,8 +64,23 @@ describe('SlackConnectionPage', () => {
     renderPage();
 
     expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/^Missing required environment variables: SLACK_APP_SIGNING_SECRET/)).toBeInTheDocument();
+    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
+  });
+
+  it('given the server reports the Slack integration is not registered, when rendered, then it states the fact without naming env vars', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('Not configured')).toBeInTheDocument();
+    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(screen.queryByText(/SLACK_APP_SIGNING_SECRET/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
 

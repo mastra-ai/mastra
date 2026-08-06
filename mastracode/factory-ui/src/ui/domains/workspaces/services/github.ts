@@ -622,13 +622,18 @@ export interface FactoryUserSession {
   updatedAt: string;
 }
 
-export async function listUserSessions(baseUrl: string, projectRepositoryId: string): Promise<FactoryUserSession[]> {
+export async function listUserSessions(
+  baseUrl: string,
+  projectRepositoryId: string,
+  signal?: AbortSignal,
+): Promise<FactoryUserSession[]> {
   const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
+    signal,
   });
-  if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
-  return ((await res.json()) as { sessions: FactoryUserSession[] }).sessions;
+  const body = await readJsonOrThrow<{ sessions: FactoryUserSession[] }>(res, 'Failed to list sessions');
+  return body.sessions;
 }
 
 export async function createUserSession(

@@ -1,4 +1,5 @@
 export type SettingsSection =
+  | 'account'
   | 'preferences'
   | 'factory'
   | 'connections'
@@ -8,6 +9,7 @@ export type SettingsSection =
   | 'behavior';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
+  account: 'My account',
   preferences: 'Preferences',
   factory: 'Factory',
   connections: 'Connections',

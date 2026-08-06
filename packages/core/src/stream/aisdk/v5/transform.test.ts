@@ -613,6 +613,42 @@ describe('convertFullStreamChunkToMastra', () => {
       });
     });
 
+    it('should forward text-delta chunks that only carry providerMetadata', () => {
+      const chunk: StreamPart = {
+        type: 'text-delta',
+        id: 'text-1',
+        delta: '',
+        providerMetadata: {
+          google: { thoughtSignature: 'sig-abc' },
+        },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'text-1',
+          providerMetadata: {
+            google: { thoughtSignature: 'sig-abc' },
+          },
+          text: '',
+        },
+      });
+    });
+
+    it('should drop empty text-delta chunks with no providerMetadata', () => {
+      const chunk: StreamPart = {
+        type: 'text-delta',
+        id: 'text-1',
+        delta: '',
+      };
+
+      expect(convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' })).toBeUndefined();
+    });
+
     it('should handle finish chunks correctly', () => {
       const chunk: StreamPart = {
         type: 'finish',

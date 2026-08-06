@@ -8,7 +8,7 @@ import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatHeader } from '../../chat/components/ChatHeader';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { useWorkspaceFiles } from '../../workspace-viewer/context/useWorkspaceFiles';
-import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
+import { relatedWorkItems, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
@@ -19,21 +19,15 @@ function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): Work
     .at(-1);
 }
 
-function itemNumber(item: WorkItem): string | undefined {
-  const number = item.metadata.number;
-  if (typeof number === 'number' || typeof number === 'string') return String(number);
-  return item.sourceKey?.split(':').at(-1) || undefined;
-}
-
 function sessionTitle(item: WorkItem): string {
-  const number = itemNumber(item);
+  const number = workItemNumber(item);
   if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
   if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
   return item.title;
 }
 
 function externalWorkItemLabel(item: WorkItem): string {
-  const number = itemNumber(item);
+  const number = workItemNumber(item);
   if (item.source === 'github-pr') return number ? `PR #${number}` : 'Pull request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {

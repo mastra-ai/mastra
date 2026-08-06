@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
+import { createSignal } from '../../agent/signals';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
 import { MemoryStorage } from '../../storage';
@@ -638,6 +639,53 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).toHaveBeenCalledWith({
         messages: [expect.objectContaining({ id: 'msg-user', role: 'user' })],
       });
+    });
+
+    it('should drop transient signals but keep normal signals when persisting', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const transientSignal = createSignal({
+        id: 'sig-transient',
+        type: 'reactive',
+        contents: 'Steering reminder — not retained',
+        transient: true,
+      }).toDBMessage({ threadId: 'thread-1' });
+      const persistedSignal = createSignal({
+        id: 'sig-persisted',
+        type: 'reactive',
+        contents: 'Regular signal — stored',
+      }).toDBMessage({ threadId: 'thread-1' });
+
+      const messages: MastraDBMessage[] = [
+        transientSignal,
+        persistedSignal,
+        {
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+          id: 'msg-user',
+          createdAt: new Date(),
+        },
+      ];
+
+      await processor.persistMessages({ messages, threadId: 'thread-1' });
+
+      const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      const savedIds = savedMessages.map(m => m.id);
+      expect(savedIds).toContain('sig-persisted');
+      expect(savedIds).toContain('msg-user');
+      expect(savedIds).not.toContain('sig-transient');
     });
 
     it('should preserve dynamic system reminders in persisted non-system messages to avoid cache invalidation and re-injection', async () => {

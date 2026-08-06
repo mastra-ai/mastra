@@ -2,8 +2,10 @@ import type { ComponentPropsWithoutRef } from 'react';
 import { forwardRef } from 'react';
 
 import { ScrollArea } from '../ScrollArea';
+import { useComposerPointerAngle } from './use-composer-pointer-angle';
 import { cn } from '@/lib/utils';
 
+import './composer-ring.css';
 import './composer-sending.css';
 
 export type ComposerProps = ComponentPropsWithoutRef<'form'>;
@@ -41,6 +43,30 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
   ),
 );
 ComposerBox.displayName = 'ComposerBox';
+
+export interface ComposerRingProps extends ComponentPropsWithoutRef<'div'> {
+  busy?: boolean;
+}
+
+/**
+ * Edge for the composer box it wraps: a conic arc lit under the cursor on hover,
+ * spinning on its own while the agent runs, never both at once. Wraps rather
+ * than decorates because the box clips its overflow and would cut the arc off.
+ */
+export const ComposerRing = ({ busy = false, className, ...props }: ComposerRingProps) => {
+  const ringRef = useComposerPointerAngle(!busy);
+
+  return (
+    <div
+      ref={ringRef}
+      data-slot="composer-ring"
+      data-busy={busy ? 'true' : 'false'}
+      className={cn('composer-ring mx-auto w-full max-w-3xl', className)}
+      {...props}
+    />
+  );
+};
+ComposerRing.displayName = 'ComposerRing';
 
 export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
   ({ className, ...props }, ref) => (
