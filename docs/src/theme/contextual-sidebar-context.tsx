@@ -1,4 +1,4 @@
-import React, { createContext, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
+import React, { createContext, type ReactNode, useContext, useEffect, useState } from 'react'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { useLocation } from '@docusaurus/router'
 import type { PropSidebarItem, PropSidebarItemCategory } from '@docusaurus/plugin-content-docs'
@@ -54,38 +54,56 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
   const {
     siteConfig: { url: siteUrl },
   } = useDocusaurusContext()
-  const initialPathname = useRef(pathname).current
-  const [initialSidebarEnabled, setInitialSidebarEnabled] = useState(true)
+  const [suppressedPathnames, setSuppressedPathnames] = useState(() => new Set<string>())
   const [sidebarState, setSidebarState] = useState<ContextualSidebarState>()
   const observedState = observeContextualSidebarPathname(sidebarState, pathname)
 
   useEffect(() => {
     if (observedState !== sidebarState) {
+      if (!observedState && sidebarState && pathname === sidebarState.entryPathname) {
+        setSuppressedPathnames(currentPathnames => {
+          const nextPathnames = new Set(currentPathnames)
+          for (const destinationPathname of sidebarState.destinationPathnames) {
+            nextPathnames.add(destinationPathname)
+          }
+          return nextPathnames
+        })
+      }
       setSidebarState(observedState)
     }
-  }, [observedState, sidebarState])
+  }, [observedState, pathname, sidebarState])
 
   const activeSidebar = isContextualSidebarVisible(observedState, pathname) ? observedState : undefined
 
   const value: ContextualSidebarContextValue = {
     activateSidebar: state => {
-      setInitialSidebarEnabled(false)
+      setSuppressedPathnames(currentPathnames => {
+        if (!currentPathnames.has(pathname)) return currentPathnames
+        const nextPathnames = new Set(currentPathnames)
+        nextPathnames.delete(pathname)
+        return nextPathnames
+      })
       setSidebarState(state)
     },
     clearSidebar: () => {
-      setInitialSidebarEnabled(false)
+      setSuppressedPathnames(currentPathnames => new Set(currentPathnames).add(pathname))
       setSidebarState(undefined)
     },
     enterSidebar: category => {
       const nextState = enterContextualSidebar(category, pathname, siteUrl)
       if (nextState) {
-        setInitialSidebarEnabled(false)
+        setSuppressedPathnames(currentPathnames => {
+          if (!currentPathnames.has(pathname)) return currentPathnames
+          const nextPathnames = new Set(currentPathnames)
+          nextPathnames.delete(pathname)
+          return nextPathnames
+        })
         setSidebarState(nextState)
       }
     },
     resolveSidebar: sidebar => {
       let state = activeSidebar
-      if (!state && initialSidebarEnabled && pathname === initialPathname) {
+      if (!state && !suppressedPathnames.has(pathname)) {
         const category = findInitialContextualSidebarCategory(sidebar, pathname, siteUrl)
         if (category) {
           state = enterContextualSidebar(category, pathname, siteUrl)

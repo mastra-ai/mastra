@@ -318,6 +318,26 @@ test.describe('Contextual sidebar', () => {
     expect(getErrors(), 'JS errors during contextual sidebar navigation').toEqual([])
   })
 
+  test('desktop: body links switch to the destination contextual sidebar', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
+
+    await page.goto('/docs/workflows/overview', { waitUntil: 'domcontentloaded' })
+    const workflowsPane = visibleSidebarPane(page, 'contextual')
+    await expect(workflowsPane).toBeVisible()
+    await expect(workflowsPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Workflows')
+
+    await page.locator('main').getByRole('link', { name: 'workflow runners', exact: true }).click()
+    await expect(page).toHaveURL('/docs/deployment/workflow-runners')
+
+    const deploymentPane = visibleSidebarPane(page, 'contextual')
+    await expect(deploymentPane).toBeVisible()
+    await expect(deploymentPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Deployment')
+    await expect(deploymentPane.locator('a.menu__link[href="/docs/deployment/workflow-runners"]')).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
   test('desktop: direct destination loads initialize context while later history remains transient', async ({
     page,
     isMobile,
