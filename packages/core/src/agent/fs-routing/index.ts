@@ -454,27 +454,48 @@ function resolveInstructions(
  * at all never reaches here; the bundler fails first, naming the same file.)
  */
 function assertValidInstructionsModule(name: string, instructions: DynamicArgument<AgentInstructions>): void {
-  // `AgentInstructions` is `SystemMessage`, which covers a string, an array of
-  // strings or system messages, and a single system-message object — so the
-  // check accepts any object carrying `content` rather than objects wholesale.
   const isUsable =
     typeof instructions === 'function' ||
-    typeof instructions === 'string' ||
-    Array.isArray(instructions) ||
-    (typeof instructions === 'object' && instructions !== null && 'content' in instructions);
+    (Array.isArray(instructions)
+      ? instructions.length > 0 && instructions.every(isUsableSystemMessage)
+      : isUsableSystemMessage(instructions));
 
   if (isUsable) {
     return;
   }
 
-  const received = instructions === null ? 'null' : typeof instructions;
+  const received = describeInstructionsExport(instructions);
   throw new MastraError({
     id: 'AGENT_FS_ROUTING_INSTRUCTIONS_INVALID',
     domain: ErrorDomain.AGENT,
     category: ErrorCategory.USER,
     details: { agentName: name, received },
-    text: `Agent "${name}": agents/${name}/instructions.ts must default-export a string, a system message, or a function returning one, but got ${received}.`,
+    text: `Agent "${name}": agents/${name}/instructions.ts must default-export a string, a system message, an array of either, or a function returning one, but got ${received}.`,
   });
+}
+
+/**
+ * One entry of an `AgentInstructions` value: a bare string, or a system message
+ * whose `content` is a string. Anything else reaches the model as an empty
+ * string, so the entries have to be checked rather than just the container —
+ * `[123]` is exactly as mute as `123`.
+ */
+function isUsableSystemMessage(value: unknown): boolean {
+  return (
+    typeof value === 'string' ||
+    (typeof value === 'object' && value !== null && typeof (value as { content?: unknown }).content === 'string')
+  );
+}
+
+/** Name what an unusable default export actually was, for the error text. */
+function describeInstructionsExport(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0 ? 'an empty array' : 'an array holding something other than strings or system messages';
+  }
+  return typeof value;
 }
 
 function mergeTools(

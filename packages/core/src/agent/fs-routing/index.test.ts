@@ -202,6 +202,15 @@ describe('assembleAgentFromFsEntry', () => {
       expect(await agent.getInstructions()).toBe('only module');
     });
 
+    it('accepts an array of strings and system messages', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: ['be helpful', { role: 'system', content: 'be brief' }],
+      });
+      expect(await agent.getInstructions()).toEqual(['be helpful', { role: 'system', content: 'be brief' }]);
+    });
+
     it('throws when the default export is not a usable instructions value', () => {
       expect(() =>
         assembleAgentFromFsEntry({
@@ -209,7 +218,24 @@ describe('assembleAgentFromFsEntry', () => {
           config: { model: 'openai/gpt-4o' },
           instructions: { prompt: 'wrong shape' } as never,
         }),
-      ).toThrow(/must default-export a string, a system message, or a function/i);
+      ).toThrow(/must default-export a string, a system message, an array of either, or a function/i);
+    });
+
+    // Every one of these reaches the model as an empty string, so the container
+    // being the right shape isn't enough to call the export usable.
+    it.each([
+      ['an array of non-messages', [123, 456], /array holding something other than strings or system messages/i],
+      ['an empty array', [], /an empty array/i],
+      ['a system message with non-string content', { role: 'system', content: 42 }, /but got object/i],
+      ['a message inside an array with non-string content', [{ role: 'system', content: 42 }], /array holding/i],
+    ])('throws for %s', (_label, instructions, expected) => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: instructions as never,
+        }),
+      ).toThrow(expected);
     });
 
     // A null default export is a mistake in a file whose only job is to export
