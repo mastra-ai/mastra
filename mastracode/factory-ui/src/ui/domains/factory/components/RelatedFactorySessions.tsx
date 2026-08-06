@@ -1,12 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleDot, ExternalLink, Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { ChatHeader } from '../../chat/components/ChatHeader';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { useWorkspaceFiles } from '../../workspace-viewer/context/useWorkspaceFiles';
-import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
+import { relatedWorkItems, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
@@ -17,21 +19,15 @@ function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): Work
     .at(-1);
 }
 
-function itemNumber(item: WorkItem): string | undefined {
-  const number = item.metadata.number;
-  if (typeof number === 'number' || typeof number === 'string') return String(number);
-  return item.sourceKey?.split(':').at(-1) || undefined;
-}
-
 function sessionTitle(item: WorkItem): string {
-  const number = itemNumber(item);
+  const number = workItemNumber(item);
   if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
   if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
   return item.title;
 }
 
 function externalWorkItemLabel(item: WorkItem): string {
-  const number = itemNumber(item);
+  const number = workItemNumber(item);
   if (item.source === 'github-pr') return number ? `PR #${number}` : 'Pull request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {
@@ -62,32 +58,30 @@ export function FactorySessionHeader() {
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
-
-  if (!currentItem && !workspacePath) return null;
-
+  const hasSession = Boolean(currentItem || workspacePath);
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
 
   return (
-    <header
-      role="region"
-      className="border-border1 flex w-full min-w-0 items-center gap-2 border-b px-3 py-2 md:px-5"
-      aria-label="Factory session"
-    >
-      {currentItem ? <WorkItemBreadcrumb item={currentItem} factoryId={factoryId} /> : null}
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        {currentItem && factoryId && threadId ? (
-          <WorkItemActions
-            item={currentItem}
-            allItems={allItems}
-            livePaths={livePaths}
-            factoryId={factoryId}
-            threadId={threadId}
-            projectRepositoryId={projectRepositoryId}
-          />
-        ) : null}
-        <WorkspaceFilesToggle />
-      </div>
-    </header>
+    <ChatHeader className={cn(hasSession && 'border-border1 border-b md:px-5')}>
+      {hasSession ? (
+        <div role="region" aria-label="Factory session" className="flex min-w-0 flex-1 items-center gap-2">
+          {currentItem ? <WorkItemBreadcrumb item={currentItem} factoryId={factoryId} /> : null}
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {currentItem && factoryId && threadId ? (
+              <WorkItemActions
+                item={currentItem}
+                allItems={allItems}
+                livePaths={livePaths}
+                factoryId={factoryId}
+                threadId={threadId}
+                projectRepositoryId={projectRepositoryId}
+              />
+            ) : null}
+            <WorkspaceFilesToggle />
+          </div>
+        </div>
+      ) : null}
+    </ChatHeader>
   );
 }
 

@@ -24,6 +24,15 @@ function renderNavigation() {
 afterEach(() => window.localStorage.removeItem(STORAGE_KEY));
 
 describe('SettingsNavigation', () => {
+  it('links to My account settings', () => {
+    renderNavigation();
+
+    expect(screen.getByRole('link', { name: 'My account' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/account',
+    );
+  });
+
   it('separates code repositories, work intake, and agent settings into named groups', () => {
     renderNavigation();
     expect(screen.getByRole('link', { name: 'Factory' })).toHaveAttribute('href', '/factories/fp-1/settings/factory');

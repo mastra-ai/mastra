@@ -54,7 +54,7 @@ const DEFAULT_TEMPLATE: Template = {
   slug: 'template-agent-harness',
   agents: ['agent'],
   mcp: [],
-  tools: ['web-fetch'],
+  tools: [],
   networks: [],
   workflows: [],
 };
@@ -89,6 +89,7 @@ export interface CreateOptions {
   timeout?: number;
   analytics?: PosthogAnalytics;
   resolveVersionTag?: () => Promise<string | undefined>;
+  install?: boolean;
 }
 
 type PlatformSetupResult =
@@ -218,6 +219,7 @@ function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOpti
     git: args.git ?? true,
     template: args.template,
     timeout: args.timeout ?? 60_000,
+    install: args.install ?? true,
   };
 }
 
@@ -331,6 +333,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   process.on('SIGTERM', handleSigterm);
 
   let selectedApiKeyEnv: string | undefined;
+  let selectedApiKeyWritten = false;
   let materializationError: unknown;
 
   try {
@@ -364,20 +367,31 @@ export const create = async (args: CreateOptions): Promise<void> => {
           versionTag: versionTag ?? 'latest',
         });
         selectedApiKeyEnv = providerConfig.apiKeyEnv;
+        selectedApiKeyWritten = providerConfig.apiKeyWritten;
+        if (providerConfig.adaptationFailed) {
+          p.log.warn('Some provider setup could not be applied. Review the generated project before running it.');
+        }
         materializationController.signal.throwIfAborted();
       }
     }
 
-    if (observabilityEnabled) {
-      await installDependencies(
-        staging.projectPath,
-        packageManager,
-        options.timeout,
-        materializationController.signal,
-        true,
-      );
-    } else {
-      await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);
+    if (options.install) {
+      if (observabilityEnabled) {
+        await installDependencies(
+          staging.projectPath,
+          packageManager,
+          options.timeout,
+          materializationController.signal,
+          true,
+        );
+      } else {
+        await installDependencies(
+          staging.projectPath,
+          packageManager,
+          options.timeout,
+          materializationController.signal,
+        );
+      }
     }
     materializationController.signal.throwIfAborted();
     await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
@@ -401,13 +415,23 @@ export const create = async (args: CreateOptions): Promise<void> => {
   process.removeListener('SIGINT', handleSigint);
   process.removeListener('SIGTERM', handleSigterm);
 
-  if (interruptionSignal === 'SIGINT') cancelCreate();
+  if (interruptionSignal === 'SIGINT') {
+    if (observabilityEnabled) {
+      analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'cancelled' });
+    }
+    cancelCreate();
+  }
   if (interruptionSignal === 'SIGTERM') throw new Error('Operation terminated by SIGTERM');
   if (materializationError) throw materializationError;
   if (platformSetup?.status === 'cancelled') {
+    analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
     p.log.info('Skipping Mastra platform setup.');
   } else if (observabilityEnabled) {
-    p.log.success('Default template cloned and dependencies installed.');
+    p.log.success(
+      options.install
+        ? 'Default template cloned and dependencies installed.'
+        : 'Default template cloned. Dependency installation was skipped.',
+    );
   }
 
   const postSetup = await runPostCreateSetup({
@@ -444,12 +468,14 @@ export const create = async (args: CreateOptions): Promise<void> => {
       });
       platformEnvWritten = true;
       observabilitySummary = `${color.green('Mastra platform enabled.')}\n\nProject: ${color.cyan(result.projectName)} (${result.orgName})\nWrote ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} to ${color.cyan('.env')}.`;
+      analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'completed' });
     } catch (error) {
       platformError = error;
     }
   }
 
   if (platformError !== undefined) {
+    analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'failed' });
     const message = platformError instanceof Error ? platformError.message : 'Unknown error';
     try {
       await writeObservabilityEnv({ projectPath: targetPath });
@@ -463,7 +489,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
 
   if (mode === 'managed') {
     const apiKeySummary = llmApiKey
-      ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+      ? selectedApiKeyWritten
+        ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+        : `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
       : platformEnvWritten
         ? `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
         : `Copy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`;
