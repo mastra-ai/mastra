@@ -417,7 +417,9 @@ export type HttpServerDefinition = BaseServerOptions & {
    *   `'localhost:8080'`.
    * - Matching is exact and case-insensitive on the hostname. No wildcards.
    * - The URL scheme is NOT checked — matching is host-only, so `http://` and
-   *   `https://` URLs to an allowed host both pass.
+   *   `https://` URLs to an allowed host both pass. The `Authorization` header
+   *   is still dropped on any cross-origin redirect hop (scheme, host, or port
+   *   change), so a same-host scheme downgrade never re-sends credentials.
    * - An empty array (`allowedHosts: []`) denies all hosts.
    *
    * Enforcement strength varies by path:

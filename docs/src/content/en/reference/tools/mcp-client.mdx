@@ -280,7 +280,7 @@ When `forwardInstructions` is omitted (the default), instructions are still cach
 
 ### Subprocess environment for Stdio servers
 
-Stdio subprocesses do not inherit the full parent process environment. By default the subprocess environment starts from the MCP SDK's curated whitelist (POSIX: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`; Windows: `APPDATA`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `PATH`, `PROCESSOR_ARCHITECTURE`, `SYSTEMDRIVE`, `SYSTEMROOT`, `TEMP`, `USERNAME`, `USERPROFILE`), merged with any variables you set in `env`. Sensitive variables such as API keys are not inherited unless you pass them explicitly.
+Stdio subprocesses don't inherit the full parent process environment. By default the subprocess environment starts from the MCP SDK's curated whitelist (POSIX: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`; Windows: `APPDATA`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `PATH`, `PROCESSOR_ARCHITECTURE`, `SYSTEMDRIVE`, `SYSTEMROOT`, `TEMP`, `USERNAME`, `USERPROFILE`), merged with any variables you set in `env`. Sensitive variables such as API keys aren't inherited unless you pass them explicitly.
 
 For stricter isolation, set `inheritDefaultEnv: false` so only your configured `env` entries reach the subprocess:
 
@@ -296,7 +296,7 @@ const mcp = new MCPClient({
 })
 ```
 
-Variables you place in `env` are forwarded verbatim — treat server configurations that come from untrusted sources (for example, user-supplied config files) as untrusted input.
+Variables you place in `env` are forwarded verbatim, so treat server configurations that come from untrusted sources (for example, user-supplied config files) as untrusted input.
 
 ### Restricting outbound hosts with `allowedHosts`
 
@@ -315,16 +315,16 @@ const mcp = new MCPClient({
 
 Enforcement details:
 
-- On the default fetch path, requests to disallowed hosts — including every redirect hop — are blocked **before** they are sent. Redirects are followed manually (up to 5 hops) so each hop is validated, and the `Authorization` header is not carried across hops to a different host.
-- When you supply a custom `fetch` (or a custom `eventSourceInit.fetch`), the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded if it landed on a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
+- On the default fetch path, requests to disallowed hosts, including every redirect hop, are blocked **before** they're sent. Redirects are followed manually (up to 5 hops) so each hop is validated, and the `Authorization` header isn't carried across hops to a different origin (any scheme, host, or port change drops it, matching standard fetch behavior).
+- When you supply a custom `fetch` (or a custom `eventSourceInit.fetch`), the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
 - OAuth requests made through `authProvider` (authorization server metadata discovery, token exchange, refresh) are also validated. If your authorization server runs on a different host than the MCP server, add that host to `allowedHosts` too.
 - A blocked host fails the connection with a clear error and is never retried by the reconnect logic.
 
-`allowedHosts` is intentionally simple: exact host matching, no wildcards, scheme not checked. If you need richer policy (scheme checks, IP-range rules), supply a custom `fetch` implementation — it is invoked for every request the client makes.
+`allowedHosts` is intentionally minimal: it matches exact hosts and doesn't support wildcards or scheme checks. If you need richer policy (scheme checks, IP-range rules), supply a custom `fetch` implementation, which is invoked for every request the client makes.
 
 ### Treat tool responses as untrusted input
 
-Tool results returned by MCP servers flow into your agent's context as model input. A malicious or compromised server can use tool output for prompt injection. The transport client does not sanitize tool responses — sanitization policy belongs at the agent layer, where Mastra's [input and output processors](/docs/agents/processors) let you inspect, transform, or block content before and after it reaches the model. Combine this with `requireToolApproval` and the `forwardInstructions` security note above when working with third-party servers.
+Tool results returned by MCP servers flow into your agent's context as model input. A malicious or compromised server can use tool output for prompt injection. The transport client doesn't sanitize tool responses: sanitization policy belongs at the agent layer, where Mastra's [input and output processors](/docs/agents/processors) let you inspect, transform, or block content before and after it reaches the model. Combine this with `requireToolApproval` and the `forwardInstructions` security note above when working with third-party servers.
 
 ## Methods
 

@@ -18,12 +18,35 @@ function normalizeHost(host: string): string {
  * and the eventsource package's `FetchLikeResponse` (used for a caller-supplied
  * `eventSourceInit.fetch`) satisfy it.
  */
-type ResponseLike = { readonly url: string };
+type ResponseLike = { readonly url: string; readonly body?: unknown };
+
+/** Best-effort release of a discarded response body so its socket is not left undrained. */
+function cancelResponseBody(response: ResponseLike): void {
+  const body = response.body as { cancel?: () => Promise<unknown> } | null | undefined;
+  if (typeof body?.cancel !== 'function') {
+    return;
+  }
+  try {
+    void Promise.resolve(body.cancel()).catch(() => {});
+  } catch {
+    // some Response implementations throw synchronously on cancel
+  }
+}
 
 function isHostAllowed(host: string, allowedHosts: readonly string[]): boolean {
   const normalized = normalizeHost(host);
   return allowedHosts.some(allowed => normalizeHost(allowed) === normalized);
 }
+
+/**
+ * Marker phrase embedded in every policy error's message. The `eventsource`
+ * package flattens errors thrown from the SSE stream's fetch into a plain
+ * message string (its internal `flattenError`), and the SDK re-wraps that
+ * string as `SseError` — the `MastraError` identity does not survive that
+ * boundary, but the message text does. {@link isUrlPolicyError} falls back to
+ * matching this marker.
+ */
+const URL_POLICY_ERROR_MARKER = 'allowedHosts policy';
 
 /**
  * Build the policy-violation error. The message deliberately avoids every
@@ -84,6 +107,7 @@ export function assertResponseHostAllowed<R extends ResponseLike>(response: R, a
   }
   const parsed = new URL(response.url);
   if (!isHostAllowed(parsed.host, allowedHosts)) {
+    cancelResponseBody(response);
     throw hostNotAllowedError(
       parsed.host,
       allowedHosts,
@@ -94,9 +118,40 @@ export function assertResponseHostAllowed<R extends ResponseLike>(response: R, a
 }
 
 /**
+ * True when the error is one of the allowedHosts policy errors. Policy
+ * violations are final: they must never trigger the SSE fallback or the
+ * reconnect machinery, because retrying a blocked host cannot succeed.
+ *
+ * Matches by `MastraError` id when the identity is intact, and by the
+ * {@link URL_POLICY_ERROR_MARKER} message marker for errors that crossed the
+ * eventsource boundary (which flattens thrown errors to message strings) or
+ * were re-wrapped by another layer.
+ */
+const URL_POLICY_ERROR_IDS = new Set([
+  'MCP_CLIENT_HOST_NOT_ALLOWED',
+  'MCP_CLIENT_TOO_MANY_REDIRECTS',
+  'MCP_CLIENT_REDIRECT_MISSING_LOCATION',
+  'MCP_CLIENT_REDIRECT_BODY_NOT_REPLAYABLE',
+]);
+
+export function isUrlPolicyError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error instanceof MastraError && URL_POLICY_ERROR_IDS.has(error.id)) {
+    return true;
+  }
+  return error.message.includes(URL_POLICY_ERROR_MARKER);
+}
+
+/**
  * Wrap a caller-supplied fetch with the allowedHosts policy: the request URL is
  * validated before the wrapped fetch runs, and the response is validated
  * post-hoc via {@link assertResponseHostAllowed}.
+ *
+ * Variadic over the trailing arguments deliberately: the same wrapper serves
+ * the 3-arg `MastraFetchLike` (url, init, requestContext) and the 2-arg
+ * eventsource stream fetch (url, init).
  */
 export function wrapFetchWithHostPolicy<Args extends [url: string | URL, ...rest: any[]], R extends ResponseLike>(
   fetchImpl: (...args: Args) => Promise<R>,
@@ -119,7 +174,12 @@ export function wrapFetchWithHostPolicy<Args extends [url: string | URL, ...rest
  * - 303 switches the method to GET and drops the body; 301/302 on POST do the same.
  * - 307/308 preserve method and body; a non-replayable body (anything other
  *   than a string) throws rather than silently re-sending an empty body.
- * - The `Authorization` header is not carried across hops to a different host.
+ * - 301/302 on non-POST methods preserve the method and body, matching
+ *   platform behavior.
+ * - The `Authorization` header is not carried across hops to a different
+ *   origin (scheme, host, or port change), matching the WHATWG Fetch
+ *   credential-stripping rule — same host over a downgraded scheme still
+ *   drops the header.
  * - A redirect status with no `Location` header throws.
  * - More than {@link MAX_REDIRECT_HOPS} hops throws.
  */
@@ -146,7 +206,7 @@ export async function fetchFollowingAllowedRedirects(
         id: 'MCP_CLIENT_REDIRECT_MISSING_LOCATION',
         domain: ErrorDomain.MCP,
         category: ErrorCategory.THIRD_PARTY,
-        text: `Received a ${response.status} redirect with no Location header from "${currentUrl.host}".`,
+        text: `Received a ${response.status} redirect with no Location header from "${currentUrl.host}" while following redirects under the allowedHosts policy.`,
       });
     }
     if (redirectsFollowed >= MAX_REDIRECT_HOPS) {
@@ -154,12 +214,15 @@ export async function fetchFollowingAllowedRedirects(
         id: 'MCP_CLIENT_TOO_MANY_REDIRECTS',
         domain: ErrorDomain.MCP,
         category: ErrorCategory.THIRD_PARTY,
-        text: `Exceeded the maximum of ${MAX_REDIRECT_HOPS} redirect hops while requesting "${String(url)}".`,
+        // Interpolate only the host, not the full URL: a URL's path/query could
+        // contain substrings (e.g. "sessionId") that isReconnectableMCPError
+        // matches, which would misclassify this terminal failure as transient.
+        text: `Exceeded the maximum of ${MAX_REDIRECT_HOPS} redirect hops while requesting host "${currentUrl.host}" under the allowedHosts policy.`,
       });
     }
 
     // Release the redirect response's body so its socket can be reused.
-    void response.body?.cancel().catch(() => {});
+    cancelResponseBody(response);
 
     const nextUrl = new URL(location, currentUrl);
     assertHostAllowed(nextUrl, allowedHosts, `A redirect from "${currentUrl.host}" pointed at it; the hop was not followed.`);
@@ -175,11 +238,14 @@ export async function fetchFollowingAllowedRedirects(
         id: 'MCP_CLIENT_REDIRECT_BODY_NOT_REPLAYABLE',
         domain: ErrorDomain.MCP,
         category: ErrorCategory.USER,
-        text: `Cannot follow a ${response.status} redirect: the request body is not replayable (only string bodies can be re-sent).`,
+        text: `Cannot follow a ${response.status} redirect under the allowedHosts policy: the request body is not replayable (only string bodies can be re-sent).`,
       });
     }
 
-    if (normalizeHost(nextUrl.host) !== normalizeHost(currentUrl.host)) {
+    // WHATWG Fetch strips Authorization when the ORIGIN (scheme + host + port)
+    // changes — host alone is not enough: a same-host https→http downgrade must
+    // also drop the header or the bearer token is re-sent in cleartext.
+    if (nextUrl.origin !== currentUrl.origin) {
       headers.delete('authorization');
     }
 

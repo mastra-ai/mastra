@@ -62,8 +62,8 @@ import type {
 } from './types';
 import {
   assertHostAllowed,
-  assertResponseHostAllowed,
   fetchFollowingAllowedRedirects,
+  isUrlPolicyError,
   wrapFetchWithHostPolicy,
 } from './url-policy';
 
@@ -469,19 +469,16 @@ export class InternalMastraMCPClient extends MastraBase {
     // When allowedHosts is set, the same wrapper enforces the host policy: on the default
     // path via manual redirect following (hops blocked before being sent), and on the
     // custom-fetch path via a pre-request check plus post-hoc response validation.
+    const policyUserFetch =
+      userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
       const requestContext = this.operationContextStore.getStore() ?? null;
       const executeFetch = (): Promise<Response> => {
         if (allowedHosts === undefined) {
           return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
         }
-        if (userFetch) {
-          const guardedUserFetch = async () => {
-            assertHostAllowed(requestUrl, allowedHosts);
-            const response = await userFetch(requestUrl, init, requestContext);
-            return assertResponseHostAllowed(response, allowedHosts);
-          };
-          return guardedUserFetch();
+        if (policyUserFetch) {
+          return policyUserFetch(requestUrl, init, requestContext);
         }
         return fetchFollowingAllowedRedirects(
           (u: string | URL, i?: RequestInit) => globalThis.fetch(u, i),
@@ -524,6 +521,13 @@ export class InternalMastraMCPClient extends MastraBase {
         // Guarded on authProvider so servers without one never carry an auth state.
         if (authProvider && error instanceof UnauthorizedError) {
           this.markNeedsAuth(streamableTransport);
+          throw error;
+        }
+
+        // A policy violation is final: retrying the blocked host over SSE cannot
+        // succeed, and falling through would bury the policy error under a generic
+        // "could not connect" message.
+        if (isUrlPolicyError(error)) {
           throw error;
         }
 
@@ -572,6 +576,10 @@ export class InternalMastraMCPClient extends MastraBase {
       } catch (sseError) {
         if (authProvider && sseError instanceof UnauthorizedError) {
           this.markNeedsAuth(sseTransport);
+          throw sseError;
+        }
+        // Surface policy violations directly instead of the generic connect error.
+        if (isUrlPolicyError(sseError)) {
           throw sseError;
         }
         this.log(

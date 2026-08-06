@@ -241,6 +241,66 @@ describe('fetchFollowingAllowedRedirects', () => {
     expect((sameHost.mock.calls[1]![1]!.headers as Headers).get('authorization')).toBe('Bearer secret');
   });
 
+  it('strips the Authorization header on a same-host scheme downgrade (origin change)', async () => {
+    // WHATWG Fetch strips credentials when the ORIGIN changes, not just the host:
+    // https://a.example -> http://a.example must not re-send the bearer token in cleartext.
+    const downgrade = vi
+      .fn()
+      .mockResolvedValueOnce(redirectResponse(302, 'http://a.example/next'))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+    await fetchFollowingAllowedRedirects(
+      downgrade,
+      'https://a.example/x',
+      { headers: { authorization: 'Bearer secret' } },
+      allowed,
+    );
+    expect((downgrade.mock.calls[1]![1]!.headers as Headers).get('authorization')).toBeNull();
+  });
+
+  it('throws only non-reconnectable errors from the redirect loop', async () => {
+    // Every terminal redirect-loop error must dodge isReconnectableMCPError, or a
+    // final failure gets misclassified as transient and fed to the reconnect
+    // machinery. The hop-overflow case is the sharpest: the request URL contains
+    // "sessionId" (as legacy SSE POST endpoints do), which would match the
+    // reconnectable "session" substring if the message interpolated the full URL.
+    const alwaysRedirect = vi.fn().mockResolvedValue(redirectResponse(302, 'https://a.example/loop'));
+    const overflow = await fetchFollowingAllowedRedirects(
+      alwaysRedirect,
+      'https://a.example/messages?sessionId=abc123',
+      undefined,
+      allowed,
+    ).then(
+      () => undefined,
+      e => e,
+    );
+    expect(overflow).toBeInstanceOf(Error);
+    expect(isReconnectableMCPError(overflow)).toBe(false);
+
+    const noLocation = await fetchFollowingAllowedRedirects(
+      vi.fn().mockResolvedValueOnce(redirectResponse(301)),
+      'https://a.example/messages?sessionId=abc123',
+      undefined,
+      allowed,
+    ).then(
+      () => undefined,
+      e => e,
+    );
+    expect(noLocation).toBeInstanceOf(Error);
+    expect(isReconnectableMCPError(noLocation)).toBe(false);
+
+    const notReplayable = await fetchFollowingAllowedRedirects(
+      vi.fn().mockResolvedValueOnce(redirectResponse(307, 'https://a.example/next')),
+      'https://a.example/messages?sessionId=abc123',
+      { method: 'POST', body: new Uint8Array([1]) },
+      allowed,
+    ).then(
+      () => undefined,
+      e => e,
+    );
+    expect(notReplayable).toBeInstanceOf(Error);
+    expect(isReconnectableMCPError(notReplayable)).toBe(false);
+  });
+
   it('throws on a redirect status with no Location header', async () => {
     const impl = vi.fn().mockResolvedValueOnce(redirectResponse(301));
     await expect(fetchFollowingAllowedRedirects(impl, 'https://a.example/x', undefined, allowed)).rejects.toThrow(
@@ -564,11 +624,14 @@ describe('MastraMCPClient allowedHosts policy', () => {
       server: { url: server.baseUrl, allowedHosts: [server.host], fetch: userFetch },
     });
 
-    await expect(client.connect()).rejects.toThrow();
+    // The policy error surfaces directly (no SSE-fallback burial into a
+    // generic "could not connect" message) …
+    await expect(client.connect()).rejects.toThrow(/allowedHosts/);
     expect(userFetch.mock.calls.length).toBeGreaterThan(0);
-    // Post-hoc semantics: the outbound hop DID reach the disallowed host
-    // (documented limitation of the custom-fetch path) …
-    expect(decoy.requests.length).toBeGreaterThan(0);
+    // … and post-hoc semantics: the outbound hop DID reach the disallowed host
+    // (documented limitation of the custom-fetch path) — exactly once, because
+    // a policy violation must not trigger a second connect attempt over SSE.
+    expect(decoy.requests.length).toBe(1);
   }, 15000);
 
   it('wraps a caller-supplied eventSourceInit.fetch (SSE stream) with the policy', async () => {
@@ -603,10 +666,21 @@ describe('MastraMCPClient allowedHosts policy', () => {
         eventSourceInit: { fetch: sseFetchSpy as any },
       },
     });
-    await expect(client.connect()).rejects.toThrow();
+    // The policy error surfaces directly instead of the generic connect error.
+    const thrown = await client.connect().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toMatch(/allowedHosts/);
+    // The error that crossed the eventsource boundary (flattened to a message
+    // string and re-wrapped as SseError) must STILL be non-reconnectable, or
+    // the reconnect machinery would retry the blocked host.
+    expect(isReconnectableMCPError(thrown)).toBe(false);
     // Pre-request check passed (requested URL was allowed), the fetch ran …
     expect(sseFetchSpy.mock.calls.length).toBeGreaterThan(0);
-    expect(decoy.requests.length).toBeGreaterThan(0);
+    // … exactly one outbound hop reached the decoy: no retry, no reconnect.
+    expect(decoy.requests.length).toBe(1);
   }, 15000);
 });
 
