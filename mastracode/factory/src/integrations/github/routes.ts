@@ -36,7 +36,7 @@ import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
-import { cleanReleasedSandbox } from './sandbox-release.js';
+import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
   computeWorktreePath,
@@ -1354,50 +1354,22 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        if (session.sandboxId && fleet.provider !== 'local' && session.sandboxWorkdir) {
-          // Keep the remote VM alive: return it to the reuse pool so the next
-          // session for this repository link and user claims it (repo already
-          // cloned) instead of provisioning a fresh sandbox. Scrub the
-          // session's work off the VM first so it doesn't idle with stale
-          // branches or dirty state.
-          await cleanReleasedSandbox({
-            fleet,
-            sourceControl: github.sourceControlStorage,
-            orgId: session.orgId,
-            projectRepositoryId: session.projectRepositoryId,
-            sandboxId: session.sandboxId,
-            sandboxWorkdir: session.sandboxWorkdir,
-          });
-          await github.sourceControlStorage.sandboxPool.release({
-            orgId: session.orgId,
-            projectRepositoryId: session.projectRepositoryId,
-            userId: session.userId,
-            sandboxId: session.sandboxId,
-            sandboxWorkdir: session.sandboxWorkdir,
-          });
-        } else if (session.sandboxId) {
-          let sandbox: MaterializationSandbox | undefined;
-          try {
-            sandbox = await fleet.reattachSandbox(session.sandboxId);
-          } catch {
-            // The provider may already have reclaimed the sandbox.
-          }
-          await fleet.teardownSandbox(
-            {
-              sandboxId: session.sandboxId,
-              setSandboxId: async () => {},
-              clear: async () => {
-                await github.sourceControlStorage.sessions.setSandbox({
-                  id: session.id,
-                  sandboxId: null,
-                  sandboxWorkdir: session.sandboxWorkdir ?? '',
-                });
-              },
-            },
-            sandbox,
-          );
-        }
+        // Answer as soon as the workspace is actually gone. Reclaiming its
+        // sandbox wakes the VM and scrubs the checkout, which takes minutes on
+        // a large repository — the caller must not sit through that for a
+        // workspace that has already been removed.
         await github.sourceControlStorage.sessions.delete(session.id);
+        void reclaimDeletedSessionSandbox({
+          fleet,
+          sourceControl: github.sourceControlStorage,
+          session,
+        }).catch((error: unknown) => {
+          console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+            sessionId: session.sessionId,
+            sandboxId: session.sandboxId,
+            error,
+          });
+        });
         return c.json({ removed: true });
       },
     }),
