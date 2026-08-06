@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import assert from 'node:assert';
 import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -14,21 +14,13 @@ import { OverlaysProvider } from '../../../../lib/overlays';
 import Chat from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
-import { useThreadPageKickoffs } from '../../hooks/useThreadPageKickoffs';
-import { claimThreadPageKickoffs } from '../../services/threadPageReadiness';
-import { Composer, PREPARING_SESSION_TIMEOUT_MS } from '../Composer';
+import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
+import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
-
-// the kickoff queue is module state; a kickoff left by one test must not dispatch in the next
-afterEach(() => {
-  for (const kickoff of claimThreadPageKickoffs({ resourceId: SESSION_ID, threadId: SESSION_ID })) {
-    kickoff.complete();
-  }
-});
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const FACTORY_ID = 'fp-preparing';
@@ -37,8 +29,12 @@ const SESSION_ID = '20000000-0000-4000-8000-000000000003';
 
 interface PreparingSession {
   finishWorkspace: () => void;
-  finishFirstDispatch: () => void;
-  sentMessages: string[];
+  /** Messages the browser handed to the controller, in arrival order. */
+  posted: string[];
+  /** Attachments carried by the last posted message. */
+  postedFiles: unknown[];
+  /** Messages the controller accepted once the workspace came up. */
+  delivered: string[];
   sessionLookups: number;
   ensureRequests: number;
   controllerCreates: number;
@@ -49,7 +45,6 @@ interface StubPreparingSessionOptions {
   createdSessionTitle?: string;
   failDispatch?: boolean;
   failWorkspace?: boolean;
-  holdFirstDispatch?: boolean;
   materialized?: boolean;
 }
 
@@ -59,27 +54,35 @@ function readSentMessage(body: unknown): string {
   return '';
 }
 
+function readSentFiles(body: unknown): unknown[] {
+  if (typeof body !== 'object' || body === null || !('files' in body)) return [];
+  return Array.isArray(body.files) ? body.files : [];
+}
+
+/**
+ * Models the controller's own hold: `POST .../messages` resolves the session
+ * before sending, and resolving the session is what provisions the workspace.
+ */
 function stubPreparingSession({
   createdSessionTitle,
   failDispatch = false,
   failWorkspace = false,
-  holdFirstDispatch = false,
   materialized = false,
 }: StubPreparingSessionOptions = {}): PreparingSession {
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
   });
-  let releaseFirstDispatch = () => {};
-  const firstDispatchFinished = new Promise<void>(resolve => {
-    releaseFirstDispatch = resolve;
+  // the stream only opens once the session resolves, which is when messages land too
+  let attachSse = (_controller: ReadableStreamDefaultController<Uint8Array>) => {};
+  const sseOpen = new Promise<ReadableStreamDefaultController<Uint8Array>>(resolve => {
+    attachSse = resolve;
   });
-  let sse: ReadableStreamDefaultController<Uint8Array> | null = null;
-  const sentMessages: string[] = [];
   const result: PreparingSession = {
     finishWorkspace: releaseWorkspace,
-    finishFirstDispatch: releaseFirstDispatch,
-    sentMessages,
+    posted: [],
+    postedFiles: [],
+    delivered: [],
     steerAttempts: 0,
     controllerCreates: 0,
     sessionLookups: 0,
@@ -177,7 +180,7 @@ function stubPreparingSession({
         new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
-              sse = controller;
+              attachSse(controller);
             },
             cancel() {},
           }),
@@ -188,11 +191,15 @@ function stubPreparingSession({
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
-      sentMessages.push(readSentMessage(await request.json()));
-      if (holdFirstDispatch && sentMessages.length === 1) await firstDispatchFinished;
+      const body = await request.json();
+      result.posted.push(readSentMessage(body));
+      result.postedFiles = readSentFiles(body);
+      await workspaceReady;
+      if (failWorkspace) return HttpResponse.json({ message: 'Clone failed' }, { status: 500 });
       if (failDispatch) return HttpResponse.json({ message: 'Sandbox is gone' }, { status: 500 });
-      // real dispatch runs an agent turn; agent_end is what releases the pending latch
-      sse?.enqueue(new TextEncoder().encode('data: {"type":"agent_end"}\n\n'));
+      result.delivered.push(readSentMessage(body));
+      // a real turn runs on delivery; agent_end is what releases the pending latch
+      void sseOpen.then(controller => controller.enqueue(new TextEncoder().encode('data: {"type":"agent_end"}\n\n')));
       return HttpResponse.json({ ok: true });
     }),
     http.post(`${API}/sessions/:resourceId/steer`, () => {
@@ -211,7 +218,7 @@ async function releaseSession(finishWorkspace: () => void, client: QueryClient) 
 }
 
 function ThreadSurface() {
-  useThreadPageKickoffs();
+  useHandoffPrompt();
   return (
     <>
       <Link to="/away">go-away</Link>
@@ -302,7 +309,7 @@ function createdDraftSession(title: string) {
 }
 
 describe('Composer on a lazy user-session draft', () => {
-  it('creates once, queues before navigation, and lets preparation dispatch the exact first prompt', async () => {
+  it('creates the session on the first prompt, then hands that prompt to the thread it opens', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'fix the login bug' });
     let finishCreate = () => {};
     const createFinished = new Promise<void>(resolve => {
@@ -345,15 +352,17 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
-    await waitFor(() => expect(preparation.controllerCreates).toBe(1));
-    expect(preparation.sentMessages).toEqual([]);
+    // the prompt reaches the controller while the workspace is still coming up
+    await waitFor(() => expect(preparation.posted).toEqual(['fix the login bug']));
+    expect(preparation.delivered).toEqual([]);
     await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
     expect(client.getQueryData(queryKeys.userSession(SESSION_ID))).toEqual(createdDraftSession('fix the login bug'));
     expect(client.getQueryData(queryKeys.sessions(PROJECT_REPOSITORY_ID))).toBeUndefined();
 
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(preparation.sentMessages).toEqual(['fix the login bug']));
+    await waitFor(() => expect(preparation.delivered).toEqual(['fix the login bug']));
+    expect(preparation.posted).toEqual(['fix the login bug']);
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
   });
 
@@ -381,7 +390,7 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() => expect(message).toHaveValue('retry this prompt'));
     expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
     expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
-    expect(preparation.controllerCreates).toBe(0);
+    expect(preparation.posted).toEqual([]);
 
     await user.keyboard('{Enter}');
 
@@ -395,8 +404,9 @@ describe('Composer on a lazy user-session draft', () => {
 
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(preparation.sentMessages).toEqual(['retry this prompt']));
+    await waitFor(() => expect(preparation.delivered).toEqual(['retry this prompt']));
   });
+
   it('runs local commands and keeps session commands in the draft without creating a session', async () => {
     const preparation = stubPreparingSession();
     let sessionPosts = 0;
@@ -407,7 +417,7 @@ describe('Composer on a lazy user-session draft', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderDraft();
+    renderDraft();
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
@@ -432,7 +442,7 @@ describe('Composer on a lazy user-session draft', () => {
 });
 
 describe('Composer while a session prepares its workspace', () => {
-  it('takes the first message, shows it, and sends it once the session is online', async () => {
+  it('sends the message straight away and shows it while the workspace comes up', async () => {
     const session = stubPreparingSession();
     const user = userEvent.setup();
 
@@ -446,23 +456,24 @@ describe('Composer while a session prepares its workspace', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
-    expect(session.sentMessages).toEqual([]);
+    await waitFor(() => expect(session.posted).toEqual(['fix the login bug']));
+    expect(session.delivered).toEqual([]);
 
     session.finishWorkspace();
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug']));
+    await waitFor(() => expect(session.delivered).toEqual(['fix the login bug']));
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
 
     await user.type(message(), 'follow up');
     await user.keyboard('{Enter}');
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug', 'follow up']));
+    await waitFor(() => expect(session.delivered).toEqual(['fix the login bug', 'follow up']));
     expect(session.steerAttempts).toBe(0);
   });
 
-  it('re-echoes a queued message after navigating away and back while the session prepares', async () => {
+  it('delivers a message once even when the sender navigates away before the workspace is up', async () => {
     const session = stubPreparingSession();
     const user = userEvent.setup();
 
@@ -474,24 +485,21 @@ describe('Composer while a session prepares its workspace', () => {
 
     await user.type(message(), 'fix the login bug');
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
+    await waitFor(() => expect(session.posted).toEqual(['fix the login bug']));
 
     await user.click(screen.getByText('go-away'));
-    expect(screen.queryByText('fix the login bug')).not.toBeInTheDocument();
-
     await user.click(screen.getByText('go-thread'));
-    await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
 
     session.finishWorkspace();
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug']));
-    expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
+    await waitFor(() => expect(session.delivered).toEqual(['fix the login bug']));
+    expect(session.posted).toEqual(['fix the login bug']);
     expect(session.steerAttempts).toBe(0);
   });
 
-  it('dispatches queued messages in order without steering the offline session', async () => {
-    const session = stubPreparingSession({ holdFirstDispatch: true });
+  it('keeps messages in order and never steers a session with no run to steer', async () => {
+    const session = stubPreparingSession();
     const user = userEvent.setup();
 
     const { client } = renderThread();
@@ -502,21 +510,19 @@ describe('Composer while a session prepares its workspace', () => {
 
     await user.type(message(), 'fix the login bug');
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
+    await waitFor(() => expect(session.posted).toEqual(['fix the login bug']));
 
     await user.type(message(), 'and add a test');
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(screen.getByText('and add a test')).toBeInTheDocument());
+    await waitFor(() => expect(session.posted).toEqual(['fix the login bug', 'and add a test']));
 
     expect(session.steerAttempts).toBe(0);
     expect(screen.getByText('Preparing workspace…')).toBeInTheDocument();
 
     session.finishWorkspace();
-
-    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug']));
-    session.finishFirstDispatch();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug', 'and add a test']));
+
+    await waitFor(() => expect(session.delivered).toEqual(['fix the login bug', 'and add a test']));
     expect(session.steerAttempts).toBe(0);
   });
 
@@ -537,10 +543,10 @@ describe('Composer while a session prepares its workspace', () => {
     session.finishWorkspace();
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(session.sentMessages).toEqual(['fix the login bug']));
+    await waitFor(() => expect(session.delivered).toEqual(['fix the login bug']));
   });
 
-  it('reports a failed dispatch once, not once per reporter', async () => {
+  it('reports a failed send once, not once per reporter', async () => {
     const session = stubPreparingSession({ failDispatch: true });
     const user = userEvent.setup();
 
@@ -558,9 +564,10 @@ describe('Composer while a session prepares its workspace', () => {
 
     await waitFor(() => expect(screen.getAllByText(/Sandbox is gone/).length).toBeGreaterThan(0));
     expect(screen.getAllByText(/Sandbox is gone/)).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
   });
 
-  it('fails queued messages when the session cannot come online', async () => {
+  it('surfaces the workspace failure when the session cannot come online', async () => {
     const session = stubPreparingSession({ failWorkspace: true });
     const user = userEvent.setup();
 
@@ -575,47 +582,14 @@ describe('Composer while a session prepares its workspace', () => {
     session.finishWorkspace();
     await waitForMutationsIdle(client);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('The session failed to come online. Reconnect, then send the message again.'),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getAllByText(/Clone failed/).length).toBeGreaterThan(0));
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
-    expect(session.sentMessages).toEqual([]);
+    expect(session.delivered).toEqual([]);
   });
 
-  it('clears the pending message and reports when preparation times out', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const session = stubPreparingSession();
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const { client } = renderThread();
-
-      const message = () => screen.getByRole('textbox', { name: 'Message' });
-      await waitFor(() => expect(message()).toBeEnabled());
-      await waitFor(() => expect(screen.getByText('Preparing workspace…')).toBeInTheDocument());
-
-      await user.type(message(), 'fix the login bug');
-      await user.keyboard('{Enter}');
-      expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
-      expect(message()).toHaveAttribute('placeholder', 'Ask Mastra Code…');
-
-      await vi.advanceTimersByTimeAsync(PREPARING_SESSION_TIMEOUT_MS + 1);
-
-      await waitFor(() =>
-        expect(
-          screen.getByText('The session never came online. Send the message again once it is ready.'),
-        ).toBeInTheDocument(),
-      );
-      expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
-      await releaseSession(session.finishWorkspace, client);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('refuses an image dropped while preparing, since a queued message carries text only', async () => {
-    const { finishWorkspace, sentMessages } = stubPreparingSession();
+  it('carries an image attached while the workspace prepares', async () => {
+    const session = stubPreparingSession();
+    const user = userEvent.setup();
 
     const { container, client } = renderThread();
 
@@ -626,18 +600,19 @@ describe('Composer while a session prepares its workspace', () => {
     const form = container.querySelector('form');
     assert(form);
     fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
+    expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(screen.getByText('Images can be attached once the session is ready.')).toBeInTheDocument(),
-    );
-    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
-    expect(sentMessages).toEqual([]);
+    await user.type(message(), 'what is wrong here');
+    await user.keyboard('{Enter}');
 
-    await releaseSession(finishWorkspace, client);
+    await waitFor(() => expect(session.posted).toEqual(['what is wrong here']));
+    expect(session.postedFiles).toHaveLength(1);
+
+    await releaseSession(session.finishWorkspace, client);
   });
 
   it('keeps a slash command in the composer, since commands act on a live session', async () => {
-    const { finishWorkspace, sentMessages } = stubPreparingSession();
+    const session = stubPreparingSession();
     const user = userEvent.setup();
 
     const { client } = renderThread();
@@ -651,13 +626,13 @@ describe('Composer while a session prepares its workspace', () => {
 
     await waitFor(() => expect(screen.getByText('Commands run once the session is ready.')).toBeInTheDocument());
     expect(message()).toHaveValue('/goal ship it');
-    expect(sentMessages).toEqual([]);
+    expect(session.posted).toEqual([]);
 
-    await releaseSession(finishWorkspace, client);
+    await releaseSession(session.finishWorkspace, client);
   });
 
   it('runs local slash commands while preparing', async () => {
-    const { finishWorkspace, sentMessages } = stubPreparingSession();
+    const session = stubPreparingSession();
     const user = userEvent.setup();
 
     const { client } = renderThread();
@@ -671,8 +646,8 @@ describe('Composer while a session prepares its workspace', () => {
 
     expect(await screen.findByText(/Available commands:/)).toBeInTheDocument();
     expect(message()).toHaveValue('');
-    expect(sentMessages).toEqual([]);
+    expect(session.posted).toEqual([]);
 
-    await releaseSession(finishWorkspace, client);
+    await releaseSession(session.finishWorkspace, client);
   });
 });

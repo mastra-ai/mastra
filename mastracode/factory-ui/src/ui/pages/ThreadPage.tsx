@@ -25,8 +25,8 @@ import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
-import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import { useFactoryQuery } from '../../hooks/useFactories';
 
 // The docked workspace card claims room on the end edge; the shell pads its own
@@ -69,7 +69,7 @@ export function ThreadPage() {
 function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }) {
   useGlobalShortcuts();
   useRouteThreadSync();
-  useThreadPageKickoffs();
+  useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
   const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
