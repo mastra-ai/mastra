@@ -202,6 +202,12 @@ export class GithubRules {
           ).find(subscription => subscription.orgId === project.orgId)?.data,
         )
       : null;
+    // A review re-request targets the PR's own Review card, not the Work item
+    // that provenance would bind the event to — and the sender is whoever
+    // clicked re-request, so a Factory-authored PR must not brand a human
+    // requester as factory-authored.
+    const reviewRequested = event === 'pullRequestReviewRequested';
+    const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
     const relatedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,
@@ -209,13 +215,13 @@ export class GithubRules {
       issueNumber,
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
-      provenance,
+      reviewRequested ? null : provenance,
     );
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
       login,
-      factoryAuthored: provenance !== null || login === `${this.options.github.slug}[bot]`,
+      factoryAuthored: (!reviewRequested && provenance !== null) || login === `${this.options.github.slug}[bot]`,
     });
     if (
       actor.type === 'github' &&
@@ -290,6 +296,14 @@ export class GithubRules {
               merged: boolean(pullRequest?.merged) ?? false,
               headBranch: string(object(pullRequest?.head)?.ref) ?? '',
               baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
+            },
+          }
+        : {}),
+      ...(reviewRequested && requestedReviewer
+        ? {
+            reviewRequest: {
+              reviewer: requestedReviewer,
+              factoryReviewer: requestedReviewer === `${this.options.github.slug}[bot]`,
             },
           }
         : {}),
