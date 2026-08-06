@@ -1,11 +1,11 @@
-import { MastraClient } from '@mastra/client-js';
-import type { KnownAgentControllerEvent, PlanResume, SendNotificationInput } from '@mastra/client-js';
+import { MastraClient, isKnownAgentControllerEvent } from '@mastra/client-js';
+import type { PlanResume, SendNotificationInput } from '@mastra/client-js';
 
 import {
   createInitialTranscript,
   initialTranscript,
   transcriptReducer,
-} from '../../src/web/ui/domains/chat/services/transcript';
+} from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 import type {
   ApprovalPrompt,
   NotificationEntry,
@@ -13,7 +13,7 @@ import type {
   SuspensionPrompt,
   TimelineEntry,
   TranscriptState,
-} from '../../src/web/ui/domains/chat/services/transcript';
+} from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 
 /**
  * Scenario driver — the web equivalent of MastraCode's `McE2eTerminal`.
@@ -118,15 +118,16 @@ export async function createDriver(opts: {
     onEvent: event => {
       // Mirror the app: mode/model changes update the session-state layer
       // (query invalidation → refetch in React), not the transcript.
-      const known = event as KnownAgentControllerEvent;
-      if (known.type === 'mode_changed') {
-        sessionState = { ...sessionState, modeId: known.modeId };
-      } else if (known.type === 'model_changed') {
-        sessionState = { ...sessionState, modelId: known.modelId };
-      } else if (known.type === 'agent_start') {
-        running = true;
-      } else if (known.type === 'agent_end') {
-        running = false;
+      if (isKnownAgentControllerEvent(event)) {
+        if (event.type === 'mode_changed') {
+          sessionState = { ...sessionState, modeId: event.modeId };
+        } else if (event.type === 'model_changed') {
+          sessionState = { ...sessionState, modelId: event.modelId };
+        } else if (event.type === 'agent_start') {
+          running = true;
+        } else if (event.type === 'agent_end') {
+          running = false;
+        }
       }
       apply(transcriptReducer(state, { type: 'event', event }));
     },

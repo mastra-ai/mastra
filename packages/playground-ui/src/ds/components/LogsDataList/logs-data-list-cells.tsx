@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import { DataListCell, DataListMonoCell } from '../DataList/data-list-cells';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -43,12 +42,12 @@ function EntityTypeIcon({ entityType, className }: { entityType: string; classNa
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
-    case EntityType.AGENT:
+    case 'agent':
       return <AgentIcon className={iconClass} aria-hidden />;
     case 'workflow':
-    case EntityType.WORKFLOW_RUN:
+    case 'workflow_run':
       return <WorkflowIcon className={iconClass} aria-hidden />;
-    case EntityType.TOOL:
+    case 'tool':
       return <ToolsIcon className={iconClass} aria-hidden />;
     default:
       return null;
@@ -66,7 +65,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="min-w-0 truncate text-ui-smd">{entityName}</span> : '-'}
+      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -81,7 +80,7 @@ export interface LogsDataListMessageCellProps {
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
   return (
-    <DataListCell height="compact" className="min-w-0 truncate font-mono text-ui-smd text-neutral4">
+    <DataListCell height="compact" className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">
       {message}
     </DataListCell>
   );

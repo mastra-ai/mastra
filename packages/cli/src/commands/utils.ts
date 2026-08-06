@@ -1,8 +1,12 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InvalidArgumentError } from 'commander';
 import { execa } from 'execa';
 import fsExtra from 'fs-extra';
 import type { PackageManager } from '../utils/package-manager';
+import { selectMatchingDistTag } from './create/command';
 import { EDITOR, isValidEditor } from './init/mcp-docs-server-install';
 import { areValidComponents, COMPONENTS, isValidLLMProvider, LLMProvider } from './init/utils';
 
@@ -92,25 +96,34 @@ export function shouldSkipDotenvLoading(): boolean {
 
 /**
  * Get the version tag (e.g., 'beta', 'latest') for the currently running mastra CLI.
- * This queries npm dist-tags to find which tag corresponds to the current version.
+ * Create passes its known version to avoid resolving package metadata from an installed layout.
+ * Init omits it and preserves the existing best-effort undefined fallback.
  */
-export async function getVersionTag(): Promise<string | undefined> {
+export async function getVersionTag(version?: string): Promise<string | undefined> {
   try {
-    const pkgPath = fileURLToPath(import.meta.resolve('mastra/package.json'));
-    const json = await fsExtra.readJSON(pkgPath);
-    const currentVersion = json.version;
+    let currentVersion = version;
+    if (!currentVersion) {
+      const pkgPath = fileURLToPath(import.meta.resolve('mastra/package.json'));
+      const json = await fsExtra.readJSON(pkgPath);
+      currentVersion = json.version;
+    }
+    if (!currentVersion) throw new Error('Missing mastra package version');
 
     const { stdout } = await execa('npm', ['dist-tag', 'ls', 'mastra'], {
       cwd: import.meta.dirname,
     });
-    const tagLine = stdout.split('\n').find((distLine: string) => distLine.endsWith(`: ${currentVersion}`));
-    const tag = tagLine ? tagLine.split(':')[0]?.trim() : undefined;
-
-    return tag;
+    const tag = selectMatchingDistTag(currentVersion, stdout);
+    if (tag) return tag;
   } catch {
-    // If we can't determine the tag, return undefined (will use default/latest)
-    return undefined;
+    // The caller-specific fallback is handled below.
   }
+
+  if (version) {
+    console.error('We could not resolve the mastra version tag, falling back to "latest"');
+    return 'latest';
+  }
+
+  return undefined;
 }
 
 /**
@@ -136,7 +149,7 @@ export async function gitInit({ cwd }: { cwd: string }) {
     [
       'commit',
       '-m',
-      '"Initial commit from Mastra"',
+      'Initial commit from Mastra',
       '--author="dane-ai-mastra[bot] <dane-ai-mastra[bot]@users.noreply.github.com>"',
     ],
     { cwd, stdio: 'ignore' },

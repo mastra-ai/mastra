@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import { agentControllerMessageText } from './agent-controller';
+import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
 global.fetch = vi.fn();
@@ -67,6 +67,16 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
+  });
+
+  it('requests an exact thread binding when creating a session', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'factory-session-1', threadId: 'factory-session-1' });
+    await client.getAgentController('code').session('factory-session-1').create({ threadId: 'factory-session-1' });
+    const [, init] = lastCall();
+    expect(JSON.parse(init.body as string)).toEqual({
+      resourceId: 'factory-session-1',
+      threadId: 'factory-session-1',
+    });
   });
 
   it('sends a message to the resource-scoped session', async () => {
@@ -287,7 +297,9 @@ describe('AgentController Resource', () => {
       .getAgentController('code')
       .session('user-1')
       .subscribe({
-        onEvent: e => received.push(e as KnownAgentControllerEvent),
+        onEvent: e => {
+          if (isKnownAgentControllerEvent(e)) received.push(e);
+        },
       });
 
     // Allow the async pump to drain the (already-closed) stream.

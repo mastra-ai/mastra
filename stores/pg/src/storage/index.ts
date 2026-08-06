@@ -17,6 +17,7 @@ import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
 import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
+import { loadSchemaSnapshot } from './db/schema-snapshot';
 import { AgentsPG } from './domains/agents';
 import { BackgroundTasksPG } from './domains/background-tasks';
 import { BlobsPG } from './domains/blobs';
@@ -37,6 +38,7 @@ import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
 import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsPG } from './domains/workflow-definitions';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
 
@@ -104,6 +106,7 @@ const ALL_DOMAINS = [
   BlobsPG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
@@ -154,13 +157,14 @@ export {
   FavoritesPG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   WorkspacesPG,
 };
 export type { VNextPostgresObservabilityConfig };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
-export { PgFactoryStorage, hashAdvisoryLockKey, type PgFactoryStorageConfig } from './factory-storage';
+export { PgFactoryStorage, type PgFactoryStorageConfig } from './factory-storage';
 
 /**
  * PostgreSQL storage adapter for Mastra.
@@ -229,6 +233,7 @@ export class PostgresStore extends MastraCompositeStore {
       this.stores = {
         scores: new ScoresPG(domainConfig),
         workflows: new WorkflowsPG(domainConfig),
+        workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
         notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
@@ -336,6 +341,11 @@ export class PostgresStore extends MastraCompositeStore {
       pinnedClient = await this.#pool.connect();
       const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
       this.#db.pin(pinned);
+      // Read the schema's catalog once, up front, so the domains below can
+      // answer "does this table/column/index already exist?" locally instead of
+      // asking the server ~350 times over this one serialized connection.
+      // Cleared in the finally: the snapshot never outlives init().
+      this.#db.setSchemaSnapshot(await loadSchemaSnapshot(pinned, this.schema));
       await super.init();
       // Only mark initialized after schema creation actually finishes so a
       // racing second init() caller can't return early and issue runtime
@@ -359,6 +369,10 @@ export class PostgresStore extends MastraCompositeStore {
         error,
       );
     } finally {
+      // Drop the snapshot unconditionally — including when loading it or
+      // super.init() threw — so no code path can read a stale catalog picture
+      // after init returns.
+      this.#db.setSchemaSnapshot(null);
       // Only unpin/release when connect() actually handed us a client; on a
       // failed connect() pinnedClient is undefined and pin() never ran.
       if (pinnedClient) {

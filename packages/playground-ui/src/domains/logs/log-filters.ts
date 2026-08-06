@@ -1,18 +1,20 @@
-import { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/observability';
 import type { ListLogsArgs } from '@mastra/core/storage';
 import type { LogLevel } from './types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export type LogsDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
-export type LogsEntityOptions = { label: string; entityType: EntityType };
+type EntityTypeValue = `${EntityType}`;
+
+export type LogsEntityOptions = { label: string; entityType: EntityTypeValue };
 
 export const LOGS_ROOT_ENTITY_TYPES = {
-  AGENT: EntityType.AGENT,
-  WORKFLOW: EntityType.WORKFLOW_RUN,
-  SCORER: EntityType.SCORER,
-  INGEST: EntityType.RAG_INGESTION,
-} as const;
+  AGENT: 'agent',
+  WORKFLOW: 'workflow_run',
+  SCORER: 'scorer',
+  INGEST: 'rag_ingestion',
+} as const satisfies Record<string, EntityTypeValue>;
 
 export const LOGS_ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Agent', entityType: LOGS_ROOT_ENTITY_TYPES.AGENT },

@@ -305,7 +305,7 @@ const updated = await mastra.schedules.update('pinger', {
 })
 ```
 
-Agent schedule patches can update `cron`, `timezone`, `prompt`, `name`, `signalType`, `tagName`, `attributes`, `providerOptions`, `ifActive`, `ifIdle`, `metadata`, and `status`. `threadId` and `resourceId` aren't patchable; create a new schedule when the thread target needs to change.
+Agent schedule patches can update `cron`, `timezone`, `prompt`, `name`, `signalType`, `tagName`, `attributes`, `providerOptions`, `ifActive`, `ifIdle`, `metadata`, and `status`. `threadId` and `resourceId` aren't patchable. Create a new schedule when the thread target needs to change.
 
 Workflow schedule patches can update `cron`, `timezone`, `inputData`, `initialState`, `requestContext`, `metadata`, and `status`. Agent-only patch fields such as `prompt`, `signalType`, and `ifIdle` throw on workflow schedules.
 
