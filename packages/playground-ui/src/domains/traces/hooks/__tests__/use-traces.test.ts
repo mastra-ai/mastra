@@ -418,22 +418,32 @@ describe('shouldResetAfterIdle', () => {
 });
 
 describe('shouldPinLightList', () => {
+  const START = 1_700_000_000_000;
+
   it('pins on 404, which means the server has no light route at all', () => {
-    expect(shouldPinLightList(404, 0)).toBe(true);
+    expect(shouldPinLightList(404, undefined, START)).toBe(true);
   });
 
-  it('does not pin on a first 500, which is as likely a transient fault as an old store', () => {
-    expect(shouldPinLightList(500, 0)).toBe(false);
+  it('does not pin on the 500 that opens a run, which is as likely a fault as an old store', () => {
+    expect(shouldPinLightList(500, undefined, START)).toBe(false);
   });
 
-  it('pins once a second consecutive 500 rules out a transient fault', () => {
-    expect(shouldPinLightList(500, 1)).toBe(true);
-    expect(shouldPinLightList(500, 5)).toBe(true);
+  // Three queries can fail in the same instant, and chase mode re-polls every 100ms
+  // through an outage, so a burst of 500s must not add up to a pin.
+  it('does not pin while the 500s are still within the blip window', () => {
+    expect(shouldPinLightList(500, START, START)).toBe(false);
+    expect(shouldPinLightList(500, START, START + 200)).toBe(false);
+    expect(shouldPinLightList(500, START, START + 9_999)).toBe(false);
+  });
+
+  it('pins once the 500s have outlasted the blip window', () => {
+    expect(shouldPinLightList(500, START, START + 10_000)).toBe(true);
+    expect(shouldPinLightList(500, START, START + 60_000)).toBe(true);
   });
 
   it('never pins on statuses the full endpoint would hit too', () => {
     for (const status of [401, 403, 429, 501, 502, 503, undefined]) {
-      expect(shouldPinLightList(status, 1)).toBe(false);
+      expect(shouldPinLightList(status, START, START + 60_000)).toBe(false);
     }
   });
 });

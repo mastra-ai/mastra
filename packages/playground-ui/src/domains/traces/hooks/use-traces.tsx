@@ -30,13 +30,16 @@ const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, Del
 type LightListSupport = 'unknown' | 'unsupported';
 const lightListSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, LightListSupport>();
 
-/** Consecutive 500s from the light endpoint, per client. Reset by any light success. */
-const lightListServerErrorsByClient = new WeakMap<ReturnType<typeof useMastraClient>, number>();
+/** When the current run of light-endpoint 500s started, per client. Cleared by any light success. */
+const lightListFirstServerErrorAtByClient = new WeakMap<ReturnType<typeof useMastraClient>, number>();
 
-/** A 500 is ambiguous — an old core's store throwing, or a transient server fault. Serve the
- *  request from the full endpoint either way, but only pin the session once a second consecutive
- *  one rules out a blip; a DB hiccup would otherwise degrade the list for the rest of the session. */
-const LIGHT_LIST_SERVER_ERRORS_BEFORE_PINNING = 2;
+/** A 500 is ambiguous — an old core's store throwing, or a transient fault (DB hiccup, timeout).
+ *  Serve the request from the full endpoint either way, but only pin the session once the 500s
+ *  have outlasted a blip; a hiccup would otherwise degrade the list until the tab is reloaded.
+ *  Elapsed time, not a request count: the page refetch, the delta poll and the status refresh can
+ *  fail in the same instant, and a fallback response still looks like a success to the delta query,
+ *  so chase mode keeps re-polling every `deltaChaseIntervalMs` throughout the outage. */
+const LIGHT_LIST_SERVER_ERROR_PIN_AFTER_MS = 10_000;
 
 /** Tunables for live-tail polling. All fields optional — defaults below.
  *  Platform consumers override individual fields to throttle traffic or
@@ -103,11 +106,17 @@ function lightListFallbackStatus(error: unknown): 404 | 500 | undefined {
 }
 
 /** Whether a failed light-list request should pin the session to the full endpoint.
- *  Exported for testing — pure function of the status and the prior failure count. */
-export function shouldPinLightList(status: number | undefined, priorConsecutiveServerErrors: number): boolean {
+ *  `firstServerErrorAt` is undefined when this 500 opens a new run of them, so a single
+ *  fault never pins. Exported for testing — pure function of the status and timestamps. */
+export function shouldPinLightList(
+  status: number | undefined,
+  firstServerErrorAt: number | undefined,
+  now: number,
+): boolean {
   if (status === 404) return true;
   if (status !== 500) return false;
-  return priorConsecutiveServerErrors + 1 >= LIGHT_LIST_SERVER_ERRORS_BEFORE_PINNING;
+  if (firstServerErrorAt === undefined) return false;
+  return now - firstServerErrorAt >= LIGHT_LIST_SERVER_ERROR_PIN_AFTER_MS;
 }
 
 type FetchTracesFnArgs = TracesFilters & {
@@ -147,15 +156,18 @@ const fetchTracesFn = async (args: FetchTracesFnArgs) => {
         return client.listTraces(params as ListTracesArgs);
       }
     }
-    lightListServerErrorsByClient.delete(client);
+    lightListFirstServerErrorAtByClient.delete(client);
     return response;
   } catch (error) {
     const status = lightListFallbackStatus(error);
     if (status === undefined) throw error;
 
-    const priorServerErrors = lightListServerErrorsByClient.get(client) ?? 0;
-    if (status === 500) lightListServerErrorsByClient.set(client, priorServerErrors + 1);
-    if (shouldPinLightList(status, priorServerErrors)) {
+    const now = Date.now();
+    const firstServerErrorAt = lightListFirstServerErrorAtByClient.get(client);
+    if (status === 500 && firstServerErrorAt === undefined) {
+      lightListFirstServerErrorAtByClient.set(client, now);
+    }
+    if (shouldPinLightList(status, firstServerErrorAt, now)) {
       lightListSupportByClient.set(client, 'unsupported');
     }
     return client.listTraces(params as ListTracesArgs);
