@@ -60,6 +60,12 @@ import type {
   Root,
   RequireToolApproval,
 } from './types';
+import {
+  assertHostAllowed,
+  assertResponseHostAllowed,
+  fetchFollowingAllowedRedirects,
+  wrapFetchWithHostPolicy,
+} from './url-policy';
 
 // Re-export types for convenience
 export type {
@@ -433,14 +439,40 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } =
+      this.serverConfig;
+
+    // Fail fast with a clear error before any transport is constructed.
+    if (allowedHosts !== undefined) {
+      assertHostAllowed(url, allowedHosts);
+    }
 
     // Wrap fetch so request-scoped metadata still flows through normal MCP POSTs, while
     // the long-lived Streamable HTTP event stream does not inherit the active Datadog span.
+    // When allowedHosts is set, the same wrapper enforces the host policy: on the default
+    // path via manual redirect following (hops blocked before being sent), and on the
+    // custom-fetch path via a pre-request check plus post-hoc response validation.
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
       const requestContext = this.operationContextStore.getStore() ?? null;
-      const executeFetch = () =>
-        userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
+      const executeFetch = (): Promise<Response> => {
+        if (allowedHosts === undefined) {
+          return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
+        }
+        if (userFetch) {
+          const guardedUserFetch = async () => {
+            assertHostAllowed(requestUrl, allowedHosts);
+            const response = await userFetch(requestUrl, init, requestContext);
+            return assertResponseHostAllowed(response, allowedHosts);
+          };
+          return guardedUserFetch();
+        }
+        return fetchFollowingAllowedRedirects(
+          (u: string | URL, i?: RequestInit) => globalThis.fetch(u, i),
+          requestUrl,
+          init,
+          allowedHosts,
+        );
+      };
 
       return shouldDetachPersistentTransportRequest(init) ? runOutsideDatadogTraceScope(executeFetch) : executeFetch();
     };
@@ -498,8 +530,17 @@ export class InternalMastraMCPClient extends MastraBase {
       // Fallback to SSE transport
       // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
       // Only supply our span-detaching fetch when the caller hasn't provided one, so an explicit
-      // eventSourceInit.fetch is preserved rather than overwritten.
-      const sseEventSourceInit = { ...eventSourceInit, fetch: eventSourceInit?.fetch ?? fetch };
+      // eventSourceInit.fetch is preserved rather than overwritten. When allowedHosts is set, a
+      // caller-supplied eventSourceInit.fetch is wrapped with the same policy check + post-hoc
+      // redirect validation as the custom-fetch path — otherwise it would bypass the policy.
+      const callerSseFetch = eventSourceInit?.fetch;
+      const sseEventSourceInit = {
+        ...eventSourceInit,
+        fetch:
+          callerSseFetch && allowedHosts !== undefined
+            ? wrapFetchWithHostPolicy(callerSseFetch, allowedHosts)
+            : (callerSseFetch ?? fetch),
+      };
 
       const sseTransport = new SSEClientTransport(url, {
         requestInit,

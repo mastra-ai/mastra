@@ -327,6 +327,7 @@ export type StdioServerDefinition = BaseServerOptions & {
   sessionId?: never;
   connectTimeout?: never;
   fetch?: never;
+  allowedHosts?: never;
 };
 
 /**
@@ -381,6 +382,43 @@ export type HttpServerDefinition = BaseServerOptions & {
    * ```
    */
   fetch?: MastraFetchLike;
+  /**
+   * Optional allowlist of hosts this server's HTTP requests may target.
+   *
+   * When set, every outgoing request made on behalf of this server (initial
+   * connect, Streamable HTTP POSTs, the SSE fallback and its event stream,
+   * OAuth discovery/token requests routed through the transport fetch, and
+   * every redirect hop) is checked against this list. When unset, no
+   * restriction applies (current behavior).
+   *
+   * Matching semantics:
+   * - Entries are host values matched against `URL.host` — the hostname plus
+   *   the port when the URL carries a non-default port. WHATWG URL elides
+   *   default ports, so `https://x.com:443` has host `x.com` and matches the
+   *   entry `'x.com'`, not `'x.com:443'`. Examples: `'api.example.com'`,
+   *   `'localhost:8080'`.
+   * - Matching is exact and case-insensitive on the hostname. No wildcards.
+   * - The URL scheme is NOT checked — matching is host-only, so `http://` and
+   *   `https://` URLs to an allowed host both pass.
+   * - An empty array (`allowedHosts: []`) denies all hosts.
+   *
+   * Enforcement strength varies by path:
+   * - On the default path (no custom `fetch`), requests to disallowed hosts —
+   *   including redirect hops, via manual redirect following — are blocked
+   *   BEFORE being sent.
+   * - When a custom `fetch` (or a caller-supplied `eventSourceInit.fetch`) is
+   *   in play, the initial URL is checked before the request, but redirect
+   *   hops are validated post-hoc via `response.url`: the outbound hop may
+   *   occur, but the response never reaches the caller or the model. A
+   *   hand-built `Response` with an empty `response.url` skips the post-hoc
+   *   check (documented limitation — custom fetches legitimately construct
+   *   such responses).
+   *
+   * OAuth note: the SDK routes OAuth discovery and token requests through the
+   * transport's fetch, so when using an `authProvider` whose authorization
+   * server lives on a different host, that host must also be allowlisted.
+   */
+  allowedHosts?: string[];
   /** Optional request configuration for HTTP requests (optional when `fetch` is provided) */
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
   /** Optional configuration for SSE fallback (required when using custom headers with SSE, optional when `fetch` is provided) */
