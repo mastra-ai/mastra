@@ -7,7 +7,11 @@ import type { FactoryStorage } from '@mastra/core/storage';
 
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
-import { ensureFactoryRuleSession } from '../integrations/github/factory-session.js';
+import {
+  ensureFactoryRuleSession,
+  factoryReviewBranch,
+  subscribeFactoryRuleSessionToPullRequest,
+} from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -140,15 +144,16 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
   ) {
     return `factory/issue-${issueNumber}`;
   }
-  const pullRequestNumber = metadata.githubPullRequestNumber ?? metadata.number;
-  if (
-    item.externalSource?.integrationId === 'github' &&
-    item.externalSource.type === 'pull-request' &&
-    typeof pullRequestNumber === 'number'
-  ) {
-    return `factory/pr-${pullRequestNumber}`;
-  }
+  const pullRequestNumber = factoryRulePullRequestNumber(item);
+  if (pullRequestNumber) return factoryReviewBranch(pullRequestNumber);
   throw new Error('Factory skill invocation requires a GitHub issue or pull request number.');
+}
+
+function factoryRulePullRequestNumber(item: FactoryBindingPreparationInput['item']): number | undefined {
+  if (item.externalSource?.integrationId !== 'github' || item.externalSource.type !== 'pull-request') return undefined;
+  const metadata = item.metadata ?? {};
+  const pullRequestNumber = metadata.githubPullRequestNumber ?? metadata.number;
+  return typeof pullRequestNumber === 'number' ? pullRequestNumber : undefined;
 }
 
 async function prepareFactoryRuleBinding(
@@ -169,7 +174,7 @@ async function prepareFactoryRuleBinding(
   const destinationStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
   if (!destinationStage) throw new Error('Factory skill invocation requires one exclusive board stage.');
 
-  await coordinator.prepare({
+  const prepared = await coordinator.prepare({
     orgId: input.record.orgId,
     userId: preparedSession.userId,
     factoryProjectId: input.record.factoryProjectId,
@@ -189,6 +194,23 @@ async function prepareFactoryRuleBinding(
         metadata: input.item.metadata,
       },
     },
+  });
+
+  const pullRequestNumber = factoryRulePullRequestNumber(input.item);
+  if (!pullRequestNumber) return;
+  // A missing subscription costs the session its merge signal, not its run.
+  await subscribeFactoryRuleSessionToPullRequest({
+    github,
+    orgId: input.record.orgId,
+    session: preparedSession,
+    resourceId: prepared.resourceId,
+    threadId: prepared.threadId,
+    pullRequestNumber,
+  }).catch((error: unknown) => {
+    console.warn(
+      `[Factory] Review session for pull request ${pullRequestNumber} could not subscribe to GitHub updates.`,
+      error,
+    );
   });
 }
 

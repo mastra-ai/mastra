@@ -1,6 +1,7 @@
 import type { IntegrationStorageHandle, IntegrationSubscription } from '../../storage/domains/integrations/base.js';
 
-export type GithubSignalSubscriptionSource = 'auto-gh-pr-create' | 'factory-pr-create' | 'explicit-tool';
+export type GithubSignalSubscriptionSource =
+  'auto-gh-pr-create' | 'factory-pr-create' | 'factory-review-binding' | 'explicit-tool';
 export type GithubSignalSubscriptionStatus = 'open' | 'closed' | 'merged';
 
 export interface GithubSignalSubscriptionData {
@@ -52,9 +53,38 @@ export interface PullRequestSubscriptionTarget {
 }
 
 export type GithubWebhookPullRequestTarget = Omit<PullRequestSubscriptionTarget, 'orgId'>;
+export type GithubRepositoryTarget = Omit<GithubWebhookPullRequestTarget, 'changeRequestId'>;
+
+function changeRequestTargetPrefix(input: GithubRepositoryTarget): string {
+  return `change-request:${input.installationExternalId}:${input.repositoryExternalId}:`;
+}
 
 export function changeRequestTargetKey(input: GithubWebhookPullRequestTarget): string {
-  return `change-request:${input.installationExternalId}:${input.repositoryExternalId}:${input.changeRequestId}`;
+  return `${changeRequestTargetPrefix(input)}${input.changeRequestId}`;
+}
+
+/**
+ * Pull requests one repository still has an open subscription for.
+ *
+ * The reconcile sweep is otherwise card-driven, and a review card reaches
+ * `done` the moment the review pass ends — usually well before a human merges
+ * the pull request. Sweeping the cards alone would leave those subscriptions
+ * open forever whenever the merge webhook is missed.
+ */
+export async function listSubscribedPullRequestNumbers(
+  repository: GithubRepositoryTarget,
+  // Only the target keys are read, so both the typed and the generic handle fit.
+  storage: { subscriptions: { listByStatus(status: string): Promise<{ targetKey: string }[]> } },
+): Promise<number[]> {
+  const prefix = changeRequestTargetPrefix(repository);
+  const rows = await storage.subscriptions.listByStatus('open');
+  const numbers = new Set<number>();
+  for (const row of rows) {
+    if (!row.targetKey.startsWith(prefix)) continue;
+    const pullRequestNumber = Number(row.targetKey.slice(prefix.length));
+    if (Number.isInteger(pullRequestNumber) && pullRequestNumber > 0) numbers.add(pullRequestNumber);
+  }
+  return [...numbers];
 }
 
 function sameSession(row: GithubSignalSubscriptionRow, input: SubscribeToPullRequestInput): boolean {
@@ -97,6 +127,25 @@ export async function subscribeToPullRequest(
       subscribedByUserId: input.subscribedByUserId ?? null,
     },
   });
+}
+
+/**
+ * Re-create a subscription a session lost, without reviving a retired one.
+ *
+ * `subscribeToPullRequest` reopens whatever row it finds. A reconcile-time
+ * backfill doing that would fight the retire the same sweep just performed,
+ * every sweep. Returns whether a row was created.
+ */
+export async function restorePullRequestSubscription(
+  input: SubscribeToPullRequestInput,
+  // Same rows as the typed handle — the sweep only ever holds the generic one.
+  storage: IntegrationStorageHandle,
+): Promise<boolean> {
+  const github = storage as unknown as GithubSubscriptionStorage;
+  const rows = await github.subscriptions.listByTarget(changeRequestTargetKey(input));
+  if (rows.some(row => sameSession(row, input))) return false;
+  await subscribeToPullRequest(input, github);
+  return true;
 }
 
 export async function unsubscribeFromPullRequest(
