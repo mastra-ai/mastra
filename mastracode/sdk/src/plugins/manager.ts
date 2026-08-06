@@ -49,8 +49,22 @@ export class PluginManager {
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
+  private runtime: MastraCodePluginRuntime | undefined;
 
-  constructor(private readonly options: PluginManagerOptions) {}
+  constructor(private readonly options: PluginManagerOptions) {
+    this.runtime = options.runtime;
+  }
+
+  /**
+   * Publish (or replace) the runtime accessors handed to plugin field resolvers.
+   * Takes effect on the next load or reload. `createMastraCode` calls this for
+   * every manager it uses — including an injected one — so a manager constructed
+   * without a runtime still exposes `getController`/`getActiveSession` to plugins.
+   * A manager shared across controllers sees the most recent controller's accessors.
+   */
+  setRuntime(runtime: MastraCodePluginRuntime): void {
+    this.runtime = runtime;
+  }
 
   onReload(listener: (plugins: LoadedPlugin[]) => void | Promise<void>): () => void {
     this.reloadListeners.add(listener);
@@ -67,7 +81,7 @@ export class PluginManager {
     if (this.reloadInFlight) return this.reloadInFlight;
 
     this.reloadInFlight = (async () => {
-      this.loadedPlugins = await loadPlugins(this.options);
+      this.loadedPlugins = await loadPlugins({ ...this.options, runtime: this.runtime });
       await this.stampLoadedPlugins(this.loadedPlugins);
       this.updateLocalEntryWatchers(this.loadedPlugins);
       this.updateGithubPoller(this.loadedPlugins);
