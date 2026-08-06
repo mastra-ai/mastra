@@ -1,21 +1,29 @@
-import type {
-  Message,
-  Task,
-  TaskState,
-  TaskStatus,
-  TaskContext,
-  TaskArtifactUpdateEvent,
-  Artifact,
-} from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { InMemoryTaskStore } from './store';
+import type {
+  A2AWireArtifact as Artifact,
+  A2AWireMessage as Message,
+  A2AWireTask as Task,
+  A2AWireTaskArtifactUpdateEvent as TaskArtifactUpdateEvent,
+  A2AWireTaskStatus as TaskStatus,
+} from './wire-types';
+import { TERMINAL_TASK_STATES } from './wire-types';
 
+export interface TaskContext {
+  task: Task;
+  userMessage: Message;
+  history: Message[];
+  isCancelled(): boolean;
+}
+
+// v1 wire status/artifact updates are discriminated structurally (no `kind`):
+// a status update carries `state`; an artifact update carries `artifact`.
 function isTaskStatusUpdate(update: TaskStatus | TaskArtifactUpdateEvent): update is Omit<TaskStatus, 'timestamp'> {
-  return 'state' in update && !('parts' in update);
+  return 'state' in update && !('artifact' in update);
 }
 
 function isArtifactUpdate(update: TaskStatus | TaskArtifactUpdateEvent): update is TaskArtifactUpdateEvent {
-  return 'kind' in update && update.kind === 'artifact-update';
+  return 'artifact' in update;
 }
 
 export function applyUpdateToTask(
@@ -94,14 +102,13 @@ export async function loadOrCreateTask({
       id: taskId,
       contextId: contextId || crypto.randomUUID(),
       status: {
-        state: 'submitted',
+        state: 'TASK_STATE_SUBMITTED',
         timestamp: new Date().toISOString(),
         message: undefined,
       },
       artifacts: [],
       history: [message],
       metadata: metadata,
-      kind: 'task',
     };
 
     logger?.info(`[Task ${taskId}] Created new task.`);
@@ -119,18 +126,17 @@ export async function loadOrCreateTask({
 
   // Handle state transitions
   const { status } = data;
-  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
 
-  if (finalStates.includes(status.state)) {
+  if (TERMINAL_TASK_STATES.includes(status.state)) {
     logger?.warn(`[Task ${taskId}] Received message for task in final state ${status.state}. Restarting.`);
     updatedData = applyUpdateToTask(updatedData, {
-      state: 'submitted',
+      state: 'TASK_STATE_SUBMITTED',
       message: undefined,
     });
-  } else if (status.state === 'input-required') {
+  } else if (status.state === 'TASK_STATE_INPUT_REQUIRED') {
     logger?.info(`[Task ${taskId}] Changing state from 'input-required' to 'working'.`);
-    updatedData = applyUpdateToTask(updatedData, { state: 'working' });
-  } else if (status.state === 'working') {
+    updatedData = applyUpdateToTask(updatedData, { state: 'TASK_STATE_WORKING' });
+  } else if (status.state === 'TASK_STATE_WORKING') {
     logger?.warn(`[Task ${taskId}] Received message while already 'working'. Proceeding.`);
   }
 

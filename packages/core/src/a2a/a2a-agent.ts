@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk';
+import { A2A_VERSION_HEADER } from '@a2a-js/sdk';
+import type { AgentCard, AgentInterface } from '@a2a-js/sdk';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../agent/message-list';
@@ -21,6 +22,50 @@ import type {
   JSONRPCResponse,
   RequestCredentialsMode,
 } from './types';
+import {
+  isTerminalWireTaskState,
+  isTextPart,
+  isWireArtifactUpdate,
+  isWireMessage,
+  isWireStatusUpdate,
+  isWireTask,
+  normalizeInboundEvent,
+  wireMessageToLegacy,
+} from './wire-types';
+import type {
+  PeerVersion,
+  WireArtifact,
+  WireMessage as Message,
+  WirePart,
+  WireStreamEvent,
+  WireTask as Task,
+  WireTaskArtifactUpdateEvent as TaskArtifactUpdateEvent,
+  WireTaskStatusUpdateEvent as TaskStatusUpdateEvent,
+} from './wire-types';
+
+/** v1 JSON-RPC (PascalCase) method names. */
+const V1_METHOD = {
+  sendMessage: 'SendMessage',
+  sendStreamingMessage: 'SendStreamingMessage',
+  getTask: 'GetTask',
+  subscribeToTask: 'SubscribeToTask',
+  cancelTask: 'CancelTask',
+} as const;
+
+/** v0.3 JSON-RPC (slash) method names. */
+const LEGACY_METHOD = {
+  sendMessage: 'message/send',
+  sendStreamingMessage: 'message/stream',
+  getTask: 'tasks/get',
+  subscribeToTask: 'tasks/resubscribe',
+  cancelTask: 'tasks/cancel',
+} as const;
+
+type MethodKey = keyof typeof V1_METHOD;
+
+/** The A2A-Version header value for the v1 protocol. */
+const A2A_V1_HEADER_VALUE = '1.0';
+const A2A_V03_HEADER_VALUE = '0.3';
 
 type FetchLike = typeof fetch;
 
@@ -45,6 +90,8 @@ type AgentBootstrap = {
   cardUrl: string;
   executionUrl: string;
   streamingSupported: boolean;
+  /** Protocol version of the selected interface. Defaults to '1.0'. */
+  peerVersion: PeerVersion;
 };
 
 type TerminalEvaluation =
@@ -144,16 +191,16 @@ function createFinishPayload(): A2AAgentFinishPayload {
   };
 }
 
-function isTask(result: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent): result is Task {
-  return typeof result === 'object' && result !== null && 'status' in result && 'id' in result && 'kind' in result;
+function isTask(result: WireStreamEvent): result is Task {
+  return isWireTask(result);
 }
 
-function isMessage(result: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent): result is Message {
-  return typeof result === 'object' && result !== null && 'messageId' in result && 'parts' in result;
+function isMessage(result: WireStreamEvent): result is Message {
+  return isWireMessage(result);
 }
 
 function isTerminalTaskState(state: Task['status']['state'] | undefined) {
-  return state === 'completed' || state === 'failed' || state === 'canceled' || state === 'rejected';
+  return isTerminalWireTaskState(state);
 }
 
 function splitNextEvent(buffer: string): { eventBlock?: string; rest: string } {
@@ -200,47 +247,36 @@ function parseEventBlock(eventBlock: string): { done: true } | { event?: A2AStre
   return { event: parsed as A2AStreamEventData };
 }
 
-function extractTextParts(parts: { kind: string; text?: string }[] | undefined): string {
+function extractTextParts(parts: WirePart[] | undefined): string {
   return (parts ?? [])
-    .filter((part): part is { kind: string; text: string } => part.kind === 'text' && typeof part.text === 'string')
+    .filter(isTextPart)
     .map(part => part.text)
     .join('\n');
 }
 
 function extractTaskText(task: Task): string {
   const artifactText = (task.artifacts ?? [])
-    .flatMap(
-      artifact =>
-        artifact.parts?.flatMap(part => {
-          if (part.kind === 'text' && 'text' in part && typeof part.text === 'string') {
-            return [part.text];
-          }
-
-          return [];
-        }) ?? [],
-    )
+    .flatMap(artifact => artifact.parts?.filter(isTextPart).map(part => part.text) ?? [])
     .join('\n');
-  const statusText = task.status.message ? extractMessageText(task.status.message) : '';
+  const statusText = task.status?.message ? extractMessageText(task.status.message) : '';
   return [artifactText, statusText].filter(Boolean).join('\n').trim();
 }
 
 function extractTaskArtifactText(task: Task): string {
   return (task.artifacts ?? [])
-    .flatMap(
-      artifact =>
-        artifact.parts?.flatMap(part => {
-          if (part.kind === 'text' && 'text' in part && typeof part.text === 'string') {
-            return [part.text];
-          }
+    .flatMap(artifact => artifact.parts?.filter(isTextPart).map(part => part.text) ?? [])
+    .join('');
+}
 
-          return [];
-        }) ?? [],
-    )
+function extractArtifactText(artifact: WireArtifact): string {
+  return (artifact.parts ?? [])
+    .filter(isTextPart)
+    .map(part => part.text)
     .join('');
 }
 
 function extractMessageText(message: Message): string {
-  return extractTextParts(message.parts as { kind: string; text?: string }[] | undefined).trim();
+  return extractTextParts(message.parts).trim();
 }
 
 function messagesToPrompt<OUTPUT>(messages: MessageListInput, options?: AgentExecutionOptionsBase<OUTPUT>): string {
@@ -465,6 +501,27 @@ async function requireResponseBody(response: Response, operation: string) {
   }
 
   return response.body;
+}
+
+/**
+ * Select the interface the client should call from a v1 AgentCard. Prefers a
+ * JSONRPC interface (the transport this client speaks), falling back to the
+ * first advertised interface. The chosen interface's `protocolVersion` tells us
+ * whether the peer is v1 ('1.0') or legacy ('0.3'); v1 is assumed when the
+ * version is absent/unknown since it is the current protocol.
+ */
+function selectInterface(card: AgentCard): { executionUrl: string; peerVersion: PeerVersion } {
+  const interfaces: AgentInterface[] = Array.isArray(card.supportedInterfaces) ? card.supportedInterfaces : [];
+
+  const preferred = interfaces.find(iface => iface.protocolBinding?.toUpperCase() === 'JSONRPC') ?? interfaces[0];
+
+  if (!preferred?.url) {
+    throw MastraA2AError.invalidAgentResponse('Remote A2A agent card does not advertise a callable interface.');
+  }
+
+  const peerVersion: PeerVersion = preferred.protocolVersion === '0.3' ? '0.3' : '1.0';
+
+  return { executionUrl: preferred.url, peerVersion };
 }
 
 export class A2AAgent implements SubAgent {
@@ -708,11 +765,14 @@ export class A2AAgent implements SubAgent {
       await this.#verifyAgentCard.verify(card, context);
     }
 
+    const { executionUrl, peerVersion } = selectInterface(card);
+
     const bootstrap: AgentBootstrap = {
       card,
       cardUrl,
-      executionUrl: card.url,
+      executionUrl,
       streamingSupported: card.capabilities?.streaming ?? false,
+      peerVersion,
     };
 
     this.#cachedBootstrap = bootstrap;
@@ -721,6 +781,43 @@ export class A2AAgent implements SubAgent {
 
   #resolveCardUrl() {
     return this.#url.endsWith('/agent-card.json') ? this.#url : `${this.#url}/.well-known/agent-card.json`;
+  }
+
+  /** Resolve the JSON-RPC method name for the peer's protocol version. */
+  #resolveMethod(bootstrap: AgentBootstrap, key: MethodKey): string {
+    return bootstrap.peerVersion === '0.3' ? LEGACY_METHOD[key] : V1_METHOD[key];
+  }
+
+  /** Protocol-version header for the peer. */
+  #versionHeaders(bootstrap: AgentBootstrap): Record<string, string> {
+    return {
+      [A2A_VERSION_HEADER]: bootstrap.peerVersion === '0.3' ? A2A_V03_HEADER_VALUE : A2A_V1_HEADER_VALUE,
+    };
+  }
+
+  /** Build an outbound message payload in the peer's protocol shape. */
+  #buildMessageParams(
+    bootstrap: AgentBootstrap,
+    { prompt, contextId, referenceTaskIds }: { prompt: string; contextId?: string; referenceTaskIds?: string[] },
+  ): { message: Record<string, unknown> } {
+    const wireMessage: Message = {
+      messageId: randomUUID(),
+      role: 'ROLE_USER',
+      parts: [{ text: prompt }],
+      ...(contextId ? { contextId } : {}),
+      ...(referenceTaskIds?.length ? { referenceTaskIds } : {}),
+    };
+
+    if (bootstrap.peerVersion === '0.3') {
+      return { message: wireMessageToLegacy(wireMessage) };
+    }
+
+    return { message: wireMessage as unknown as Record<string, unknown> };
+  }
+
+  /** Normalize an unwrapped JSON-RPC result into v1 wire shapes. */
+  #normalizeResult(bootstrap: AgentBootstrap, result: Message | Task): Message | Task {
+    return normalizeInboundEvent(result as WireStreamEvent, bootstrap.peerVersion) as Message | Task;
   }
 
   async #sendMessage({
@@ -739,25 +836,17 @@ export class A2AAgent implements SubAgent {
     const response = await this.#request(bootstrap.executionUrl, {
       method: 'POST',
       signal,
+      headers: this.#versionHeaders(bootstrap),
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'message/send',
-        params: {
-          message: {
-            role: 'user',
-            kind: 'message',
-            messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }],
-            ...(contextId ? { contextId } : {}),
-            ...(referenceTaskIds?.length ? { referenceTaskIds } : {}),
-          },
-        },
+        method: this.#resolveMethod(bootstrap, 'sendMessage'),
+        params: this.#buildMessageParams(bootstrap, { prompt, contextId, referenceTaskIds }),
       } satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    return unwrapA2AResult(json);
+    return this.#normalizeResult(bootstrap, unwrapA2AResult(json));
   }
 
   async #sendAndResolve({
@@ -820,19 +909,20 @@ export class A2AAgent implements SubAgent {
     const response = await this.#request(bootstrap.executionUrl, {
       method: 'POST',
       signal,
+      headers: this.#versionHeaders(bootstrap),
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'tasks/get',
+        method: this.#resolveMethod(bootstrap, 'getTask'),
         params: { id: taskId },
       } satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    const result = unwrapA2AResult(json);
+    const result = this.#normalizeResult(bootstrap, unwrapA2AResult(json));
 
     if (!isTask(result)) {
-      throw MastraA2AError.invalidAgentResponse('Remote A2A agent returned a non-task response for tasks/get.');
+      throw MastraA2AError.invalidAgentResponse('Remote A2A agent returned a non-task response for GetTask.');
     }
 
     return result;
@@ -885,7 +975,7 @@ export class A2AAgent implements SubAgent {
         lastTask: evaluation.task,
       });
 
-      if (evaluation.task.status.state === 'input-required') {
+      if (evaluation.task.status?.state === 'TASK_STATE_INPUT_REQUIRED') {
         return createGenerateResult({
           runId,
           text: evaluation.text,
@@ -910,7 +1000,7 @@ export class A2AAgent implements SubAgent {
   #evaluateTask({ bootstrap, task }: { bootstrap: AgentBootstrap; task: Task }): TerminalEvaluation {
     const text = extractTaskText(task);
 
-    if (task.status.state === 'input-required') {
+    if (task.status?.state === 'TASK_STATE_INPUT_REQUIRED') {
       return {
         kind: 'suspended',
         text,
@@ -927,7 +1017,7 @@ export class A2AAgent implements SubAgent {
       };
     }
 
-    if (isTerminalTaskState(task.status.state)) {
+    if (isTerminalTaskState(task.status?.state)) {
       return {
         kind: 'completed',
         text,
@@ -975,27 +1065,19 @@ export class A2AAgent implements SubAgent {
       method: 'POST',
       signal,
       stream: true,
+      headers: this.#versionHeaders(bootstrap),
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'message/stream',
-        params: {
-          message: {
-            role: 'user',
-            kind: 'message',
-            messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }],
-            ...(contextId ? { contextId } : {}),
-            ...(referenceTaskIds?.length ? { referenceTaskIds } : {}),
-          },
-        },
+        method: this.#resolveMethod(bootstrap, 'sendStreamingMessage'),
+        params: this.#buildMessageParams(bootstrap, { prompt, contextId, referenceTaskIds }),
       } satisfies JSONRPCRequestBody,
     });
 
     return this.#consumeA2AStream({
       bootstrap,
       runId,
-      stream: await requireResponseBody(response, 'message/stream'),
+      stream: await requireResponseBody(response, 'SendStreamingMessage'),
       threadId,
       resourceId,
       emitStart,
@@ -1023,10 +1105,11 @@ export class A2AAgent implements SubAgent {
       method: 'POST',
       signal,
       stream: true,
+      headers: this.#versionHeaders(bootstrap),
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'tasks/resubscribe',
+        method: this.#resolveMethod(bootstrap, 'subscribeToTask'),
         params: { id: taskId },
       } satisfies JSONRPCRequestBody,
     });
@@ -1035,7 +1118,7 @@ export class A2AAgent implements SubAgent {
       bootstrap,
       runId,
       initialTask,
-      stream: await requireResponseBody(response, 'tasks/resubscribe'),
+      stream: await requireResponseBody(response, 'SubscribeToTask'),
       threadId,
       resourceId,
       // Resubscribing continues an existing run; `start` is only emitted for fresh runs,
@@ -1185,11 +1268,11 @@ export class A2AAgent implements SubAgent {
         }
 
         if ('event' in parsed && parsed.event) {
-          const event = parsed.event;
+          const event = normalizeInboundEvent(parsed.event, bootstrap.peerVersion);
 
           if (isTask(event)) {
             task = event;
-            if (event.status.state === 'input-required') {
+            if (event.status?.state === 'TASK_STATE_INPUT_REQUIRED') {
               suspended = {
                 taskId: event.id,
                 contextId: event.contextId,
@@ -1211,12 +1294,8 @@ export class A2AAgent implements SubAgent {
                 yield toAgentStreamChunk(runId, { type: 'text-delta', payload: { id: textId, text } });
               }
             }
-          } else if (event.kind === 'artifact-update') {
-            const text = event.artifact.parts
-              ?.flatMap(part =>
-                part.kind === 'text' && 'text' in part && typeof part.text === 'string' ? [part.text] : [],
-              )
-              .join('');
+          } else if (isWireArtifactUpdate(event)) {
+            const text = extractArtifactText(event.artifact);
             if (text) {
               textId ??= resolveStreamTextId([event.artifact.artifactId, task?.id]);
               if (textId) {
@@ -1227,14 +1306,14 @@ export class A2AAgent implements SubAgent {
                 yield toAgentStreamChunk(runId, { type: 'text-delta', payload: { id: textId, text } });
               }
             }
-          } else if (event.kind === 'status-update') {
+          } else if (isWireStatusUpdate(event)) {
             task = task
               ? {
                   ...task,
                   status: event.status,
                 }
               : task;
-            if (event.status.state === 'input-required' && task) {
+            if (event.status?.state === 'TASK_STATE_INPUT_REQUIRED' && task) {
               suspended = {
                 taskId: task.id,
                 contextId: task.contextId,
@@ -1256,7 +1335,7 @@ export class A2AAgent implements SubAgent {
           yield toAgentStreamChunk(runId, { type: 'text-end', payload: { id: textId } });
         }
 
-        if (!suspended && task && !isTerminalTaskState(task.status.state)) {
+        if (!suspended && task && !isTerminalTaskState(task.status?.state)) {
           suspended = {
             taskId: task.id,
             contextId: task.contextId,
@@ -1322,13 +1401,13 @@ export class A2AAgent implements SubAgent {
         }
 
         if ('event' in parsed && parsed.event) {
-          const event = parsed.event;
+          const event = normalizeInboundEvent(parsed.event, bootstrap.peerVersion);
 
           if (isTask(event)) {
             task = event;
             textBuffer = extractTaskArtifactText(event) || textBuffer;
 
-            if (event.status.state === 'input-required') {
+            if (event.status?.state === 'TASK_STATE_INPUT_REQUIRED') {
               suspended = {
                 payload: {
                   taskId: event.id,
@@ -1346,26 +1425,25 @@ export class A2AAgent implements SubAgent {
             if (messageText) {
               textBuffer = messageText;
             }
-          } else if (event.kind === 'artifact-update') {
+          } else if (isWireArtifactUpdate(event)) {
+            const updateEvent = event;
             task = task
               ? {
                   ...task,
                   artifacts: [
-                    ...(task.artifacts ?? []).filter(artifact => artifact.artifactId !== event.artifact.artifactId),
-                    event.artifact,
+                    ...(task.artifacts ?? []).filter(
+                      artifact => artifact.artifactId !== updateEvent.artifact.artifactId,
+                    ),
+                    updateEvent.artifact,
                   ],
                 }
               : task;
 
-            const artifactText = event.artifact.parts
-              ?.flatMap(part =>
-                part.kind === 'text' && 'text' in part && typeof part.text === 'string' ? [part.text] : [],
-              )
-              .join('');
+            const artifactText = extractArtifactText(updateEvent.artifact);
             if (artifactText) {
               textBuffer += artifactText;
             }
-          } else if (event.kind === 'status-update') {
+          } else if (isWireStatusUpdate(event)) {
             task = task
               ? {
                   ...task,
@@ -1373,7 +1451,7 @@ export class A2AAgent implements SubAgent {
                 }
               : task;
 
-            if (event.status.state === 'input-required' && task) {
+            if (event.status?.state === 'TASK_STATE_INPUT_REQUIRED' && task) {
               suspended = {
                 payload: {
                   taskId: task.id,
@@ -1398,7 +1476,7 @@ export class A2AAgent implements SubAgent {
       }
     }
 
-    if (!suspended && task && !isTerminalTaskState(task.status.state)) {
+    if (!suspended && task && !isTerminalTaskState(task.status?.state)) {
       suspended = {
         payload: {
           taskId: task.id,

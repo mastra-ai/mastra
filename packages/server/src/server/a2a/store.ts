@@ -1,4 +1,4 @@
-import type { Task } from '@mastra/core/a2a';
+import type { A2AWireTask as Task } from './wire-types';
 
 function createAbortError() {
   return new DOMException('The operation was aborted.', 'AbortError');
@@ -61,6 +61,21 @@ export class InMemoryTaskStore {
 
   getVersion({ agentId, taskId }: { agentId: string; taskId: string }): number {
     return this.versions.get(this.getKey(agentId, taskId)) ?? 0;
+  }
+
+  /**
+   * Lists all stored tasks for an agent. Used by the v1 `ListTasks` method.
+   * Keys are namespaced `${agentId}-${taskId}`, so we match on the agent prefix.
+   */
+  listByAgent({ agentId }: { agentId: string }): Task[] {
+    const prefix = `${agentId}-`;
+    const tasks: Task[] = [];
+    for (const [key, task] of this.store.entries()) {
+      if (key.startsWith(prefix)) {
+        tasks.push({ ...task });
+      }
+    }
+    return tasks;
   }
 
   async waitForNextUpdate({

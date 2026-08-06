@@ -1,19 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { MastraA2AError } from '@mastra/core/a2a';
-import type {
-  MessageSendParams,
-  TaskQueryParams,
-  TaskIdParams,
-  AgentCard,
-  TaskStatus,
-  TaskState,
-  Task,
-  TaskPushNotificationConfig,
-  GetTaskPushNotificationConfigParams,
-  ListTaskPushNotificationConfigParams,
-  DeleteTaskPushNotificationConfigParams,
-  Artifact,
-} from '@mastra/core/a2a';
+import { a2aV03Compat, MastraA2AError } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -22,8 +8,27 @@ import { signAgentCard } from '../a2a/agent-card-signing';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
+import type {
+  GetTaskPushNotificationConfigParams,
+  ListTaskPushNotificationConfigParams,
+  DeleteTaskPushNotificationConfigParams,
+  TaskPushNotificationConfig,
+} from '../a2a/push-notification-store';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
+import { normalizeToV1Method, v03MessageToV1, v1EventToV03 } from '../a2a/translate';
+import { isLegacyVersion, resolveProtocolVersion } from '../a2a/version';
+import type { A2AProtocolVersion } from '../a2a/version';
+import type {
+  A2ATaskStateWire,
+  A2AWireArtifact as Artifact,
+  A2AWireMessage,
+  A2AWireStreamEvent,
+  A2AWireTask as Task,
+  A2AWireTaskArtifactUpdateEvent,
+  A2AWireTaskStatus as TaskStatus,
+} from '../a2a/wire-types';
+import { isTextWirePart, TERMINAL_TASK_STATES } from '../a2a/wire-types';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
@@ -36,48 +41,52 @@ import { convertInstructionsToString } from '../utils';
 import { getAgentFromSystem } from './agents';
 import { getPublicOrigin } from './auth';
 
-// Mirrors @a2a-js/sdk's Part discriminated union (text | file | data) and the
-// part shape already declared in ../schemas/a2a.ts. Before this widening, the
-// schema hard-coded `kind: z.enum(['text'])` which rejected every non-text
-// part before the converter could see it — even though convertToCoreMessagePart
-// at ../a2a/protocol.ts already handles file and data parts. With this change,
-// FilePart (FileWithBytes | FileWithUri) and DataPart parse successfully and
-// reach the converter (data parts then throw a clear "not supported in core
-// messages" message; files convert natively to AI-SDK CoreMessage file parts).
-const messagePartSchema = z.discriminatedUnion('kind', [
+type AgentCard = z.infer<typeof agentCardResponseSchema>;
+
+// v1 wire message-send params. The server accepts both v0.3- and v1-shaped
+// inbound messages; a legacy inbound message is normalized to v1 (via
+// v03MessageToV1) before it reaches these handlers.
+interface MessageSendParams {
+  message: A2AWireMessage;
+  configuration?: {
+    acceptedOutputModes?: string[];
+    blocking?: boolean;
+    historyLength?: number;
+    pushNotificationConfig?: TaskPushNotificationConfig['pushNotificationConfig'];
+  };
+  metadata?: Record<string, unknown>;
+}
+
+// v1 wire message-send params validation schema (content-keyed parts, no kind).
+const messagePartSchema = z.union([
   z.object({
-    kind: z.literal('text'),
     text: z.string(),
+    mediaType: z.string().optional(),
     metadata: z.record(z.string(), z.any()).optional(),
   }),
   z.object({
-    kind: z.literal('file'),
-    file: z.union([
-      z.object({
-        bytes: z.string(),
-        mimeType: z.string().optional(),
-        name: z.string().optional(),
-      }),
-      z.object({
-        uri: z.string(),
-        mimeType: z.string().optional(),
-        name: z.string().optional(),
-      }),
-    ]),
+    raw: z.string(),
+    filename: z.string().optional(),
+    mediaType: z.string().optional(),
     metadata: z.record(z.string(), z.any()).optional(),
   }),
   z.object({
-    kind: z.literal('data'),
-    data: z.record(z.string(), z.any()),
+    url: z.string(),
+    filename: z.string().optional(),
+    mediaType: z.string().optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+  z.object({
+    data: z.union([z.record(z.string(), z.any()), z.array(z.any())]),
+    mediaType: z.string().optional(),
     metadata: z.record(z.string(), z.any()).optional(),
   }),
 ]);
 
 const messageSendParamsSchema = z.object({
   message: z.object({
-    role: z.enum(['user', 'agent']),
+    role: z.enum(['ROLE_USER', 'ROLE_AGENT']),
     parts: z.array(messagePartSchema),
-    kind: z.literal('message'),
     messageId: z.string(),
     contextId: z.string().optional(),
     taskId: z.string().optional(),
@@ -114,28 +123,15 @@ function createAgentCardDefaults({
   pushNotifications = false,
 }: {
   pushNotifications?: boolean;
-} = {}): Pick<
-  AgentCard,
-  | 'protocolVersion'
-  | 'additionalInterfaces'
-  | 'supportsAuthenticatedExtendedCard'
-  | 'security'
-  | 'securitySchemes'
-  | 'capabilities'
-  | 'defaultInputModes'
-  | 'defaultOutputModes'
-> {
+} = {}) {
   return {
-    protocolVersion: '0.3.0',
-    additionalInterfaces: [],
-    supportsAuthenticatedExtendedCard: false,
-    security: [],
-    securitySchemes: {},
+    security: [] as Array<Record<string, string[]>>,
+    securitySchemes: {} as Record<string, unknown>,
     capabilities: {
       streaming: true,
       pushNotifications,
-      stateTransitionHistory: false,
-      extensions: [],
+      extendedAgentCard: false,
+      extensions: [] as unknown[],
     },
     defaultInputModes: ['text/plain'],
     defaultOutputModes: ['text/plain'],
@@ -153,6 +149,7 @@ export async function getAgentCardByIdHandler({
   version = '1.0',
   pushNotifications = false,
   requestContext,
+  protocolVersion,
 }: Context & {
   requestContext: RequestContext;
   agentId: keyof ReturnType<typeof mastra.listAgents>;
@@ -163,6 +160,7 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
   pushNotifications?: boolean;
+  protocolVersion?: A2AProtocolVersion;
 }): Promise<AgentCard> {
   const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
 
@@ -171,11 +169,22 @@ export async function getAgentCardByIdHandler({
     Awaited<ReturnType<typeof agent.listTools>>,
   ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
-  // Extract agent information to create the AgentCard
+  const legacy = protocolVersion ? isLegacyVersion(protocolVersion) : false;
+
+  // v1 AgentCard: the execution endpoint lives in `supportedInterfaces`.
+  const v1Interface = {
+    url: executionUrl,
+    protocolBinding: 'JSONRPC',
+    protocolVersion: '1.0',
+    tenant: '',
+  };
+
+  // Build a V1 AgentCard.
   const agentCard: AgentCard = {
     name: agent.id || (agentId as string),
     description: convertInstructionsToString(instructions),
-    url: executionUrl,
+    protocolVersion: '1.0',
+    supportedInterfaces: [v1Interface],
     provider,
     version,
     ...createAgentCardDefaults({ pushNotifications }),
@@ -189,15 +198,27 @@ export async function getAgentCardByIdHandler({
     })),
   };
 
+  if (legacy) {
+    // Down-translate for a v0.3 consumer: mirror the interface as a top-level
+    // `url` + `additionalInterfaces`, restore the extended-card flag, and add a
+    // legacy interface alongside the v1 one so both peers can discover it.
+    const legacyInterfaces = a2aV03Compat.duplicateInterfacesForLegacy([v1Interface], ['JSONRPC']);
+    agentCard.protocolVersion = '0.3';
+    agentCard.url = executionUrl;
+    agentCard.supportedInterfaces = legacyInterfaces;
+    agentCard.additionalInterfaces = legacyInterfaces;
+    agentCard.supportsAuthenticatedExtendedCard = false;
+  }
+
   const signing = mastra.getServer?.()?.a2a?.agentCardSigning;
   if (!signing) {
     return agentCard;
   }
 
   return signAgentCard({
-    agentCard,
+    agentCard: agentCard as unknown as Parameters<typeof signAgentCard>[0]['agentCard'],
     signing,
-  });
+  }) as unknown as AgentCard;
 }
 
 function getA2AExecutionUrl({
@@ -240,18 +261,14 @@ function createArtifactUpdate({
   contextId: string;
   text?: string;
   data?: Record<string, unknown>;
-}) {
-  const parts = [
-    ...(text ? [{ kind: 'text' as const, text }] : []),
-    ...(data ? [{ kind: 'data' as const, data }] : []),
-  ];
+}): A2AWireTaskArtifactUpdateEvent | undefined {
+  const parts: Artifact['parts'] = [...(text ? [{ text }] : []), ...(data ? [{ data }] : [])];
 
   if (parts.length === 0) {
     return undefined;
   }
 
   return {
-    kind: 'artifact-update' as const,
     taskId,
     contextId,
     lastChunk: true,
@@ -275,9 +292,8 @@ function createTextChunkArtifactUpdate({
   text: string;
   append?: boolean;
   lastChunk?: boolean;
-}) {
+}): A2AWireTaskArtifactUpdateEvent {
   return {
-    kind: 'artifact-update' as const,
     taskId,
     contextId,
     ...(append ? { append: true } : {}),
@@ -285,7 +301,7 @@ function createTextChunkArtifactUpdate({
     artifact: {
       artifactId: `${taskId}:response:text`,
       name: 'response.txt',
-      parts: [{ kind: 'text' as const, text }],
+      parts: [{ text }],
     },
   };
 }
@@ -300,16 +316,15 @@ function createDataArtifactUpdate({
   contextId: string;
   data: Record<string, unknown>;
   lastChunk?: boolean;
-}) {
+}): A2AWireTaskArtifactUpdateEvent {
   return {
-    kind: 'artifact-update' as const,
     taskId,
     contextId,
     ...(lastChunk !== undefined ? { lastChunk } : {}),
     artifact: {
       artifactId: `${taskId}:response:data`,
       name: 'response.json',
-      parts: [{ kind: 'data' as const, data }],
+      parts: [{ data }],
     },
   };
 }
@@ -355,7 +370,12 @@ function createTaskPushNotificationConfig(
 }
 
 function shouldSendPushNotification(previousTask: Task | undefined, nextTask: Task) {
-  const pushTriggerStates: TaskState[] = ['completed', 'failed', 'canceled', 'input-required'];
+  const pushTriggerStates: A2ATaskStateWire[] = [
+    'TASK_STATE_COMPLETED',
+    'TASK_STATE_FAILED',
+    'TASK_STATE_CANCELED',
+    'TASK_STATE_INPUT_REQUIRED',
+  ];
 
   if (!pushTriggerStates.includes(nextTask.status.state)) {
     return false;
@@ -388,7 +408,9 @@ async function saveTaskAndMaybeSendPushNotification({
   void pushNotificationSender
     .sendNotifications({
       agentId,
-      task: nextTask,
+      // The sender only reads `task.id`; it is typed against the SDK's in-memory
+      // Task, but Mastra passes wire-shaped tasks internally.
+      task: nextTask as unknown as Parameters<DefaultPushNotificationSender['sendNotifications']>[0]['task'],
       logger,
     })
     .catch(error => {
@@ -456,8 +478,8 @@ function extractFinalStructuredObject(value: unknown): Record<string, unknown> |
   return objectValue && typeof objectValue === 'object' ? (objectValue as Record<string, unknown>) : undefined;
 }
 
-function isTerminalTaskState(state: TaskState) {
-  return ['completed', 'failed', 'canceled'].includes(state);
+function isTerminalTaskState(state: A2ATaskStateWire) {
+  return TERMINAL_TASK_STATES.includes(state);
 }
 
 function artifactIdentity(artifact: Artifact) {
@@ -475,11 +497,11 @@ function areArtifactPartsEqual(left: Artifact['parts'], right: Artifact['parts']
 
   return left.every((part, index) => {
     const other = right[index];
-    if (!other || part.kind !== other.kind) {
+    if (!other) {
       return false;
     }
 
-    if (part.kind === 'text' && other.kind === 'text') {
+    if (isTextWirePart(part) && isTextWirePart(other)) {
       return part.text === other.text;
     }
 
@@ -523,7 +545,6 @@ function areStatusMessagesEqual(left: Task['status']['message'], right: Task['st
 
   return (
     left.messageId === right.messageId &&
-    left.kind === right.kind &&
     left.role === right.role &&
     left.contextId === right.contextId &&
     left.taskId === right.taskId &&
@@ -550,7 +571,6 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
   });
 
   return changedArtifacts.map((artifact, index) => ({
-    kind: 'artifact-update' as const,
     taskId: next.id,
     contextId: next.contextId,
     lastChunk: isTerminalTaskState(next.status.state) && index === changedArtifacts.length - 1,
@@ -594,7 +614,7 @@ async function executeMessageSend({
     });
 
     const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
-    if (latestTask?.status.state === 'canceled') {
+    if (latestTask?.status.state === 'TASK_STATE_CANCELED') {
       return createSuccessResponse(requestId, latestTask);
     }
     currentData = latestTask ?? currentData;
@@ -612,7 +632,7 @@ async function executeMessageSend({
 
     const previousTask = currentData;
     currentData = applyUpdateToTask(currentData, {
-      state: 'completed',
+      state: 'TASK_STATE_COMPLETED',
       message: undefined,
     });
 
@@ -637,24 +657,22 @@ async function executeMessageSend({
     });
   } catch (handlerError) {
     const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
-    if (latestTask?.status.state === 'canceled') {
+    if (latestTask?.status.state === 'TASK_STATE_CANCELED') {
       return createSuccessResponse(requestId, latestTask);
     }
     currentData = latestTask ?? currentData;
 
     // If handler throws, apply 'failed' status, save, and rethrow
     const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
-      state: 'failed',
+      state: 'TASK_STATE_FAILED',
       message: {
         messageId: crypto.randomUUID(),
-        role: 'agent',
+        role: 'ROLE_AGENT',
         parts: [
           {
-            kind: 'text',
             text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
           },
         ],
-        kind: 'message',
       },
     };
     const previousTask = currentData;
@@ -708,7 +726,7 @@ export async function handleMessageSend({
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
   const existingTask = await taskStore.load({ agentId, taskId });
-  if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
+  if (params.configuration?.blocking === false && existingTask?.status.state === 'TASK_STATE_WORKING') {
     return createSuccessResponse(requestId, existingTask);
   }
   const {
@@ -736,12 +754,11 @@ export async function handleMessageSend({
   }
 
   currentData = applyUpdateToTask(currentData, {
-    state: 'working',
+    state: 'TASK_STATE_WORKING',
     message: {
       messageId: crypto.randomUUID(),
-      kind: 'message',
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Generating response...' }],
+      role: 'ROLE_AGENT',
+      parts: [{ text: 'Generating response...' }],
     },
   });
   await saveTaskAndMaybeSendPushNotification({
@@ -994,12 +1011,11 @@ export async function* handleMessageStream({
   }
 
   currentData = applyUpdateToTask(currentData, {
-    state: 'working',
+    state: 'TASK_STATE_WORKING',
     message: {
       messageId: crypto.randomUUID(),
-      kind: 'message',
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Generating response...' }],
+      role: 'ROLE_AGENT',
+      parts: [{ text: 'Generating response...' }],
     },
   });
 
@@ -1114,7 +1130,7 @@ export async function* handleMessageStream({
 
     const previousTask = currentData;
     const completedTask = applyUpdateToTask(currentData, {
-      state: 'completed',
+      state: 'TASK_STATE_COMPLETED',
       message: undefined,
     });
 
@@ -1141,17 +1157,15 @@ export async function* handleMessageStream({
   } catch (handlerError) {
     const previousTask = currentData;
     currentData = applyUpdateToTask(currentData, {
-      state: 'failed',
+      state: 'TASK_STATE_FAILED',
       message: {
         messageId: crypto.randomUUID(),
-        role: 'agent',
+        role: 'ROLE_AGENT',
         parts: [
           {
-            kind: 'text',
             text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
           },
         ],
-        kind: 'message',
       },
     });
 
@@ -1171,11 +1185,9 @@ export async function* handleMessageStream({
   }
 
   yield createSuccessResponse(requestId, {
-    kind: 'status-update',
     taskId: currentData.id,
     contextId: currentData.contextId,
     status: currentData.status,
-    final: true,
   });
 }
 
@@ -1219,11 +1231,9 @@ export async function* handleTaskResubscribe({
 
     if (didTaskStatusChange(task, nextUpdate.task)) {
       yield createSuccessResponse(requestId, {
-        kind: 'status-update',
         taskId: nextUpdate.task.id,
         contextId: nextUpdate.task.contextId,
         status: nextUpdate.task.status,
-        final: isTerminalTaskState(nextUpdate.task.status.state),
       });
     }
 
@@ -1235,9 +1245,7 @@ export async function* handleTaskResubscribe({
   }
 }
 
-function getTaskIdFromParams(
-  params: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown> | undefined,
-) {
+function getTaskIdFromParams(params: MessageSendParams | Record<string, unknown> | undefined) {
   if (!params || typeof params !== 'object') {
     return undefined;
   }
@@ -1324,9 +1332,7 @@ export async function handleTaskCancel({
   }
 
   // Check if cancelable (not already in a final state)
-  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
-
-  if (finalStates.includes(data.status.state)) {
+  if (TERMINAL_TASK_STATES.includes(data.status.state)) {
     logger?.info(`Task ${taskId} already in final state ${data.status.state}, cannot cancel.`);
     return createSuccessResponse(requestId, data);
   }
@@ -1336,11 +1342,10 @@ export async function handleTaskCancel({
 
   // Apply 'canceled' state update
   const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
-    state: 'canceled',
+    state: 'TASK_STATE_CANCELED',
     message: {
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Task cancelled by request.' }],
-      kind: 'message',
+      role: 'ROLE_AGENT',
+      parts: [{ text: 'Task cancelled by request.' }],
       messageId: crypto.randomUUID(),
     },
   };
@@ -1365,6 +1370,41 @@ export async function handleTaskCancel({
   return createSuccessResponse(requestId, data);
 }
 
+export async function handleListTasks({
+  requestId,
+  taskStore,
+  agentId,
+  params,
+}: {
+  requestId: number | string;
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  params?: { pageSize?: number; pageToken?: string; contextId?: string };
+}) {
+  let tasks = taskStore.listByAgent({ agentId });
+
+  // Optional filtering by contextId.
+  if (params?.contextId) {
+    tasks = tasks.filter(task => task.contextId === params.contextId);
+  }
+
+  // Optional pagination. pageToken is the offset (as a string) into the list.
+  const offset = params?.pageToken ? Number.parseInt(params.pageToken, 10) || 0 : 0;
+  const pageSize = params?.pageSize;
+  let page = offset > 0 ? tasks.slice(offset) : tasks;
+  let nextPageToken: string | undefined;
+
+  if (pageSize !== undefined && pageSize > 0 && page.length > pageSize) {
+    page = page.slice(0, pageSize);
+    nextPageToken = String(offset + pageSize);
+  }
+
+  return createSuccessResponse(requestId, {
+    tasks: page,
+    ...(nextPageToken ? { nextPageToken } : {}),
+  });
+}
+
 export async function getAgentExecutionHandler({
   requestId,
   mastra,
@@ -1377,27 +1417,20 @@ export async function getAgentExecutionHandler({
   pushNotificationSender,
   logger,
   abortSignal,
+  protocolVersion,
 }: Context & {
   requestId: number | string;
   requestContext: RequestContext;
   agentId: string;
-  method:
-    | 'message/send'
-    | 'message/stream'
-    | 'tasks/get'
-    | 'tasks/cancel'
-    | 'tasks/resubscribe'
-    | 'tasks/pushNotificationConfig/set'
-    | 'tasks/pushNotificationConfig/get'
-    | 'tasks/pushNotificationConfig/list'
-    | 'tasks/pushNotificationConfig/delete'
-    | 'agent/getAuthenticatedExtendedCard';
-  params?: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown>;
+  /** Accepts both v0.3 slash-names and v1 PascalCase names. */
+  method: string;
+  params?: MessageSendParams | Record<string, unknown>;
   taskStore: InMemoryTaskStore;
   pushNotificationStore?: InMemoryPushNotificationStore;
   pushNotificationSender?: DefaultPushNotificationSender;
   logger?: IMastraLogger;
   abortSignal?: AbortSignal;
+  protocolVersion?: A2AProtocolVersion;
 }): Promise<any> {
   const agent = await getAgentFromSystem({ mastra, agentId });
   const {
@@ -1408,17 +1441,30 @@ export async function getAgentExecutionHandler({
     pushNotificationSender,
   });
 
+  const legacy = protocolVersion ? isLegacyVersion(protocolVersion) : false;
+
+  // Normalize the incoming method to its v1 PascalCase form (accepts both v0.3
+  // slash-names and v1 names). Unknown methods surface methodNotFound below.
+  const v1Method = normalizeToV1Method(method);
+
+  // For message-bearing methods, normalize a legacy inbound message to v1 wire
+  // shape before the handlers see it. The wire shapes only differ for v0.3.
+  const normalizedParams: MessageSendParams | Record<string, unknown> | undefined =
+    legacy && params && typeof params === 'object' && 'message' in params && params.message
+      ? { ...(params as Record<string, unknown>), message: v03MessageToV1((params as any).message) }
+      : params;
+
   let taskId: string | undefined; // For error context
 
   try {
-    taskId = getTaskIdFromParams(params);
+    taskId = getTaskIdFromParams(normalizedParams as MessageSendParams | Record<string, unknown> | undefined);
 
-    // 2. Route based on method
-    switch (method) {
-      case 'message/send': {
+    // 2. Route based on the normalized v1 method name.
+    switch (v1Method) {
+      case 'SendMessage': {
         const result = await handleMessageSend({
           requestId,
-          params: params as MessageSendParams,
+          params: normalizedParams as MessageSendParams,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           pushNotificationSender: resolvedPushNotificationSender,
@@ -1427,13 +1473,13 @@ export async function getAgentExecutionHandler({
           logger,
           requestContext,
         });
-        return result;
+        return maybeTranslateResult(result, legacy);
       }
-      case 'message/stream': {
-        const result = await handleMessageStream({
+      case 'SendStreamingMessage': {
+        const result = handleMessageStream({
           requestId,
           taskStore,
-          params: params as MessageSendParams,
+          params: normalizedParams as MessageSendParams,
           pushNotificationStore: resolvedPushNotificationStore,
           pushNotificationSender: resolvedPushNotificationSender,
           agent,
@@ -1441,10 +1487,10 @@ export async function getAgentExecutionHandler({
           logger,
           requestContext,
         });
-        return result;
+        return legacy ? translateStream(result) : result;
       }
 
-      case 'tasks/get': {
+      case 'GetTask': {
         const result = await handleTaskGet({
           requestId,
           taskStore,
@@ -1452,9 +1498,9 @@ export async function getAgentExecutionHandler({
           taskId: taskId || 'No task ID provided',
         });
 
-        return result;
+        return maybeTranslateResult(result, legacy);
       }
-      case 'tasks/cancel': {
+      case 'CancelTask': {
         const result = await handleTaskCancel({
           requestId,
           taskStore,
@@ -1464,49 +1510,58 @@ export async function getAgentExecutionHandler({
           logger,
         });
 
-        return result;
+        return maybeTranslateResult(result, legacy);
       }
-      case 'tasks/resubscribe':
-        return await handleTaskResubscribe({
+      case 'SubscribeToTask': {
+        const result = handleTaskResubscribe({
           requestId,
           taskStore,
           agentId,
           taskId: taskId || 'No task ID provided',
           abortSignal,
         });
-      case 'tasks/pushNotificationConfig/set':
+        return legacy ? translateStream(result) : result;
+      }
+      case 'ListTasks':
+        return await handleListTasks({
+          requestId,
+          taskStore,
+          agentId,
+          params: normalizedParams as { pageSize?: number; pageToken?: string; contextId?: string } | undefined,
+        });
+      case 'CreateTaskPushNotificationConfig':
         return await handleSetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as unknown as TaskPushNotificationConfig,
+          params: normalizedParams as unknown as TaskPushNotificationConfig,
         });
-      case 'tasks/pushNotificationConfig/get':
+      case 'GetTaskPushNotificationConfig':
         return await handleGetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as GetTaskPushNotificationConfigParams,
+          params: normalizedParams as unknown as GetTaskPushNotificationConfigParams,
         });
-      case 'tasks/pushNotificationConfig/list':
+      case 'ListTaskPushNotificationConfigs':
         return await handleListTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as ListTaskPushNotificationConfigParams,
+          params: normalizedParams as unknown as ListTaskPushNotificationConfigParams,
         });
-      case 'tasks/pushNotificationConfig/delete':
+      case 'DeleteTaskPushNotificationConfig':
         return await handleDeleteTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as DeleteTaskPushNotificationConfigParams,
+          params: normalizedParams as unknown as DeleteTaskPushNotificationConfigParams,
         });
-      case 'agent/getAuthenticatedExtendedCard':
+      case 'GetExtendedAgentCard':
         throw MastraA2AError.extendedAgentCardNotConfigured();
       default:
         throw MastraA2AError.methodNotFound(method);
@@ -1517,6 +1572,25 @@ export async function getAgentExecutionHandler({
     }
 
     return normalizeError(error, requestId, taskId, logger);
+  }
+}
+
+/**
+ * Translates a single JSON-RPC success result to the v0.3 wire shape when the
+ * negotiated version is legacy. Error responses and non-result payloads pass
+ * through unchanged.
+ */
+function maybeTranslateResult(result: any, legacy: boolean) {
+  if (!legacy || !result || typeof result !== 'object' || !('result' in result) || result.result == null) {
+    return result;
+  }
+  return { ...result, result: v1EventToV03(result.result as A2AWireStreamEvent) };
+}
+
+/** Wraps an SSE stream so each JSON-RPC event's result is down-translated to v0.3. */
+async function* translateStream(stream: AsyncIterable<any>) {
+  for await (const event of stream) {
+    yield maybeTranslateResult(event, true);
   }
 }
 
@@ -1541,12 +1615,16 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
       routePrefix: ctx.routePrefix,
     });
 
+    const request = (ctx as typeof ctx & { request?: Request }).request;
+    const protocolVersion = resolveProtocolVersion(request?.headers ?? {});
+
     return getAgentCardByIdHandler({
       mastra: ctx.mastra,
       requestContext: ctx.requestContext,
       agentId: ctx.agentId,
       executionUrl,
       pushNotifications: true,
+      protocolVersion,
     });
   },
 });
@@ -1562,9 +1640,10 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, ...bodyParams }) => {
+  handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
     const { id: requestId, method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
+    const protocolVersion = resolveProtocolVersion(request?.headers ?? {});
     const result = await getAgentExecutionHandler({
       requestId,
       mastra,
@@ -1574,9 +1653,12 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       params,
       taskStore: taskStore!,
       abortSignal,
+      protocolVersion,
     });
 
-    if (method === 'message/stream' || method === 'tasks/resubscribe') {
+    // Both the v0.3 slash-name and the v1 PascalCase name map to streaming.
+    const v1Method = normalizeToV1Method(method);
+    if (v1Method === 'SendStreamingMessage' || v1Method === 'SubscribeToTask') {
       return createA2ASSEResponse(result);
     }
 

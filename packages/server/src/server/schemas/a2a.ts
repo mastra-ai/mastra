@@ -32,7 +32,40 @@ const messageSendConfigurationSchema = z.object({
 });
 
 // Part schemas
-const textPartSchema = z.object({
+//
+// The server accepts BOTH A2A v0.3 (kind-tagged) and v1 (content-keyed) parts.
+// translate.ts normalizes v0.3 parts to v1 after validation, so these schemas
+// only need to be a permissive superset that lets either shape through.
+
+// --- v1 wire parts (discriminated by content key, no `kind`) ---
+const v1TextPartSchema = z.object({
+  text: z.string().describe('Text content'),
+  mediaType: z.string().optional().describe('Optional media type for the text content'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
+});
+
+const v1FileBytesPartSchema = z.object({
+  raw: z.string().describe('base64 encoded content of the file'),
+  filename: z.string().optional().describe('Optional file name'),
+  mediaType: z.string().optional().describe('Optional media type for the file'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
+});
+
+const v1FileUriPartSchema = z.object({
+  url: z.string().describe('URL for the file content'),
+  filename: z.string().optional().describe('Optional file name'),
+  mediaType: z.string().optional().describe('Optional media type for the file'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
+});
+
+const v1DataPartSchema = z.object({
+  data: z.union([z.record(z.string(), z.unknown()), z.array(z.unknown())]).describe('Structured data content'),
+  mediaType: z.string().optional().describe('Optional media type for the data'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
+});
+
+// --- v0.3 wire parts (kind-tagged) ---
+const legacyTextPartSchema = z.object({
   kind: z.literal('text').describe('Part type - text for TextParts'),
   text: z.string().describe('Text content'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
@@ -50,25 +83,35 @@ const fileWithUriSchema = z.object({
   name: z.string().optional().describe('Optional name for the file'),
 });
 
-const filePartSchema = z.object({
+const legacyFilePartSchema = z.object({
   kind: z.literal('file').describe('Part type - file for FileParts'),
   file: z.union([fileWithBytesSchema, fileWithUriSchema]).describe('File content either as url or bytes'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
 });
 
-const dataPartSchema = z.object({
+const legacyDataPartSchema = z.object({
   kind: z.literal('data').describe('Part type - data for DataParts'),
   data: z.record(z.string(), z.unknown()).describe('Structured data content'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
 });
 
-const partSchema = z.union([textPartSchema, filePartSchema, dataPartSchema]);
+// Permissive superset accepting both v0.3 (kind-tagged) and v1 (content-keyed) parts.
+const partSchema = z.union([
+  v1TextPartSchema,
+  v1FileBytesPartSchema,
+  v1FileUriPartSchema,
+  v1DataPartSchema,
+  legacyTextPartSchema,
+  legacyFilePartSchema,
+  legacyDataPartSchema,
+]);
 
-// Message schema
+// Message schema — accepts both v1 (role ROLE_USER/ROLE_AGENT, no kind) and
+// v0.3 (role user/agent, kind:'message') messages. translate.ts normalizes.
 const messageSchema = z.object({
-  kind: z.literal('message').describe('Event type'),
+  kind: z.literal('message').optional().describe('Event type (v0.3 only)'),
   messageId: z.string().describe('Identifier created by the message creator'),
-  role: z.enum(['user', 'agent']).describe("Message sender's role"),
+  role: z.enum(['user', 'agent', 'ROLE_USER', 'ROLE_AGENT']).describe("Message sender's role"),
   parts: z.array(partSchema).describe('Message content'),
   contextId: z.string().optional().describe('The context the message is associated with'),
   taskId: z.string().optional().describe('Identifier of task the message is related to'),
@@ -132,7 +175,17 @@ const requestBaseSchema = {
   id: z.union([z.string(), z.number()]),
 } as const;
 
+// ListTasks (v1-only) params — permissive filtering/pagination.
+const listTasksParamsSchema = z
+  .object({
+    pageSize: z.number().optional().describe('Maximum number of tasks to return'),
+    pageToken: z.string().optional().describe('Opaque pagination token'),
+    contextId: z.string().optional().describe('Filter tasks by context id'),
+  })
+  .optional();
+
 export const agentExecutionBodySchema = z.discriminatedUnion('method', [
+  // --- v0.3 slash method names ---
   z.object({
     ...requestBaseSchema,
     method: z.literal('message/send'),
@@ -182,51 +235,123 @@ export const agentExecutionBodySchema = z.discriminatedUnion('method', [
     ...requestBaseSchema,
     method: z.literal('agent/getAuthenticatedExtendedCard'),
   }),
+  // --- v1 PascalCase method names ---
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('SendMessage'),
+    params: messageSendParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('SendStreamingMessage'),
+    params: messageSendParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('GetTask'),
+    params: taskQueryParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('CancelTask'),
+    params: taskIdParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('SubscribeToTask'),
+    params: taskResubscribeParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('ListTasks'),
+    params: listTasksParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('CreateTaskPushNotificationConfig'),
+    params: setPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('GetTaskPushNotificationConfig'),
+    params: getPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('ListTaskPushNotificationConfigs'),
+    params: listPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('DeleteTaskPushNotificationConfig'),
+    params: deletePushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('GetExtendedAgentCard'),
+  }),
 ]);
 
 // Response schemas
-export const agentCardResponseSchema = z.object({
-  additionalInterfaces: z.array(z.unknown()).optional(),
-  name: z.string(),
-  description: z.string(),
-  url: z.string(),
-  protocolVersion: z.string(),
-  provider: z
-    .object({
-      organization: z.string(),
-      url: z.string(),
-    })
-    .optional(),
-  security: z.array(z.record(z.string(), z.array(z.string()))).optional(),
-  securitySchemes: z.record(z.string(), z.unknown()).optional(),
-  version: z.string(),
-  capabilities: z.object({
-    extensions: z.array(z.unknown()).optional(),
-    streaming: z.boolean().optional(),
-    pushNotifications: z.boolean().optional(),
-    stateTransitionHistory: z.boolean().optional(),
-  }),
-  defaultInputModes: z.array(z.string()),
-  defaultOutputModes: z.array(z.string()),
-  supportsAuthenticatedExtendedCard: z.boolean().optional(),
-  signatures: z
-    .array(
-      z.object({
-        protected: z.string(),
-        signature: z.string(),
-        header: z.record(z.string(), z.unknown()).optional(),
-      }),
-    )
-    .optional(),
-  skills: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      description: z.string(),
-      tags: z.array(z.string()).optional(),
+// v1 AgentCard: interfaces are described in `supportedInterfaces`, the extended
+// card flag lives in `capabilities.extendedAgentCard`. Kept permissive so a
+// legacy-translated card (which re-adds `url` / `additionalInterfaces` /
+// `supportsAuthenticatedExtendedCard`) still validates.
+export const agentCardResponseSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    protocolVersion: z.string().optional(),
+    supportedInterfaces: z
+      .array(
+        z.object({
+          url: z.string(),
+          protocolBinding: z.string().optional(),
+          protocolVersion: z.string().optional(),
+          tenant: z.string().optional(),
+        }),
+      )
+      .optional(),
+    provider: z
+      .object({
+        organization: z.string(),
+        url: z.string(),
+      })
+      .optional(),
+    security: z.array(z.record(z.string(), z.array(z.string()))).optional(),
+    securitySchemes: z.record(z.string(), z.unknown()).optional(),
+    version: z.string(),
+    capabilities: z.object({
+      extensions: z.array(z.unknown()).optional(),
+      streaming: z.boolean().optional(),
+      pushNotifications: z.boolean().optional(),
+      extendedAgentCard: z.boolean().optional(),
     }),
-  ),
-});
+    defaultInputModes: z.array(z.string()),
+    defaultOutputModes: z.array(z.string()),
+    signatures: z
+      .array(
+        z.object({
+          protected: z.string(),
+          signature: z.string(),
+          header: z.record(z.string(), z.unknown()).optional(),
+        }),
+      )
+      .optional(),
+    skills: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        description: z.string(),
+        tags: z.array(z.string()).optional(),
+      }),
+    ),
+    // v0.3 fields present only on a legacy-translated card.
+    url: z.string().optional(),
+    additionalInterfaces: z.array(z.unknown()).optional(),
+    supportsAuthenticatedExtendedCard: z.boolean().optional(),
+  })
+  .loose();
 
 export const taskResponseSchema = z.unknown(); // Complex task state structure
 

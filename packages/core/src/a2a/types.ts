@@ -1,5 +1,9 @@
-import type { AgentCard, Message, Task } from '@a2a-js/sdk';
+import type { AgentCard } from '@a2a-js/sdk';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+// A2A protocol v1: the SDK's root `Message`/`Task` are in-memory protobuf types
+// (numeric enums, `{ content: { $case } }` parts). The A2A client speaks
+// HTTP/JSON directly, so it works with the v1 WIRE shapes instead.
+import type { WireMessage as Message, WireTask as Task } from './wire-types';
 
 /**
  * Minimal JSON-RPC 2.0 message base. A2A protocol v1 (`@a2a-js/sdk` v1) no

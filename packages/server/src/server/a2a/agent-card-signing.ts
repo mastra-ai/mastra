@@ -15,9 +15,10 @@ const SUPPORTED_JWS_ALGORITHMS = new Set<string>([
   'PS512',
 ]);
 
-function stripAgentCardSignatures(agentCard: AgentCard): AgentCard {
-  const unsignedCard = structuredClone(agentCard) as AgentCard & { signatures?: AgentCardSignature[] };
-  delete unsignedCard.signatures;
+function stripAgentCardSignatures(agentCard: AgentCard): Omit<AgentCard, 'signatures'> {
+  // v1's AgentCard types `signatures` as required, so drop it via destructuring
+  // rather than `delete` (which TS rejects on a non-optional property).
+  const { signatures: _signatures, ...unsignedCard } = structuredClone(agentCard);
   return unsignedCard;
 }
 

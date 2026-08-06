@@ -1,9 +1,44 @@
-import type {
-  DeleteTaskPushNotificationConfigParams,
-  GetTaskPushNotificationConfigParams,
-  ListTaskPushNotificationConfigParams,
-  TaskPushNotificationConfig,
-} from '@mastra/core/a2a';
+/**
+ * A2A protocol v1 removed the `*Params` type exports from `@mastra/core/a2a`
+ * (they lived in the old JSON-RPC framing layer). Mastra works with wire-JSON
+ * shapes directly, so we declare the minimal param/config shapes this in-memory
+ * store needs locally.
+ *
+ * `TaskPushNotificationConfig` keeps the nested `pushNotificationConfig` shape
+ * that the push-notification sender and A2A handlers consume; it is Mastra's
+ * internal representation rather than the SDK's flattened v1 protobuf type.
+ */
+export interface PushNotificationConfig {
+  url: string;
+  id?: string;
+  token?: string;
+  authentication?: {
+    schemes: string[];
+    credentials?: string;
+  };
+}
+
+export interface TaskPushNotificationConfig {
+  taskId: string;
+  pushNotificationConfig: PushNotificationConfig;
+}
+
+/** Params carrying a task id, plus an optional specific config id. */
+export interface GetTaskPushNotificationConfigParams {
+  id: string;
+  pushNotificationConfigId?: string;
+}
+
+/** Params carrying just a task id (list all configs for the task). */
+export interface ListTaskPushNotificationConfigParams {
+  id: string;
+}
+
+/** Params carrying a task id and the specific config id to delete. */
+export interface DeleteTaskPushNotificationConfigParams {
+  id: string;
+  pushNotificationConfigId: string;
+}
 
 function normalizeConfigId(taskId: string, configId?: string) {
   return configId || taskId;

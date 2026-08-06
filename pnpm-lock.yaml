@@ -5997,6 +5997,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@a2a-js/sdk':
+        specifier: ^1.0.1
+        version: 1.0.1(@grpc/grpc-js@1.14.4)(express@5.2.1)
       hono:
         specifier: ^4.12.8
         version: 4.12.30
