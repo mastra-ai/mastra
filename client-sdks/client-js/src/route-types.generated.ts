@@ -17,7 +17,7 @@ type Shared_Auxiliary_290 =
       [key: string]: Shared_Auxiliary_290;
     };
 
-type Shared_Auxiliary_1074 =
+type Shared_Auxiliary_1073 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1074 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1074[];
+      args: Shared_Auxiliary_1073[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1074;
+      arg: Shared_Auxiliary_1073;
     };
 
-type Shared_Auxiliary_1215 = {
+type Shared_Auxiliary_1214 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1215[] | undefined;
+  children?: Shared_Auxiliary_1214[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -1590,9 +1590,16 @@ type Shared_Type_75 = {
   parentSpanId?: (string | null) | undefined;
   endedAt?: (Date | null) | undefined;
   error?: (unknown | null) | undefined;
+  status?: (('success' | 'error' | 'running') | null) | undefined;
   entityType?: (Shared_Type_71 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
+  metadata?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
+  inputPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -2433,13 +2440,13 @@ type Shared_Type_106 =
   | {
       type: 'conditional';
       steps: Shared_Type_104[];
-      predicates: Shared_Auxiliary_1074[];
+      predicates: Shared_Auxiliary_1073[];
     }
   | {
       type: 'loop';
       step: Shared_Type_104;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1074;
+      predicate: Shared_Auxiliary_1073;
     };
 
 type Shared_Type_107 = {
@@ -2776,7 +2783,7 @@ type Shared_Type_119 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1215[] | undefined;
+  files?: Shared_Auxiliary_1214[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8307,74 +8314,14 @@ export interface GetObservabilityTraces_RouteContract {
 // ============================================================================
 // Route: GET /observability/traces/light
 // ============================================================================
-export type GetObservabilityTracesLight_QueryParams = {
-  startedAt?: ((Shared_Type_69 | undefined) | undefined) | unknown;
-  endedAt?: ((Shared_Type_69 | undefined) | undefined) | unknown;
-  spanType?: (Shared_Type_70 | undefined) | undefined;
-  /** Filter by trace ID (matches root span) */
-  traceId?: (string | undefined) | undefined;
-  entityType?: (string | undefined) | undefined;
-  entityId?: ((string | null) | undefined) | undefined;
-  entityName?: ((string | null) | undefined) | undefined;
-  parentEntityType?: ((Shared_Type_71 | null) | undefined) | undefined;
-  parentEntityId?: ((string | null) | undefined) | undefined;
-  parentEntityName?: ((string | null) | undefined) | undefined;
-  rootEntityType?: ((Shared_Type_71 | null) | undefined) | undefined;
-  rootEntityId?: ((string | null) | undefined) | undefined;
-  rootEntityName?: ((string | null) | undefined) | undefined;
-  userId?: ((string | null) | undefined) | undefined;
-  organizationId?: ((string | null) | undefined) | undefined;
-  resourceId?: ((string | null) | undefined) | undefined;
-  runId?: ((string | null) | undefined) | undefined;
-  sessionId?: ((string | null) | undefined) | undefined;
-  threadId?: ((string | null) | undefined) | undefined;
-  requestId?: ((string | null) | undefined) | undefined;
-  environment?: ((string | null) | undefined) | undefined;
-  serviceName?: ((string | null) | undefined) | undefined;
-  scope?:
-    | (
-        | (
-            | ({
-                [key: string]: unknown;
-              } | null)
-            | undefined
-          )
-        | undefined
-      )
-    | unknown;
-  entityVersionId?: ((string | null) | undefined) | undefined;
-  parentEntityVersionId?: ((string | null) | undefined) | undefined;
-  rootEntityVersionId?: ((string | null) | undefined) | undefined;
-  experimentId?: ((string | null) | undefined) | undefined;
-  source?: ((string | null) | undefined) | undefined;
-  metadata?:
-    | (
-        | (
-            | ({
-                [key: string]: unknown;
-              } | null)
-            | undefined
-          )
-        | undefined
-      )
-    | unknown;
-  tags?: (((string[] | null) | undefined) | undefined) | unknown;
-  status?: (('success' | 'error' | 'running') | undefined) | undefined;
-  hasChildError?: (boolean | undefined) | undefined;
-  /** Zero-indexed page number */
-  page?: (number | undefined) | undefined;
-  /** Number of items per page */
-  perPage?: (number | undefined) | undefined;
-  /** Field to order by */
-  field?: ('startedAt' | 'endedAt') | undefined;
-  /** Sort direction */
-  direction?: ('ASC' | 'DESC') | undefined;
-  dateRange?: ((Shared_Type_69 | undefined) | undefined) | unknown;
-  name?: (string | undefined) | undefined;
-};
+export type GetObservabilityTracesLight_QueryParams = GetObservabilityTraces_QueryParams;
 
 export type GetObservabilityTracesLight_Response = {
-  pagination: Shared_Type_72;
+  pagination?: Shared_Type_72 | undefined;
+  /** Incremental polling metadata */
+  delta?: Shared_Type_73 | undefined;
+  /** Opaque cursor value for incremental polling */
+  deltaCursor?: string | undefined;
   spans: Shared_Type_75[];
 };
 
@@ -16252,7 +16199,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1215[] | undefined;
+  files?: Shared_Auxiliary_1214[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16310,7 +16257,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1215[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1214[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

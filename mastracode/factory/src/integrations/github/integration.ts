@@ -1137,9 +1137,11 @@ export class GithubIntegration implements FactoryIntegration {
         title: pullRequest.title,
         url: pullRequest.url,
         state: pullRequest.state === 'closed' ? 'closed' : 'open',
+        draft: pullRequest.draft,
         merged: pullRequest.merged,
         headBranch: pullRequest.headBranch,
         baseBranch: pullRequest.baseBranch,
+        ...(pullRequest.author ? { author: pullRequest.author } : {}),
         ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
       };
     } catch {

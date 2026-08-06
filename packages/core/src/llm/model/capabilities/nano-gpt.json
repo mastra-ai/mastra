@@ -374,6 +374,7 @@
     "longcat-2.0:thinking",
     "meta-llama/llama-3.3-70b-instruct",
     "meta/muse-spark-1.1",
+    "meta/muse-spark-1.2",
     "minimax/minimax-m2.1",
     "minimax/minimax-m2.5",
     "minimax/minimax-m2.7",
