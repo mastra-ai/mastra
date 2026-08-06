@@ -237,6 +237,26 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
+  // Only a review re-requested *from Factory's own bot* restarts the review —
+  // requesting a human reviewer is not Factory's signal.
+  if (!context.item || context.board !== 'review' || !context.reviewRequest?.factoryReviewer) return;
+  if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // Trusted (write/admin) requesters only: re-entering review checks out and
+  // executes PR code, the same bar pullRequestOpened applies to auto-review.
+  if (!trustedGithubActor(context)) return;
+  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // Already in Reviewing: a review pass is pending or running; re-entering
+  // would be a same-stage no-op anyway (stage rules only fire on change).
+  if (context.item.stages.length === 1 && context.item.stages[0] === 'review') return;
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:re-review-requested`,
+    board: 'review',
+    stage: 'review',
+  } as const;
+}
+
 function linearIssueObserved(context: FactoryLinearRuleContext) {
   if (context.item) return;
   return {
@@ -284,6 +304,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     issueCommentEdited: { onEvent: retriageGithubIssue },
     issueCommentDeleted: { onEvent: retriageGithubIssue },
     pullRequestOpened: { onEvent: pullRequestOpened },
+    pullRequestReviewRequested: { onEvent: reReviewRequestedPullRequest },
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },
   },
