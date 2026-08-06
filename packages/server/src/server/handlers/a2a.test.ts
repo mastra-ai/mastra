@@ -18,6 +18,7 @@ import {
   getAgentCardByIdHandler,
   getAgentExecutionHandler,
   handleTaskGet,
+  handleTaskList,
   handleMessageSend,
   handleMessageStream,
   handleTaskCancel,
@@ -2845,6 +2846,77 @@ describe('A2A Handler', () => {
         error: {
           code: -32001,
           message: 'Task not found: missing-task',
+        },
+      });
+    });
+
+    it('accepts and returns A2A v1 message shapes', async () => {
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Hello from v1' });
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '1.0' },
+        }),
+        id: 2,
+        method: 'message/send',
+        params: {
+          message: {
+            messageId: 'v1-message',
+            role: 'ROLE_USER',
+            parts: [{ text: 'Hello' }],
+          },
+          configuration: { returnImmediately: false },
+        },
+      });
+
+      expect(await response.json()).toMatchObject({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          task: {
+            status: { state: 'TASK_STATE_COMPLETED' },
+            artifacts: [{ parts: [{ text: 'Hello from v1' }] }],
+          },
+        },
+      });
+    });
+
+    it('lists tasks using the A2A v1 pagination response', async () => {
+      const task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        kind: 'task' as const,
+        status: { state: 'completed' as const, timestamp: '2026-08-06T12:00:00.000Z' },
+      };
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      expect(
+        handleTaskList({
+          requestId: 3,
+          taskStore: mockTaskStore,
+          agentId: 'test-agent',
+          params: { contextId: 'context-1', pageSize: 10 },
+        }),
+      ).toEqual({
+        jsonrpc: '2.0',
+        id: 3,
+        result: {
+          tasks: [
+            expect.objectContaining({
+              id: 'task-1',
+              status: expect.objectContaining({ state: 'TASK_STATE_COMPLETED' }),
+            }),
+          ],
+          nextPageToken: '',
+          pageSize: 10,
+          totalSize: 1,
         },
       });
     });
