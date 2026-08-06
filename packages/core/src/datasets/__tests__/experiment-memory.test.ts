@@ -142,14 +142,21 @@ describe('experiment executor memory-thread injection (#20663)', () => {
       expect(thread.resourceId).toBe('user-1');
       // Injected threads are tagged with the experiment id for traceability.
       expect(thread.metadata).toMatchObject({ experimentId: expect.any(String) });
+      // The transcript must actually be persisted — an injected memory option that
+      // disables lastMessages would suppress the MessageHistory output processor
+      // and leave every one of these threads empty.
+      const recalled = await memory.recall({ threadId: thread.id, resourceId: 'user-1' });
+      expect(recalled.messages.length).toBeGreaterThan(0);
     }
 
-    // Contract check the mock cannot surface: injected threads are ephemeral
-    // bookkeeping, so title generation and history recall must be suppressed
-    // (MockMemory never titles threads, so only the passed option proves this).
+    // Contract check the mock cannot surface: title generation must be suppressed
+    // (MockMemory never titles threads, so only the passed option proves this),
+    // while lastMessages must stay enabled — it gates the MessageHistory output
+    // processor, and disabling it would persist every injected thread empty.
     for (const call of generateSpy.mock.calls) {
       const options = (call as unknown[])[1] as { memory?: { options?: Record<string, unknown> } };
-      expect(options?.memory?.options).toMatchObject({ generateTitle: false, lastMessages: false });
+      expect(options?.memory?.options).toMatchObject({ generateTitle: false });
+      expect(options?.memory?.options).not.toHaveProperty('lastMessages');
     }
   });
 
@@ -169,6 +176,10 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     const threads = await listThreadsForResource(memory, 'user-legacy');
     expect(threads).toHaveLength(ITEM_INPUTS.length);
     expect(new Set(threads.map(t => t.id)).size).toBe(ITEM_INPUTS.length);
+    for (const thread of threads) {
+      expect(thread.resourceId).toBe('user-legacy');
+      expect(thread.metadata).toMatchObject({ experimentId: expect.any(String) });
+    }
   });
 
   it('SC2a: no resourceId in context — run succeeds memory-less, no threads created', async () => {

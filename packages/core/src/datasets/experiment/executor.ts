@@ -262,11 +262,12 @@ async function executeAgent(
             ...(experimentId ? { metadata: { experimentId } } : {}),
           },
           resource: String(contextResourceId),
-          // The runner's threads are ephemeral bookkeeping, not user conversations:
-          // suppress title generation to avoid an extra LLM call per item (and per
-          // retry), and skip history recall — each thread is brand new anyway.
-          // Mirrors the ephemeral subagent-delegation precedent (issue #18738).
-          options: { lastMessages: false as const, generateTitle: false },
+          // Suppress title generation: these threads are runner bookkeeping, so an
+          // extra title LLM call per item (and per retry) is pure waste (precedent:
+          // ephemeral subagent-delegation threads, issue #18738). lastMessages is
+          // deliberately NOT disabled — it also gates the MessageHistory output
+          // processor, and disabling it would persist every injected thread empty.
+          options: { generateTitle: false },
         },
       }
     : undefined;
