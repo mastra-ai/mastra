@@ -743,14 +743,33 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
 
     const transportError = new Error('HTTP 404: session not found');
     const reconnectError = new Error('Could not reconnect');
-    vi.spyOn(sdkClient, 'callTool')
-      .mockRejectedValueOnce(transportError)
-      .mockRejectedValueOnce(reconnectError);
+    vi.spyOn(sdkClient, 'callTool').mockRejectedValueOnce(transportError);
     vi.spyOn(client as any, 'reconnectAfterTransportFailure').mockRejectedValue(reconnectError);
 
     const tools = await client.tools();
 
     await expect(tools['fetch'].execute?.({})).rejects.toThrow('Could not reconnect');
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('surfaces the retry failure when reconnect succeeds but the retried call fails', async () => {
+    const client = new InternalMastraMCPClient({ name: 'retry-fail-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+
+    const transportError = new Error('HTTP 404: session not found');
+    const retryError = new Error('Retry failed after reconnect');
+    vi.spyOn(sdkClient, 'callTool').mockRejectedValueOnce(transportError).mockRejectedValueOnce(retryError);
+    vi.spyOn(client as any, 'reconnectAfterTransportFailure').mockResolvedValue(undefined);
+
+    const tools = await client.tools();
+
+    await expect(tools['fetch'].execute?.({})).rejects.toThrow('Retry failed after reconnect');
 
     await client.disconnect().catch(() => {});
   });
