@@ -1279,6 +1279,86 @@ describe('TokenCounter', () => {
     });
   });
 
+  describe('tool error (output-error)', () => {
+    // Regression: a failed tool call persists as state 'output-error' with the failure
+    // surfaced in `errorText`. The counter did not handle this state and threw
+    // ("Unhandled tool-invocation state ..."), so observational memory crashed on any
+    // conversation containing a tool call that errored. It now counts the error text
+    // like a small tool result.
+    const DEFAULT_ERROR_TEXT = 'Tool execution failed';
+
+    const createErroredMessage = (errorText?: string) =>
+      createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId: 'tool-1',
+              toolName: 'findUserTool',
+              args: { name: 'Dero Israel' },
+              ...(errorText ? { errorText } : {}),
+            },
+          },
+        ],
+      });
+
+    it('counts a failed tool call by its error text instead of throwing', () => {
+      const counter = new TokenCounter();
+      const errorText = 'Network request timed out after 30s';
+      const message = createErroredMessage(errorText);
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(0);
+      expect(estimate?.key).toContain('tool-result-error');
+      expect(estimate?.tokens).toBe(counter.countString(errorText));
+    });
+
+    it('falls back to a default error text when errorText is absent', () => {
+      const counter = new TokenCounter();
+      const message = createErroredMessage();
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(0);
+      expect(estimate?.key).toContain('tool-result-error');
+      expect(estimate?.tokens).toBe(counter.countString(DEFAULT_ERROR_TEXT));
+    });
+  });
+
+  describe('tool approval (approval-responded)', () => {
+    // Regression: an answered approval persists as state 'approval-responded', a
+    // tool-invocation state the counter did not handle and threw on. Like
+    // 'approval-requested' it is control metadata with no model-visible output of its
+    // own — the resulting tool output arrives separately — so it contributes no tokens.
+    it('counts an answered approval as zero tokens instead of throwing', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'approval-responded',
+              toolCallId: 'tool-1',
+              toolName: 'deleteFile',
+              args: { path: 'fixture.txt' },
+              approval: { id: 'approval-1', approved: true },
+            },
+          },
+        ],
+      });
+      const emptyMessage = createMessage({ format: 2, parts: [] });
+
+      expect(() => counter.countMessage(message)).not.toThrow();
+      expect(counter.countMessage(message)).toBe(counter.countMessage(emptyMessage));
+    });
+  });
+
   describe('countObservations', () => {
     it('delegates to countString', () => {
       const counter = new TokenCounter();
