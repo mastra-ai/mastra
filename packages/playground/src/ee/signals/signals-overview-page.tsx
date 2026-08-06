@@ -1,7 +1,5 @@
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { useSearchParams } from 'react-router';
 
 import { Link } from '../../lib/link';
 import { useEntityLearningProgress } from './hooks';
@@ -10,13 +8,13 @@ import { SignalsErrorState } from './signals-error-state';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import type { TraceSignalName } from './types';
 import { useSelectedThemeEntity } from './use-selected-theme-entity';
+import { useSignalsDateUrlState } from './use-signals-date-url-state';
 
 const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
 
 export function SignalsOverviewPage() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const url = useTraceUrlState(searchParams, setSearchParams, { defaultDatePreset: 'last-7d' });
+  const url = useSignalsDateUrlState();
   const signalNames = entity ? SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName)) : [];
   const progressQuery = useEntityLearningProgress(
     entity?.entityId,
