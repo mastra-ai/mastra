@@ -246,6 +246,7 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
       handled.push(event.type);
     });
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    let stderrOutput: string[] = [];
 
     try {
       subscribeToAgentController(poisonedState, handleEvent);
@@ -257,10 +258,12 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
       });
       await delivery;
     } finally {
+      stderrOutput = stderrSpy.mock.calls.map(args => String(args[0]));
       stderrSpy.mockRestore();
     }
 
     expect(handled).toEqual(['tool_suspended']);
     expect(mocks.sendNotification).not.toHaveBeenCalled();
+    expect(stderrOutput.join('')).toContain('[notify error] poisoned state');
   });
 });
