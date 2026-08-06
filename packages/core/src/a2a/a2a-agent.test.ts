@@ -1,4 +1,4 @@
-import type { AgentCard, Message, Task } from '@a2a-js/sdk';
+import type { AgentCard, Message, Task } from '@a2a-js/sdk-v0_3';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { SubAgent } from '../agent';
