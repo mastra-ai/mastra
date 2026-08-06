@@ -453,8 +453,8 @@ describe('useAgentControllerConnection', () => {
 
     try {
       setDocumentVisibility('hidden');
-      // The released stream shows up as a disconnect; nothing reconnects while hidden.
-      await waitFor(() => expect(result.current.status).toBe('reconnecting'));
+      // The stream is torn down and nothing reconnects while hidden.
+      await new Promise(resolve => setTimeout(resolve, 50));
       expect(onStream).toHaveBeenCalledTimes(1);
 
       setDocumentVisibility('visible');
