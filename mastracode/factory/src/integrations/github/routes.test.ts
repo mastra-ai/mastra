@@ -234,6 +234,7 @@ const listRepoOpenIssues = vi.fn(
         title: 'Fix flaky test',
         url: 'https://github.com/octo/hello/issues/12',
         author: 'ada',
+        assignee: 'grace',
         labels: ['bug'],
         comments: 3,
         createdAt: '2026-07-01T00:00:00Z',
@@ -253,6 +254,8 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
       title: 'Add factory pages',
       url: 'https://github.com/octo/hello/pull/34',
       author: 'grace',
+      assignees: ['ada'],
+      requestedReviewers: ['octocat'],
       baseBranch: 'main',
       headBranch: 'feat/factory',
       createdAt: '2026-07-03T00:00:00Z',
@@ -321,7 +324,7 @@ const githubStub = {
           state: 'open',
           stateType: 'open',
           priority: null,
-          assignee: null,
+          assignee: issue.assignee,
           source: input.sourceIds[0]!,
           labels: issue.labels,
           commentCount: issue.comments,
@@ -1464,7 +1467,12 @@ describe('issues route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.issues).toHaveLength(1);
-    expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
+    expect(json.issues[0]).toMatchObject({
+      number: 12,
+      title: 'Fix flaky test',
+      assignee: 'grace',
+      labels: ['bug'],
+    });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined });
   });
@@ -1652,7 +1660,13 @@ describe('prs route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pullRequests).toHaveLength(1);
-    expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
+    expect(json.pullRequests[0]).toMatchObject({
+      number: 34,
+      title: 'Add factory pages',
+      assignees: ['ada'],
+      requestedReviewers: ['octocat'],
+      headBranch: 'feat/factory',
+    });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
   });

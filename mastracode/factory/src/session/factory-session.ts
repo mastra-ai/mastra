@@ -49,6 +49,92 @@ export interface EnsuredFactorySourceSession {
   baseBranch: string;
 }
 
+export interface ResolvedFactorySourceRepository {
+  projectRepositoryId: string;
+  /** The repository's pinned branch, else its default branch. */
+  baseBranch: string;
+  /** Who connected the repository. The attribution for runs with no interactive user. */
+  connectedByUserId: string;
+}
+
+/**
+ * Outcome of {@link resolveFactorySourceRepository}. A miss carries which step
+ * failed: callers differ on whether that is an error (an autonomous run cannot
+ * proceed) or a routine fallback (a chat integration drops to a chat-only
+ * session), and the two steps fail for different reasons worth reporting apart.
+ */
+export type FactorySourceRepositoryResult =
+  | ({ found: true } & ResolvedFactorySourceRepository)
+  | { found: false; reason: 'connection' | 'repository' };
+
+/**
+ * Resolve which repository a factory project's source-control runs act on: the
+ * owner's connection on the project, then one of its linked repositories.
+ *
+ * The owner is whichever integration owns source control, matched by the
+ * handle's own `integrationId` — nothing here is provider-specific.
+ */
+export async function resolveFactorySourceRepository(args: {
+  sourceControl: SourceControlStorageHandle;
+  orgId: string;
+  factoryProjectId: string;
+  /** Pick a specific linked repository by slug. Defaults to the first linked repository. */
+  repositorySlug?: string;
+}): Promise<FactorySourceRepositoryResult> {
+  const { sourceControl, orgId, factoryProjectId, repositorySlug } = args;
+
+  const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
+  const connection = connections.find(candidate => candidate.integrationId === sourceControl.integrationId);
+  if (!connection) return { found: false, reason: 'connection' };
+
+  const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
+  const resolvedRepositories = await Promise.all(
+    projectRepositories.map(async projectRepository => ({
+      projectRepository,
+      repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
+    })),
+  );
+  const resolved = resolvedRepositories.find(
+    candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
+  );
+  if (!resolved?.repository) return { found: false, reason: 'repository' };
+
+  return {
+    found: true,
+    projectRepositoryId: resolved.projectRepository.id,
+    baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
+    connectedByUserId: connection.createdByUserId,
+  };
+}
+
+/**
+ * Walk a Factory user-session id back to the project it belongs to.
+ *
+ * Repo-backed channel threads are keyed by their Factory session id, which is
+ * the only handle a session-start hook gets. This turns that id back into the
+ * project whose configuration the session should adopt. Durable by
+ * construction — it reads the same rows the session was created from, so it
+ * survives restarts without any in-memory mapping.
+ */
+export async function resolveFactoryProjectForSession(args: {
+  sourceControl: SourceControlStorageHandle;
+  sessionId: string;
+}): Promise<{ factoryProjectId: string; orgId: string; userId: string } | null> {
+  const { sourceControl, sessionId } = args;
+
+  const session = await sourceControl.sessions.getBySessionId(sessionId);
+  if (!session) return null;
+  const projectRepository = await sourceControl.projectRepositories.get({
+    orgId: session.orgId,
+    id: session.projectRepositoryId,
+  });
+  if (!projectRepository) return null;
+  const connection = await sourceControl.connections.get({ orgId: session.orgId, id: projectRepository.connectionId });
+  if (!connection) return null;
+
+  return { factoryProjectId: connection.factoryProjectId, orgId: session.orgId, userId: session.userId };
+}
+
 /**
  * Create the source-control session a repo-backed factory run needs.
  *
@@ -68,38 +154,30 @@ export async function ensureFactorySourceSession(
 ): Promise<EnsuredFactorySourceSession> {
   const { sourceControl, orgId, factoryProjectId, branch, repositorySlug } = args;
 
-  const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
-  const connection = connections.find(candidate => candidate.integrationId === sourceControl.integrationId);
-  if (!connection) throw new Error('Factory source-control connection not found.');
+  const resolved = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId, repositorySlug });
+  if (!resolved.found) {
+    throw new Error(
+      resolved.reason === 'connection'
+        ? 'Factory source-control connection not found.'
+        : 'Factory source-control repository not found.',
+    );
+  }
 
-  const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
-  const resolvedRepositories = await Promise.all(
-    projectRepositories.map(async projectRepository => ({
-      projectRepository,
-      repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
-    })),
-  );
-  const resolved = resolvedRepositories.find(
-    candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
-  );
-  if (!resolved?.repository) throw new Error('Factory source-control repository not found.');
-
-  const userId = connection.createdByUserId;
-  const baseBranch = resolved.projectRepository.branch ?? resolved.repository.defaultBranch;
+  const userId = resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
     sessionId: randomUUID(),
-    projectRepositoryId: resolved.projectRepository.id,
+    projectRepositoryId: resolved.projectRepositoryId,
     orgId,
     userId,
     branch,
-    baseBranch,
+    baseBranch: resolved.baseBranch,
   });
   return {
     sessionId: session.sessionId,
     userId,
-    projectRepositoryId: resolved.projectRepository.id,
+    projectRepositoryId: resolved.projectRepositoryId,
     branch: session.branch,
-    baseBranch,
+    baseBranch: resolved.baseBranch,
   };
 }
 

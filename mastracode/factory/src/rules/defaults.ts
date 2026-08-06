@@ -156,6 +156,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      assignees: context.issue.assignees ?? [],
     },
   } as const;
 }
@@ -181,6 +182,8 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       state: context.pullRequest.state,
       draft: context.pullRequest.draft,
       merged: context.pullRequest.merged,
+      assignees: context.pullRequest.assignees ?? [],
+      requestedReviewers: context.pullRequest.requestedReviewers ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),

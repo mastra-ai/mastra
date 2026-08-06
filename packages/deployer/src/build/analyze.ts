@@ -284,6 +284,7 @@ async function validateOutput(
     output,
     reverseVirtualReferenceMap,
     usedExternals,
+    userExternals,
     outputDir,
     projectRoot,
     workspaceMap,
@@ -292,6 +293,7 @@ async function validateOutput(
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
     usedExternals: Record<string, Record<string, string>>;
+    userExternals: string[];
     outputDir: string;
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
@@ -341,7 +343,9 @@ async function validateOutput(
     binaryMapData = JSON.parse(binaryMap);
   }
 
-  const stubbedExternals = [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...result.externalDependencies.keys()];
+  const stubbedExternals = [
+    ...new Set([...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...userExternals, ...result.externalDependencies.keys()]),
+  ];
 
   for (const file of output) {
     if (file.type === 'asset') {
@@ -583,6 +587,7 @@ export async function analyzeBundle(
       output,
       reverseVirtualReferenceMap: fileNameToDependencyMap,
       usedExternals,
+      userExternals,
       outputDir,
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,

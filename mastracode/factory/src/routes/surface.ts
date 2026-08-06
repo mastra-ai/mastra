@@ -219,7 +219,10 @@ export function buildIntegrationContext(
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
     factoryReady: boolean;
-    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems' | 'channelIdentity'>;
+    domains: Pick<
+      FactoryApiRoutesDeps['domains'],
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
+    >;
     /**
      * Stable id of the registered source-control-owning integration (today:
      * `'github'` when registered). Every call site must derive and pass it so
@@ -245,6 +248,7 @@ export function buildIntegrationContext(
       projects: deps.domains.projects,
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
+      memorySettings: deps.domains.memorySettings,
     },
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),

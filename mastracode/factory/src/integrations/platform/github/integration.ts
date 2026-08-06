@@ -116,6 +116,8 @@ type GithubPullRequest = {
   head: { ref: string; sha: string };
   base: { ref: string; repo: { id: number; fullName: string } };
   user: GithubActor;
+  assignees?: string[];
+  requestedReviewers?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -736,6 +738,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         merged?: boolean;
         created_at?: string;
         user?: { login?: string } | null;
+        assignees?: Array<{ login?: string }> | null;
+        requested_reviewers?: Array<{ login?: string }> | null;
         merged_by?: { login?: string } | null;
         head?: { ref?: string };
         base?: { ref?: string };
@@ -749,6 +753,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         state: result.state === 'closed' ? 'closed' : 'open',
         draft: result.draft === true,
         merged: result.merged === true,
+        assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+        requestedReviewers: (result.requested_reviewers ?? []).flatMap(reviewer =>
+          reviewer.login ? [reviewer.login] : [],
+        ),
         headBranch: result.head?.ref ?? '',
         baseBranch: result.base?.ref ?? '',
         ...(result.user?.login ? { author: result.user.login } : {}),
@@ -1267,6 +1275,7 @@ function parseIntakeIssue(sourceId: string, issue: GithubIssue): IntakeIssue {
     stateType: issue.state,
     priority: null,
     assignee: issue.assignees[0] ?? null,
+    assignees: issue.assignees,
     source: sourceId,
     labels: issue.labels,
     commentCount: issue.commentCount,
@@ -1293,6 +1302,8 @@ function parsePullRequest(pullRequest: GithubPullRequest): PullRequest {
     title: pullRequest.title,
     url: pullRequest.htmlUrl,
     author: pullRequest.user?.login ?? null,
+    assignees: pullRequest.assignees ?? [],
+    requestedReviewers: pullRequest.requestedReviewers ?? [],
     body: pullRequest.body?.trim() ? pullRequest.body : null,
     state: pullRequest.state,
     draft: pullRequest.draft,
