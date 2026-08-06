@@ -454,7 +454,7 @@ export function stripMastraCodeCustomProviderPrefix(modelId: string, customProvi
 
   const rest = modelId.slice(gatewayPrefix.length);
   const [providerId, ...modelParts] = rest.split('/');
-  if (!providerId || modelParts.length === 0) return modelId;
+  if (!providerId || modelParts.length === 0 || modelParts.some(part => part.length === 0)) return modelId;
 
   const isCustomProvider = customProviders.some(provider => getCustomProviderId(provider.name) === providerId);
   return isCustomProvider ? rest : modelId;

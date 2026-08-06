@@ -575,6 +575,12 @@ describe('customProviders parsing/persistence', () => {
         'custom-provider/gemma-4-31b',
       );
     });
+
+    it('leaves ids with an empty model portion unchanged', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/custom-provider/', customProviders)).toBe(
+        'mastracode/custom-provider/',
+      );
+    });
   });
 
   it('round-trips optional api keys without forcing apiKey field', () => {
