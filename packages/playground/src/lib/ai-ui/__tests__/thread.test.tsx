@@ -179,14 +179,17 @@ describe('Thread', () => {
     server.resetHandlers();
   });
 
-  it('shows the empty welcome state when there are no messages', async () => {
-    server.use(...baseHandlers());
+  describe('when no suggested prompts are provided for an empty thread', () => {
+    it('renders the default welcome state', async () => {
+      server.use(...baseHandlers());
 
-    await act(async () => {
-      renderThread([]);
+      await act(async () => {
+        renderThread([]);
+      });
+
+      expect(screen.getByText('How can I help you today?')).toBeTruthy();
+      expect(screen.getByRole('textbox')).toBeTruthy();
     });
-
-    expect(screen.getByText('How can I help you today?')).toBeTruthy();
   });
 
   it('renders existing messages instead of the welcome state', async () => {
