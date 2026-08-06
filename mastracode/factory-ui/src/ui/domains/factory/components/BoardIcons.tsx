@@ -40,7 +40,7 @@ function pullRequestStatus(item: Pick<WorkItem, 'metadata' | 'stages'>): PullReq
 export function PullRequestStatusIcon({ item }: { item: Pick<WorkItem, 'metadata' | 'stages'> }) {
   const status = pullRequestStatus(item);
   const label = `${status[0]?.toUpperCase()}${status.slice(1)} pull request`;
-  if (status === 'merged') return <GitMerge size={16} className="text-accent3 shrink-0" aria-label={label} />;
+  if (status === 'merged') return <GitMerge size={16} className="shrink-0 text-purple-400" aria-label={label} />;
   if (status === 'closed') return <GitPullRequestClosed size={16} className="text-error shrink-0" aria-label={label} />;
   if (status === 'draft') return <GitPullRequestDraft size={16} className="text-icon3 shrink-0" aria-label={label} />;
   return <GitPullRequest size={16} className="text-accent1 shrink-0" aria-label={label} />;
