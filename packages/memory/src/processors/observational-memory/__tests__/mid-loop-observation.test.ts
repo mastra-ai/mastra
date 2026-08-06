@@ -17,7 +17,7 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import { MessageList } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 import { ObservationalMemoryProcessor } from '../processor';
@@ -166,6 +166,13 @@ describe('Mid-Loop Observation', () => {
     processor = new ObservationalMemoryProcessor(om, noopMemoryProvider);
 
     mockCallObserver(om);
+  });
+
+  afterEach(() => {
+    // The suite runs with `isolate: false` — restore all spies (including the
+    // rejecting observer mock in the failure-propagation test) so nothing leaks
+    // across tests or files. `beforeEach` re-creates `om` and re-spies.
+    vi.restoreAllMocks();
   });
 
   describe('Token counting and threshold detection', () => {
@@ -700,6 +707,7 @@ describe('Mid-Loop Observation', () => {
 
     it('keeps the freshly observed giant message in context and in the input bucket', async () => {
       mockCallObserver(om);
+      const sealSpy = vi.spyOn(om, 'sealMessagesForBuffering');
       const messageList = new MessageList({ threadId, resourceId });
       messageList.add(createGiantMessage(), 'input');
 
@@ -717,6 +725,11 @@ describe('Mid-Loop Observation', () => {
       expect(messageList.get.input.db().map(msg => msg.id)).toContain('giant-msg');
       // The user prompt must NOT be sealed: `sealed` metadata persisted on a user
       // message would route any future same-id re-add through the re-id branch.
+      // Anchor on the seal API itself (not just the metadata path, which would
+      // vacuously resolve to undefined if the path were renamed): the user prompt
+      // must never be handed to sealMessagesForBuffering.
+      const sealedIds = sealSpy.mock.calls.flatMap(([msgs]) => (msgs ?? []).map((msg: any) => msg.id));
+      expect(sealedIds).not.toContain('giant-msg');
       expect(((survivor as any)?.content?.metadata?.mastra as any)?.sealed).toBeUndefined();
     });
 
@@ -837,7 +850,7 @@ describe('Mid-Loop Observation', () => {
       const observerSpy = mockCallObserver(om);
       const realGetStatus = (om as any).getStatus.bind(om);
       let passedThroughObserve = false;
-      vi.spyOn(om as any, 'getStatus').mockImplementation(async (args: any) => {
+      const statusSpy = vi.spyOn(om as any, 'getStatus').mockImplementation(async (args: any) => {
         const status = await realGetStatus(args);
         if (!passedThroughObserve && status.shouldObserve) {
           // First over-threshold snapshot passes through (arms willObserveNow)…
@@ -853,6 +866,10 @@ describe('Mid-Loop Observation', () => {
 
       await processor.processInputStep(stepArgs(messageList));
 
+      // Prove the branch under test actually executed: the first snapshot armed
+      // willObserveNow, and the fresh re-check inside the observation path ran.
+      expect(passedThroughObserve).toBe(true);
+      expect(statusSpy.mock.calls.length).toBeGreaterThan(1);
       // The persist block ran, but at step 0 the input bucket must NOT be drained —
       // downstream consumers (semantic recall embedding, durable-loop task tracking)
       // read `get.input.db()` after this point.
@@ -861,6 +878,38 @@ describe('Mid-Loop Observation', () => {
       // …and marker-boundary pruning must NOT have dropped the unobserved message
       const survivor = messageList.get.all.db().find(msg => msg.id === 'giant-msg');
       expect(survivor).toBeDefined();
+    });
+
+    it('marker-boundary cleanup never trims or removes a preserved marker anchor', async () => {
+      // The marker anchor itself can be an in-flight message (the step-0 seeded
+      // response message carries only data-om-* parts). When its id is preserved,
+      // cleanup must not remove it even though it has no unobserved parts.
+      const anchor: MastraDBMessage = {
+        id: 'anchor-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'data-om-observation-end', data: { cycleId: 'cycle-1' } } as any],
+        },
+        type: 'text',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+      };
+      const older = createTestMessage('an older, fully observed message', 'user', 'old-1');
+
+      const remaining = await om.cleanupMessages({
+        threadId,
+        resourceId,
+        messages: [older, anchor],
+        preserveMessageIds: ['anchor-1'],
+      });
+
+      const remainingIds = remaining.map(msg => msg.id);
+      expect(remainingIds).toContain('anchor-1');
+      expect(remainingIds).not.toContain('old-1');
+      // Preserved anchors keep their parts untouched (no unobserved-part trimming).
+      expect(remaining.find(msg => msg.id === 'anchor-1')?.content.parts).toHaveLength(1);
     });
   });
 });

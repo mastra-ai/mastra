@@ -16977,7 +16977,11 @@ describe('Message ordering regressions', () => {
 
     // Since #16523, an over-threshold step 0 observes during runStep — snapshot
     // the record state here so we can prove finalize adds NO side effects on top.
+    // Positive anchor first: the step-0 observation must actually have happened,
+    // otherwise the unchanged-state comparisons below hold vacuously ('' === '').
     const recordAfterStep = await s.getOMRecord();
+    expect(recordAfterStep?.activeObservations).toBeTruthy();
+    expect(recordAfterStep?.lastObservedAt).toBeDefined();
     const metadataAfterStep = await s.getOMMetadata();
 
     s.addAssistantMessage('React is a UI library.');
@@ -17017,6 +17021,7 @@ describe('Message ordering regressions', () => {
 
     // Turn 2: the backlog (turn 1 assistant message + new user message) is
     // observed at the next turn's steps, not before.
+    const observerSpy = vi.spyOn((s.om as any).observer, 'call');
     s.resetForNewTurn();
     s.addUserMessage('Follow-up');
     await s.runStep(0);
@@ -17028,6 +17033,9 @@ describe('Message ordering regressions', () => {
     record = await s.getOMRecord();
     expect(record?.activeObservations).toBeTruthy();
     expect(record?.lastObservedAt).toBeDefined();
+    // Positive anchor: turn 2 must have called the observer — a timestamp
+    // comparison alone also holds when turn 2 never observes at all.
+    expect(observerSpy).toHaveBeenCalled();
     expect(new Date(record!.lastObservedAt!).getTime()).toBeGreaterThanOrEqual(
       new Date(lastObservedAfterTurn1Step!).getTime(),
     );

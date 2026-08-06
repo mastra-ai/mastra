@@ -2453,11 +2453,16 @@ ${formattedMessages}
 
       messagesToSave.push(markerMsg);
 
-      const unobservedParts = getUnobservedParts(markerMsg);
-      if (unobservedParts.length === 0) {
-        if (markerMsg.id) idsToRemove.push(markerMsg.id);
-      } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
-        markerMsg.content.parts = unobservedParts;
+      // The marker anchor itself may be an in-flight message (e.g. the step-0
+      // seeded response message) — preserved ids must never be trimmed or removed.
+      const preserveMarker = Boolean(markerMsg.id && preserveSet?.has(markerMsg.id));
+      if (!preserveMarker) {
+        const unobservedParts = getUnobservedParts(markerMsg);
+        if (unobservedParts.length === 0) {
+          if (markerMsg.id) idsToRemove.push(markerMsg.id);
+        } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
+          markerMsg.content.parts = unobservedParts;
+        }
       }
 
       if (messageList) {
