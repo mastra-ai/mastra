@@ -1,13 +1,9 @@
 import { pathToFileURL } from 'node:url';
-
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { askUserTool } from '@mastra/core/tools';
+import { askUserTool, webFetchTool, webSearchTool } from '@mastra/core/tools';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
-
-import { webFetchTool } from '../tools/web-fetch-tool';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
 
 const workspacePath = 'workspace';
@@ -68,7 +64,7 @@ For local file changes, end with a plain-text URL using ${pathToFileURL(`${works
     start_schedule: startScheduleTool,
     stop_schedule: stopScheduleTool,
     web_fetch: webFetchTool,
-    web_search: openai.tools.webSearch(),
+    web_search: webSearchTool,
   },
   signals: [new TaskSignalProvider()],
 });

@@ -16,6 +16,16 @@
   ],
   "redirects": [
     {
+      "source": "/docs/editor/prompts",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/tools",
+      "destination": "/docs/editor/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/workspace",
       "destination": "/docs/mastra-platform/workspaces",
       "permanent": true
@@ -27,7 +37,7 @@
     },
     {
       "source": "/docs/voice/livekit",
-      "destination": "/docs/voice/realtime-voice",
+      "destination": "/guides/voice/realtime-voice",
       "permanent": true
     },
     {
@@ -76,6 +86,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
@@ -117,7 +132,7 @@
     },
     {
       "source": "/docs/agents/adding-voice",
-      "destination": "/docs/voice/overview",
+      "destination": "/guides/voice/overview",
       "permanent": true
     },
     {
@@ -272,82 +287,82 @@
     },
     {
       "source": "/examples/rag/chunking/chunk-text",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-html",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-json",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-markdown",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-size",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-delimiters",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-chunk",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-chunk-array",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-with-cohere",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/upsert/upsert-embeddings",
-      "destination": "/docs/rag/vector-databases",
+      "destination": "/guides/rag/vector-databases",
       "permanent": true
     },
     {
       "source": "/examples/rag/query/retrieve-results",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-cohere",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-zeroentropy",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/basic-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
@@ -487,12 +502,12 @@
     },
     {
       "source": "/examples/rag/query/hybrid-vector-search",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/graph-rag",
-      "destination": "/docs/rag/graph-rag",
+      "destination": "/guides/rag/graph-rag",
       "permanent": true
     },
     {
@@ -777,12 +792,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/evals/datasets/overview",
+      "destination": "/docs/datasets/overview",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/evals/datasets/running-experiments",
+      "destination": "/docs/datasets/running-experiments",
       "permanent": true
     },
     {
@@ -867,32 +882,32 @@
     },
     {
       "source": "/docs/harness/modes",
-      "destination": "/docs/agent-controller/modes",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview",
-      "destination": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/session",
-      "destination": "/docs/agent-controller/session",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents",
-      "destination": "/docs/agent-controller/subagents",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state",
-      "destination": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals",
-      "destination": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/harness/agent-controller",
       "permanent": true
     },
     {
@@ -1126,6 +1141,86 @@
       "permanent": true
     },
     {
+      "source": "/docs/rag/:path*",
+      "destination": "/guides/rag/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*",
+      "destination": "/guides/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/:path*",
+      "destination": "/docs/datasets/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/config",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/storage",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/overview",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/session",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/modes",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/threads-and-state",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/subagents",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/tool-approvals",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/channels",
+      "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/supervisor-agents",
+      "destination": "/docs/capabilities/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/prompts/llms.txt",
+      "destination": "/docs/editor/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/tools/llms.txt",
+      "destination": "/docs/editor/overview/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/workspace/llms.txt",
       "destination": "/docs/mastra-platform/workspaces/llms.txt",
       "permanent": true
@@ -1137,7 +1232,7 @@
     },
     {
       "source": "/docs/voice/livekit/llms.txt",
-      "destination": "/docs/voice/realtime-voice/llms.txt",
+      "destination": "/guides/voice/realtime-voice/llms.txt",
       "permanent": true
     },
     {
@@ -1186,6 +1281,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon/llms.txt",
+      "destination": "/models/gateways/neon/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*/llms.txt",
       "destination": "/guides/:path*/llms.txt",
       "permanent": true
@@ -1207,7 +1307,7 @@
     },
     {
       "source": "/docs/agents/adding-voice/llms.txt",
-      "destination": "/docs/voice/overview/llms.txt",
+      "destination": "/guides/voice/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1632,12 +1732,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview/llms.txt",
-      "destination": "/docs/evals/datasets/overview/llms.txt",
+      "destination": "/docs/datasets/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments/llms.txt",
-      "destination": "/docs/evals/datasets/running-experiments/llms.txt",
+      "destination": "/docs/datasets/running-experiments/llms.txt",
       "permanent": true
     },
     {
@@ -1722,32 +1822,32 @@
     },
     {
       "source": "/docs/harness/modes/llms.txt",
-      "destination": "/docs/agent-controller/modes/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview/llms.txt",
-      "destination": "/docs/agent-controller/overview/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/session/llms.txt",
-      "destination": "/docs/agent-controller/session/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents/llms.txt",
-      "destination": "/docs/agent-controller/subagents/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state/llms.txt",
-      "destination": "/docs/agent-controller/threads-and-state/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals/llms.txt",
-      "destination": "/docs/agent-controller/tool-approvals/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },
     {
@@ -1893,6 +1993,76 @@
     {
       "source": "/docs/getting-started/file-based-agents/llms.txt",
       "destination": "/docs/getting-started/develop/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*/llms.txt",
+      "destination": "/guides/rag/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*/llms.txt",
+      "destination": "/guides/voice/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/:path*/llms.txt",
+      "destination": "/docs/datasets/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/config/llms.txt",
+      "destination": "/docs/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/storage/llms.txt",
+      "destination": "/docs/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/overview/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/session/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/modes/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/threads-and-state/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/subagents/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/tool-approvals/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/channels/llms.txt",
+      "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/supervisor-agents/llms.txt",
+      "destination": "/docs/capabilities/subagents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
       "permanent": true
     }
   ]

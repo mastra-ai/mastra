@@ -12,6 +12,7 @@
   ],
   "temperature": [
     "accounts/fireworks/models/deepseek-v4-flash",
+    "accounts/fireworks/models/deepseek-v4-flash-0731",
     "accounts/fireworks/models/deepseek-v4-pro",
     "accounts/fireworks/models/glm-5p2",
     "accounts/fireworks/models/gpt-oss-120b",
@@ -28,6 +29,7 @@
   ],
   "structuredOutput": [
     "accounts/fireworks/models/deepseek-v4-flash",
+    "accounts/fireworks/models/deepseek-v4-flash-0731",
     "accounts/fireworks/models/deepseek-v4-pro",
     "accounts/fireworks/models/kimi-k3",
     "accounts/fireworks/routers/kimi-k3-fast"

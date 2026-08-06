@@ -303,9 +303,13 @@ export function buildMessagesFromChunks({
     }
   }
 
-  // Remove text parts that ended up empty (e.g. spans where every delta was '').
+  // Remove text parts that ended up empty (e.g. spans where every delta was ''),
+  // unless they carry providerMetadata (e.g. Gemini thought signatures, #20469) —
+  // that metadata must survive to the DB so it can be sent back to the provider.
   // Empty reasoning parts are kept intentionally (#9005) and are not filtered here.
-  const nonEmptyParts = parts.filter(p => !(p.type === 'text' && (p as any).text === ''));
+  const nonEmptyParts = parts.filter(
+    p => !(p.type === 'text' && (p as any).text === '' && (p as any).providerMetadata == null),
+  );
 
   // Insert step-start markers between tool-invocation and subsequent text parts.
   // This matches the convention used by MessageMerger.pushNewPart when merging messages,
