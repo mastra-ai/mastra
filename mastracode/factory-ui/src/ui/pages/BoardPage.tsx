@@ -6,6 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { useCompleteAuditEvents } from '../../hooks/useAuditEvents';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
@@ -23,6 +24,7 @@ import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
+import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
@@ -100,6 +102,9 @@ function BoardContent({
   });
   const decisions = useBoardDecisions(factoryProjectId);
   const composer = useBoardComposer(factoryProjectId);
+  const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
+  const activity = useCompleteAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
+  const activityPage = activity.data;
   const loadingStages = boardLoadingStages({
     stages,
     itemsPending: items.isPending,
@@ -208,6 +213,7 @@ function BoardContent({
                     item={item}
                     columnStage={stage.id}
                     allItems={items.all}
+                    activityPage={activityPage}
                     liveWorktreePaths={runs.liveWorktreePaths}
                     runDisabled={runs.disabled}
                     preparing={runs.preparingFor(item.id)}

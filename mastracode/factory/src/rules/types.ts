@@ -118,6 +118,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     url: string;
     createdAt?: string;
     state: 'open' | 'closed';
+    draft: boolean;
     merged: boolean;
     headBranch: string;
     baseBranch: string;
@@ -138,6 +139,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     stateType: string;
     priorityLabel: string;
     assignee: string | null;
+    creator: string | null;
     team: string | null;
     labels: readonly string[];
     createdAt: string;

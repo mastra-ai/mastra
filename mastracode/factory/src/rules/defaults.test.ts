@@ -89,6 +89,7 @@ function githubContext(
       url: 'https://github.test/acme/repo/pull/17',
       createdAt: sourceCreatedAt,
       state: 'open',
+      draft: false,
       merged: false,
       headBranch: 'feature',
       baseBranch: 'main',
@@ -111,6 +112,7 @@ function linearContext(): FactoryLinearRuleContext {
       stateType: 'unstarted',
       priorityLabel: 'High',
       assignee: 'ada',
+      creator: 'grace',
       team: 'ENG',
       labels: ['bug'],
       createdAt: '2026-07-01T00:00:00Z',
@@ -394,10 +396,41 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('records the PR head branch on Review intake so the card links back to its work item', async () => {
+  it('records PR branches and status on Review intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestOpened');
+    context.pullRequest = { ...context.pullRequest!, draft: true };
+    expect(await rules.github.pullRequestOpened?.onEvent?.(context)).toMatchObject({
+      metadata: {
+        state: 'open',
+        draft: true,
+        merged: false,
+        headBranch: 'feature',
+        baseBranch: 'main',
+      },
+    });
+  });
+
+  it('stamps the GitHub author login on issue and PR intake metadata', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
+      metadata: { author: 'author' },
+    });
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
-      metadata: { headBranch: 'feature', baseBranch: 'main' },
+      metadata: { author: 'author' },
+    });
+  });
+
+  it('mirrors the Linear assignee under `assignee` and the creator under `author` for provider-agnostic attribution', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.linear.issueObserved?.onEvent?.(linearContext())).toMatchObject({
+      metadata: {
+        linearAssignee: 'ada',
+        assignee: 'ada',
+        linearCreator: 'grace',
+        creator: 'grace',
+        author: 'grace',
+      },
     });
   });
 
