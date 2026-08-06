@@ -1,4 +1,5 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
@@ -8,7 +9,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
+import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -45,6 +46,8 @@ const RefBlockContent = ({
   readOnly = false,
 }: RefBlockContentProps) => {
   const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
+  const isDraft = promptBlock && !promptBlock.activeVersionId;
+  const hasUnpublishedEdits = promptBlock && !!promptBlock.activeVersionId && !!promptBlock.hasDraft;
   const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
   const { navigate, paths } = useLinkComponent();
   // Local state for the editor so edits aren't lost on query refetch
@@ -126,6 +129,16 @@ const RefBlockContent = ({
               <Txt variant="ui-xs" className="text-neutral3 truncate">
                 {promptBlock.name}
               </Txt>
+              {isDraft && (
+                <Badge size="xs" variant="warning" className="text-ui-2xs" aria-label="Draft prompt block">
+                  Draft
+                </Badge>
+              )}
+              {hasUnpublishedEdits && (
+                <Badge size="xs" variant="warning" className="text-ui-2xs" aria-label="Unpublished prompt block edits">
+                  Unpublished edits
+                </Badge>
+              )}
               {!readOnly && (
                 <Popover>
                   <PopoverTrigger asChild>
@@ -207,6 +220,17 @@ const RefBlockContent = ({
                 </Popover>
               )}
             </div>
+
+            {(isDraft || hasUnpublishedEdits) && (
+              <div className="text-warning text-ui-xs flex items-start gap-1.5 px-1 pb-1">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  {isDraft
+                    ? 'This block is skipped at runtime until it is published.'
+                    : 'Runtime uses the last published version until these edits are published.'}
+                </span>
+              </div>
+            )}
 
             {/* Editable content */}
             <CodeEditor
