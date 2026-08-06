@@ -689,7 +689,7 @@ li[data-contextual-sidebar='true'] span[class*='categoryLinkLabel'] {
     background: var(--ifm-menu-link-sublist-icon) center;
     transform-origin: center;
     position: absolute;
-    right: 12%;
+    right: 1.6%;
   }
 }
 
@@ -1203,6 +1203,11 @@ article p {
 @media (min-width: 62.25rem) {
   #doc-item-container {
     gap: 2rem;
+  }
+  .menu__caret {
+    &::before {
+      right: 12%;
+    }
   }
 
   .theme-doc-sidebar-item-link-level-2 .menu__link {

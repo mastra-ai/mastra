@@ -197,6 +197,29 @@ test.describe('Sidebar navigation', () => {
 
     expect(getErrors(), 'JS errors during mobile sidebar navigation').toEqual([])
   })
+
+  test('mobile: long sidebars use one scroll container', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Mobile sidebar only renders on mobile')
+
+    await page.goto('/models', { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle')
+    await page.locator('[aria-label="Toggle navigation bar"]').click()
+
+    const mobileSidebar = page.locator('.navbar-sidebar')
+    await expect(mobileSidebar).toBeVisible()
+
+    const scrollContainers = await mobileSidebar.evaluate(sidebar =>
+      [sidebar, ...sidebar.querySelectorAll<HTMLElement>('*')]
+        .filter(element => {
+          const { overflowY } = getComputedStyle(element)
+          return ['auto', 'scroll'].includes(overflowY) && element.scrollHeight > element.clientHeight
+        })
+        .map(element => element.className),
+    )
+
+    expect(scrollContainers).toHaveLength(1)
+    expect(scrollContainers[0]).toContain('navbar-sidebar__item')
+  })
 })
 
 // ─── Contextual sidebar navigation ────────────────────────────────────
