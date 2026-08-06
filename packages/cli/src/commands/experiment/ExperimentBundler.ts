@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { lstat, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
@@ -205,6 +205,11 @@ async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
         const target = await readlink(fullPath);
         if (isAbsolute(target)) {
           throw new Error(`Experiment worker artifacts cannot contain absolute symlinks: ${artifactPath}`);
+        }
+        const resolvedTarget = resolve(dirname(fullPath), target);
+        const artifactTarget = relative(root, resolvedTarget);
+        if (artifactTarget === '..' || artifactTarget.startsWith(`..${sep}`) || isAbsolute(artifactTarget)) {
+          throw new Error(`Experiment worker artifacts cannot contain escaping symlinks: ${artifactPath}`);
         }
         files.push({
           path: artifactPath,

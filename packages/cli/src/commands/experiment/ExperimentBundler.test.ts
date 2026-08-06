@@ -225,6 +225,20 @@ describe('ExperimentBundler', () => {
     );
   });
 
+  it('rejects relative symlink targets that escape relocatable artifacts', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const publicDirectory = join(output, 'public');
+    await mkdir(publicDirectory);
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await symlink('../../outside', join(publicDirectory, 'link'));
+
+    await expect(new ExperimentBundler().writeArtifactManifest(output, '1.2.3')).rejects.toThrow(
+      'Experiment worker artifacts cannot contain escaping symlinks: public/link',
+    );
+  });
+
   it('excludes only the root artifact manifest from digests', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');
