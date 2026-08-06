@@ -48,8 +48,8 @@ overrides:
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
-  better-auth: ^1.6.13
-  js-yaml: ^3.15.0
+  better-auth: ^1.6.23
+  js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
   '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.3.0
@@ -71,8 +71,8 @@ overrides:
   fast-uri@<3.1.5: 3.1.5
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
-  brace-expansion@<1.1.13: 1.1.13
-  brace-expansion@>=2.0.0 <2.0.3: 2.1.2
+  brace-expansion@<1.1.13: 5.0.8
+  brace-expansion@>=2.0.0 <2.0.3: 5.0.8
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
@@ -487,7 +487,7 @@ importers:
         specifier: ^0.4.1
         version: 0.4.1(bufferutil@4.1.0)(kysely@0.28.17)
       better-auth:
-        specifier: ^1.6.13
+        specifier: ^1.6.23
         version: 1.6.23(@cloudflare/workers-types@4.20260702.1)(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260702.1)(@libsql/client@0.17.4(bufferutil@4.1.0))(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(@upstash/redis@1.38.0)(kysely@0.28.17)(mysql2@3.22.4(@types/node@22.19.15))(pg@8.22.0)(sql.js@1.14.1)(sqlite3@5.1.7))(mongodb@7.5.0(@aws-sdk/credential-providers@3.1104.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9))(mysql2@3.22.4(@types/node@22.19.15))(pg@8.22.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.10)
       hono:
         specifier: ^4.0.0
@@ -2282,8 +2282,8 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(react@19.2.7)
       react-router:
-        specifier: ^7.13.1
-        version: 7.18.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: ^8.0.0
+        version: 8.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       shiki:
         specifier: ^1.29.2
         version: 1.29.2
@@ -4668,7 +4668,7 @@ importers:
         version: 8.0.4
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
+        version: 1.3.1(@hono/node-server@2.0.10(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -4740,8 +4740,8 @@ importers:
         version: 8.21.0(bufferutil@4.1.0)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@hono/standard-validator':
         specifier: ^0.3.0
         version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30)
@@ -4828,8 +4828,8 @@ importers:
         version: link:../schema-compat
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -5103,8 +5103,8 @@ importers:
         version: 3.1.3
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../_vendored/ai_v5
@@ -5197,8 +5197,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5252,8 +5252,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5511,8 +5511,8 @@ importers:
         specifier: ^4.7.3
         version: 4.11.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react-router:
-        specifier: ^7.13.1
-        version: 7.18.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: ^8.0.0
+        version: 8.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react-syntax-highlighter:
         specifier: ^15.6.6
         version: 15.6.6(react@19.2.7)
@@ -6362,7 +6362,7 @@ importers:
     dependencies:
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
+        version: 1.3.1(@hono/node-server@2.0.10(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -6377,8 +6377,8 @@ importers:
         specifier: ^2.0.115
         version: 2.0.117(zod@4.4.3)
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@hono/swagger-ui':
         specifier: ^0.5.3
         version: 0.5.3(hono@4.12.30)
@@ -8753,8 +8753,8 @@ importers:
         specifier: ^1.3.24
         version: 1.3.24(zod@4.4.3)
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -22089,9 +22089,6 @@ packages:
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
 
-  balanced-match@1.0.2:
-    resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
-
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
@@ -22324,15 +22321,13 @@ packages:
     resolution: {integrity: sha512-z0M+byMThzQmD9NILRniCUXYsYpjwnlO8N5uCFaCqIOpqRsJCrQL9NK3JsD67CN5a08nF5oIL2bD6loTdHOuKw==}
     engines: {node: '>= 5.10.0'}
 
-  brace-expansion@1.1.13:
-    resolution: {integrity: sha512-9ZLprWS6EENmhEOpjCYW2c8VkmOvckIJZfkr7rBW6dObmfgJ/L1GpSYW5Hpo9lDz4D1+n0Ckz8rU7FwHDQiG/w==}
-
-  brace-expansion@2.1.2:
-    resolution: {integrity: sha512-w5JZcKgdhDOgOwm8H+KgbosopHMuGcl6qbulwjtz3SM7I7P3yW1eAjzMPLrIE+NQ9vjgANKHWeMHnrT0OXW1oA==}
-
   brace-expansion@5.0.7:
     resolution: {integrity: sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==}
     engines: {node: 18 || 20 || >=22}
+
+  brace-expansion@5.0.8:
+    resolution: {integrity: sha512-JZyDyq3D4AUifKTPOB7DELf6XsB3WdPuNxCtob1vFXPsSXhdAiHBWJ/tJ8HAc9aH84BK+5JFZLNkJKx3G9kzQg==}
+    engines: {node: 20 || >=22}
 
   braces@3.0.3:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
@@ -22934,9 +22929,6 @@ packages:
     resolution: {integrity: sha512-YEMv5JGWyqRJw5hdZqDVQF3MMlHA6TRiXreR8IYffk6xB7GA5p/8DeDzvg0Jy2tHNGpD+qJGl0+oJwA+5R/sVA==}
     engines: {node: '>=12.0.0'}
 
-  concat-map@0.0.1:
-    resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
-
   concat-stream@2.0.0:
     resolution: {integrity: sha512-MWufYdFw53ccGjCA+Ol7XJYpAlW6/prSMzuPOTRnJGcGzuhLn4Scrz7qf6o8bROZ514ltazcIFJZevcfbo0x7A==}
     engines: {'0': node >= 6.0}
@@ -23018,6 +23010,9 @@ packages:
         optional: true
       react:
         optional: true
+
+  cookie-es@3.1.1:
+    resolution: {integrity: sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==}
 
   cookie-signature@1.0.6:
     resolution: {integrity: sha512-QADzlaHc8icV8I7vbaJXJwod9HWYp8uCqf1xa4OfNu1T7JVxQIrUgOWtHdNDtPiywmFbiS12VjotIXLrKM3orQ==}
@@ -26051,8 +26046,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@3.15.0:
-    resolution: {integrity: sha512-ttBQIIQPDeLjpPOohtUdXuXUVoA2uIB6fEH9HyJ7234s5mBJ5wTx20njxplLZQgLaOfpmPQA7X2t5AX6tIPbog==}
+  js-yaml@5.2.3:
+    resolution: {integrity: sha512-n+mUVyUX5bVv7G/G2zyIHOhdxfuU1dY2NOFzTQUWiMUbFss8b57NFlgCCaggU78wSw5KVS9cllzeLyzyR+n5nw==}
     hasBin: true
 
   jsbn@0.1.1:
@@ -29225,12 +29220,12 @@ packages:
     peerDependencies:
       react: '>=15'
 
-  react-router@7.18.0:
-    resolution: {integrity: sha512-pTTGt8J+ji1NOmYnjzT+bAJy/1zD+Jp4ziO6cL7T3ZLvXKtusO7BpFqlRXitqpcPVqllsIXFHRMt+2/k3Xn6HQ==}
-    engines: {node: '>=20.0.0'}
+  react-router@8.3.0:
+    resolution: {integrity: sha512-qyPMvW83jGIct3yiieisxdk9M745anqhpIMKN5m1t6yBMfgVPpt77aHOqs5fUlEJRMCGffg9BaQLH9oPVOL7xQ==}
+    engines: {node: '>=22.22.0'}
     peerDependencies:
-      react: '>=18'
-      react-dom: '>=18'
+      react: '>=19.2.7'
+      react-dom: '>=19.2.7'
     peerDependenciesMeta:
       react-dom:
         optional: true
@@ -35542,7 +35537,7 @@ snapshots:
   '@changesets/parse@0.4.3':
     dependencies:
       '@changesets/types': 6.1.0
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
 
   '@changesets/pre@2.0.2':
     dependencies:
@@ -36311,7 +36306,7 @@ snapshots:
 
   '@datadog/wasm-js-rewriter@5.0.1':
     dependencies:
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       lru-cache: 7.18.3
       module-details-from-path: 1.0.4
       node-gyp-build: 4.8.4
@@ -36771,7 +36766,7 @@ snapshots:
       '@types/react-router-config': 5.0.11
       combine-promises: 1.2.0
       fs-extra: 11.3.5
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       lodash: 4.18.1
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -37430,7 +37425,7 @@ snapshots:
       '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       fs-extra: 11.3.5
       joi: 17.13.4
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       lodash: 4.18.1
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -37464,7 +37459,7 @@ snapshots:
       globby: 11.1.0
       gray-matter: 4.0.3
       jiti: 1.21.7
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       lodash: 4.18.1
       micromatch: 4.0.8
       p-queue: 6.6.2
@@ -37505,7 +37500,7 @@ snapshots:
       globby: 11.1.0
       gray-matter: 4.0.3
       jiti: 1.21.7
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       lodash: 4.18.1
       micromatch: 4.0.8
       p-queue: 6.6.2
@@ -38617,7 +38612,7 @@ snapshots:
     dependencies:
       '@jsdevtools/ono': 7.1.3
       '@types/json-schema': 7.0.15
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
 
   '@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@6.0.3)':
     dependencies:
@@ -38662,9 +38657,9 @@ snapshots:
     dependencies:
       hono: 4.12.30
 
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)':
+  '@hono/node-ws@1.3.1(@hono/node-server@2.0.10(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.30)
+      '@hono/node-server': 2.0.10(hono@4.12.30)
       hono: 4.12.30
       ws: 8.21.0(bufferutil@4.1.0)
     transitivePeerDependencies:
@@ -39721,7 +39716,7 @@ snapshots:
   '@manypkg/tools@2.1.1':
     dependencies:
       jju: 1.4.0
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       tinyglobby: 0.2.17
 
   '@marijn/find-cluster-break@1.0.2': {}
@@ -40465,7 +40460,7 @@ snapshots:
       eckles: 1.4.1
       form-data: 4.0.6
       https-proxy-agent: 5.0.1
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       lodash: 4.18.1
       njwt: 2.0.1
       node-fetch: 2.7.0(encoding@0.1.13)
@@ -45656,7 +45651,7 @@ snapshots:
     dependencies:
       '@verdaccio/core': 8.1.2
       debug: 4.4.3
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       lodash: 4.18.1
     transitivePeerDependencies:
       - supports-color
@@ -46859,8 +46854,6 @@ snapshots:
 
   bail@2.0.2: {}
 
-  balanced-match@1.0.2: {}
-
   balanced-match@4.0.4: {}
 
   bare-events@2.9.1: {}
@@ -47078,16 +47071,11 @@ snapshots:
     dependencies:
       big-integer: 1.6.52
 
-  brace-expansion@1.1.13:
-    dependencies:
-      balanced-match: 1.0.2
-      concat-map: 0.0.1
-
-  brace-expansion@2.1.2:
-    dependencies:
-      balanced-match: 1.0.2
-
   brace-expansion@5.0.7:
+    dependencies:
+      balanced-match: 4.0.4
+
+  brace-expansion@5.0.8:
     dependencies:
       balanced-match: 4.0.4
 
@@ -47784,8 +47772,6 @@ snapshots:
       grad-school: 0.0.5
       suffix-thumb: 5.0.2
 
-  concat-map@0.0.1: {}
-
   concat-stream@2.0.0:
     dependencies:
       buffer-from: 1.1.2
@@ -47857,6 +47843,8 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  cookie-es@3.1.1: {}
+
   cookie-signature@1.0.6: {}
 
   cookie-signature@1.2.2: {}
@@ -47914,7 +47902,7 @@ snapshots:
   cosmiconfig@8.3.6(typescript@6.0.3):
     dependencies:
       import-fresh: 3.3.1
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       parse-json: 5.2.0
       path-type: 4.0.0
     optionalDependencies:
@@ -50420,7 +50408,7 @@ snapshots:
 
   gray-matter@4.0.3:
     dependencies:
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
@@ -51414,10 +51402,9 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@3.15.0:
+  js-yaml@5.2.3:
     dependencies:
-      argparse: 1.0.10
-      esprima: 4.0.1
+      argparse: 2.0.1
 
   jsbn@0.1.1: {}
 
@@ -52845,7 +52832,7 @@ snapshots:
 
   minimatch@10.2.3:
     dependencies:
-      brace-expansion: 5.0.7
+      brace-expansion: 5.0.8
 
   minimatch@10.2.5:
     dependencies:
@@ -52853,15 +52840,15 @@ snapshots:
 
   minimatch@3.1.5:
     dependencies:
-      brace-expansion: 1.1.13
+      brace-expansion: 5.0.8
 
   minimatch@5.1.8:
     dependencies:
-      brace-expansion: 2.1.2
+      brace-expansion: 5.0.8
 
   minimatch@7.4.9:
     dependencies:
-      brace-expansion: 2.1.2
+      brace-expansion: 5.0.8
 
   minimatch@9.0.7:
     dependencies:
@@ -55274,11 +55261,10 @@ snapshots:
       tiny-invariant: 1.3.3
       tiny-warning: 1.0.3
 
-  react-router@7.18.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  react-router@8.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
-      cookie: 1.1.1
+      cookie-es: 3.1.1
       react: 19.2.7
-      set-cookie-parser: 2.7.2
     optionalDependencies:
       react-dom: 19.2.7(react@19.2.7)
 
@@ -55315,7 +55301,7 @@ snapshots:
   read-yaml-file@1.1.0:
     dependencies:
       graceful-fs: 4.2.11
-      js-yaml: 3.15.0
+      js-yaml: 5.2.3
       pify: 4.0.1
       strip-bom: 3.0.0
 
