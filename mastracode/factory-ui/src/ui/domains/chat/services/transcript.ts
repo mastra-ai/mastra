@@ -1,9 +1,5 @@
-import type {
-  AgentControllerEvent,
-  KnownAgentControllerEvent,
-  AgentControllerTaskSnapshot,
-  AgentControllerOMProgress,
-} from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot, AgentControllerOMProgress } from '@mastra/client-js';
+import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
@@ -272,8 +268,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
-  const event = raw as KnownAgentControllerEvent;
+function applyEvent(state: TranscriptState, event: AgentControllerEvent): TranscriptState {
+  if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
