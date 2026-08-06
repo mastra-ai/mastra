@@ -113,12 +113,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** Token usage snapshot from usage_update events. */
 export interface UsageSnapshot {
@@ -615,8 +610,10 @@ function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[
 function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   if (messages.length === 0) return state;
 
-  const onScreen = new Set(state.entries.flatMap(entry => (entry.kind === 'message' ? [entry.id] : [])));
-  if (messages.every(message => onScreen.has(message.id))) return state;
+  const reconciled = reconcileToolResults(state, messages);
+
+  const onScreen = new Set(reconciled.entries.flatMap(entry => (entry.kind === 'message' ? [entry.id] : [])));
+  if (messages.every(message => onScreen.has(message.id))) return reconciled;
 
   const entries: TimelineEntry[] = [];
   let cursor = 0;
@@ -627,19 +624,60 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
       missing.push(message);
       continue;
     }
-    const anchorIndex = state.entries.findIndex(
+    const anchorIndex = reconciled.entries.findIndex(
       (entry, index) => index >= cursor && entry.kind === 'message' && entry.id === message.id,
     );
     // Out-of-order anchor (the window disagrees with the timeline): leave it
     // where the timeline put it rather than moving rendered content around.
     if (anchorIndex === -1) continue;
-    entries.push(...state.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
     missing = [];
     cursor = anchorIndex;
   }
-  entries.push(...state.entries.slice(cursor), ...messagesToEntries(missing));
+  entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
 
-  return { ...state, entries };
+  return { ...reconciled, entries };
+}
+
+function isTerminalInvocationState(invocationState: string): boolean {
+  return invocationState === 'result' || invocationState === 'output-error' || invocationState === 'output-denied';
+}
+
+/**
+ * Fold terminal tool results from the refetched window into entries already on
+ * screen. The stream can lose a `tool_end` (SSE drop — the server does not
+ * replay missed events), leaving an on-screen part stuck at `call` and its row
+ * spinning forever. Terminal states never regress, so the server copy wins;
+ * everything else (streamed text, live overlay) is left alone.
+ */
+function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const serverTerminalParts = new Map<string, MastraMessagePart>();
+  for (const message of messages) {
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation') continue;
+      if (!isTerminalInvocationState(part.toolInvocation.state)) continue;
+      serverTerminalParts.set(part.toolInvocation.toolCallId, part);
+    }
+  }
+  if (serverTerminalParts.size === 0) return state;
+
+  let changed = false;
+  const entries = state.entries.map(entry => {
+    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+    let entryChanged = false;
+    const parts = entry.message.content.parts.map(part => {
+      if (part.type !== 'tool-invocation' || isTerminalInvocationState(part.toolInvocation.state)) return part;
+      const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
+      if (!serverPart) return part;
+      entryChanged = true;
+      return serverPart;
+    });
+    if (!entryChanged) return entry;
+    changed = true;
+    return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
+  });
+
+  return changed ? { ...state, entries } : state;
 }
 
 /**
@@ -657,8 +695,7 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 function isChannelOriginSignal(message: MastraDBMessage): boolean {
   const signal = message.content.metadata?.signal as { providerOptions?: unknown } | undefined;
   const dataPart = (message.content.parts ?? []).find(part => part.type === 'data-user-message') as
-    | { data?: { providerOptions?: unknown } }
-    | undefined;
+    { data?: { providerOptions?: unknown } } | undefined;
 
   for (const candidate of [signal?.providerOptions, dataPart?.data?.providerOptions]) {
     if (!candidate || typeof candidate !== 'object') continue;

@@ -996,17 +996,30 @@ function FileAttachment({ part }: { part: FilePart }) {
   return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
+/** Terminal status carried by the persisted part, if it reached one. */
+function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation']): 'done' | 'error' | undefined {
+  if (invocation.state === 'output-error' || invocation.state === 'output-denied') return 'error';
+  if (invocation.state !== 'result') return undefined;
+  return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
+}
+
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
   const invocation = part.toolInvocation;
-  const failed = invocation.state === 'output-error' || invocation.state === 'output-denied';
   const persistedResult = 'result' in invocation ? invocation.result : undefined;
+  // Persisted terminal state beats the live overlay: `tool_end` can be lost in
+  // an SSE gap (no server replay), and a terminal part never regresses — the
+  // overlay's 'running' would otherwise spin forever.
+  const terminalStatus = terminalInvocationStatus(invocation);
+  const result = terminalStatus
+    ? (persistedResult ?? invocation.errorText ?? runtime?.result)
+    : (runtime?.result ?? persistedResult ?? invocation.errorText);
   return {
     toolCallId: invocation.toolCallId,
     toolName: invocation.toolName,
     argsText: runtime?.argsText ?? '',
     args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
-    status: runtime?.status ?? (failed ? 'error' : invocation.state === 'result' ? 'done' : 'running'),
-    result: runtime?.result ?? persistedResult ?? invocation.errorText,
+    status: terminalStatus ?? runtime?.status ?? 'running',
+    result,
     output: runtime?.output ?? '',
   };
 }

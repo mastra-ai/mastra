@@ -1,6 +1,6 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
@@ -68,6 +68,21 @@ export function useAgentControllerConnection({
       return current;
     });
   };
+
+  // Events sent while the stream was down are gone for good (the server does
+  // not replay them), so a reconnect refetches the mounted message windows —
+  // mergeWindow folds whatever the gap dropped back into the transcript.
+  const invalidateResourceMessages = useEffectEvent(() => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+    });
+  });
+  const previousSseStateRef = useRef<SseConnectionState>('never');
+  useEffect(() => {
+    const previous = previousSseStateRef.current;
+    previousSseStateRef.current = sseConnectionState;
+    if (previous === 'dropped' && sseConnectionState === 'connected') invalidateResourceMessages();
+  }, [sseConnectionState]);
 
   const handleEvent = (event: AgentControllerEvent) => {
     const displayStateRunning =

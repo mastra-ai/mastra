@@ -549,6 +549,105 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries[0]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
     expect(messageParts(next.entries[0])).toEqual([{ type: 'text', text: 'partial' }]);
   });
+
+  it('replaces a tool part stuck at call with the terminal copy from the window', () => {
+    // A dropped stream can swallow tool_end; the refetched window carries the
+    // persisted result and must heal the stuck part.
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'execute_command', args: {} },
+          },
+        ]),
+      ],
+    });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'execute_command',
+              args: {},
+              result: 'ok',
+            },
+          },
+        ]),
+      ],
+    });
+
+    expect(messageParts(next.entries[0])).toMatchObject([{ toolInvocation: { state: 'result', result: 'ok' } }]);
+  });
+
+  it('heals a stuck tool part without touching live-streamed text', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: 'streamed text' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+          },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: 'persisted prefix' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'done' },
+          },
+        ]),
+      ],
+    });
+
+    expect(messageParts(next.entries[0])).toEqual([
+      { type: 'text', text: 'streamed text' },
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ state: 'result', result: 'done' }),
+      }),
+    ]);
+  });
+
+  it('never regresses a terminal tool part to an older call state from the window', () => {
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+      ],
+    });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+          },
+        ]),
+      ],
+    });
+
+    expect(next).toBe(onScreen);
+  });
 });
 
 describe('transcript reducer error notices', () => {
