@@ -670,6 +670,92 @@ describe('MastraMCPClient - isError handling', () => {
   });
 });
 
+describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+    toolCalls: string[];
+    breakAfterToolCall: boolean;
+  };
+
+  beforeEach(async () => {
+    const toolCalls: string[] = [];
+    const httpServer: HttpServer = createServer();
+    const mcpServer = new McpServer(
+      { name: 'reconnect-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+
+    mcpServer.tool('chargeCard', 'Non-idempotent tool', { amount: z.number().default(1) }, async ({ amount }) => {
+      toolCalls.push(`charge:${amount}`);
+      return { content: [{ type: 'text', text: 'Session expired for object 42' }], isError: true };
+    });
+
+    let broken = false;
+    httpServer.on('request', async (req, res) => {
+      if (broken) {
+        req.socket.destroy();
+        return;
+      }
+      await mcpServer.close().catch(() => {});
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res);
+      if (testServer?.breakAfterToolCall && toolCalls.length > 0) broken = true;
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    testServer = { httpServer, mcpServer, serverTransport: undefined as any, baseUrl, toolCalls, breakAfterToolCall: false };
+  });
+
+  afterEach(async () => {
+    await testServer?.mcpServer.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('does not retry tool-execution errors that contain reconnectable substrings', async () => {
+    const client = new InternalMastraMCPClient({ name: 'no-retry-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+    const tools = await client.tools();
+
+    await expect(tools['chargeCard'].execute?.({ amount: 100 })).rejects.toThrow('Session expired for object 42');
+    expect(testServer.toolCalls).toEqual(['charge:100']);
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('surfaces the reconnect failure when reconnect fails, not the original error', async () => {
+    const client = new InternalMastraMCPClient({ name: 'reconnect-fail-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+
+    const transportError = new Error('HTTP 404: session not found');
+    const reconnectError = new Error('Could not reconnect');
+    vi.spyOn(sdkClient, 'callTool')
+      .mockRejectedValueOnce(transportError)
+      .mockRejectedValueOnce(reconnectError);
+    vi.spyOn(client as any, 'reconnectAfterTransportFailure').mockRejectedValue(reconnectError);
+
+    const tools = await client.tools();
+
+    await expect(tools['fetch'].execute?.({})).rejects.toThrow('Could not reconnect');
+
+    await client.disconnect().catch(() => {});
+  });
+});
+
 describe('MastraMCPClient - no outputSchema', () => {
   // MCP tools that do NOT declare an outputSchema return the full
   // CallToolResult envelope. We don't extract or transform the result.
@@ -3970,7 +4056,7 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     await client.disconnect();
     rejectToolCall(new Error('Connection closed'));
 
-    await expect(result).rejects.toThrow('Connection closed');
+    await expect(result).rejects.toThrow('MCP client was disconnected while recovering the failed transport');
     expect(connect).not.toHaveBeenCalled();
     expect(transport.close).toHaveBeenCalledOnce();
   });
