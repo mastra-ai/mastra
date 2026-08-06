@@ -129,11 +129,16 @@ describe('ExperimentBundler', () => {
   it('writes a machine-readable artifact manifest with file digests', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    await mkdir(join(output, '.build'), { recursive: true });
+    await writeFile(join(output, '.build', 'module-resolve-map.json'), JSON.stringify({ entry: output }));
     await writeFile(join(output, 'index.mjs'), 'console.error("worker");');
     await writeFile(join(output, 'package.json'), '{"type":"module"}');
 
     await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
 
+    await expect(readFile(join(output, '.build', 'module-resolve-map.json'), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
     expect(manifest).toMatchObject({
       artifactVersion: 1,

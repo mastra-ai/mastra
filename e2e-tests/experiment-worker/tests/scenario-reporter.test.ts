@@ -13,7 +13,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 
-function testCase(scenarioId: string, state: 'passed' | 'failed' = 'passed') {
+function testCase(scenarioId: string, state: 'passed' | 'failed' | 'skipped' = 'passed') {
   return {
     fullName: `experiment worker > ${scenarioId} completes`,
     result: () => ({ state }),
@@ -73,6 +73,32 @@ describe('scenario reporter', () => {
         id,
         status: 'failed',
         evidence: { error: 'Scenario failed before assertion evidence was recorded' },
+      })),
+    );
+  });
+
+  test('preserves a skipped scenario when assertion evidence was not recorded', async () => {
+    const reportRoot = await mkdtemp(join(tmpdir(), 'experiment-reports-'));
+    roots.push(reportRoot);
+    const scenario = scenarios.find(candidate => candidate.id === 'workspace-skill-agent')!;
+    process.env.MASTRA_EXPERIMENT_E2E_REPORT_DIR = reportRoot;
+    process.env.MASTRA_EXPERIMENT_E2E_TIER = 'full';
+    process.env.MASTRA_EXPERIMENT_E2E_SCENARIO = scenario.id;
+
+    const reporter = new ScenarioReporter();
+    reporter.onTestCaseResult(testCase(scenario.id, 'skipped') as never);
+    await expect(reporter.onTestRunEnd()).rejects.toThrow('Required scenario assertions did not pass');
+
+    const report = JSON.parse(await readFile(join(reportRoot, `${scenario.id}.json`), 'utf8')) as {
+      status: string;
+      assertions: Array<{ status: string; evidence: { error: string } }>;
+    };
+    expect(report.status).toBe('skipped');
+    expect(report.assertions).toEqual(
+      scenario.assertions.map(id => ({
+        id,
+        status: 'skipped',
+        evidence: { error: 'Scenario skipped before assertion evidence was recorded' },
       })),
     );
   });

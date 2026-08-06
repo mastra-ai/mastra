@@ -84,7 +84,10 @@ export class ExperimentBundler extends Bundler {
   }
 
   async writeArtifactManifest(outputDirectory: string, cliVersion: string): Promise<void> {
-    await removePnpmInstallMetadata(outputDirectory);
+    await Promise.all([
+      removePnpmInstallMetadata(outputDirectory),
+      rm(join(outputDirectory, this.analyzeOutputDir), { recursive: true, force: true }),
+    ]);
     const files = await collectFileDigests(outputDirectory);
     const lockfileNames = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb']);
     const lockfile = files.find(file => lockfileNames.has(file.path))?.path;

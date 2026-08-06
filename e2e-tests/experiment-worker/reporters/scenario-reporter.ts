@@ -60,11 +60,11 @@ export default class ScenarioReporter implements Reporter {
           evidence: Record<string, unknown>;
         };
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || status !== 'failed') throw error;
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || status === 'passed') throw error;
         assertionEvidence = {
           scenarioId: scenario.id,
           evidence: Object.fromEntries(
-            scenario.assertions.map(id => [id, { error: 'Scenario failed before assertion evidence was recorded' }]),
+            scenario.assertions.map(id => [id, { error: `Scenario ${status} before assertion evidence was recorded` }]),
           ),
         };
       }
