@@ -450,7 +450,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                disabled={disabled}
+                disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach image"
               >
