@@ -8,6 +8,7 @@ import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivi
 
 const ACTION_LABELS: Record<string, string> = {
   'factory.work_item.created': 'Created the item',
+  'factory.work_item.assigned': 'Assigned the item',
   'factory.work_item.updated': 'Updated the item',
   'factory.work_item.stage_moved': 'Moved the item',
   'factory.work_item.deleted': 'Removed the item',

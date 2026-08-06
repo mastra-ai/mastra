@@ -252,8 +252,10 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,
       linearAssignee: context.issue.assignee,
+      linearCreator: context.issue.creator,
       linearTeam: context.issue.team,
       ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
+      ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
     },
   } as const;
 }

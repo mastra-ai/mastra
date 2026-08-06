@@ -138,6 +138,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     stateType: string;
     priorityLabel: string;
     assignee: string | null;
+    creator: string | null;
     team: string | null;
     labels: readonly string[];
     createdAt: string;

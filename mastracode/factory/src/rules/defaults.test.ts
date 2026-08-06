@@ -111,6 +111,7 @@ function linearContext(): FactoryLinearRuleContext {
       stateType: 'unstarted',
       priorityLabel: 'High',
       assignee: 'ada',
+      creator: 'grace',
       team: 'ENG',
       labels: ['bug'],
       createdAt: '2026-07-01T00:00:00Z',
@@ -411,10 +412,16 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('mirrors the Linear assignee under `assignee` for provider-agnostic attribution', async () => {
+  it('mirrors the Linear assignee under `assignee` and the creator under `author` for provider-agnostic attribution', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await rules.linear.issueObserved?.onEvent?.(linearContext())).toMatchObject({
-      metadata: { linearAssignee: 'ada', assignee: 'ada' },
+      metadata: {
+        linearAssignee: 'ada',
+        assignee: 'ada',
+        linearCreator: 'grace',
+        creator: 'grace',
+        author: 'grace',
+      },
     });
   });
 

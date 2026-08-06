@@ -43,6 +43,7 @@ const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _so
       stateType: 'unstarted',
       priorityLabel: 'High',
       assignee: 'ada',
+      creator: 'grace',
       team: 'ENG',
       labels: ['bug'],
       createdAt: '2026-07-01T00:00:00Z',
@@ -265,7 +266,9 @@ describe('issues route', () => {
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId,
-      issues: expect.arrayContaining([expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' })]),
+      issues: expect.arrayContaining([
+        expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42', assignee: 'ada', creator: 'grace' }),
+      ]),
     });
   });
 

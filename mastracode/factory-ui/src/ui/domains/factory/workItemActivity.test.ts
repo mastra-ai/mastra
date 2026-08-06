@@ -227,6 +227,61 @@ describe('workItemActivity', () => {
     expect(activity.lastWorker).toEqual({ id: 'linear:grace', name: 'grace' });
   });
 
+  it('exposes the Linear creator and assignee separately with a synthetic assigned event', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'linear-issue',
+        metadata: { identifier: 'ENG-42', assignee: 'grace', creator: 'ada' },
+      },
+      { events: [], actors: {} },
+    );
+
+    // Assignee wins for the card because they currently own the work.
+    expect(activity.lastWorker).toEqual({ id: 'linear:grace', name: 'grace' });
+    expect(activity.extraActors).toEqual({
+      'linear:grace': { id: 'linear:grace', name: 'grace' },
+      'linear:ada': { id: 'linear:ada', name: 'ada' },
+    });
+    // Timeline is newest-first: assigned (updatedAt) then created (createdAt).
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'linear:grace' },
+      { id: `synthetic-created:${item.id}`, actorId: 'linear:ada' },
+    ]);
+  });
+
+  it('accepts legacy Linear metadata that stored the creator under `linearCreator`', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'linear-issue',
+        metadata: { identifier: 'ENG-42', linearCreator: 'ada' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'linear:ada', name: 'ada' });
+    // Creator only, no assignee → only a created event, no assigned event.
+    expect(activity.events.map(candidate => candidate.id)).toEqual([`synthetic-created:${item.id}`]);
+  });
+
+  it('does not synthesize an assigned event when the Linear assignee is also the creator', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'linear-issue',
+        metadata: { identifier: 'ENG-42', assignee: 'grace', creator: 'grace' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'linear:grace', name: 'grace' });
+    expect(activity.events.map(candidate => candidate.id)).toEqual([`synthetic-created:${item.id}`]);
+  });
+
   it('prepends a synthetic created event when the audit page has none', () => {
     const activity = workItemActivity(
       {
