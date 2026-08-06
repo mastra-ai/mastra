@@ -3546,6 +3546,8 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
+    /** Live MessageList for the in-flight turn — lets markers land on the pending assistant message. */
+    messageList?: MessageList;
     hooks?: ObserveHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
@@ -3599,6 +3601,7 @@ ${formattedMessages}
           threadId,
           resourceId,
           messages: unobservedMessages,
+          messageList: opts.messageList,
           reflectionHooks,
           agent: opts.agent,
           requestContext,

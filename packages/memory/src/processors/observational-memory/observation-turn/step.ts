@@ -381,6 +381,7 @@ export class ObservationStep {
       threadId,
       resourceId,
       messages: messageList.get.all.db(),
+      messageList,
       trigger: 'turn-sync',
       requestContext: this.turn.requestContext,
       writer: this.turn.writer,
