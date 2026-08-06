@@ -28,8 +28,10 @@ import {
   useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
-import { matchCommands } from '../services/commands';
+import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { commandRequiresReadySession, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { ThreadPageKickoffTimeoutError, queueThreadPageKickoff } from '../services/threadPageReadiness';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
 import { useComposerSpotlight } from './useComposerSpotlight';
@@ -64,6 +66,8 @@ let pendingImageSeq = 0;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 /** Aggregate cap across all pending images on a single message. */
 const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+// provision + clone + setup can take minutes
+export const PREPARING_SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -84,7 +88,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset } = useChatTranscript();
+  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
@@ -100,6 +104,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+
+  const preparingThreadId = usePreparingThreadId();
 
   const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,6 +151,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const addImageFiles = async (fileList: Iterable<File>) => {
+    // drop/paste bypass disabled attach button; queued kickoffs cannot carry files
+    if (preparingThreadId) {
+      pushNotice('Images can be attached once the session is ready.');
+      return;
+    }
     const imageFiles = Array.from(fileList).filter(
       file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
     );
@@ -192,6 +203,19 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     void addImageFiles(e.target.files ?? []);
     e.target.value = '';
+  };
+
+  const queueUntilSessionReady = (threadId: string, text: string) => {
+    localUser(text, false);
+    void queueThreadPageKickoff({ resourceId, projectPath, threadId }, text, {
+      echoed: true,
+      timeoutMs: PREPARING_SESSION_TIMEOUT_MS,
+    }).catch(error => {
+      // thread page owns dispatch errors; unclaimed timeout has no UI owner
+      if (!(error instanceof ThreadPageKickoffTimeoutError)) return;
+      clearPending();
+      pushNotice('The session never came online. Send the message again once it is ready.', 'error');
+    });
   };
 
   const send = async (text: string, files: PendingImage[]) => {
@@ -282,6 +306,25 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    // queued message sets busy; check before the offline-unsafe steer path
+    if (preparingThreadId) {
+      if (text.startsWith('/')) {
+        if (commandRequiresReadySession(text)) {
+          updateDraft(text);
+          pushNotice('Commands run once the session is ready.');
+          return;
+        }
+        await runComposerCommand(text);
+        return;
+      }
+      if (images.length > 0) {
+        updateDraft(text);
+        pushNotice('Remove the attached images to send while the session is preparing.');
+        return;
+      }
+      queueUntilSessionReady(preparingThreadId, text);
+      return;
+    }
     if (await runComposerCommand(text)) return;
     // Steering is text-only; attached images stay pending until the next send.
     if (busy) {
@@ -299,7 +342,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   }
 
-  const disabled = status !== 'ready';
+  const attachDisabled = status !== 'ready';
+  const disabled = attachDisabled && !preparingThreadId;
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
@@ -357,7 +401,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onChange={e => updateDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
             onPaste={onPaste}
-            placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
+            placeholder={busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…'}
             disabled={disabled}
             maxHeight={composerVariantMaxHeight[variant]}
             className={cn(composerVariantClass[variant], 'text-[15px]')}
@@ -380,13 +424,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                disabled={disabled}
+                disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach image"
               >
                 <ImagePlus size={14} />
               </Button>
-              {busy && (
+              {busy && !preparingThreadId && (
                 <Button
                   type="button"
                   variant="outline"

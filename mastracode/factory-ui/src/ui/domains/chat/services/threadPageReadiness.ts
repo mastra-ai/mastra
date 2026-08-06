@@ -6,6 +6,7 @@ export interface ThreadPageReadinessKey {
 
 interface PendingKickoff {
   message: string;
+  echoed: boolean;
   resolve: () => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -13,8 +14,15 @@ interface PendingKickoff {
 
 export interface ClaimedThreadKickoff {
   message: string;
+  /** Message already rendered before the kickoff was queued. */
+  echoed: boolean;
   complete: () => void;
   fail: (error: Error) => void;
+}
+
+export interface QueueThreadPageKickoffOptions {
+  echoed?: boolean;
+  timeoutMs?: number;
 }
 
 export class ThreadPageKickoffTimeoutError extends Error {}
@@ -25,19 +33,17 @@ function keyOf({ resourceId, projectPath, threadId }: ThreadPageReadinessKey): s
   return JSON.stringify([resourceId, projectPath ?? '', threadId]);
 }
 
-/**
- * Transfers a Factory kickoff across route navigation. The returned promise
- * settles only after the mounted thread finishes dispatching the message.
- */
+/** Queues a message until its mounted thread is online, then resolves after dispatch. */
 export function queueThreadPageKickoff(
   key: ThreadPageReadinessKey,
   message: string,
-  timeoutMs = 60_000,
+  { echoed = false, timeoutMs = 60_000 }: QueueThreadPageKickoffOptions = {},
 ): Promise<void> {
   const readinessKey = keyOf(key);
   return new Promise((resolve, reject) => {
     const kickoff: PendingKickoff = {
       message,
+      echoed,
       resolve,
       reject,
       timeout: setTimeout(() => {
@@ -63,6 +69,7 @@ export function claimThreadPageKickoffs(key: ThreadPageReadinessKey): ClaimedThr
   pendingKickoffs.delete(readinessKey);
   return kickoffs.map(kickoff => ({
     message: kickoff.message,
+    echoed: kickoff.echoed,
     complete: () => {
       clearTimeout(kickoff.timeout);
       kickoff.resolve();
