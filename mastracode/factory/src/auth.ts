@@ -45,6 +45,8 @@ export interface FactoryAuthUser {
   id?: string;
   email?: string;
   name?: string;
+  /** Provider-supplied profile picture URL, when the auth provider exposes one. */
+  avatarUrl?: string;
   /**
    * Organization id. The org is the top-level tenant: it owns the GitHub
    * App installation and connected projects, while each user inside the org gets
