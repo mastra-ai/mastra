@@ -1275,6 +1275,7 @@ function parseIntakeIssue(sourceId: string, issue: GithubIssue): IntakeIssue {
     stateType: issue.state,
     priority: null,
     assignee: issue.assignees[0] ?? null,
+    assignees: issue.assignees,
     source: sourceId,
     labels: issue.labels,
     commentCount: issue.commentCount,

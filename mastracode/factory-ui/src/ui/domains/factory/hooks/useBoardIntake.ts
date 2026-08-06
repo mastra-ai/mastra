@@ -66,8 +66,8 @@ export function useBoardIntake({
     () =>
       review
         ? (pulls.data ?? []).map(pullRequestCandidate)
-        : [...intakeIssues.map(issueCandidate), ...(linearIssues.data ?? []).map(linearCandidate)],
-    [intakeIssues, pulls.data, linearIssues.data, review],
+        : [...(issues.data ?? []).map(issueCandidate), ...(linearIssues.data ?? []).map(linearCandidate)],
+    [issues.data, pulls.data, linearIssues.data, review],
   );
   const candidates = useMemo(() => {
     const all: BoardCandidate[] = review

@@ -458,7 +458,7 @@ const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
 
 function sameStrings(left: unknown, right: string[] | undefined): boolean {
   if (right === undefined) return true;
-  if (!Array.isArray(left)) return right.length === 0;
+  if (!Array.isArray(left)) return false;
   const leftValues = new Set(left.flatMap(value => (typeof value === 'string' ? [value] : [])));
   const rightValues = new Set(right);
   return leftValues.size === rightValues.size && [...leftValues].every(value => rightValues.has(value));

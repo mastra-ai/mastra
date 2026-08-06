@@ -291,11 +291,13 @@ function polledIssueEvent(
     url: string;
     author: string | null;
     assignee: string | null;
+    assignees?: string[];
     labels: string[];
     createdAt: string;
   },
 ): ParsedGithubWebhook {
   const repositoryId = Number(project.repository.externalId);
+  const assigneeLogins = issue.assignees ?? (issue.assignee ? [issue.assignee] : []);
   return {
     event: 'issues',
     deliveryId: `poll:${repositoryId}:issue:${issue.number}:${issue.createdAt}`,
@@ -309,7 +311,7 @@ function polledIssueEvent(
         title: issue.title,
         html_url: issue.url,
         created_at: issue.createdAt,
-        assignees: issue.assignee ? [{ login: issue.assignee }] : [],
+        assignees: assigneeLogins.map(login => ({ login })),
         labels: issue.labels.map(name => ({ name })),
       },
     },
@@ -782,6 +784,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             url: issue.url,
             author: issue.author,
             assignee: issue.assignee,
+            assignees: issue.assignees,
             labels: issue.labels,
             comments: issue.commentCount ?? 0,
             createdAt: issue.createdAt,
