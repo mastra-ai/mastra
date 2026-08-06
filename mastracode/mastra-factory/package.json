@@ -41,11 +41,8 @@
     "ai"
   ],
   "dependencies": {
-    "@clack/prompts": "^1.7.0",
     "commander": "^14.0.3",
-    "mastra": "workspace:*",
-    "picocolors": "^1.1.1",
-    "tinyexec": "^1.2.4"
+    "mastra": "workspace:*"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

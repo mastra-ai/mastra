@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PosthogAnalytics } from '../../analytics/index.js';
 
 const clack = vi.hoisted(() => ({
   intro: vi.fn(),
@@ -48,7 +48,9 @@ const cliAuth = vi.hoisted(() => ({
 vi.mock('@clack/prompts', () => clack);
 vi.mock('tinyexec', () => tinyexec);
 vi.mock('./platform.js', () => platform);
-vi.mock('mastra/internal/auth', () => cliAuth);
+vi.mock('../auth/api.js', () => cliAuth);
+vi.mock('../auth/credentials.js', () => cliAuth);
+vi.mock('../auth/orgs.js', () => cliAuth);
 
 import { create } from './create.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
@@ -248,7 +250,7 @@ describe('create (platform provisioning)', () => {
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
-      keyName: 'create-factory: my-factory',
+      keyName: 'mastra factory init: my-factory',
     });
     expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
       token: 'wos-token',

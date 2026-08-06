@@ -1,13 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as p from '@clack/prompts';
-// `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
-// flow and reuses persisted credentials + org resolution rather than duplicating
-// them here.
-import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
-import { fetchOrgs, getToken, loadCredentials, LoginCancelledError, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
+import type { PosthogAnalytics } from '../../analytics/index.js';
+import { fetchOrgs } from '../auth/api.js';
+import { getToken, loadCredentials, LoginCancelledError } from '../auth/credentials.js';
+import { resolveCurrentOrg } from '../auth/orgs.js';
 
 import { upsertEnvFile } from './env.js';
 import type { PlatformProject, ProjectRegion } from './platform.js';
@@ -179,7 +178,7 @@ export async function create(args: CreateArgs): Promise<void> {
     try {
       await x('git', ['init', '-q'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
       await x('git', ['add', '-A'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
-      await x('git', ['commit', '-q', '-m', 'Initial commit from create-factory'], {
+      await x('git', ['commit', '-q', '-m', 'Initial commit from Mastra Factory'], {
         throwOnError: true,
         nodeOptions: { cwd: projectPath },
       });
@@ -224,7 +223,7 @@ export async function create(args: CreateArgs): Promise<void> {
   } else if (platformError) {
     lines.push(
       `${color.yellow('Platform provisioning failed:')} ${platformError}`,
-      `Any credentials that were minted before the failure have been written to ${color.cyan('.env')}. Re-run \`npx create factory\` after fixing, or fill in the rest manually from ${color.underline('https://platform.mastra.ai')}.`,
+      `Any credentials that were minted before the failure have been written to ${color.cyan('.env')}. Re-run \`mastra factory init\` after fixing, or fill in the rest manually from ${color.underline('https://platform.mastra.ai')}.`,
     );
   } else {
     lines.push('Open the Factory UI to finish setup (models, integrations, database).');
@@ -270,8 +269,8 @@ async function runPlatformProvisioning({
         p.cancel('Operation cancelled');
         process.exit(0);
       }
+      p.log.info('Signing in to Mastra…');
     }
-    p.log.info('Signing in to Mastra…');
     const token = await getToken(undefined, { skipOnInput: true });
 
     // 2. Org — `--org <id-or-name>` skips the picker; otherwise prompt every
@@ -317,7 +316,7 @@ async function runPlatformProvisioning({
       secretKey = await mintOrgApiKey({
         token,
         orgId,
-        keyName: `create-factory: ${projectName}`,
+        keyName: `mastra factory init: ${projectName}`,
       });
       keySpinner.stop('Platform API key created.');
     } catch (err) {
@@ -425,6 +424,6 @@ function ensureEnvGitignored(projectPath: string): void {
   const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
   fs.writeFileSync(
     gitignorePath,
-    `${existing}${prefix}\n# Added by create-factory to protect platform credentials\n.env\n`,
+    `${existing}${prefix}\n# Added by Mastra Factory init to protect platform credentials\n.env\n`,
   );
 }
