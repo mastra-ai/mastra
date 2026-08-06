@@ -114,6 +114,7 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: {
+    id?: string;
     input: unknown;
     groundTruth?: unknown;
     metadata?: Record<string, unknown>;
@@ -218,7 +219,7 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
  */
 async function executeAgent(
   agent: Agent,
-  item: { input: unknown; groundTruth?: unknown },
+  item: { id?: string; input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
   experimentId?: string,
@@ -259,7 +260,16 @@ async function executeAgent(
         memory: {
           thread: {
             id: randomUUID(),
-            ...(experimentId ? { metadata: { experimentId } } : {}),
+            // Tag experimentId (and the item id when known) so a large run's threads
+            // map back to their items without matching transcripts.
+            ...(experimentId || item.id
+              ? {
+                  metadata: {
+                    ...(experimentId ? { experimentId } : {}),
+                    ...(item.id ? { experimentItemId: item.id } : {}),
+                  },
+                }
+              : {}),
           },
           resource: String(contextResourceId),
           // Suppress title generation: these threads are runner bookkeeping, so an

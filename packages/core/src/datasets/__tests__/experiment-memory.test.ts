@@ -76,7 +76,7 @@ function createMemoryAgent(model: MockLanguageModelV1 | MockLanguageModelV2) {
   return { agent, memory };
 }
 
-async function setupDataset(agent: Agent) {
+async function setupDataset(agent: Agent, inputs: string[] = ITEM_INPUTS) {
   const db = new InMemoryDB();
   const datasetsStorage = new DatasetsInMemory({ db });
   const experimentsStorage = new ExperimentsInMemory({ db });
@@ -108,11 +108,13 @@ async function setupDataset(agent: Agent) {
   } as unknown as Mastra;
 
   const record = await datasetsStorage.createDataset({ name: 'Experiment Memory DS' });
-  for (const input of ITEM_INPUTS) {
-    await datasetsStorage.addItem({ datasetId: record.id, input });
+  const itemIds: string[] = [];
+  for (const input of inputs) {
+    const item = await datasetsStorage.addItem({ datasetId: record.id, input });
+    itemIds.push(item.id);
   }
 
-  return new Dataset(record.id, mastra);
+  return { ds: new Dataset(record.id, mastra), itemIds };
 }
 
 async function listThreadsForResource(memory: MockMemory, resourceId: string) {
@@ -124,7 +126,7 @@ describe('experiment executor memory-thread injection (#20663)', () => {
   it('SC1: memory-enabled agent + lone resourceId succeeds with a distinct thread per item', async () => {
     const { agent, memory } = createMemoryAgent(createV2Model());
     const generateSpy = vi.spyOn(agent, 'generate');
-    const ds = await setupDataset(agent);
+    const { ds, itemIds } = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
       targetType: 'agent',
@@ -140,14 +142,22 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     expect(new Set(threads.map(t => t.id)).size).toBe(ITEM_INPUTS.length);
     for (const thread of threads) {
       expect(thread.resourceId).toBe('user-1');
-      // Injected threads are tagged with the experiment id for traceability.
-      expect(thread.metadata).toMatchObject({ experimentId: expect.any(String) });
+      // Injected threads are tagged with the experiment id and item id so a large
+      // run's threads map back to their items without matching transcripts.
+      expect(thread.metadata).toMatchObject({
+        experimentId: expect.any(String),
+        experimentItemId: expect.any(String),
+      });
       // The transcript must actually be persisted — an injected memory option that
       // disables lastMessages would suppress the MessageHistory output processor
       // and leave every one of these threads empty.
       const recalled = await memory.recall({ threadId: thread.id, resourceId: 'user-1' });
       expect(recalled.messages.length).toBeGreaterThan(0);
     }
+
+    // The tagged item ids must be exactly the dataset's item ids — one thread per item.
+    const taggedItemIds = threads.map(t => (t.metadata as Record<string, unknown>).experimentItemId);
+    expect(new Set(taggedItemIds)).toEqual(new Set(itemIds));
 
     // Contract check the mock cannot surface: title generation must be suppressed
     // (MockMemory never titles threads, so only the passed option proves this),
@@ -162,7 +172,7 @@ describe('experiment executor memory-thread injection (#20663)', () => {
 
   it('SC1 (legacy): memory-enabled v1-model agent + lone resourceId succeeds with a distinct thread per item', async () => {
     const { agent, memory } = createMemoryAgent(createV1Model());
-    const ds = await setupDataset(agent);
+    const { ds } = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
       targetType: 'agent',
@@ -178,13 +188,16 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     expect(new Set(threads.map(t => t.id)).size).toBe(ITEM_INPUTS.length);
     for (const thread of threads) {
       expect(thread.resourceId).toBe('user-legacy');
-      expect(thread.metadata).toMatchObject({ experimentId: expect.any(String) });
+      expect(thread.metadata).toMatchObject({
+        experimentId: expect.any(String),
+        experimentItemId: expect.any(String),
+      });
     }
   });
 
   it('SC2a: no resourceId in context — run succeeds memory-less, no threads created', async () => {
     const { agent, memory } = createMemoryAgent(createV2Model());
-    const ds = await setupDataset(agent);
+    const { ds } = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
       targetType: 'agent',
@@ -206,7 +219,7 @@ describe('experiment executor memory-thread injection (#20663)', () => {
       model: createV2Model(),
     });
     const generateSpy = vi.spyOn(agent, 'generate');
-    const ds = await setupDataset(agent);
+    const { ds } = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
       targetType: 'agent',
@@ -230,7 +243,7 @@ describe('experiment executor memory-thread injection (#20663)', () => {
   it('SC2c: empty-string resourceId — no injection, run stays memory-less as before the fix', async () => {
     const { agent, memory } = createMemoryAgent(createV2Model());
     const generateSpy = vi.spyOn(agent, 'generate');
-    const ds = await setupDataset(agent);
+    const { ds } = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
       targetType: 'agent',
@@ -255,7 +268,7 @@ describe('experiment executor memory-thread injection (#20663)', () => {
 
   it('SC3: explicit threadId in context wins — no per-item injection, all items share the supplied thread', async () => {
     const { agent, memory } = createMemoryAgent(createV2Model());
-    const ds = await setupDataset(agent);
+    const { ds } = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
       targetType: 'agent',
@@ -272,5 +285,54 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     const threads = await listThreadsForResource(memory, 'user-3');
     expect(threads).toHaveLength(1);
     expect(threads[0]?.id).toBe('caller-supplied-thread');
+  });
+
+  it('SC4: each retry attempt gets a fresh injected thread (same item id, distinct thread ids)', async () => {
+    // Fail the first generate call, succeed on the retry — retries re-enter
+    // executeAgent, so each attempt must mint its own thread rather than
+    // appending the retry transcript to the failed attempt's thread.
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('transient model failure');
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text' as const, text: 'Dummy response' }],
+          warnings: [],
+        };
+      },
+    });
+    const { agent } = createMemoryAgent(model);
+    const generateSpy = vi.spyOn(agent, 'generate');
+    const { ds, itemIds } = await setupDataset(agent, ['Only item']);
+
+    const summary = await ds.startExperiment({
+      targetType: 'agent',
+      targetId: 'memory-agent',
+      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'user-retry' },
+      maxRetries: 1,
+    });
+
+    expect(summary.failedCount).toBe(0);
+    expect(summary.succeededCount).toBe(1);
+    expect(generateSpy).toHaveBeenCalledTimes(2);
+
+    // Contract check on the passed options (thread persistence timing for the
+    // failed attempt is an implementation detail of the memory pipeline).
+    const passedThreads = generateSpy.mock.calls.map(call => {
+      const options = (call as unknown[])[1] as {
+        memory?: { thread?: { id?: string; metadata?: Record<string, unknown> } };
+      };
+      return options?.memory?.thread;
+    });
+    expect(passedThreads[0]?.id).toBeDefined();
+    expect(passedThreads[1]?.id).toBeDefined();
+    expect(passedThreads[0]?.id).not.toBe(passedThreads[1]?.id);
+    // Both attempts stay traceable to the same item.
+    expect(passedThreads[0]?.metadata?.experimentItemId).toBe(itemIds[0]);
+    expect(passedThreads[1]?.metadata?.experimentItemId).toBe(itemIds[0]);
   });
 });
