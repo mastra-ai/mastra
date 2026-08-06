@@ -11,10 +11,10 @@ const AUTOMATION_ACTORS = new Set([
 
 export interface WorkItemActivity {
   events: AuditEvent[];
-  lastWorker: AuditActorProfile;
+  lastWorker?: AuditActorProfile;
 }
 
-function isHumanActor(actorId: string | undefined): actorId is string {
+export function isHumanActor(actorId: string | undefined): actorId is string {
   if (!actorId) return false;
   return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
 }
@@ -42,10 +42,19 @@ function latestStageWorker(item: WorkItem): { actorId: string; occurredAt: strin
   }, undefined);
 }
 
+export function workItemHumanActorIds(item: WorkItem): string[] {
+  const actorIds = [
+    item.createdBy,
+    ...item.stageHistory.flatMap(entry => [entry.by, entry.exitedBy]),
+    ...Object.values(item.sessions).map(session => session.startedBy),
+  ].filter(isHumanActor);
+  return [...new Set(actorIds)];
+}
+
 export function workItemActivity(item: WorkItem, page: AuditEventPage | undefined): WorkItemActivity {
   const actors = page?.actors ?? {};
   const events = page?.events.filter(event => targetsWorkItem(event, item.id)) ?? [];
-  const latestHumanEvent = events.find(event => event.actorType === 'human');
+  const latestHumanEvent = events.find(event => event.actorType === 'human' && isHumanActor(event.actorId));
   if (latestHumanEvent) {
     return {
       events,
@@ -54,9 +63,13 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   }
 
   const latestStage = latestStageWorker(item);
-  const actorId = latestStage?.actorId ?? item.createdBy;
+  const sessionActorId = Object.values(item.sessions)
+    .map(session => session.startedBy)
+    .find(isHumanActor);
+  const createdBy = isHumanActor(item.createdBy) ? item.createdBy : undefined;
+  const actorId = latestStage?.actorId ?? sessionActorId ?? createdBy;
   return {
     events,
-    lastWorker: actorProfile(actorId, actors),
+    ...(actorId ? { lastWorker: actorProfile(actorId, actors) } : {}),
   };
 }

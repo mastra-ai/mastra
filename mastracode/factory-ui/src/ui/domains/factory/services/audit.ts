@@ -59,10 +59,11 @@ async function throwRequestError(res: Response): Promise<never> {
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,
-  options: { actions?: string[]; before?: string; limit?: number } = {},
+  options: { actions?: string[]; actorIds?: string[]; before?: string; limit?: number } = {},
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
   if (options.actions && options.actions.length > 0) query.set('actions', options.actions.join(','));
+  if (options.actorIds && options.actorIds.length > 0) query.set('actorIds', options.actorIds.join(','));
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   const qs = query.size > 0 ? `?${query}` : '';

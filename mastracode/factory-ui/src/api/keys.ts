@@ -43,8 +43,8 @@ export const queryKeys = {
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
-  factoryAudit: (githubProjectId: string | undefined, group: string) =>
-    ['factory', 'audit', githubProjectId ?? null, group] as const,
+  factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
+    ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,

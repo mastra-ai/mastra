@@ -25,18 +25,29 @@ function actionLabel(action: string): string {
   );
 }
 
+function metadataString(event: AuditEvent, key: string): string | undefined {
+  const value = event.metadata[key];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
 function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile {
-  if (event.actorType === 'agent') return { id: event.actorId, name: 'Factory agent' };
+  if (event.actorType === 'agent') {
+    return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
+  }
   return actors[event.actorId] ?? { id: event.actorId, name: event.actorId };
 }
 
 function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<string, AuditActorProfile> }) {
   const actor = eventActor(event, actors);
+  const modelId = event.actorType === 'agent' ? metadataString(event, 'modelId') : undefined;
   return (
     <li className="flex items-start gap-2">
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-ui-xs text-icon5 truncate font-medium">{actor.name}</span>
+        <span className="text-ui-xs text-icon5 truncate font-medium">
+          {actor.name}
+          {modelId ? <span className="text-icon3 font-normal"> · {modelId}</span> : null}
+        </span>
         <span className="text-ui-xs text-icon3 flex items-baseline justify-between gap-3">
           <span className="min-w-0 truncate capitalize">{actionLabel(event.action)}</span>
           <time className="shrink-0" dateTime={event.occurredAt}>
@@ -57,6 +68,7 @@ export function WorkItemActivity({
 }) {
   const worker = activity.lastWorker;
   const timeline = activity.events.slice(0, 8);
+  if (!worker) return null;
 
   return (
     <HoverCard>

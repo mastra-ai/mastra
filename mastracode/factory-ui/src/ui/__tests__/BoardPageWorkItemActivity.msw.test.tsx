@@ -36,8 +36,17 @@ const workItem = {
 const reviewItem = {
   ...workItem,
   id: 'review-item-1',
+  createdBy: 'factory-rule-dispatcher',
   title: 'Review retry fix',
   stages: ['review'],
+  sessions: {
+    review: {
+      sessionId: 'session-review',
+      threadId: 'thread-review',
+      branch: 'review/retry-fix',
+      startedBy: 'user-grace',
+    },
+  },
   externalSource: {
     integrationId: 'github',
     type: 'pull-request',
@@ -66,10 +75,22 @@ const events = [
     actorType: 'agent',
     action: 'factory.work_item.updated',
     targets: [{ type: 'work_item', id: workItem.id, name: workItem.title }],
-    metadata: {},
+    metadata: { agentName: 'build agent', modelId: 'anthropic/claude-sonnet-4-5' },
     githubProjectId: FACTORY_ID,
     context: {},
     occurredAt: '2026-08-05T10:00:00.000Z',
+  },
+  {
+    id: 'event-work-automation',
+    orgId: 'org-1',
+    actorId: 'factory-rule-dispatcher',
+    actorType: 'human',
+    action: 'factory.work_item.updated',
+    targets: [{ type: 'work_item', id: workItem.id, name: workItem.title }],
+    metadata: {},
+    githubProjectId: FACTORY_ID,
+    context: {},
+    occurredAt: '2026-08-05T09:30:00.000Z',
   },
   {
     id: 'event-work-human',
@@ -82,18 +103,6 @@ const events = [
     githubProjectId: FACTORY_ID,
     context: {},
     occurredAt: '2026-08-05T09:00:00.000Z',
-  },
-  {
-    id: 'event-review-human',
-    orgId: 'org-1',
-    actorId: 'user-grace',
-    actorType: 'human',
-    action: 'factory.run.started',
-    targets: [{ type: 'work_item', id: reviewItem.id, name: reviewItem.title }],
-    metadata: {},
-    githubProjectId: FACTORY_ID,
-    context: {},
-    occurredAt: '2026-08-05T08:00:00.000Z',
   },
 ];
 
@@ -129,7 +138,15 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () => HttpResponse.json({ events, actors })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) => {
+      const actorIds = new URL(request.url).searchParams.get('actorIds')?.split(',') ?? [];
+      if (actorIds.length === 0) {
+        return HttpResponse.json({ events, actors: { 'user-ada': actors['user-ada'] } });
+      }
+      expect(actorIds).toEqual(expect.arrayContaining(['user-creator', 'user-grace']));
+      expect(actorIds).not.toContain('factory-rule-dispatcher');
+      return HttpResponse.json({ events, actors });
+    }),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: {
@@ -180,13 +197,13 @@ describe('Board work-item activity', () => {
     renderBoard('work');
 
     await expectActivity('Ada Lovelace', 'Moved the item');
-    expect(screen.getByLabelText('Work item activity')).toHaveTextContent('Factory agent');
+    expect(screen.getByLabelText('Work item activity')).toHaveTextContent('build agent · anthropic/claude-sonnet-4-5');
   });
 
   it('shows the latest human worker, initial fallback, and timeline on review cards', async () => {
     stubBoardEndpoints();
     renderBoard('review');
 
-    await expectActivity('Grace Hopper', 'Started a run', false);
+    await expectActivity('Grace Hopper', 'No recorded activity yet', false);
   });
 });

@@ -71,6 +71,14 @@ export interface AuditDomainOptions {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ACTION_FILTERS = 16;
+const MAX_ACTOR_PROFILES = 100;
+const AUTOMATION_ACTORS = new Set([
+  'factory',
+  'system',
+  'automation',
+  'factory-rule-dispatcher',
+  'factory-tool-result-rule',
+]);
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -84,6 +92,23 @@ function parseActionsParam(raw: string | undefined): string[] | undefined {
     .filter(Boolean)
     .slice(0, MAX_ACTION_FILTERS);
   return actions.length > 0 ? actions : undefined;
+}
+
+function isHumanActorId(actorId: string | undefined): actorId is string {
+  if (!actorId) return false;
+  return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
+}
+
+function parseActorIdsParam(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map(actorId => actorId.trim())
+        .filter(isHumanActorId),
+    ),
+  ].slice(0, MAX_ACTOR_PROFILES);
 }
 
 function parseLimitParam(raw: string | undefined): number | undefined {
@@ -197,13 +222,20 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
       const state = context?.getState();
       if (!orgId || !userId || !threadId || !state?.factoryProjectId) return;
 
+      const modeId = context.session.modeId?.trim();
+      const modelId = context.session.modelId?.trim();
       await this.record({
         orgId,
         actorId: `agent:${threadId}`,
         actorType: 'agent',
         action: input.action,
         targets: input.targets,
-        metadata: { ...input.metadata, startedBy: userId },
+        metadata: {
+          ...input.metadata,
+          startedBy: userId,
+          ...(modeId ? { agentName: `${modeId} agent` } : {}),
+          ...(modelId ? { modelId } : {}),
+        },
         factoryProjectId: state.factoryProjectId,
         projectRepositoryId: state.projectRepositoryId,
         context: {},
@@ -216,10 +248,20 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     }
   }
 
-  async #resolveActorProfiles(events: AuditEventRow[]): Promise<Record<string, AuditActorProfile>> {
+  async #resolveActorProfiles(
+    events: AuditEventRow[],
+    requestedActorIds: string[] = [],
+  ): Promise<Record<string, AuditActorProfile>> {
     if (!this.#users) return {};
 
-    const actorIds = [...new Set(events.filter(event => event.actorType === 'human').map(event => event.actorId))];
+    const actorIds = [
+      ...new Set(
+        [
+          ...requestedActorIds,
+          ...events.filter(event => event.actorType === 'human').map(event => event.actorId),
+        ].filter(isHumanActorId),
+      ),
+    ].slice(0, MAX_ACTOR_PROFILES);
     if (actorIds.length === 0) return {};
 
     try {
@@ -268,7 +310,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),
           });
-          const actors = await this.#resolveActorProfiles(page.events);
+          const actors = await this.#resolveActorProfiles(page.events, parseActorIdsParam(c.req.query('actorIds')));
           return c.json({ ...page, actors });
         },
       }),

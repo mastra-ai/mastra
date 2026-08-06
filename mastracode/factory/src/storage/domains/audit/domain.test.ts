@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -113,6 +114,38 @@ describe('AuditDomain', () => {
     });
   });
 
+  it('records the active agent name and model on agent events when available', async () => {
+    const seed = await createFactoryStorageForTests();
+    const domain = auditDomain(seed, {
+      agentTenant: () => ({ orgId: 'org-1', userId: 'user-1' }),
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      threadId: 'thread-1',
+      session: { modeId: 'review', modelId: 'anthropic/claude-sonnet-4-5' },
+      getState: () => ({ factoryProjectId: 'project-1' }),
+    });
+
+    await domain.emitAgent({
+      requestContext,
+      input: {
+        action: 'factory.agent.commit',
+        targets: [{ type: 'worktree', id: '/tmp/worktree' }],
+      },
+    });
+
+    const [event] = (await seed.audit.list({ orgId: 'org-1' })).events;
+    expect(event).toMatchObject({
+      actorId: 'agent:thread-1',
+      actorType: 'agent',
+      metadata: {
+        startedBy: 'user-1',
+        agentName: 'review agent',
+        modelId: 'anthropic/claude-sonnet-4-5',
+      },
+    });
+  });
+
   it('serves exactly the project audit route', async () => {
     const seed = await createFactoryStorageForTests();
     expect(
@@ -167,14 +200,13 @@ describe('AuditDomain', () => {
       userId: 'user-1',
       input: { name: 'Acme project' },
     });
+    const getUser = vi.fn(async (userId: string) => ({
+      id: userId,
+      name: userId === 'user-1' ? 'Ada Lovelace' : 'Grace Hopper',
+      avatarUrl: `https://avatars.example/${userId}.png`,
+    }));
     const domain = auditDomain(seed, {
-      users: {
-        getUser: async userId => ({
-          id: userId,
-          name: 'Ada Lovelace',
-          avatarUrl: 'https://avatars.example/ada.png',
-        }),
-      },
+      users: { getUser },
     });
     await domain.record({
       orgId: 'org-1',
@@ -190,7 +222,9 @@ describe('AuditDomain', () => {
     });
     mountApiRoutes(app as never, domain.routes());
 
-    const response = await app.request(`/web/factory/projects/${project.id}/audit`);
+    const response = await app.request(
+      `/web/factory/projects/${project.id}/audit?actorIds=user-2,factory-rule-dispatcher`,
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -198,10 +232,17 @@ describe('AuditDomain', () => {
         'user-1': {
           id: 'user-1',
           name: 'Ada Lovelace',
-          avatarUrl: 'https://avatars.example/ada.png',
+          avatarUrl: 'https://avatars.example/user-1.png',
+        },
+        'user-2': {
+          id: 'user-2',
+          name: 'Grace Hopper',
+          avatarUrl: 'https://avatars.example/user-2.png',
         },
       },
     });
+    expect(getUser.mock.calls.flat()).toEqual(expect.arrayContaining(['user-1', 'user-2']));
+    expect(getUser).not.toHaveBeenCalledWith('factory-rule-dispatcher');
   });
 
   it('normalizes project audit filters before listing', async () => {

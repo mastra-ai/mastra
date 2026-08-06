@@ -24,6 +24,7 @@ import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
+import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
@@ -101,7 +102,8 @@ function BoardContent({
   });
   const decisions = useBoardDecisions(factoryProjectId);
   const composer = useBoardComposer(factoryProjectId);
-  const activity = useAuditEvents(factoryProjectId, `board-${kind}-activity`, undefined, 200);
+  const activityActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
+  const activity = useAuditEvents(factoryProjectId, `board-${kind}-activity`, undefined, 200, activityActorIds);
   const activityPage = activity.data?.pages[0];
   const loadingStages = boardLoadingStages({
     stages,

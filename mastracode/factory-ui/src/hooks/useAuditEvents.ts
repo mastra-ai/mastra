@@ -15,11 +15,14 @@ export function useAuditEvents(
   group: string,
   actions: string[] | undefined,
   limit?: number,
+  actorIds: string[] = [],
 ) {
   const { baseUrl } = useApiConfig();
+  const actorKey = [...actorIds].sort().join(',');
   return useInfiniteQuery({
-    queryKey: queryKeys.factoryAudit(factoryProjectId, group),
-    queryFn: ({ pageParam }) => fetchAuditEvents(baseUrl, factoryProjectId!, { actions, before: pageParam, limit }),
+    queryKey: queryKeys.factoryAudit(factoryProjectId, group, actorKey),
+    queryFn: ({ pageParam }) =>
+      fetchAuditEvents(baseUrl, factoryProjectId!, { actions, actorIds, before: pageParam, limit }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: AuditEventPage) => lastPage.nextCursor,
     enabled: Boolean(factoryProjectId),

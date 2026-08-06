@@ -86,6 +86,33 @@ describe('workItemActivity', () => {
     expect(activity.events.map(candidate => candidate.id)).toEqual(['agent-event', 'human-event']);
   });
 
+  it('does not treat automation events recorded as human as card attribution', () => {
+    const page: AuditEventPage = {
+      events: [
+        event({
+          id: 'automation-event',
+          actorId: 'factory-rule-dispatcher',
+          actorType: 'human',
+          occurredAt: '2026-08-05T10:00:00.000Z',
+        }),
+        event({
+          id: 'human-event',
+          actorId: 'user-ada',
+          actorType: 'human',
+          occurredAt: '2026-08-05T09:00:00.000Z',
+        }),
+      ],
+      actors: {
+        'user-ada': { id: 'user-ada', name: 'Ada Lovelace' },
+      },
+    };
+
+    const activity = workItemActivity(item, page);
+
+    expect(activity.lastWorker).toEqual(page.actors['user-ada']);
+    expect(activity.events.map(candidate => candidate.id)).toEqual(['automation-event', 'human-event']);
+  });
+
   it('falls back to the latest human stage actor when no audit event is available', () => {
     const activity = workItemActivity(
       {
@@ -99,5 +126,56 @@ describe('workItemActivity', () => {
     );
 
     expect(activity.lastWorker).toEqual({ id: 'user-ada', name: 'user-ada' });
+  });
+
+  it('falls back to the human session owner and its resolved profile for review cards', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        sessions: {
+          review: {
+            sessionId: 'session-1',
+            threadId: 'thread-1',
+            branch: 'review/retry-fix',
+            startedBy: 'user-grace',
+          },
+        },
+      },
+      {
+        events: [],
+        actors: {
+          'user-grace': { id: 'user-grace', name: 'Grace Hopper', avatarUrl: 'https://avatars.example/grace.png' },
+        },
+      },
+    );
+
+    expect(activity.lastWorker).toEqual({
+      id: 'user-grace',
+      name: 'Grace Hopper',
+      avatarUrl: 'https://avatars.example/grace.png',
+    });
+  });
+
+  it('omits card attribution when the item has no human association', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+      },
+      {
+        events: [
+          event({
+            id: 'automation-event',
+            actorId: 'factory-rule-dispatcher',
+            actorType: 'human',
+            occurredAt: '2026-08-05T10:00:00.000Z',
+          }),
+        ],
+        actors: {},
+      },
+    );
+
+    expect(activity.lastWorker).toBeUndefined();
   });
 });
