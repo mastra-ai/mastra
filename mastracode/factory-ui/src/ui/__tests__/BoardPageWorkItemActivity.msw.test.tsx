@@ -56,6 +56,30 @@ const reviewItem = {
   },
 };
 
+const pullRequestStatusItems = [
+  { id: 'draft', title: 'Draft PR', stages: ['review'], metadata: { state: 'open', draft: true, merged: false } },
+  { id: 'open', title: 'Open PR', stages: ['review'], metadata: { state: 'open', draft: false, merged: false } },
+  {
+    id: 'closed',
+    title: 'Closed PR',
+    stages: ['canceled'],
+    metadata: { state: 'closed', draft: false, merged: false },
+  },
+  { id: 'merged', title: 'Merged PR', stages: ['done'], metadata: { state: 'closed', draft: false, merged: true } },
+].map(({ id, title, stages, metadata }, index) => ({
+  ...reviewItem,
+  id: `review-item-${id}`,
+  title,
+  stages,
+  sessions: {},
+  metadata: { number: 20 + index, author: `author-${id}`, ...metadata },
+  externalSource: {
+    ...reviewItem.externalSource,
+    externalId: `github-pr:${20 + index}`,
+    url: `https://github.com/acme/app/pull/${20 + index}`,
+  },
+}));
+
 const actors = {
   'user-ada': {
     id: 'user-ada',
@@ -214,5 +238,20 @@ describe('Board work-item activity', () => {
     expect(popup).toHaveTextContent('octocat');
     expect(popup).not.toHaveTextContent('Created the item');
     expect(within(popup).getByText(`Created at: ${createdAt}`)).toHaveAttribute('datetime', reviewItem.createdAt);
+  });
+
+  it('shows distinct draft, open, closed, and merged pull request icons', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: pullRequestStatusItems }),
+      ),
+    );
+    renderBoard('review');
+
+    expect(await screen.findByLabelText('Draft pull request')).toBeInTheDocument();
+    expect(screen.getByLabelText('Open pull request')).toBeInTheDocument();
+    expect(screen.getByLabelText('Closed pull request')).toBeInTheDocument();
+    expect(screen.getByLabelText('Merged pull request')).toBeInTheDocument();
   });
 });

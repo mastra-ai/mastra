@@ -286,6 +286,7 @@ export class GithubRules {
               url: string(pullRequest?.html_url)!,
               ...(string(pullRequest?.created_at) ? { createdAt: string(pullRequest?.created_at) } : {}),
               state: string(pullRequest?.state) === 'closed' ? ('closed' as const) : ('open' as const),
+              draft: boolean(pullRequest?.draft) ?? false,
               merged: boolean(pullRequest?.merged) ?? false,
               headBranch: string(object(pullRequest?.head)?.ref) ?? '',
               baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
@@ -388,6 +389,7 @@ export interface ReconcilePullRequestState {
   title: string;
   url: string;
   state: 'open' | 'closed';
+  draft: boolean;
   merged: boolean;
   headBranch: string;
   baseBranch: string;
@@ -471,6 +473,7 @@ export function reconciledClosedEvent(
         html_url: state.url,
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         state: 'closed',
+        draft: state.draft,
         merged: state.merged,
         head: { ref: state.headBranch },
         base: { ref: state.baseBranch },
@@ -555,10 +558,15 @@ export function createGithubPullRequestReconciler(
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
-            const stage = item.stages[0];
-            if (stage === 'done' || stage === 'canceled') continue;
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
+            const stage = item.stages[0];
+            const metadata = item.metadata ?? {};
+            const hasReconciledStatus =
+              (metadata.state === 'open' || metadata.state === 'closed') &&
+              typeof metadata.draft === 'boolean' &&
+              typeof metadata.merged === 'boolean';
+            if ((stage === 'done' || stage === 'canceled') && hasReconciledStatus) continue;
             const cards = cardsByNumber.get(pullRequestNumber) ?? [];
             cards.push(item);
             cardsByNumber.set(pullRequestNumber, cards);
@@ -577,19 +585,28 @@ export function createGithubPullRequestReconciler(
           });
           summary.checked += 1;
           if (!state) continue;
-          if (state.author) {
-            for (const card of cards) {
-              if (card.metadata?.author === state.author) continue;
-              try {
-                await options.storage.update({
-                  orgId: card.orgId,
-                  id: card.id,
-                  userId: 'factory-rule-dispatcher',
-                  patch: { metadata: { author: state.author } },
-                });
-              } catch (error) {
-                recordFailure(repository, error, pullRequestNumber);
-              }
+          for (const card of cards) {
+            const metadata = card.metadata ?? {};
+            const statusChanged =
+              metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
+            const authorChanged = state.author !== undefined && metadata.author !== state.author;
+            if (!statusChanged && !authorChanged) continue;
+            try {
+              await options.storage.update({
+                orgId: card.orgId,
+                id: card.id,
+                userId: 'factory-rule-dispatcher',
+                patch: {
+                  metadata: {
+                    state: state.state,
+                    draft: state.draft,
+                    merged: state.merged,
+                    ...(state.author ? { author: state.author } : {}),
+                  },
+                },
+              });
+            } catch (error) {
+              recordFailure(repository, error, pullRequestNumber);
             }
           }
           if (state.state !== 'closed') continue;

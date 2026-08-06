@@ -89,6 +89,7 @@ function githubContext(
       url: 'https://github.test/acme/repo/pull/17',
       createdAt: sourceCreatedAt,
       state: 'open',
+      draft: false,
       merged: false,
       headBranch: 'feature',
       baseBranch: 'main',
@@ -395,10 +396,18 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('records the PR head branch on Review intake so the card links back to its work item', async () => {
+  it('records PR branches and status on Review intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
-    expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
-      metadata: { headBranch: 'feature', baseBranch: 'main' },
+    const context = githubContext('pullRequestOpened');
+    context.pullRequest = { ...context.pullRequest!, draft: true };
+    expect(await rules.github.pullRequestOpened?.onEvent?.(context)).toMatchObject({
+      metadata: {
+        state: 'open',
+        draft: true,
+        merged: false,
+        headBranch: 'feature',
+        baseBranch: 'main',
+      },
     });
   });
 

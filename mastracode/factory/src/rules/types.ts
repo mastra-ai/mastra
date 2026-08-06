@@ -118,6 +118,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     url: string;
     createdAt?: string;
     state: 'open' | 'closed';
+    draft: boolean;
     merged: boolean;
     headBranch: string;
     baseBranch: string;

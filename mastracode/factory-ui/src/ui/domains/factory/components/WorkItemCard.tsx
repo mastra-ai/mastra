@@ -27,7 +27,7 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, SOURCE_ICONS } from './BoardIcons';
+import { BoardStageIcon, PullRequestStatusIcon, SOURCE_ICONS } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
 import { WorkItemActivity } from './WorkItemActivity';
 
@@ -197,7 +197,11 @@ export function WorkItemCard({
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
           <div className="flex min-w-0 items-center gap-1.5">
-            <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            {item.source === 'github-pr' ? (
+              <PullRequestStatusIcon item={item} />
+            ) : (
+              <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            )}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />
             </span>

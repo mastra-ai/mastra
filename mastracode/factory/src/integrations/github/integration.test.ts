@@ -574,6 +574,7 @@ describe('GithubIntegration merge reconciler', () => {
       title: 'Ship intake',
       url: 'https://github.com/acme/app/pull/34',
       state: 'closed',
+      draft: false,
       merged: true,
       headBranch: 'feat/intake',
       baseBranch: 'main',

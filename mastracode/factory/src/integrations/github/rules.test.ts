@@ -729,6 +729,7 @@ describe('createGithubPullRequestReconciler', () => {
       title: `PR ${number}`,
       url: `https://github.com/acme/repo/pull/${number}`,
       state: 'closed',
+      draft: false,
       merged: true,
       headBranch: 'feature',
       baseBranch: 'main',
@@ -813,7 +814,11 @@ describe('createGithubPullRequestReconciler', () => {
 
   it('only checks open cards and commits nothing for unmerged pull requests', async () => {
     const context = await setup('read');
-    await createCard(context, { number: 17, stages: ['done'] });
+    await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { state: 'closed', draft: false, merged: true },
+    });
     await createCard(context, { number: 18 });
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
@@ -831,16 +836,37 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
 
-  it('silently backfills missing or stale authors on open pull request cards', async () => {
+  it('backfills status once for terminal pull request cards created before status metadata existed', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, stages: ['done'] });
+    const fetchPullRequest = vi.fn(async () => ({
+      ...mergedState(17),
+      state: 'open' as const,
+      draft: true,
+      merged: false,
+    }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { state: 'open', draft: true, merged: false },
+    });
+  });
+
+  it('silently reconciles status and authors on open pull request cards', async () => {
     const context = await setup('read');
     const missing = await createCard(context, { number: 18, metadata: { repository: 'acme/repo' } });
     const stale = await createCard(context, {
       number: 19,
-      metadata: { author: 'old-author', repository: 'acme/repo' },
+      metadata: { author: 'old-author', state: 'open', draft: false, merged: false, repository: 'acme/repo' },
     });
     const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
       ...mergedState(input.number),
       state: 'open' as const,
+      draft: input.number === 19,
       merged: false,
       author: `author-${input.number}`,
     }));
@@ -855,10 +881,22 @@ describe('createGithubPullRequestReconciler', () => {
     });
 
     await expect(context.workItems.get({ orgId: 'org-1', id: missing.item.id })).resolves.toMatchObject({
-      metadata: { author: 'author-18', repository: 'acme/repo' },
+      metadata: {
+        author: 'author-18',
+        state: 'open',
+        draft: false,
+        merged: false,
+        repository: 'acme/repo',
+      },
     });
     await expect(context.workItems.get({ orgId: 'org-1', id: stale.item.id })).resolves.toMatchObject({
-      metadata: { author: 'author-19', repository: 'acme/repo' },
+      metadata: {
+        author: 'author-19',
+        state: 'open',
+        draft: true,
+        merged: false,
+        repository: 'acme/repo',
+      },
     });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });

@@ -732,6 +732,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title?: string;
         html_url?: string;
         state?: string;
+        draft?: boolean;
         merged?: boolean;
         created_at?: string;
         user?: { login?: string } | null;
@@ -746,6 +747,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title: result.title ?? `PR ${input.number}`,
         url: result.html_url ?? `https://github.com/${input.repository}/pull/${input.number}`,
         state: result.state === 'closed' ? 'closed' : 'open',
+        draft: result.draft === true,
         merged: result.merged === true,
         headBranch: result.head?.ref ?? '',
         baseBranch: result.base?.ref ?? '',
