@@ -74,6 +74,10 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
  * Flush messages to memory before suspending.
  * Mirrors the base Agent's flushMessagesBeforeSuspension() to ensure
  * the thread exists and all pending messages are persisted.
+ *
+ * Skips entirely when memoryConfig.readOnly is set, mirroring the readOnly
+ * guard on the durable finish path — a readOnly run shouldn't get a thread
+ * created or messages written just because it happened to suspend mid-run.
  */
 async function flushMessagesBeforeSuspension({
   saveQueueManager,
@@ -94,7 +98,7 @@ async function flushMessagesBeforeSuspension({
   threadExists?: boolean;
   onThreadCreated?: () => void;
 }) {
-  if (!saveQueueManager || !messageList || !threadId) {
+  if (!saveQueueManager || !messageList || !threadId || memoryConfig?.readOnly) {
     return;
   }
 
@@ -355,7 +359,22 @@ export function createDurableToolCallStep() {
       // full toolset from the agent — the same rebuild the LLM step already does
       // via resolveRuntimeDependencies — and retry. This is the root-cause fix
       // for `ToolNotFoundError` on skill/mastra_workspace_* tools cross-process.
-      if (!tool && mastra) {
+      //
+      // The same rebuild is ALSO the only source of a SaveQueueManager. `createInngestAgent`
+      // registers one on the run-registry entry, but only in the process that called `stream()`;
+      // the connect() worker that actually runs the loop has an empty registry, so
+      // `registryEntry?.saveQueueManager` is undefined there. Without it
+      // `flushMessagesBeforeSuspension()` early-returns and the suspend metadata written by
+      // `addToolMetadata()` is never persisted — a reloading client then sees no pending approval
+      // even though the run is parked. So rebuild when the save queue is missing too, not just
+      // when the tool is.
+      //
+      // Gated on `state?.threadId`: an agent without memory legitimately has no SaveQueueManager
+      // (see preparation.ts — it is only built when `memory` is set), and the flush requires a
+      // threadId regardless. Without this guard every tool call on a memoryless durable run would
+      // pay for a full rebuild to obtain something that can neither exist nor be used.
+      const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
+      if ((!tool || needsSaveQueueForFlush) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
@@ -370,7 +389,11 @@ export function createDurableToolCallStep() {
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
           rebuiltSaveQueueManager = rebuilt.saveQueueManager;
-          tool = rebuiltTools[toolName] as typeof tool;
+          // Keep an already-resolved tool: we may have rebuilt purely to obtain the
+          // SaveQueueManager, and the registry's instance is the live per-request closure.
+          if (!tool) {
+            tool = rebuiltTools[toolName] as typeof tool;
+          }
           if (!tool) {
             tool = findProviderToolByName(rebuiltTools as any, toolName) as typeof tool;
           }
@@ -1087,7 +1110,7 @@ export function createDurableToolCallStep() {
                     );
                   }
 
-                  if (saveQueueManager && state?.threadId) {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
                     await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
                   }
                 },
@@ -1110,7 +1133,7 @@ export function createDurableToolCallStep() {
                   // is persisted. Unlike the regular agent which has a single long-lived
                   // messageList, the durable agent's workflow state is serialized before
                   // this async callback fires, so we must flush directly.
-                  if (saveQueueManager && state?.threadId) {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
                     await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
                   }
                 },

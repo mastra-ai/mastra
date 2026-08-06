@@ -666,12 +666,13 @@ describe('Span Filtering', () => {
           attributes: {
             provider: 'mock-provider',
             model: 'mock-model-id',
+            responseModel: '   ',
           },
         });
         // end() only passes responseModel + usage (not provider/model)
         modelSpan.end({
           attributes: {
-            responseModel: 'mock-model-id',
+            responseModel: '',
             usage: { inputTokens: 20, outputTokens: 15 },
           },
         });
@@ -751,6 +752,7 @@ describe('Span Filtering', () => {
         attributes: {
           provider: 'mock-provider',
           model: 'mock-model-id',
+          responseModel: '   ',
           usage: { inputTokens: 50, outputTokens: 10 },
         },
       });
