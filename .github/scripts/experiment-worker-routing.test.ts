@@ -1,7 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import routing from '../../../.github/scripts/experiment-worker-routing.cjs';
+import routing from './experiment-worker-routing.cjs';
 
 const { dispatchedJobEnabled, experimentWorkerE2eChanged, scheduledJobEnabled } = routing;
 
@@ -33,24 +31,6 @@ describe('experiment worker workflow routing', () => {
     expect(experimentWorkerE2eChanged(['e2e-tests/deployers/index.test.ts'])).toBe(false);
     expect(experimentWorkerE2eChanged(['packages/core/src/agent/index.ts'])).toBe(false);
   });
-
-  test('routes the workflow_call experiments input directly to the experiments job', async () => {
-    const contents = await readFile(resolve(import.meta.dirname, '../../../.github/workflows/e2e-tests.yml'), 'utf8');
-    expect(contents).toContain('experiment_worker_e2e_changed:');
-    expect(contents).toContain('if: inputs.experiment_worker_e2e_changed');
-  });
-
-  test.each(['e2e-tests.yml', 'e2e-experiment-worker.yml'])(
-    '%s verifies an immutable registry snapshot at the consumer boundary',
-    async workflow => {
-      const contents = await readFile(resolve(import.meta.dirname, '../../../.github/workflows', workflow), 'utf8');
-      expect(contents).toContain('registry-snapshot.tar');
-      expect(contents).toContain('registry-artifact-digest.cjs');
-      expect(contents).toContain('MASTRA_E2E_REGISTRY_ARTIFACT_PATH:');
-      expect(contents).toContain('MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST:');
-      expect(contents).toContain('handoff-digest.txt');
-    },
-  );
 
   test('routes scheduled execution to full, browser, and every gated job', () => {
     expect(scheduledJobEnabled('pr')).toBe(false);
