@@ -53,9 +53,21 @@ export default class ScenarioReporter implements Reporter {
         : result.tests.some(test => test.status === 'skipped')
           ? 'skipped'
           : 'passed';
-      const assertionEvidence = JSON.parse(
-        await readFile(join(reportRoot, `${scenario.id}.assertions.json`), 'utf8'),
-      ) as { scenarioId: string; evidence: Record<string, unknown> };
+      let assertionEvidence: { scenarioId: string; evidence: Record<string, unknown> };
+      try {
+        assertionEvidence = JSON.parse(await readFile(join(reportRoot, `${scenario.id}.assertions.json`), 'utf8')) as {
+          scenarioId: string;
+          evidence: Record<string, unknown>;
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || status !== 'failed') throw error;
+        assertionEvidence = {
+          scenarioId: scenario.id,
+          evidence: Object.fromEntries(
+            scenario.assertions.map(id => [id, { error: 'Scenario failed before assertion evidence was recorded' }]),
+          ),
+        };
+      }
       if (assertionEvidence.scenarioId !== scenario.id) {
         throw new Error(`Assertion evidence scenario mismatch for ${scenario.id}`);
       }

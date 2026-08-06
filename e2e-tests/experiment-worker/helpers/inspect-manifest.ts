@@ -32,7 +32,9 @@ export async function inspectManifest(artifactRoot: string) {
     throw new Error('Manifest does not declare required artifact exclusions');
   }
 
-  const sorted = [...manifest.files].sort((left, right) => left.path.localeCompare(right.path));
+  const sorted = [...manifest.files].sort((left, right) =>
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+  );
   if (JSON.stringify(sorted) !== JSON.stringify(manifest.files)) throw new Error('Manifest files are not sorted');
   for (const file of manifest.files) {
     if (file.path === 'experiment-worker-manifest.json' || file.path.startsWith('node_modules/')) {

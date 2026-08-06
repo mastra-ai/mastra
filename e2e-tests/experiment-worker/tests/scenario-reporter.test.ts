@@ -13,10 +13,10 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 
-function passedTestCase(scenarioId: string) {
+function testCase(scenarioId: string, state: 'passed' | 'failed' = 'passed') {
   return {
     fullName: `experiment worker > ${scenarioId} completes`,
-    result: () => ({ state: 'passed' }),
+    result: () => ({ state }),
     diagnostic: () => ({ duration: 5 }),
   };
 }
@@ -30,7 +30,7 @@ describe('scenario reporter', () => {
 
     const reporter = new ScenarioReporter();
     const firstScenario = scenarios.find(scenario => scenario.tier === 'pr')!;
-    reporter.onTestCaseResult(passedTestCase(firstScenario.id) as never);
+    reporter.onTestCaseResult(testCase(firstScenario.id) as never);
     await writeFile(
       join(reportRoot, `${firstScenario.id}.assertions.json`),
       JSON.stringify({
@@ -51,6 +51,32 @@ describe('scenario reporter', () => {
     await expect(reporter.onTestRunEnd()).resolves.toBeUndefined();
   });
 
+  test('preserves a failed scenario when assertion evidence was not recorded', async () => {
+    const reportRoot = await mkdtemp(join(tmpdir(), 'experiment-reports-'));
+    roots.push(reportRoot);
+    const scenario = scenarios.find(candidate => candidate.id === 'workspace-browser')!;
+    process.env.MASTRA_EXPERIMENT_E2E_REPORT_DIR = reportRoot;
+    process.env.MASTRA_EXPERIMENT_E2E_TIER = 'full';
+    process.env.MASTRA_EXPERIMENT_E2E_SCENARIO = scenario.id;
+
+    const reporter = new ScenarioReporter();
+    reporter.onTestCaseResult(testCase(scenario.id, 'failed') as never);
+    await expect(reporter.onTestRunEnd()).rejects.toThrow('Required scenario assertions did not pass');
+
+    const report = JSON.parse(await readFile(join(reportRoot, `${scenario.id}.json`), 'utf8')) as {
+      status: string;
+      assertions: Array<{ status: string; evidence: { error: string } }>;
+    };
+    expect(report.status).toBe('failed');
+    expect(report.assertions).toEqual(
+      scenario.assertions.map(id => ({
+        id,
+        status: 'failed',
+        evidence: { error: 'Scenario failed before assertion evidence was recorded' },
+      })),
+    );
+  });
+
   test('rejects a scenario-level pass with missing assertion evidence', async () => {
     const reportRoot = await mkdtemp(join(tmpdir(), 'experiment-reports-'));
     roots.push(reportRoot);
@@ -60,7 +86,7 @@ describe('scenario reporter', () => {
     const reporter = new ScenarioReporter();
     const required = scenarios.filter(scenario => scenario.tier === 'pr');
     for (const scenario of required) {
-      reporter.onTestCaseResult(passedTestCase(scenario.id) as never);
+      reporter.onTestCaseResult(testCase(scenario.id) as never);
       await writeFile(
         join(reportRoot, `${scenario.id}.assertions.json`),
         JSON.stringify({
@@ -82,7 +108,7 @@ describe('scenario reporter', () => {
     process.env.MASTRA_EXPERIMENT_E2E_SCENARIO = scenario.id;
 
     const reporter = new ScenarioReporter();
-    reporter.onTestCaseResult(passedTestCase(scenario.id) as never);
+    reporter.onTestCaseResult(testCase(scenario.id) as never);
     await writeFile(
       join(reportRoot, `${scenario.id}.assertions.json`),
       JSON.stringify({
@@ -107,7 +133,7 @@ describe('scenario reporter', () => {
 
     const reporter = new ScenarioReporter();
     for (const scenario of scenarios.filter(scenario => scenario.tier === 'pr')) {
-      reporter.onTestCaseResult(passedTestCase(scenario.id) as never);
+      reporter.onTestCaseResult(testCase(scenario.id) as never);
       await writeFile(
         join(reportRoot, `${scenario.id}.assertions.json`),
         JSON.stringify({

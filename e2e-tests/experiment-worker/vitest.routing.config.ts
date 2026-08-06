@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       'tests/workflow-routing.test.ts',
       'tests/materialize-project.test.ts',
+      'tests/inspect-manifest.test.ts',
       'tests/registry-digest.test.ts',
       'tests/scenario-reporter.test.ts',
       'tests/verdaccio-resolution.test.ts',
