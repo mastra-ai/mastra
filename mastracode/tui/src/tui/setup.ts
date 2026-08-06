@@ -340,7 +340,7 @@ export function setupAutocomplete(state: TUIState): void {
     },
     { name: 'logout', description: 'Logout from OAuth provider' },
     { name: 'hooks', description: 'Show/reload configured hooks' },
-    { name: 'mcp', description: 'Show/reload MCP server connections' },
+    { name: 'mcp', description: 'Show/reload/enable/disable MCP server connections' },
     {
       name: 'thread:tag-dir',
       description: 'Tag current thread with this directory',

@@ -86,6 +86,7 @@ export type ScenarioName =
   | 'login-preserves-model-pack'
   | 'login-seeds-om-default'
   | 'modal-and-shell'
+  | 'mcp-disable-enable'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
   | 'mcp-reload-config'
