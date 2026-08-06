@@ -28,8 +28,9 @@ test('escalates timed out commands that ignore SIGTERM', async () => {
 }, 10_000);
 
 test('rejects stream errors and terminates the active child', async () => {
+  const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
   const child = Object.assign(new EventEmitter(), {
-    pid: 2_147_483_647,
+    pid: 1234,
     exitCode: null,
     signalCode: null,
     stdin: new PassThrough(),
@@ -42,4 +43,6 @@ test('rejects stream errors and terminates the active child', async () => {
   child.stdout.emit('error', new Error('stdout failed'));
 
   await expect(result).rejects.toThrow('stdout failed');
+  expect(killSpy).toHaveBeenCalledWith(process.platform === 'win32' ? child.pid : -child.pid, 'SIGKILL');
+  killSpy.mockRestore();
 });
