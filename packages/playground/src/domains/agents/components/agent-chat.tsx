@@ -18,12 +18,14 @@ export const AgentChat = ({
   supportsMemory,
   modelList,
   messageId,
+  suggestedPrompts,
   isNewThread,
   hideModelSwitcher,
   runOptionsSlot,
 }: Omit<ChatProps, 'initialMessages'> & {
   memory?: boolean;
   messageId?: string;
+  suggestedPrompts?: string[];
   isNewThread?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
@@ -81,6 +83,7 @@ export const AgentChat = ({
         agentName={agentName ?? ''}
         agentId={agentId}
         threadId={threadId}
+        suggestedPrompts={isNewThread || !isMessagesLoading ? suggestedPrompts : undefined}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
         refreshThreadList={refreshThreadList}

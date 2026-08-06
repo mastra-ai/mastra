@@ -71,6 +71,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
@@ -1178,6 +1183,16 @@
     {
       "source": "/docs/agent-controller/channels",
       "destination": "/docs/harness/agent-controller",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/supervisor-agents",
+      "destination": "/docs/capabilities/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     }
   ]

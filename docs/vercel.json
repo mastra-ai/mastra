@@ -86,6 +86,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
@@ -1196,6 +1201,16 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/supervisor-agents",
+      "destination": "/docs/capabilities/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -1263,6 +1278,11 @@
     {
       "source": "/models/v1/:path*/llms.txt",
       "destination": "/models/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/neon/llms.txt",
+      "destination": "/models/gateways/neon/llms.txt",
       "permanent": true
     },
     {
@@ -2033,6 +2053,16 @@
     {
       "source": "/docs/agent-controller/channels/llms.txt",
       "destination": "/docs/harness/agent-controller/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/supervisor-agents/llms.txt",
+      "destination": "/docs/capabilities/subagents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/mcp-apps/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
       "permanent": true
     }
   ]

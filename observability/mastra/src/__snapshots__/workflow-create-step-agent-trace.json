@@ -136,6 +136,7 @@
                       "parameters": {},
                       "finishReason": "stop",
                       "responseId": "1",
+                      "responseModel": "",
                       "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 10,
@@ -146,8 +147,7 @@
                         "outputDetails": {
                           "text": 20
                         }
-                      },
-                      "responseModel": ""
+                      }
                     },
                     "metadata": {
                       "runId": "<runId-2>",
