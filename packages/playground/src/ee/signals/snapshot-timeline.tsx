@@ -116,25 +116,27 @@ export function SnapshotTimeline({
   ];
 
   return (
-    <section aria-label="Snapshot timeline" className="flex flex-wrap items-center gap-3 px-3 py-2.5 sm:px-4">
+    <section aria-label="Snapshot timeline" className="space-y-2 px-3 py-2.5 sm:px-4">
       {snapshots.length > 1 ? (
         <>
-          <Button
-            aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
-            onClick={() => onPlayingChange(!isPlaying)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-            {isPlaying ? 'Pause' : 'Play'}
-          </Button>
           <TimelineTrack
             snapshots={snapshots}
             totalCount={totalCount}
             markers={new Map<number, TimelineMarkerKind>([[selectedIndex, 'selected']])}
             onTickSelect={onSnapshotChange}
           />
+          <div className="flex justify-center">
+            <Button
+              aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
+              onClick={() => onPlayingChange(!isPlaying)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+              {isPlaying ? 'Pause' : 'Play'}
+            </Button>
+          </div>
         </>
       ) : null}
       {/* Announced for assistive tech only; visible text here would resize the track on every tick change. */}

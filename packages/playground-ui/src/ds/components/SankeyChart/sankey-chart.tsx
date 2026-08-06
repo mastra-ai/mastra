@@ -34,6 +34,8 @@ export type SankeyChartProps = {
   onNodeClick?: (selection: SankeyChartNodeSelection) => void;
   isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
   getColumnDescription?: (column: SankeyChartColumn) => string | undefined;
+  /** Suppress the built-in SVG column headers when the caller renders its own header row. */
+  hideColumnLabels?: boolean;
 };
 
 export function SankeyChart({
@@ -44,6 +46,7 @@ export function SankeyChart({
   onNodeClick,
   isNodeClickable,
   getColumnDescription,
+  hideColumnLabels = false,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
@@ -89,9 +92,10 @@ export function SankeyChart({
               margin={margin}
               node={(props: SankeyNodeRendererProps) => {
                 const node = graph.nodes[props.index];
-                const showColumnLabel = node
-                  ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
-                  : false;
+                const showColumnLabel =
+                  !hideColumnLabels && node
+                    ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
+                    : false;
                 const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
                 const selection = node ? getSankeyChartNodeSelection(node) : undefined;
                 const clickable = Boolean(

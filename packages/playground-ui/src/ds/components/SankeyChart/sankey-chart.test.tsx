@@ -453,6 +453,23 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when column labels are hidden', () => {
+    it('renders no column header text so callers can supply their own header row', async () => {
+      const { container } = render(
+        <Sankey data={data} columns={columns}>
+          <SankeyChart hideColumnLabels />
+        </Sankey>,
+      );
+
+      await screen.findByText('Search', { selector: 'text' });
+
+      const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
+      expect(chartLabels).not.toContain('Channel');
+      expect(chartLabels).not.toContain('Region');
+      expect(chartLabels).not.toContain('Outcome');
+    });
+  });
+
   describe('when a node has a long display label', () => {
     it('truncates the visible text and preserves the full accessible label', async () => {
       const longLabel = 'Adding a transcript to a workspace with a very descriptive name';

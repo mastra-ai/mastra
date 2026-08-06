@@ -1,5 +1,7 @@
+import type { DropResult, DroppableProvided } from '@hello-pangea/dnd';
+import { DragDropContext, Draggable, Droppable, useMouseSensor, useTouchSensor } from '@hello-pangea/dnd';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent, CardFooter } from '@mastra/playground-ui/components/Card';
+import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import type {
   SankeyChartColumn,
@@ -7,11 +9,12 @@ import type {
   SankeyChartRecord,
 } from '@mastra/playground-ui/components/SankeyChart';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChartNoAxesGantt, Waypoints, X } from 'lucide-react';
+import { ArrowLeftRight, ChartNoAxesGantt, GripVertical, Waypoints, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
@@ -30,7 +33,6 @@ import {
   snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
-import { SignalDistributions } from './signal-distributions';
 import { formatSignalName, getSignalDescription } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
@@ -55,6 +57,8 @@ export interface SankeySignalsProps {
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
+
+const DRAG_SENSORS = [useMouseSensor, useTouchSensor];
 
 type SignalsViewMode = 'flow' | 'compare' | 'lifelines';
 
@@ -127,6 +131,18 @@ function ThemeFilterBanner({
   );
 }
 
+/** Chart gutter caption: the header band lists signals, the node area lists their themes. */
+function GutterLabel({ children, className }: { children: React.ReactNode; className: string }) {
+  return (
+    <span
+      className={`text-neutral3 absolute left-1/2 -translate-x-1/2 font-mono text-[9px] tracking-widest ${className}`}
+      style={{ writingMode: 'sideways-lr' }}
+    >
+      {children}
+    </span>
+  );
+}
+
 function FlowCard({
   columns,
   records,
@@ -135,6 +151,8 @@ function FlowCard({
   onNodeClick,
   isNodeClickable,
   drillInDisabledReason,
+  onOrderChange,
+  reorderDisabled,
 }: {
   columns: SankeyChartColumn[];
   records: SankeyChartRecord[];
@@ -143,8 +161,28 @@ function FlowCard({
   onNodeClick?: (selection: SankeyChartNodeSelection) => void;
   isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
   drillInDisabledReason?: string;
+  onOrderChange: (signalNames: TraceSignalName[]) => void;
+  reorderDisabled: boolean;
 }) {
   const chartColumns = columns.map(column => ({ ...column, label: column.label.toUpperCase() }));
+  // Header order mirrors the chart columns; stages carry the typed signal
+  // names, including signals the chart dropped for having no links.
+  const linkedColumnIds = new Set(columns.map(column => column.id));
+  const headerSignalNames = stages.map(stage => stage.signalName).filter(signalName => linkedColumnIds.has(signalName));
+
+  const handleDragEnd = (result: DropResult) => {
+    const destinationIndex = result.destination?.index;
+    if (destinationIndex === undefined || destinationIndex === result.source.index) return;
+
+    const reordered = [...headerSignalNames];
+    const [movedSignalName] = reordered.splice(result.source.index, 1);
+    if (!movedSignalName) return;
+    reordered.splice(destinationIndex, 0, movedSignalName);
+    // Signals without a chart column still belong to the perspective; keep
+    // them in the request after the reordered columns.
+    const seen = new Set<TraceSignalName>(reordered);
+    onOrderChange([...reordered, ...stages.map(stage => stage.signalName).filter(name => !seen.has(name))]);
+  };
 
   return (
     <Card
@@ -155,49 +193,95 @@ function FlowCard({
       title={drillInDisabledReason}
     >
       <CardContent className="px-0 py-2 sm:py-3">
-        <Sankey
-          data={records}
-          columns={chartColumns}
-          columnOrder={chartColumns.map(column => column.id)}
-          getColumnHue={column => getSignalHue(column.id)}
-          getRecordNodeId={getSignalRecordNodeId}
-          getRecordNodeLabel={getSignalRecordNodeLabel}
-          getRecordNodeValue={getSignalRecordNodeValue}
-          getRecordWeight={record => Number(record.traceCount)}
-          getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
-        >
-          <SankeyChart
-            height={height ?? 'clamp(340px, 42vw, 460px)'}
-            margin={{ top: 64, right: 32, bottom: 24, left: 32 }}
-            onNodeClick={onNodeClick}
-            isNodeClickable={isNodeClickable}
-            getColumnDescription={column => getSignalDescription(column.id)}
-          />
-        </Sankey>
-      </CardContent>
-      <CardFooter className="border-border1 bg-surface2 flex flex-wrap justify-between gap-3 border-t px-4 py-3">
-        <div className="text-neutral3 flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[10px] tracking-wider">
-          <span>RIBBON WIDTH = TRACE COUNT</span>
-          <span>CLICK TO ISOLATE THEME</span>
-        </div>
-        <ul
-          aria-label="Trace signal stage legend"
-          className="text-neutral3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
-          data-alignment="right"
-        >
-          {stages.map(stage => (
-            <li key={stage.signalName} className="flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-[2px]"
-                data-testid="signal-legend-swatch"
-                style={{ backgroundColor: nodeColor(getSignalHue(stage.signalName)) }}
+        <div className="flex">
+          <div className="relative w-6 shrink-0">
+            <GutterLabel className="top-1">SIGNALS</GutterLabel>
+            <GutterLabel className="top-1/2 -translate-y-1/2">THEMES</GutterLabel>
+          </div>
+          <div className="min-w-0 flex-1">
+            <DragDropContext enableDefaultSensors={false} sensors={DRAG_SENSORS} onDragEnd={handleDragEnd}>
+              <Droppable direction="horizontal" droppableId="signal-column-headers">
+                {(provided: DroppableProvided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    aria-label="Trace signal column headers"
+                    className="flex px-8 pb-1"
+                    role="group"
+                  >
+                    {headerSignalNames.map((signalName, index) => {
+                      const label = formatSignalName(signalName);
+                      const justify =
+                        index === 0
+                          ? 'justify-start'
+                          : index === headerSignalNames.length - 1
+                            ? 'justify-end'
+                            : 'justify-center';
+                      return (
+                        <Draggable
+                          key={signalName}
+                          draggableId={signalName}
+                          index={index}
+                          isDragDisabled={reorderDisabled}
+                        >
+                          {dragProvided => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              className={`flex min-w-0 flex-1 basis-0 items-center gap-0.5 ${justify}`}
+                              style={dragProvided.draggableProps.style}
+                            >
+                              <Tooltip>
+                                <TooltipTrigger
+                                  className="cursor-default font-mono text-xs font-semibold tracking-wider"
+                                  data-testid="signal-column-header"
+                                  style={{ color: nodeColor(getSignalHue(signalName)) }}
+                                >
+                                  {label.toUpperCase()}
+                                </TooltipTrigger>
+                                <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
+                              </Tooltip>
+                              <div
+                                {...dragProvided.dragHandleProps}
+                                aria-disabled={reorderDisabled}
+                                aria-label={`Reorder ${label}`}
+                                className="text-neutral3 hover:text-neutral5 cursor-grab rounded-xs p-0.5 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                                title={`Drag to reorder the ${label} column`}
+                              >
+                                <GripVertical aria-hidden="true" className="size-3.5" />
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+            <Sankey
+              data={records}
+              columns={chartColumns}
+              columnOrder={chartColumns.map(column => column.id)}
+              getColumnHue={column => getSignalHue(column.id)}
+              getRecordNodeId={getSignalRecordNodeId}
+              getRecordNodeLabel={getSignalRecordNodeLabel}
+              getRecordNodeValue={getSignalRecordNodeValue}
+              getRecordWeight={record => Number(record.traceCount)}
+              getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
+            >
+              <SankeyChart
+                height={height ?? 'clamp(340px, 42vw, 460px)'}
+                margin={{ top: 40, right: 32, bottom: 24, left: 32 }}
+                onNodeClick={onNodeClick}
+                isNodeClickable={isNodeClickable}
+                hideColumnLabels
               />
-              {formatSignalName(stage.signalName)}
-            </li>
-          ))}
-        </ul>
-      </CardFooter>
+            </Sankey>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -407,13 +491,6 @@ export function SankeySignals({
   }
 
   const stages = flow.stages;
-  const distributionSignalNames = perspectiveMutation.isPending ? perspectiveMutation.variables : signalNames;
-  const distributionPositions = new Map(distributionSignalNames.map((signalName, index) => [signalName, index]));
-  const distributionStages = [...stages].sort(
-    (left, right) =>
-      (distributionPositions.get(left.signalName) ?? stages.length) -
-      (distributionPositions.get(right.signalName) ?? stages.length),
-  );
   // Noise nodes open the noise details panel (noise has no themeId, so it
   // cannot drill in) and stay clickable even when drill-in is unavailable.
   const isNodeClickable = (selection: SankeyChartNodeSelection) =>
@@ -530,35 +607,20 @@ export function SankeySignals({
               onNodeClick={handleNodeClick}
               isNodeClickable={isNodeClickable}
               drillInDisabledReason={drillInDisabledReason}
+              onOrderChange={handleSignalOrderChange}
+              reorderDisabled={perspectiveMutation.isPending}
             />
           )}
-          {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
-            <>
-              {perspectiveMutation.isPending ? (
-                <p className="text-neutral3 font-mono text-xs" role="status">
-                  Reloading snapshots for new trace signal perspective…
-                </p>
-              ) : null}
-              {perspectiveMutation.isError ? (
-                <p className="text-xs text-red-500" role="alert">
-                  Unable to load that trace signal perspective. Try reordering the columns again.
-                </p>
-              ) : null}
-              <SignalDistributions
-                disabled={perspectiveMutation.isPending}
-                stages={distributionStages}
-                onOrderChange={handleSignalOrderChange}
-                onViewThemeDetails={selection => {
-                  setNoiseSignalName(undefined);
-                  setDetailSelection(selection);
-                }}
-                onViewNoiseDetails={signalName => {
-                  setDetailSelection(undefined);
-                  setNoiseSignalName(signalName);
-                }}
-              />
-            </>
-          )}
+          {perspectiveMutation.isPending ? (
+            <p className="text-neutral3 font-mono text-xs" role="status">
+              Reloading snapshots for new trace signal perspective…
+            </p>
+          ) : null}
+          {perspectiveMutation.isError ? (
+            <p className="text-xs text-red-500" role="alert">
+              Unable to load that trace signal perspective. Try reordering the columns again.
+            </p>
+          ) : null}
         </>
       )}
       <ThemeDetailPanel

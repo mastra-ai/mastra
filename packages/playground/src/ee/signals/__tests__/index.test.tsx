@@ -10,6 +10,7 @@ import { navHandleWithChildren } from '../../../lib/nav';
 import { RouteHeader } from '../../../lib/route-header/route-header';
 import { SignalsEntityCrumb } from '../signals-entity-crumb';
 import {
+  allThemePathsResponse,
   drilldownThemeFlowResponse,
   firstThemeExamplesResponse,
   themeDetailResponse,
@@ -31,6 +32,27 @@ import {
 import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
+
+// Chart nodes only render once the responsive container observes a real size.
+class ChartResizeObserver implements ResizeObserver {
+  constructor(private readonly callback: ResizeObserverCallback) {}
+
+  observe(target: Element) {
+    const size = { blockSize: 680, inlineSize: 800 };
+    const entry = {
+      target,
+      contentRect: new DOMRectReadOnly(0, 0, 800, 680),
+      borderBoxSize: [size],
+      contentBoxSize: [size],
+      devicePixelContentBoxSize: [size],
+    } satisfies ResizeObserverEntry;
+    this.callback([entry], this);
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+}
 
 function renderSignalsPage(initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -68,6 +90,12 @@ function renderSignalsPageWithShell() {
 function headerAgentSelector() {
   return within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('combobox');
 }
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', ChartResizeObserver);
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
+});
 
 afterEach(() => {
   cleanup();
@@ -382,8 +410,12 @@ describe('Trace Intelligence page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
           HttpResponse.json(themeHistoryResponse),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json(allThemePathsResponse),
+        ),
       );
       renderSignalsPage();
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
@@ -413,10 +445,14 @@ describe('Trace Intelligence page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
           HttpResponse.json(themeHistoryResponse),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json(allThemePathsResponse),
+        ),
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
       );
       renderSignalsPage();
 
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
       fireEvent.click(
