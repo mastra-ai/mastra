@@ -63,6 +63,8 @@ export interface SandboxCreateOptions {
   idleTimeoutMinutes?: number;
   /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
   checkpointName?: string;
+  /** Opaque user subject attributed to provider API requests. */
+  actingUserId?: string;
 }
 
 /**
@@ -112,6 +114,8 @@ export class SandboxBudgetError extends Error {
 export interface EnsureSandboxOptions {
   /** Provider working directory for this sandbox. */
   workingDirectory?: string;
+  /** Opaque user subject attributed to provider API requests. */
+  actingUserId?: string;
 }
 
 /**
@@ -373,6 +377,7 @@ export class SandboxFleet {
       ...(opts.workingDirectory ? { workingDirectory: opts.workingDirectory } : {}),
       ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
       ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
+      ...(opts.actingUserId ? { actingUserId: opts.actingUserId } : {}),
     });
     return toMaterializationSandbox(clone, opts.env);
   }
@@ -445,6 +450,7 @@ export class SandboxFleet {
         ...(checkpointName ? { checkpointName } : {}),
         ...(env ? { env } : {}),
         ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+        ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
       });
       try {
         await reattached.start();
@@ -467,6 +473,7 @@ export class SandboxFleet {
       ...(checkpointName ? { checkpointName } : {}),
       ...(env ? { env } : {}),
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+      ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
     });
     await sandbox.start();
     this.#liveCount += 1;
@@ -515,6 +522,7 @@ export class SandboxFleet {
       providerSandboxId,
       idleTimeoutMinutes: this.idleMinutes,
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+      ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
     });
     await sandbox.start();
     return sandbox;

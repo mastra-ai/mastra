@@ -62,7 +62,9 @@ export async function ensureProjectSandbox(options: {
   onProgress?: ProgressFn;
 }): Promise<MaterializationSandbox> {
   const { fleet, row, storage, token, onProgress } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress);
+  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress, {
+    actingUserId: row.userId,
+  });
 }
 
 /**

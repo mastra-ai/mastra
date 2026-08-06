@@ -370,6 +370,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
+      actingUserId: options.actingUserId ?? this._client.actingUserId,
       fetch: this._client.fetch,
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
