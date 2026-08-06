@@ -173,7 +173,7 @@ describe('PlatformGithubIntegration', () => {
           labels: ['bug'],
         }),
       ],
-      nextCursor: null,
+      nextCursor: '2',
     });
     await expect(
       integration.versionControl.listPullRequests({ connection: installationConnection, sourceId: 'acme/app' }),
@@ -182,6 +182,29 @@ describe('PlatformGithubIntegration', () => {
       nextCursor: null,
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('label=bug%2Curgent');
+  });
+
+  it('continues platform issue pagination after a short filtered page and stops on an empty page', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      return json({ issues: url.searchParams.get('page') === '1' ? [issue] : [] });
+    });
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    const firstPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: '1',
+    });
+    const secondPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: firstPage.nextCursor ?? undefined,
+    });
+
+    expect(firstPage).toMatchObject({ issues: [expect.objectContaining({ id: '12' })], nextCursor: '2' });
+    expect(secondPage).toEqual({ issues: [], nextCursor: null });
   });
 
   it('fetches issue details, creates comments, and preserves not-found semantics', async () => {
@@ -730,6 +753,42 @@ describe('PlatformGithubIntegration', () => {
       reconcile: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('maps pull request author from the Platform reconcile response', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      json({
+        title: 'Ship intake',
+        html_url: 'https://github.com/acme/app/pull/34',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        created_at: '2026-07-01T00:00:00Z',
+        user: { login: 'ada' },
+        merged_by: { login: 'grace' },
+        head: { ref: 'feat/intake' },
+        base: { ref: 'main' },
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).resolves.toEqual({
+      title: 'Ship intake',
+      url: 'https://github.com/acme/app/pull/34',
+      state: 'closed',
+      draft: false,
+      merged: true,
+      headBranch: 'feat/intake',
+      baseBranch: 'main',
+      author: 'ada',
+      createdAt: '2026-07-01T00:00:00Z',
+      mergedBy: 'grace',
+    });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls/34',
+    );
   });
 
   it('attaches GitHub rules to polled issue ingress', async () => {

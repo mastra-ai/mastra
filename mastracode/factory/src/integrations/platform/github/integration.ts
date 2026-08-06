@@ -732,8 +732,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title?: string;
         html_url?: string;
         state?: string;
+        draft?: boolean;
         merged?: boolean;
         created_at?: string;
+        user?: { login?: string } | null;
         merged_by?: { login?: string } | null;
         head?: { ref?: string };
         base?: { ref?: string };
@@ -745,9 +747,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title: result.title ?? `PR ${input.number}`,
         url: result.html_url ?? `https://github.com/${input.repository}/pull/${input.number}`,
         state: result.state === 'closed' ? 'closed' : 'open',
+        draft: result.draft === true,
         merged: result.merged === true,
         headBranch: result.head?.ref ?? '',
         baseBranch: result.base?.ref ?? '',
+        ...(result.user?.login ? { author: result.user.login } : {}),
         ...(result.created_at ? { createdAt: result.created_at } : {}),
         ...(result.merged_by?.login ? { mergedBy: result.merged_by.login } : {}),
       };
@@ -887,7 +891,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ issues: GithubIssue[] }>('GET', `${path}?${query}`);
     return {
       issues: result.issues.map(issue => parseIntakeIssue(sourceId, issue)),
-      nextCursor: result.issues.length === PAGE_SIZE ? String(page + 1) : null,
+      nextCursor: result.issues.length > 0 ? String(page + 1) : null,
     };
   }
 

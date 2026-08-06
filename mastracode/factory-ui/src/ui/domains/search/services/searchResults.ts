@@ -26,7 +26,7 @@ export interface SessionSearchResult {
   updatedAt: string;
 }
 
-/** A board entry nobody has started yet: no session to jump to, only its board column. */
+/** A board entry nobody has started yet. */
 export interface WorkItemSearchResult {
   id: string;
   title: string;
@@ -35,6 +35,7 @@ export interface WorkItemSearchResult {
   value: string;
   path: string;
   updatedAt: string;
+  target: { kind: 'work-item'; item: WorkItem } | { kind: 'candidate'; candidate: BoardCandidate };
 }
 
 interface SessionWorkItem {
@@ -167,6 +168,7 @@ function createWorkItemResult(factoryId: string, item: WorkItem): WorkItemSearch
     value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
+    target: { kind: 'work-item', item },
   };
 }
 
@@ -183,6 +185,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
     value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
     path: relationshipPath(candidate, factoryId),
     updatedAt,
+    target: { kind: 'candidate', candidate },
   };
 }
 

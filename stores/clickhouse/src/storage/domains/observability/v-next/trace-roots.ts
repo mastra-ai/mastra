@@ -55,117 +55,74 @@ export async function getRootSpan(
 // listTraces
 // ---------------------------------------------------------------------------
 
+/** Projections for one list variant: page-mode inner/outer selects plus the delta-join select. */
+type TraceRootProjection = {
+  innerSelect: string;
+  outerSelect: string;
+  deltaSelect: string;
+};
+
 /**
- * Shared page-mode helper used by listTracesLight.
+ * Columns a trace list renders. `input` is selected only so the row mapper can
+ * derive a short `inputPreview` at read time (see `rowToLightSpanRecord`); the
+ * raw blob itself never leaves the store.
+ */
+const LIGHT_TRACE_ROOT_FIELDS = [
+  'traceId',
+  'spanId',
+  'parentSpanId',
+  'name',
+  'spanType',
+  'isEvent',
+  'startedAt',
+  'endedAt',
+  'entityType',
+  'entityId',
+  'entityName',
+  'error',
+  'metadataRaw',
+  'input',
+];
+
+const FULL_PROJECTION: TraceRootProjection = {
+  innerSelect: '*',
+  outerSelect: '*',
+  deltaSelect: 'r.* EXCEPT(startedAt, traceId, dedupeKey)',
+};
+
+const LIGHT_PROJECTION: TraceRootProjection = {
+  // `LIMIT 1 BY dedupeKey` runs after projection, so the inner select must keep dedupeKey.
+  innerSelect: ['dedupeKey', ...LIGHT_TRACE_ROOT_FIELDS].join(', '),
+  outerSelect: LIGHT_TRACE_ROOT_FIELDS.join(', '),
+  // startedAt/traceId are re-selected by the delta join itself.
+  deltaSelect: LIGHT_TRACE_ROOT_FIELDS.filter(field => field !== 'startedAt' && field !== 'traceId')
+    .map(field => `r.${field}`)
+    .join(', '),
+};
+
+/**
+ * Shared implementation behind listTraces and listTracesLight.
+ *
+ * Reads from trace_roots (root spans only).
+ * Page mode uses a two-stage query for ReplacingMergeTree deduplication:
+ *   Inner: filter + deterministic ORDER BY + LIMIT 1 BY dedupeKey
+ *   Outer: final ordering + pagination
+ * Delta mode joins the append-only delta table and returns only rows past the cursor.
+ *
+ * hasChildError is handled via EXISTS subquery against span_events.
  */
 async function listTraceRows<TSpan>(
   client: ClickHouseClient,
   args: ListTracesArgs,
-  selectClause: string,
-  mapRows: (rows: Record<string, any>[]) => TSpan[],
-): Promise<{ pagination: NonNullable<ListTracesLightResponse['pagination']>; spans: TSpan[] }> {
-  const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-  const page = pagination?.page ?? 0;
-  const perPage = pagination?.perPage ?? 10;
-
-  const { conditions, params } = buildTraceFilterConditions(filters, 'r');
-
-  if (filters?.hasChildError != null) {
-    if (filters.hasChildError) {
-      conditions.push(`EXISTS (
-        SELECT 1 FROM ${TABLE_SPAN_EVENTS} c
-        WHERE c.traceId = r.traceId
-          AND c.parentSpanId IS NOT NULL
-          AND c.error IS NOT NULL
-      )`);
-    } else {
-      conditions.push(`NOT EXISTS (
-        SELECT 1 FROM ${TABLE_SPAN_EVENTS} c
-        WHERE c.traceId = r.traceId
-          AND c.parentSpanId IS NOT NULL
-          AND c.error IS NOT NULL
-      )`);
-    }
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const orderClause = buildTraceOrderByClause(orderBy);
-
-  const countResult = await client.query({
-    query: `
-      SELECT count() as cnt FROM (
-        SELECT dedupeKey
-        FROM ${TABLE_TRACE_ROOTS} r
-        ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
-      )
-    `,
-    query_params: params,
-    format: 'JSONEachRow',
-    clickhouse_settings: CH_SETTINGS,
-  });
-
-  const countRows = (await countResult.json()) as Array<{ cnt: string | number }>;
-  const total = Number(countRows[0]?.cnt ?? 0);
-
-  if (total === 0) {
-    return {
-      pagination: { total: 0, page, perPage, hasMore: false },
-      spans: [],
-    };
-  }
-
-  const dataResult = await client.query({
-    query: `
-      SELECT ${selectClause} FROM (
-        SELECT ${selectClause}
-        FROM ${TABLE_TRACE_ROOTS} r
-        ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
-      )
-      ORDER BY ${orderClause}
-      LIMIT {limit:UInt32}
-      OFFSET {offset:UInt32}
-    `,
-    query_params: {
-      ...params,
-      limit: perPage,
-      offset: page * perPage,
-    },
-    format: 'JSONEachRow',
-    clickhouse_settings: CH_SETTINGS,
-  });
-
-  const rows = (await dataResult.json()) as Record<string, any>[];
-
-  return {
-    pagination: {
-      total,
-      page,
-      perPage,
-      hasMore: (page + 1) * perPage < total,
-    },
-    spans: mapRows(rows),
-  };
-}
-
-/**
- * List traces with optional filtering, pagination, and ordering.
- *
- * Reads from trace_roots (root spans only).
- * Uses two-stage query for ReplacingMergeTree deduplication:
- *   Inner: filter + deterministic ORDER BY + LIMIT 1 BY dedupeKey
- *   Outer: final ordering + pagination
- *
- * hasChildError is handled via EXISTS subquery against span_events.
- */
-export async function listTraces(
-  client: ClickHouseClient,
-  args: ListTracesArgs,
   strategy: ClickHouseDeltaCursorStrategy | null,
-): Promise<ListTracesResponse> {
+  projection: TraceRootProjection,
+  mapRows: (rows: Record<string, any>[]) => TSpan[],
+): Promise<{
+  pagination?: { total: number; page: number; perPage: number; hasMore: boolean };
+  delta?: { limit: number; hasMore: boolean };
+  deltaCursor?: string;
+  spans: TSpan[];
+}> {
   const { mode, filters, pagination, orderBy, after, limit } = listTracesArgsSchema.parse(args);
   const page = pagination?.page ?? 0;
   const perPage = pagination?.perPage ?? 10;
@@ -206,11 +163,11 @@ export async function listTraces(
     }
 
     const afterCursor = validateCursorId(after);
-    const rows = await queryTracesAfterCursor(client, whereClause, params, limit, afterCursor);
+    const rows = await queryTracesAfterCursor(client, projection.deltaSelect, whereClause, params, limit, afterCursor);
     const visibleRows = rows.slice(0, limit);
 
     return {
-      spans: toTraceSpans(visibleRows.map(rowToSpanRecord)),
+      spans: mapRows(visibleRows),
       delta: { limit, hasMore: rows.length > limit },
       deltaCursor: visibleRows.length > 0 ? buildTraceCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
     };
@@ -247,8 +204,8 @@ export async function listTraces(
 
   const dataResult = await client.query({
     query: `
-      SELECT * FROM (
-        SELECT *
+      SELECT ${projection.outerSelect} FROM (
+        SELECT ${projection.innerSelect}
         FROM ${TABLE_TRACE_ROOTS} r
         ${whereClause}
         ORDER BY dedupeKey
@@ -268,7 +225,6 @@ export async function listTraces(
   });
 
   const rows = (await dataResult.json()) as Record<string, any>[];
-  const spans = rows.map(rowToSpanRecord);
 
   return {
     pagination: {
@@ -277,31 +233,31 @@ export async function listTraces(
       perPage,
       hasMore: (page + 1) * perPage < total,
     },
-    spans: toTraceSpans(spans),
+    spans: mapRows(rows),
     ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
 
-const LIGHT_TRACE_ROOT_COLUMNS = [
-  'traceId',
-  'spanId',
-  'parentSpanId',
-  'name',
-  'spanType',
-  'isEvent',
-  'startedAt',
-  'endedAt',
-  'entityType',
-  'entityId',
-  'entityName',
-  'error',
-].join(', ');
+/** List traces with optional filtering, pagination, and ordering. */
+export async function listTraces(
+  client: ClickHouseClient,
+  args: ListTracesArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListTracesResponse> {
+  return listTraceRows(client, args, strategy, FULL_PROJECTION, rows => toTraceSpans(rows.map(rowToSpanRecord)));
+}
 
+/**
+ * List traces projecting only the columns a trace list renders.
+ * Skips the attributes/output blobs and reduces `input` to a short preview in
+ * the mapper, so the response payload stays flat as traces grow.
+ */
 export async function listTracesLight(
   client: ClickHouseClient,
   args: ListTracesArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListTracesLightResponse> {
-  return listTraceRows(client, args, LIGHT_TRACE_ROOT_COLUMNS, rows => rows.map(rowToLightSpanRecord));
+  return listTraceRows(client, args, strategy, LIGHT_PROJECTION, rows => rows.map(rowToLightSpanRecord));
 }
 
 type TraceDeltaRow = Record<string, any> & {
@@ -313,6 +269,7 @@ type TraceDeltaRow = Record<string, any> & {
 
 async function queryTracesAfterCursor(
   client: ClickHouseClient,
+  deltaSelect: string,
   whereClause: string,
   params: Record<string, unknown>,
   limit: number,
@@ -322,7 +279,7 @@ async function queryTracesAfterCursor(
     await client.query({
       query: `
         SELECT
-          r.* EXCEPT(startedAt, traceId, dedupeKey),
+          ${deltaSelect},
           r.startedAt AS startedAt,
           r.traceId AS traceId,
           r.dedupeKey AS dedupeKey,
