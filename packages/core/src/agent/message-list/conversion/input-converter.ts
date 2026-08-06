@@ -46,8 +46,10 @@ export function inputToMastraDBMessage(
     );
   }
 
-  // Validate resourceId matches
+  // Validate resourceId matches (except for memory messages, which can carry a
+  // system resourceId — e.g. observational-memory continuation messages)
   if (
+    messageSource !== `memory` &&
     `resourceId` in message &&
     message.resourceId &&
     context.memoryInfo?.resourceId &&

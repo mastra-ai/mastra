@@ -8,6 +8,7 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListTracesLightResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -80,6 +81,7 @@ import {
   Conversations,
   Observability,
   StoredAgent,
+  StoredWorkflow,
   StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
@@ -129,6 +131,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredWorkflowsParams,
+  ListStoredWorkflowsResponse,
+  UpsertStoredWorkflowParams,
+  UpsertStoredWorkflowResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -203,6 +209,7 @@ import type {
   RunScheduleResponse,
 } from './types';
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
+import { createSseJsonTransform } from './utils/stream-transforms';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -1040,6 +1047,18 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves paginated list of traces carrying only the fields a trace list renders.
+   * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
+   * blobs and carry a short `inputPreview` instead.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated lightweight traces and pagination info
+   */
+  listTracesLight(params: ListTracesArgs = {}): Promise<ListTracesLightResponse> {
+    return this.observability.listTracesLight(params);
+  }
+
+  /**
    * Retrieves a paginated list of trace branches with optional filtering and sorting.
    * Each row is a branch-anchor span (AGENT_RUN, WORKFLOW_RUN, TOOL_CALL, etc.) including
    * ones nested under a different root entity. Pairs with {@link getBranch} to expand
@@ -1282,6 +1301,48 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Stored Workflows
+  // ============================================================================
+
+  /**
+   * Lists stored workflow definitions, optionally filtered by status or author
+   * @param params - Optional filters: `status` ('active' | 'archived') and `authorId`
+   * @returns Promise containing the matching definitions and a total count
+   */
+  public listStoredWorkflows(params?: ListStoredWorkflowsParams): Promise<ListStoredWorkflowsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/workflows${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates or replaces a stored workflow definition and live-registers it on the server.
+   * Optional `dependencies` lets helper workflows referenced by the root definition be
+   * saved in the same request; their ids are echoed back as `dependencyIds`.
+   * @param params - The workflow definition (id, schemas, graph) plus optional helper dependencies
+   * @returns Promise containing the persisted definition and any dependency ids
+   */
+  public upsertStoredWorkflow(params: UpsertStoredWorkflowParams): Promise<UpsertStoredWorkflowResponse> {
+    return this.request('/stored/workflows', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored workflow instance by ID for further operations (details, delete).
+   * To execute a stored workflow, use `getWorkflow(id).createRun()` like any other workflow.
+   * @param storedWorkflowId - ID of the stored workflow definition
+   * @returns StoredWorkflow instance
+   */
+  public getStoredWorkflow(storedWorkflowId: string): StoredWorkflow {
+    return new StoredWorkflow(this.options, storedWorkflowId);
   }
 
   // ============================================================================
@@ -2191,39 +2252,7 @@ export class MastraClient extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    return response.body.pipeThrough(
-      new TransformStream({
-        async transform(chunk, controller) {
-          try {
-            // Decode binary data to text
-            const decoded = new TextDecoder().decode(chunk);
-
-            // Split by record separator
-            const chunks = decoded.split('\n\n');
-
-            // Process each chunk
-            for (const chunk of chunks) {
-              if (chunk) {
-                const cleanChunk = chunk.substring('data: '.length);
-                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
-                try {
-                  const parsedChunk = JSON.parse(newChunk);
-                  controller.enqueue(parsedChunk);
-                  failedChunk = undefined;
-                } catch {
-                  failedChunk = newChunk;
-                }
-              }
-            }
-          } catch {
-            // Silently ignore processing errors
-          }
-        },
-      }),
-    );
+    return response.body.pipeThrough(createSseJsonTransform());
   }
 
   /**
