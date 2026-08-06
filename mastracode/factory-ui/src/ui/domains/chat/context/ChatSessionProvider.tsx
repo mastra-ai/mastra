@@ -48,17 +48,23 @@ export function ChatSessionConfigProvider({
         (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
       )
     : factory?.repositories[0];
-  const ensureQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
-  const resolvingSession = Boolean(userScoped ? threadId : sessionId) && sessionQuery.isPending;
+  // Materializing a sandbox provisions a VM and clones the repo, so it may only
+  // happen when the caller actually enters a session. Every factory route mounts
+  // this provider (the chat shell is the router layout), so an ungated /ensure
+  // here provisioned a sandbox just for visiting the board, metrics or settings.
+  const inSession = Boolean(userScoped ? threadId : sessionId);
+  const ensureQuery = useEnsureMaterializedSandbox(inSession ? repository?.projectRepositoryId : undefined);
+  const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
   // UserSessionsSection), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
   // On user routes the :threadId param IS the sessionId. Factory routes with
   // no workspace session (e.g. /settings/*) fall back to the factory-level
-  // session address returned by the /ensure route so resource-scoped surfaces
-  // (behavior settings, tool permissions) stay functional.
-  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? ensureQuery.data?.resourceId);
+  // session address — which is the factory project id, the same value /ensure
+  // returns — so resource-scoped surfaces (behavior settings, tool permissions)
+  // stay functional without provisioning a sandbox.
+  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
   // A `?resourceId=` query param overrides the resolved factory resource so the
   // whole chat session (transcript, messages, connection, thread switch) binds
@@ -79,10 +85,15 @@ export function ChatSessionConfigProvider({
       ? Boolean(resourceOverride)
       : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const sessionError = userScoped ? undefined : (ensureQuery.error ?? undefined);
+  // Outside a session the factory resource is addressable straight away (its id
+  // is the factory project id); inside one we keep the original ordering and
+  // wait for the workspace so resource reads follow materialization.
+  const resourceEnabled =
+    userScoped || !inSession ? Boolean(resourceId) : Boolean(resourceOverride) || ensureQuery.isSuccess;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,
-    resourceEnabled: userScoped ? Boolean(resourceId) : resourceOverride ? true : ensureQuery.isSuccess,
+    resourceEnabled,
     sessionError,
     retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
     projectPath,
