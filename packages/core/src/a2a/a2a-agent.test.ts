@@ -30,23 +30,28 @@ function createDeferred<T>() {
 const baseCard: AgentCard = {
   name: 'Remote Agent',
   description: 'A remote agent',
-  url: 'https://remote.example.com/a2a/remote',
+  protocolVersion: '1.0',
+  supportedInterfaces: [
+    {
+      url: 'https://remote.example.com/a2a/remote',
+      protocolBinding: 'JSONRPC',
+      protocolVersion: '1.0',
+      tenant: '',
+    },
+  ],
   version: '1.0',
-  protocolVersion: '0.3.0',
   skills: [],
   defaultInputModes: ['text/plain'],
   defaultOutputModes: ['text/plain'],
   capabilities: {
     streaming: true,
     pushNotifications: false,
-    stateTransitionHistory: false,
+    extendedAgentCard: false,
     extensions: [],
   },
   security: [],
   securitySchemes: {},
-  additionalInterfaces: [],
-  supportsAuthenticatedExtendedCard: false,
-};
+} as unknown as AgentCard;
 
 function jsonRpcResult(result: unknown) {
   return new Response(
@@ -66,26 +71,24 @@ function jsonRpcResult(result: unknown) {
 
 function createTask(overrides: Partial<Task> = {}): Task {
   return {
-    kind: 'task',
     id: 'task-1',
     contextId: 'ctx-1',
     status: {
-      state: 'working',
+      state: 'TASK_STATE_WORKING',
       timestamp: new Date().toISOString(),
     },
     history: [],
     artifacts: [],
     ...overrides,
-  } as Task;
+  } as unknown as Task;
 }
 
 function createMessage(text: string): Message {
   return {
-    kind: 'message',
-    role: 'agent',
+    role: 'ROLE_AGENT',
     messageId: 'message-1',
-    parts: [{ kind: 'text', text }],
-  } as Message;
+    parts: [{ text }],
+  } as unknown as Message;
 }
 
 function createParentModel() {
@@ -234,7 +237,7 @@ describe('A2AAgent', () => {
       (input, init) => {
         expect(String(input)).toBe('https://remote.example.com/a2a/remote');
         const body = JSON.parse(String(init?.body ?? '{}'));
-        expect(body.method).toBe('message/send');
+        expect(body.method).toBe('SendMessage');
         return jsonRpcResult(createMessage('Remote subagent response'));
       },
     ]);
@@ -277,27 +280,24 @@ describe('A2AAgent', () => {
       (input, init) => {
         expect(String(input)).toBe('https://remote.example.com/a2a/remote');
         const body = JSON.parse(String(init?.body ?? '{}'));
-        expect(body.method).toBe('message/stream');
+        expect(body.method).toBe('SendStreamingMessage');
         return createSseResponse([
           createTask(),
           {
-            kind: 'artifact-update',
             taskId: 'task-1',
             contextId: 'ctx-1',
             lastChunk: true,
             artifact: {
               artifactId: 'response:text',
               name: 'response.txt',
-              parts: [{ kind: 'text', text: 'Hello from remote stream' }],
+              parts: [{ text: 'Hello from remote stream' }],
             },
           },
           {
-            kind: 'status-update',
             taskId: 'task-1',
             contextId: 'ctx-1',
-            final: true,
             status: {
-              state: 'completed',
+              state: 'TASK_STATE_COMPLETED',
               timestamp: new Date().toISOString(),
             },
           },
@@ -339,14 +339,14 @@ describe('A2AAgent', () => {
     const workingTask = createTask();
     const completedTask = createTask({
       status: {
-        state: 'completed',
+        state: 'TASK_STATE_COMPLETED',
         timestamp: new Date().toISOString(),
       },
       artifacts: [
         {
           artifactId: 'response:text',
           name: 'response.txt',
-          parts: [{ kind: 'text', text: 'Remote task complete' }],
+          parts: [{ text: 'Remote task complete' }],
         },
       ],
     });
@@ -369,7 +369,7 @@ describe('A2AAgent', () => {
     const output = await agent.generate('Do the thing');
 
     expect(output.text).toBe('Remote task complete');
-    expect(output.task?.status.state).toBe('completed');
+    expect(output.task?.status.state).toBe('TASK_STATE_COMPLETED');
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -378,7 +378,7 @@ describe('A2AAgent', () => {
       new Response(JSON.stringify(baseCard), { status: 200 }),
       (input, init) => {
         const body = JSON.parse(String(init?.body ?? '{}'));
-        expect(body.method).toBe('message/send');
+        expect(body.method).toBe('SendMessage');
         return jsonRpcResult(createMessage('Generate path response'));
       },
     ]);
@@ -391,7 +391,61 @@ describe('A2AAgent', () => {
     const output = await agent.generate('Use the generate path');
 
     expect(output.text).toBe('Generate path response');
-    expect(output.message?.kind).toBe('message');
+    // v1 messages have no `kind`; assert the normalized v1 message shape instead.
+    expect(output.message?.role).toBe('ROLE_AGENT');
+    expect(output.message?.messageId).toBe('message-1');
+  });
+
+  it('speaks the v0.3 wire protocol to a legacy peer and normalizes its response to v1', async () => {
+    // Backward-compat: when the card advertises a v0.3 interface, the client
+    // sends v0.3 slash-name methods + v0.3-shaped messages, and normalizes the
+    // v0.3-shaped response (with `kind`, `role:'agent'`, `state:'completed'`)
+    // back to the v1 shapes the rest of the client works with.
+    const legacyCard = {
+      ...baseCard,
+      protocolVersion: '0.3',
+      supportedInterfaces: [
+        {
+          url: 'https://remote.example.com/a2a/remote',
+          protocolBinding: 'JSONRPC',
+          protocolVersion: '0.3',
+          tenant: '',
+        },
+      ],
+      capabilities: { ...baseCard.capabilities, streaming: false },
+    };
+
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(legacyCard), { status: 200 }),
+      (input, init) => {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        // Legacy peer: the client emits the v0.3 slash-name method and a
+        // v0.3-shaped outbound message (`kind:'message'`, `role:'user'`).
+        expect(body.method).toBe('message/send');
+        expect(body.params.message.kind).toBe('message');
+        expect(body.params.message.role).toBe('user');
+        expect(body.params.message.parts[0]).toEqual({ kind: 'text', text: 'Use the legacy path' });
+        // Respond with a v0.3-shaped message the client must normalize to v1.
+        return jsonRpcResult({
+          kind: 'message',
+          role: 'agent',
+          messageId: 'legacy-message-1',
+          parts: [{ kind: 'text', text: 'Legacy path response' }],
+        });
+      },
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const output = await agent.generate('Use the legacy path');
+
+    expect(output.text).toBe('Legacy path response');
+    // The v0.3 response is normalized to the v1 wire message shape.
+    expect(output.message?.role).toBe('ROLE_AGENT');
+    expect(output.message?.messageId).toBe('legacy-message-1');
   });
 
   it('preserves subagent memory identifiers on returned assistant messages', async () => {
@@ -422,13 +476,12 @@ describe('A2AAgent', () => {
       id: 'task-input',
       contextId: 'ctx-input',
       status: {
-        state: 'input-required',
+        state: 'TASK_STATE_INPUT_REQUIRED',
         timestamp: new Date().toISOString(),
         message: {
-          kind: 'message',
-          role: 'agent',
+          role: 'ROLE_AGENT',
           messageId: 'm-input',
-          parts: [{ kind: 'text', text: 'Please provide more info' }],
+          parts: [{ text: 'Please provide more info' }],
         } as Message,
       },
     });
@@ -440,7 +493,7 @@ describe('A2AAgent', () => {
       jsonRpcResult(inputRequiredTask),
       (input, init) => {
         const body = JSON.parse(String(init?.body ?? '{}'));
-        expect(body.method).toBe('message/send');
+        expect(body.method).toBe('SendMessage');
         expect(body.params.message.contextId).toBe('ctx-input');
         expect(body.params.message.referenceTaskIds).toEqual(['task-input']);
         expect(body.params.message.parts[0].text).toContain('user follow-up');
@@ -464,7 +517,8 @@ describe('A2AAgent', () => {
 
     const resumed = await agent.resumeGenerate({ note: 'user follow-up' }, { runId: 'run-1' });
     expect(resumed.text).toBe('Follow-up complete');
-    expect(resumed.message?.kind).toBe('message');
+    // v1 messages have no `kind`; assert the normalized v1 message shape instead.
+    expect(resumed.message?.role).toBe('ROLE_AGENT');
   });
 
   it('falls back to generate() when remote streaming is unsupported', async () => {
@@ -514,23 +568,20 @@ describe('A2AAgent', () => {
       createSseResponse([
         streamTask,
         {
-          kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
           lastChunk: true,
           artifact: {
             artifactId: 'response:text',
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'Hello from stream' }],
+            parts: [{ text: 'Hello from stream' }],
           },
         },
         {
-          kind: 'status-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
-          final: true,
           status: {
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: new Date().toISOString(),
           },
         },
@@ -564,7 +615,7 @@ describe('A2AAgent', () => {
       usage: {},
     });
     expect(await stream.text).toBe('Hello from stream');
-    expect((await stream.task)?.status.state).toBe('completed');
+    expect((await stream.task)?.status.state).toBe('TASK_STATE_COMPLETED');
   });
 
   it('returns a live stream result before the remote SSE completes', async () => {
@@ -584,14 +635,13 @@ describe('A2AAgent', () => {
                 encoder.encode(
                   `data: ${JSON.stringify({
                     result: {
-                      kind: 'artifact-update',
                       taskId: 'task-1',
                       contextId: 'ctx-1',
                       lastChunk: true,
                       artifact: {
                         artifactId: 'response:text',
                         name: 'response.txt',
-                        parts: [{ kind: 'text', text: 'Hello later' }],
+                        parts: [{ text: 'Hello later' }],
                       },
                     },
                   })}\n\n`,
@@ -654,14 +704,13 @@ describe('A2AAgent', () => {
               encoder.encode(
                 `data: ${JSON.stringify({
                   result: {
-                    kind: 'artifact-update',
                     taskId: 'task-1',
                     contextId: 'ctx-1',
                     lastChunk: true,
                     artifact: {
                       artifactId: 'response:text',
                       name: 'response.txt',
-                      parts: [{ kind: 'text', text: 'Recovered text' }],
+                      parts: [{ text: 'Recovered text' }],
                     },
                   },
                 })}\n\n`,
@@ -688,7 +737,7 @@ describe('A2AAgent', () => {
     const stream = await agent.stream('Recover after malformed frame', { runId: 'stream-run-malformed' });
 
     expect(await stream.text).toBe('Recovered text');
-    expect((await stream.task)?.status.state).toBe('working');
+    expect((await stream.task)?.status.state).toBe('TASK_STATE_WORKING');
   });
 
   it('concatenates streamed artifact text chunks without inserting newlines', async () => {
@@ -698,25 +747,23 @@ describe('A2AAgent', () => {
       createSseResponse([
         streamTask,
         {
-          kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
           lastChunk: false,
           artifact: {
             artifactId: 'response:text',
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'Hello' }],
+            parts: [{ text: 'Hello' }],
           },
         },
         {
-          kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
           lastChunk: true,
           artifact: {
             artifactId: 'response:text',
             name: 'response.txt',
-            parts: [{ kind: 'text', text: ' world' }],
+            parts: [{ text: ' world' }],
           },
         },
       ]),
@@ -757,7 +804,7 @@ describe('A2AAgent', () => {
   it('does not mix task progress status text into the final streamed text', async () => {
     const streamTask = createTask({
       status: {
-        state: 'working',
+        state: 'TASK_STATE_WORKING',
         timestamp: new Date().toISOString(),
         message: createMessage('Generating response...'),
       },
@@ -767,14 +814,13 @@ describe('A2AAgent', () => {
       createSseResponse([
         streamTask,
         {
-          kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
           lastChunk: true,
           artifact: {
             artifactId: 'response:text',
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'Final answer' }],
+            parts: [{ text: 'Final answer' }],
           },
         },
       ]),
@@ -793,31 +839,28 @@ describe('A2AAgent', () => {
   it('uses tasks/resubscribe when resuming a non-terminal remote stream', async () => {
     const fetchMock = createFetchMock([
       new Response(JSON.stringify(baseCard), { status: 200 }),
-      createSseResponse([createTask({ status: { state: 'working', timestamp: new Date().toISOString() } })]),
+      createSseResponse([createTask({ status: { state: 'TASK_STATE_WORKING', timestamp: new Date().toISOString() } })]),
       (input, init) => {
         const body = JSON.parse(String(init?.body ?? '{}'));
-        expect(body.method).toBe('tasks/resubscribe');
+        expect(body.method).toBe('SubscribeToTask');
         expect(body.params.id).toBe('task-1');
 
         return createSseResponse([
           {
-            kind: 'artifact-update',
             taskId: 'task-1',
             contextId: 'ctx-1',
             lastChunk: true,
             artifact: {
               artifactId: 'response:text',
               name: 'response.txt',
-              parts: [{ kind: 'text', text: 'Resubscribed text' }],
+              parts: [{ text: 'Resubscribed text' }],
             },
           },
           {
-            kind: 'status-update',
             taskId: 'task-1',
             contextId: 'ctx-1',
-            final: true,
             status: {
-              state: 'completed',
+              state: 'TASK_STATE_COMPLETED',
               timestamp: new Date().toISOString(),
             },
           },
@@ -846,6 +889,6 @@ describe('A2AAgent', () => {
     // (mirrors the regular Agent loop, which skips `start` when resuming).
     expect(resumedEvents).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
     expect(await resumed.text).toBe('Resubscribed text');
-    expect((await resumed.task)?.status.state).toBe('completed');
+    expect((await resumed.task)?.status.state).toBe('TASK_STATE_COMPLETED');
   });
 });

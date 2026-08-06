@@ -142,11 +142,10 @@ describe('A2A Handler', () => {
       });
       expect(agentCard).toMatchInlineSnapshot(`
         {
-          "additionalInterfaces": [],
           "capabilities": {
+            "extendedAgentCard": false,
             "extensions": [],
             "pushNotifications": false,
-            "stateTransitionHistory": false,
             "streaming": true,
           },
           "defaultInputModes": [
@@ -157,7 +156,7 @@ describe('A2A Handler', () => {
           ],
           "description": "test instructions",
           "name": "test-agent",
-          "protocolVersion": "0.3.0",
+          "protocolVersion": "1.0",
           "provider": {
             "organization": "Mastra",
             "url": "https://mastra.ai",
@@ -165,8 +164,14 @@ describe('A2A Handler', () => {
           "security": [],
           "securitySchemes": {},
           "skills": [],
-          "supportsAuthenticatedExtendedCard": false,
-          "url": "/a2a/test-agent",
+          "supportedInterfaces": [
+            {
+              "protocolBinding": "JSONRPC",
+              "protocolVersion": "1.0",
+              "tenant": "",
+              "url": "/a2a/test-agent",
+            },
+          ],
           "version": "1.0",
         }
       `);
@@ -180,7 +185,8 @@ describe('A2A Handler', () => {
         agentId: 'test-agent',
         executionUrl: customUrl,
       });
-      expect(agentCard.url).toBe(customUrl);
+      // v1 AgentCard: the execution endpoint lives in `supportedInterfaces`.
+      expect(agentCard.supportedInterfaces[0].url).toBe(customUrl);
     });
 
     it('should allow custom provider details', async () => {
@@ -222,7 +228,7 @@ describe('A2A Handler', () => {
         }),
       } as any);
 
-      expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
+      expect(response.supportedInterfaces[0].url).toBe('http://localhost:4111/api/a2a/test-agent');
       expect(response.capabilities.pushNotifications).toBe(true);
     });
 
@@ -317,7 +323,7 @@ describe('A2A Handler', () => {
       const agentResponseText = 'Hello, user!';
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
 
       const mockAgent = {
@@ -346,7 +352,6 @@ describe('A2A Handler', () => {
               parts: [
                 {
                   text: 'Hello, user!',
-                  kind: 'text',
                 },
               ],
             },
@@ -363,23 +368,20 @@ describe('A2A Handler', () => {
           },
           status: {
             message: undefined,
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
           history: [
             {
-              kind: 'message',
               messageId: 'test-message-id',
               parts: [
                 {
                   text: 'Hello, agent!',
-                  kind: 'text',
                 },
               ],
-              role: 'user',
+              role: 'ROLE_USER',
             },
           ],
-          kind: 'task',
         },
       });
     });
@@ -396,9 +398,8 @@ describe('A2A Handler', () => {
           messageId: 'non-blocking-message-id',
           taskId,
           contextId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: 'Run this in the background' }],
+          role: 'ROLE_USER',
+          parts: [{ text: 'Run this in the background' }],
         },
         configuration: { blocking: false },
       };
@@ -424,7 +425,7 @@ describe('A2A Handler', () => {
       expect(response.result).toMatchObject({
         id: taskId,
         contextId,
-        status: { state: 'working' },
+        status: { state: 'TASK_STATE_WORKING' },
       });
       expect(mockAgent.generate).toHaveBeenCalledWith(expect.any(Array), {
         runId: taskId,
@@ -432,7 +433,7 @@ describe('A2A Handler', () => {
         threadId: contextId,
         resourceId: 'test-agent',
       });
-      expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('working');
+      expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('TASK_STATE_WORKING');
 
       generation.resolve({ text: 'Background result' });
 
@@ -448,8 +449,8 @@ describe('A2A Handler', () => {
           result: {
             id: taskId,
             contextId,
-            status: { state: 'completed' },
-            artifacts: [{ parts: [{ kind: 'text', text: 'Background result' }] }],
+            status: { state: 'TASK_STATE_COMPLETED' },
+            artifacts: [{ parts: [{ text: 'Background result' }] }],
           },
         });
       });
@@ -468,9 +469,8 @@ describe('A2A Handler', () => {
           message: {
             messageId: 'first-non-blocking-message-id',
             taskId,
-            kind: 'message',
-            role: 'user',
-            parts: [{ kind: 'text', text: 'Run once' }],
+            role: 'ROLE_USER',
+            parts: [{ text: 'Run once' }],
           },
           configuration: { blocking: false },
         },
@@ -486,9 +486,8 @@ describe('A2A Handler', () => {
           message: {
             messageId: 'duplicate-non-blocking-message-id',
             taskId,
-            kind: 'message',
-            role: 'user',
-            parts: [{ kind: 'text', text: 'Run again' }],
+            role: 'ROLE_USER',
+            parts: [{ text: 'Run again' }],
           },
           configuration: { blocking: false },
         },
@@ -498,7 +497,7 @@ describe('A2A Handler', () => {
         requestContext: new RequestContext(),
       });
 
-      expect(firstResponse.result?.status.state).toBe('working');
+      expect(firstResponse.result?.status.state).toBe('TASK_STATE_WORKING');
       expect(duplicateResponse.result).toEqual(firstResponse.result);
       expect(mockAgent.generate).toHaveBeenCalledTimes(1);
       expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.history).toHaveLength(1);
@@ -506,7 +505,7 @@ describe('A2A Handler', () => {
       generation.resolve({ text: 'Completed once' });
       await vi.waitFor(async () => {
         expect(await mockTaskStore.load({ agentId: 'test-agent', taskId })).toMatchObject({
-          status: { state: 'completed' },
+          status: { state: 'TASK_STATE_COMPLETED' },
         });
       });
     });
@@ -524,9 +523,8 @@ describe('A2A Handler', () => {
           message: {
             messageId: 'failed-background-message-id',
             taskId,
-            kind: 'message',
-            role: 'user',
-            parts: [{ kind: 'text', text: 'Fail later' }],
+            role: 'ROLE_USER',
+            parts: [{ text: 'Fail later' }],
           },
           configuration: { blocking: false },
         },
@@ -536,15 +534,15 @@ describe('A2A Handler', () => {
         requestContext: new RequestContext(),
       });
 
-      expect(response.result?.status.state).toBe('working');
+      expect(response.result?.status.state).toBe('TASK_STATE_WORKING');
       generation.reject(new Error('Background failure'));
 
       await vi.waitFor(async () => {
         expect(await mockTaskStore.load({ agentId: 'test-agent', taskId })).toMatchObject({
           status: {
-            state: 'failed',
+            state: 'TASK_STATE_FAILED',
             message: {
-              parts: [{ kind: 'text', text: 'Handler failed: Background failure' }],
+              parts: [{ text: 'Handler failed: Background failure' }],
             },
           },
         });
@@ -565,9 +563,8 @@ describe('A2A Handler', () => {
           message: {
             messageId: 'canceled-background-message-id',
             taskId,
-            kind: 'message',
-            role: 'user',
-            parts: [{ kind: 'text', text: 'Cancel me' }],
+            role: 'ROLE_USER',
+            parts: [{ text: 'Cancel me' }],
           },
           configuration: { blocking: false },
         },
@@ -587,7 +584,7 @@ describe('A2A Handler', () => {
       await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(0);
 
-      expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('canceled');
+      expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('TASK_STATE_CANCELED');
       expect(save.mock.calls.some(([{ data }]) => data.status.state === 'completed')).toBe(false);
     });
 
@@ -601,9 +598,8 @@ describe('A2A Handler', () => {
         params: {
           message: {
             messageId: 'blocking-message-id',
-            kind: 'message',
-            role: 'user',
-            parts: [{ kind: 'text', text: 'Wait for me' }],
+            role: 'ROLE_USER',
+            parts: [{ text: 'Wait for me' }],
           },
           configuration: { blocking: true },
         },
@@ -623,17 +619,16 @@ describe('A2A Handler', () => {
       generation.resolve({ text: 'Blocking result' });
       await expect(responsePromise).resolves.toMatchObject({
         result: {
-          status: { state: 'completed' },
-          artifacts: [{ parts: [{ kind: 'text', text: 'Blocking result' }] }],
+          status: { state: 'TASK_STATE_COMPLETED' },
+          artifacts: [{ parts: [{ text: 'Blocking result' }] }],
         },
       });
     });
 
-    it('should accept file parts (FileWithUri + FileWithBytes) and pass them through to the converter', async () => {
+    it('should accept file parts (raw + url) and pass them through to the converter', async () => {
       // Regression test for the handler-level schema rejecting non-text parts.
-      // Pre-fix, params.message.parts was validated as `kind: z.enum(['text'])`
-      // which rejected `kind: 'file'` and `kind: 'data'` before convertToCoreMessage
-      // (which already handles all three) could see them.
+      // The v1 wire schema accepts text/raw/url/data parts; convertToCoreMessage
+      // maps raw/url file parts to CoreMessage `file` parts.
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
       const agentId = 'test-agent';
@@ -641,15 +636,11 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
+          role: 'ROLE_USER',
           parts: [
-            { kind: 'text', text: 'Please summarize the attached invoice.' },
-            {
-              kind: 'file',
-              file: { uri: 'https://example.com/invoice.pdf', mimeType: 'application/pdf', name: 'invoice.pdf' },
-            },
-            { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/png', name: 'screenshot.png' } },
+            { text: 'Please summarize the attached invoice.' },
+            { url: 'https://example.com/invoice.pdf', mediaType: 'application/pdf', filename: 'invoice.pdf' },
+            { raw: 'AAAA', mediaType: 'image/png', filename: 'screenshot.png' },
           ],
         },
       };
@@ -682,10 +673,10 @@ describe('A2A Handler', () => {
       ]);
     });
 
-    it('should reject parts with an unknown discriminator', async () => {
-      // The widened schema is still strict on the part kind — discriminatedUnion
-      // rejects anything other than text | file | data, matching the @a2a-js/sdk
-      // Part union exactly.
+    it('should reject parts with no recognized content key', async () => {
+      // The v1 wire schema is a union keyed on the content field
+      // (`text` | `raw` | `url` | `data`). A part carrying none of these keys
+      // fails validation, matching the @a2a-js/sdk v1 Part union.
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
       const agentId = 'test-agent';
@@ -693,9 +684,8 @@ describe('A2A Handler', () => {
       const params = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'bogus', text: 'nope' }],
+          role: 'ROLE_USER',
+          parts: [{ bogus: 'nope' }],
         },
       } as unknown as MessageSendParams;
 
@@ -723,7 +713,7 @@ describe('A2A Handler', () => {
       const errorMessage = 'Agent failed!';
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
@@ -746,7 +736,7 @@ describe('A2A Handler', () => {
       expect(store.length).toBe(1);
 
       const task = store[0] as Task;
-      expect(task?.status.state).toBe('failed');
+      expect(task?.status.state).toBe('TASK_STATE_FAILED');
       // @ts-expect-error - error is not always available but we know it is
       result.error.data.stack = result.error?.data.stack.split('\n')[0];
       expect(result).toMatchInlineSnapshot(`
@@ -775,9 +765,8 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: userMessage }],
+          role: 'ROLE_USER',
+          parts: [{ text: userMessage }],
           contextId, // Include contextId to test memory integration
         },
       };
@@ -817,7 +806,7 @@ describe('A2A Handler', () => {
       };
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
@@ -839,10 +828,7 @@ describe('A2A Handler', () => {
         {
           artifactId: expect.stringContaining(':response'),
           name: 'response.json',
-          parts: [
-            { kind: 'text', text: 'Order confirmed.' },
-            { kind: 'data', data: structured },
-          ],
+          parts: [{ text: 'Order confirmed.' }, { data: structured }],
         },
       ]);
     });
@@ -859,9 +845,8 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: userMessage }],
+          role: 'ROLE_USER',
+          parts: [{ text: userMessage }],
           contextId,
         },
         metadata: {
@@ -905,9 +890,8 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: userMessage }],
+          role: 'ROLE_USER',
+          parts: [{ text: userMessage }],
           contextId,
           metadata: {
             resourceId: customResourceId, // User-provided resourceId in message
@@ -952,9 +936,8 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: userMessage }],
+          role: 'ROLE_USER',
+          parts: [{ text: userMessage }],
           contextId,
           metadata: {
             resourceId: messageResourceId,
@@ -1001,9 +984,8 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: userMessage }],
+          role: 'ROLE_USER',
+          parts: [{ text: userMessage }],
           contextId,
         },
         metadata: {
@@ -1047,9 +1029,8 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: userMessage }],
+          role: 'ROLE_USER',
+          parts: [{ text: userMessage }],
           contextId,
           metadata: {
             resourceId: customResourceId, // User-provided resourceId at message level
@@ -1091,9 +1072,8 @@ describe('A2A Handler', () => {
       const params: MessageSendParams = {
         message: {
           messageId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: userMessage }],
+          role: 'ROLE_USER',
+          parts: [{ text: userMessage }],
           // No contextId
         },
       };
@@ -1129,7 +1109,7 @@ describe('A2A Handler', () => {
       const userMessage = 'Follow-up message!';
       const agentResponseText = 'Follow-up response!';
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
       // Existing task/history
 
@@ -1137,32 +1117,28 @@ describe('A2A Handler', () => {
         id: taskId,
         contextId: 'test-session-id',
         status: {
-          state: 'completed' as const,
+          state: 'TASK_STATE_COMPLETED' as const,
           message: {
             messageId,
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Old response' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Old response' }],
           },
           timestamp: new Date('2025-05-07T12:00:00.000Z').toISOString(),
         },
         artifacts: [],
         history: [
           {
-            kind: 'message',
             messageId: 'test-history-message',
-            role: 'user',
-            parts: [{ kind: 'text', text: 'Old message' }],
+            role: 'ROLE_USER',
+            parts: [{ text: 'Old message' }],
           },
           {
-            kind: 'message',
             messageId: 'test-history-response',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Old response' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Old response' }],
           },
         ],
         metadata: undefined,
-        kind: 'task',
       };
 
       // Use real InMemoryTaskStore
@@ -1183,7 +1159,7 @@ describe('A2A Handler', () => {
       });
 
       const task = await mockTaskStore.load({ agentId, taskId });
-      expect(task?.status.state).toBe('completed');
+      expect(task?.status.state).toBe('TASK_STATE_COMPLETED');
       expect(result?.result?.status.timestamp).not.toBe(existingTask.status.timestamp);
       expect(result).toEqual({
         id: 'test-request-id',
@@ -1196,7 +1172,6 @@ describe('A2A Handler', () => {
               parts: [
                 {
                   text: 'Follow-up response!',
-                  kind: 'text',
                 },
               ],
             },
@@ -1205,15 +1180,13 @@ describe('A2A Handler', () => {
           contextId: expect.any(String),
           history: [
             {
-              kind: 'message',
               messageId: 'test-message-id',
               parts: [
                 {
-                  kind: 'text',
                   text: 'Follow-up message!',
                 },
               ],
-              role: 'user',
+              role: 'ROLE_USER',
             },
           ],
           metadata: {
@@ -1226,10 +1199,9 @@ describe('A2A Handler', () => {
           },
           status: {
             message: undefined,
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: '2025-05-08T12:00:00.000Z',
           },
-          kind: 'task',
         },
       });
     });
@@ -1266,7 +1238,7 @@ describe('A2A Handler', () => {
       };
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
@@ -1335,7 +1307,7 @@ describe('A2A Handler', () => {
       };
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
         metadata: existingMetadata,
       };
 
@@ -1383,9 +1355,8 @@ describe('A2A Handler', () => {
         message: {
           messageId,
           taskId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: 'Notify me when done' }],
+          role: 'ROLE_USER',
+          parts: [{ text: 'Notify me when done' }],
         },
         configuration: {
           blocking: false,
@@ -1411,7 +1382,7 @@ describe('A2A Handler', () => {
         requestContext: new RequestContext(),
       });
 
-      expect(result.result?.status.state).toBe('working');
+      expect(result.result?.status.state).toBe('TASK_STATE_WORKING');
       expect(fetchMock).not.toHaveBeenCalled();
 
       const storedConfig = pushNotificationStore.get({
@@ -1431,7 +1402,7 @@ describe('A2A Handler', () => {
 
       await vi.waitFor(async () => {
         expect(await mockTaskStore.load({ agentId, taskId })).toMatchObject({
-          status: { state: 'completed' },
+          status: { state: 'TASK_STATE_COMPLETED' },
         });
         expect(fetchMock).toHaveBeenCalledTimes(1);
       });
@@ -1450,7 +1421,7 @@ describe('A2A Handler', () => {
       expect(JSON.parse(requestInit!.body as string)).toMatchObject({
         id: taskId,
         status: {
-          state: 'completed',
+          state: 'TASK_STATE_COMPLETED',
         },
       });
     });
@@ -1474,9 +1445,8 @@ describe('A2A Handler', () => {
         message: {
           messageId,
           taskId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: 'Notify me when done' }],
+          role: 'ROLE_USER',
+          parts: [{ text: 'Notify me when done' }],
         },
         configuration: {
           pushNotificationConfig: {
@@ -1501,7 +1471,7 @@ describe('A2A Handler', () => {
         requestContext: new RequestContext(),
       });
 
-      expect(result.result?.status.state).toBe('completed');
+      expect(result.result?.status.state).toBe('TASK_STATE_COMPLETED');
       expect(fetchMock).toHaveBeenCalledTimes(1);
       await vi.waitFor(() => {
         expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
@@ -1522,9 +1492,8 @@ describe('A2A Handler', () => {
         message: {
           messageId,
           taskId,
-          kind: 'message',
-          role: 'user',
-          parts: [{ kind: 'text', text: 'Notify me when done' }],
+          role: 'ROLE_USER',
+          parts: [{ text: 'Notify me when done' }],
         },
         configuration: {
           pushNotificationConfig: {
@@ -1548,7 +1517,7 @@ describe('A2A Handler', () => {
         requestContext: new RequestContext(),
       });
 
-      expect(result.result?.status.state).toBe('completed');
+      expect(result.result?.status.state).toBe('TASK_STATE_COMPLETED');
       expect(
         pushNotificationStore.get({
           agentId,
@@ -1596,7 +1565,7 @@ describe('A2A Handler', () => {
       const agentResponseText = 'Hello, user!';
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
@@ -1627,23 +1596,20 @@ describe('A2A Handler', () => {
           contextId: expect.any(String),
           history: [
             {
-              kind: 'message',
               messageId: 'test-message-id',
-              parts: [{ kind: 'text', text: 'Hello, agent!' }],
-              role: 'user',
+              parts: [{ text: 'Hello, agent!' }],
+              role: 'ROLE_USER',
             },
           ],
           id: expect.any(String),
-          kind: 'task',
           metadata: undefined,
           status: {
             message: {
-              kind: 'message',
               messageId: expect.any(String),
-              parts: [{ kind: 'text', text: 'Generating response...' }],
-              role: 'agent',
+              parts: [{ text: 'Generating response...' }],
+              role: 'ROLE_AGENT',
             },
-            state: 'working',
+            state: 'TASK_STATE_WORKING',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
         },
@@ -1660,12 +1626,10 @@ describe('A2A Handler', () => {
             parts: [
               {
                 text: 'Hello, user!',
-                kind: 'text',
               },
             ],
           },
           contextId: first.value?.result.contextId,
-          kind: 'artifact-update',
           lastChunk: true,
           taskId: first.value?.result.id,
         },
@@ -1678,11 +1642,9 @@ describe('A2A Handler', () => {
         jsonrpc: '2.0',
         result: {
           contextId: first.value?.result.contextId,
-          final: true,
-          kind: 'status-update',
           status: {
             message: undefined,
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
           taskId: first.value?.result.id,
@@ -1702,7 +1664,7 @@ describe('A2A Handler', () => {
       const errorMessage = 'Agent failed!';
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
@@ -1725,12 +1687,11 @@ describe('A2A Handler', () => {
         id: requestId,
         jsonrpc: '2.0',
         result: {
-          kind: 'task',
           status: {
-            state: 'working',
+            state: 'TASK_STATE_WORKING',
             message: {
-              role: 'agent',
-              parts: [{ kind: 'text', text: 'Generating response...' }],
+              role: 'ROLE_AGENT',
+              parts: [{ text: 'Generating response...' }],
             },
           },
         },
@@ -1741,12 +1702,10 @@ describe('A2A Handler', () => {
         id: requestId,
         jsonrpc: '2.0',
         result: {
-          final: true,
-          kind: 'status-update',
           status: {
-            state: 'failed',
+            state: 'TASK_STATE_FAILED',
             message: {
-              parts: [{ kind: 'text', text: `Handler failed: ${errorMessage}` }],
+              parts: [{ text: `Handler failed: ${errorMessage}` }],
             },
           },
         },
@@ -1768,7 +1727,7 @@ describe('A2A Handler', () => {
       };
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
@@ -1792,7 +1751,9 @@ describe('A2A Handler', () => {
       });
 
       const first = await gen.next();
-      expect(first.value?.result.kind).toBe('task');
+      // v1 has no `kind`: the first event is the working Task (has an id, no taskId).
+      expect(first.value?.result.id).toEqual(expect.any(String));
+      expect(first.value?.result.status.state).toBe('TASK_STATE_WORKING');
 
       const second = await gen.next();
       expect(second.value).toEqual({
@@ -1805,12 +1766,10 @@ describe('A2A Handler', () => {
             parts: [
               {
                 text: 'Order confirmed.',
-                kind: 'text',
               },
             ],
           },
           contextId: first.value?.result.contextId,
-          kind: 'artifact-update',
           lastChunk: false,
           taskId: first.value?.result.id,
         },
@@ -1827,13 +1786,11 @@ describe('A2A Handler', () => {
             name: 'response.json',
             parts: [
               {
-                kind: 'data',
                 data: structured,
               },
             ],
           },
           contextId: first.value?.result.contextId,
-          kind: 'artifact-update',
           lastChunk: true,
           taskId: first.value?.result.id,
         },
@@ -1847,7 +1804,7 @@ describe('A2A Handler', () => {
       const agentId = 'test-agent';
 
       const params: MessageSendParams = {
-        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+        message: { messageId, role: 'ROLE_USER', parts: [{ text: 'Hello' }] },
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
@@ -1870,18 +1827,19 @@ describe('A2A Handler', () => {
       });
 
       const first = await gen.next();
-      expect(first.value?.result.kind).toBe('task');
+      // v1 has no `kind`: the first event is the working Task (has an id, no taskId).
+      expect(first.value?.result.id).toEqual(expect.any(String));
+      expect(first.value?.result.status.state).toBe('TASK_STATE_WORKING');
 
       const second = await gen.next();
       expect(second.value).toMatchObject({
         id: requestId,
         jsonrpc: '2.0',
         result: {
-          kind: 'artifact-update',
           lastChunk: false,
           artifact: {
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'Hello, ' }],
+            parts: [{ text: 'Hello, ' }],
           },
         },
       });
@@ -1891,11 +1849,10 @@ describe('A2A Handler', () => {
         id: requestId,
         jsonrpc: '2.0',
         result: {
-          kind: 'artifact-update',
           lastChunk: true,
           artifact: {
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'user!' }],
+            parts: [{ text: 'user!' }],
           },
         },
       });
@@ -1914,18 +1871,16 @@ describe('A2A Handler', () => {
         id: taskId,
         contextId: 'test-session-id',
         status: {
-          state: 'completed',
+          state: 'TASK_STATE_COMPLETED',
           message: {
             messageId,
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Hello, user!' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Hello, user!' }],
           },
           timestamp: new Date('2025-05-08T11:47:38.458Z').toISOString(),
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
       await mockTaskStore.save({ agentId, data: task });
 
@@ -1951,16 +1906,13 @@ describe('A2A Handler', () => {
               parts: [
                 {
                   text: 'Hello, user!',
-                  kind: 'text',
                 },
               ],
-              role: 'agent',
-              kind: 'message',
+              role: 'ROLE_AGENT',
             },
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
-          kind: 'task',
         },
       });
     });
@@ -2004,13 +1956,12 @@ describe('A2A Handler', () => {
         id: taskId,
         contextId: 'test-session-id',
         status: {
-          state: 'working',
-          message: { messageId, kind: 'message', role: 'agent', parts: [{ kind: 'text', text: 'Working...' }] },
+          state: 'TASK_STATE_WORKING',
+          message: { messageId, role: 'ROLE_AGENT', parts: [{ text: 'Working...' }] },
           timestamp: new Date('2025-05-08T11:47:38.458Z').toISOString(),
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId, data: task });
@@ -2025,7 +1976,7 @@ describe('A2A Handler', () => {
 
       // Verify task was updated to canceled state
       const updatedData = await mockTaskStore.load({ agentId, taskId });
-      expect(updatedData?.status.state).toBe('canceled');
+      expect(updatedData?.status.state).toBe('TASK_STATE_CANCELED');
       expect(result).toEqual({
         id: 'test-request-id',
         jsonrpc: '2.0',
@@ -2040,16 +1991,13 @@ describe('A2A Handler', () => {
               parts: [
                 {
                   text: 'Task cancelled by request.',
-                  kind: 'text',
                 },
               ],
-              role: 'agent',
-              kind: 'message',
+              role: 'ROLE_AGENT',
             },
-            state: 'canceled',
+            state: 'TASK_STATE_CANCELED',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
-          kind: 'task',
         },
       });
     });
@@ -2064,13 +2012,12 @@ describe('A2A Handler', () => {
         id: taskId,
         contextId: 'test-session-id',
         status: {
-          state: 'completed',
-          message: { messageId, kind: 'message', role: 'agent', parts: [{ kind: 'text', text: 'Done!' }] },
+          state: 'TASK_STATE_COMPLETED',
+          message: { messageId, role: 'ROLE_AGENT', parts: [{ text: 'Done!' }] },
           timestamp: new Date('2025-05-08T11:47:38.458Z').toISOString(),
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId, data: task });
@@ -2084,7 +2031,7 @@ describe('A2A Handler', () => {
 
       // Verify task remained in completed state
       const updatedData = await mockTaskStore.load({ agentId, taskId });
-      expect(updatedData?.status.state).toBe('completed');
+      expect(updatedData?.status.state).toBe('TASK_STATE_COMPLETED');
       expect(result).toEqual({
         id: 'test-request-id',
         jsonrpc: '2.0',
@@ -2099,16 +2046,13 @@ describe('A2A Handler', () => {
               parts: [
                 {
                   text: 'Done!',
-                  kind: 'text',
                 },
               ],
-              role: 'agent',
-              kind: 'message',
+              role: 'ROLE_AGENT',
             },
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
-          kind: 'task',
         },
       });
     });
@@ -2156,13 +2100,12 @@ describe('A2A Handler', () => {
           id: 'task-1',
           contextId: 'context-1',
           status: {
-            state: 'working',
+            state: 'TASK_STATE_WORKING',
             message: undefined,
             timestamp: '2025-05-08T11:47:38.458Z',
           },
           artifacts: [],
           metadata: undefined,
-          kind: 'task',
         },
       });
 
@@ -2293,23 +2236,60 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('accepts a v0.3-shaped inbound message and down-translates the result for a legacy peer', async () => {
+      // Backward-compat: with protocolVersion '0.3' the server normalizes the
+      // v0.3-shaped inbound message (`kind`, `role:'user'`, `kind:'text'` parts)
+      // to v1 before the handlers see it, then down-translates the outbound
+      // result back to the v0.3 wire shape for the legacy peer.
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Legacy response' });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'message/send' as any,
+        params: {
+          message: {
+            messageId: 'legacy-message-id',
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Hello, legacy agent!' }],
+          },
+        } as any,
+        taskStore: mockTaskStore,
+        protocolVersion: '0.3',
+      });
+
+      // The outbound result is down-translated to the v0.3 wire shape.
+      expect(result.result.kind).toBe('task');
+      expect(result.result.status.state).toBe('completed');
+      expect(result.result.artifacts[0].parts[0]).toEqual({ kind: 'text', text: 'Legacy response' });
+      // Inbound v0.3 message was normalized to v1 then echoed back as v0.3 history.
+      expect(result.result.history[0]).toMatchObject({
+        kind: 'message',
+        role: 'user',
+        parts: [{ kind: 'text', text: 'Hello, legacy agent!' }],
+      });
+    });
+
     it('resubscribes to an existing terminal task by returning the current task snapshot and closing', async () => {
       const task: Task = {
         id: 'task-1',
         contextId: 'context-1',
         status: {
-          state: 'completed',
+          state: 'TASK_STATE_COMPLETED',
           message: {
             messageId: 'message-1',
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Done!' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Done!' }],
           },
           timestamp: '2025-05-08T11:47:38.458Z',
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
@@ -2340,12 +2320,11 @@ describe('A2A Handler', () => {
         id: 'task-1',
         contextId: 'context-1',
         status: {
-          state: 'working',
+          state: 'TASK_STATE_WORKING',
           message: {
             messageId: 'message-1',
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Still working...' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Still working...' }],
           },
           timestamp: '2025-05-08T11:47:38.458Z',
         },
@@ -2353,11 +2332,10 @@ describe('A2A Handler', () => {
           {
             artifactId: 'response:text',
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'Still working...' }],
+            parts: [{ text: 'Still working...' }],
           },
         ],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
@@ -2393,16 +2371,15 @@ describe('A2A Handler', () => {
             {
               artifactId: 'response:data',
               name: 'response.json',
-              parts: [{ kind: 'data', data: { total: 33.98 } }],
+              parts: [{ data: { total: 33.98 } }],
             },
           ],
           status: {
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             message: {
               messageId: 'message-2',
-              kind: 'message',
-              role: 'agent',
-              parts: [{ kind: 'text', text: 'Done!' }],
+              role: 'ROLE_AGENT',
+              parts: [{ text: 'Done!' }],
             },
             timestamp: '2025-05-08T11:48:38.458Z',
           },
@@ -2417,10 +2394,9 @@ describe('A2A Handler', () => {
           artifact: {
             artifactId: 'response:data',
             name: 'response.json',
-            parts: [{ kind: 'data', data: { total: 33.98 } }],
+            parts: [{ data: { total: 33.98 } }],
           },
           contextId: 'context-1',
-          kind: 'artifact-update',
           lastChunk: true,
           taskId: 'task-1',
         },
@@ -2432,16 +2408,13 @@ describe('A2A Handler', () => {
         jsonrpc: '2.0',
         result: {
           contextId: 'context-1',
-          final: true,
-          kind: 'status-update',
           status: {
             message: {
-              kind: 'message',
               messageId: 'message-2',
-              parts: [{ kind: 'text', text: 'Done!' }],
-              role: 'agent',
+              parts: [{ text: 'Done!' }],
+              role: 'ROLE_AGENT',
             },
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: '2025-05-08T11:48:38.458Z',
           },
           taskId: 'task-1',
@@ -2457,18 +2430,16 @@ describe('A2A Handler', () => {
         id: 'task-1',
         contextId: 'context-1',
         status: {
-          state: 'working',
+          state: 'TASK_STATE_WORKING',
           message: {
             messageId: 'message-1',
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Still working...' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Still working...' }],
           },
           timestamp: '2025-05-08T11:47:38.458Z',
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
@@ -2500,7 +2471,7 @@ describe('A2A Handler', () => {
             {
               artifactId: 'response:text',
               name: 'response.txt',
-              parts: [{ kind: 'text', text: 'Partial result' }],
+              parts: [{ text: 'Partial result' }],
             },
           ],
         },
@@ -2514,10 +2485,9 @@ describe('A2A Handler', () => {
           artifact: {
             artifactId: 'response:text',
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'Partial result' }],
+            parts: [{ text: 'Partial result' }],
           },
           contextId: 'context-1',
-          kind: 'artifact-update',
           lastChunk: false,
           taskId: 'task-1',
         },
@@ -2529,19 +2499,17 @@ describe('A2A Handler', () => {
         id: 'task-1',
         contextId: 'context-1',
         status: {
-          state: 'working',
+          state: 'TASK_STATE_WORKING',
           message: {
             messageId: 'message-1',
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Still working...' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Still working...' }],
             metadata: { phase: 'initial' },
           },
           timestamp: '2025-05-08T11:47:38.458Z',
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
@@ -2585,17 +2553,14 @@ describe('A2A Handler', () => {
         jsonrpc: '2.0',
         result: {
           contextId: 'context-1',
-          final: false,
-          kind: 'status-update',
           status: {
             message: {
-              kind: 'message',
               messageId: 'message-1',
               metadata: { phase: 'updated' },
-              parts: [{ kind: 'text', text: 'Still working...' }],
-              role: 'agent',
+              parts: [{ text: 'Still working...' }],
+              role: 'ROLE_AGENT',
             },
-            state: 'working',
+            state: 'TASK_STATE_WORKING',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
           taskId: 'task-1',
@@ -2608,18 +2573,16 @@ describe('A2A Handler', () => {
         id: 'task-1',
         contextId: 'context-1',
         status: {
-          state: 'working',
+          state: 'TASK_STATE_WORKING',
           message: {
             messageId: 'message-1',
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Still working...' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Still working...' }],
           },
           timestamp: '2025-05-08T11:47:38.458Z',
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
@@ -2651,21 +2614,20 @@ describe('A2A Handler', () => {
             {
               artifactId: 'response:text',
               name: 'response.txt',
-              parts: [{ kind: 'text', text: 'Partial result' }],
+              parts: [{ text: 'Partial result' }],
             },
             {
               artifactId: 'response:data',
               name: 'response.json',
-              parts: [{ kind: 'data', data: { total: 33.98 } }],
+              parts: [{ data: { total: 33.98 } }],
             },
           ],
           status: {
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             message: {
               messageId: 'message-2',
-              kind: 'message',
-              role: 'agent',
-              parts: [{ kind: 'text', text: 'Done!' }],
+              role: 'ROLE_AGENT',
+              parts: [{ text: 'Done!' }],
             },
             timestamp: '2025-05-08T11:48:38.458Z',
           },
@@ -2680,10 +2642,9 @@ describe('A2A Handler', () => {
           artifact: {
             artifactId: 'response:text',
             name: 'response.txt',
-            parts: [{ kind: 'text', text: 'Partial result' }],
+            parts: [{ text: 'Partial result' }],
           },
           contextId: 'context-1',
-          kind: 'artifact-update',
           lastChunk: false,
           taskId: 'task-1',
         },
@@ -2697,10 +2658,9 @@ describe('A2A Handler', () => {
           artifact: {
             artifactId: 'response:data',
             name: 'response.json',
-            parts: [{ kind: 'data', data: { total: 33.98 } }],
+            parts: [{ data: { total: 33.98 } }],
           },
           contextId: 'context-1',
-          kind: 'artifact-update',
           lastChunk: true,
           taskId: 'task-1',
         },
@@ -2712,16 +2672,13 @@ describe('A2A Handler', () => {
         jsonrpc: '2.0',
         result: {
           contextId: 'context-1',
-          final: true,
-          kind: 'status-update',
           status: {
             message: {
-              kind: 'message',
               messageId: 'message-2',
-              parts: [{ kind: 'text', text: 'Done!' }],
-              role: 'agent',
+              parts: [{ text: 'Done!' }],
+              role: 'ROLE_AGENT',
             },
-            state: 'completed',
+            state: 'TASK_STATE_COMPLETED',
             timestamp: '2025-05-08T11:48:38.458Z',
           },
           taskId: 'task-1',
@@ -2737,18 +2694,16 @@ describe('A2A Handler', () => {
         id: 'task-1',
         contextId: 'context-1',
         status: {
-          state: 'working',
+          state: 'TASK_STATE_WORKING',
           message: {
             messageId: 'message-1',
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Still working...' }],
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'Still working...' }],
           },
           timestamp: '2025-05-08T11:47:38.458Z',
         },
         artifacts: [],
         metadata: undefined,
-        kind: 'task',
       };
 
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
@@ -2845,9 +2800,8 @@ describe('A2A Handler', () => {
         params: {
           message: {
             messageId: 'user-message-id',
-            kind: 'message',
-            role: 'user',
-            parts: [{ kind: 'text', text: 'Hello' }],
+            role: 'ROLE_USER',
+            parts: [{ text: 'Hello' }],
           },
           configuration: {
             blocking: true,
@@ -2858,9 +2812,13 @@ describe('A2A Handler', () => {
       expect(response.headers.get('Content-Type')).toContain('text/event-stream');
 
       const body = await response.text();
+      // The v0.3 slash-name method is normalized to v1 (SendStreamingMessage);
+      // with no A2A-Version header the peer is v1, so the wire shapes are v1
+      // (no `kind`, `TASK_STATE_*` states, status-update events without `final`).
       expect(body).toContain('data: {"jsonrpc":"2.0","id":42,"result":{"id":');
-      expect(body).toContain('"kind":"task"');
-      expect(body).toContain('"kind":"status-update"');
+      expect(body).toContain('"state":"TASK_STATE_WORKING"');
+      expect(body).toContain('"state":"TASK_STATE_COMPLETED"');
+      expect(body).not.toContain('"kind"');
       expect(body).toContain('Hello from SSE');
     });
   });
