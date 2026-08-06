@@ -14,11 +14,21 @@ if (typeof require === 'undefined') {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+export function resolveVerdaccioPathFrom(requireFrom) {
+  const manifestPath = requireFrom.resolve('verdaccio/package.json');
+  const manifest = requireFrom(manifestPath);
+  const binPath = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.verdaccio;
+  if (!binPath) {
+    throw new Error(`Verdaccio package at ${manifestPath} does not declare a verdaccio binary`);
+  }
+  return resolve(dirname(manifestPath), binPath);
+}
+
 function resolveVerdaccioPath() {
   try {
-    return require.resolve('verdaccio/bin/verdaccio');
+    return resolveVerdaccioPathFrom(require);
   } catch {
-    return createRequire(join(process.cwd(), 'package.json')).resolve('verdaccio/bin/verdaccio');
+    return resolveVerdaccioPathFrom(createRequire(join(process.cwd(), 'package.json')));
   }
 }
 

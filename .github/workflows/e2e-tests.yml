@@ -112,7 +112,6 @@ jobs:
           set -o pipefail
           mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
           test -f tests/minimal-agent.test.ts
-          node scripts/diagnose-vitest-discovery.mjs
           pnpm test:pr 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
@@ -128,9 +127,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: experiment-worker-pr-reports
-          path: |
-            ${{ runner.temp }}/experiment-worker-reports
-            e2e-tests/experiment-worker/vitest-discovery-debug.jsonl
+          path: ${{ runner.temp }}/experiment-worker-reports
           if-no-files-found: error
           retention-days: 14
 

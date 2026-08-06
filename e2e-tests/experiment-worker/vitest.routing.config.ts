@@ -7,6 +7,7 @@ export default defineConfig({
       'tests/materialize-project.test.ts',
       'tests/registry-digest.test.ts',
       'tests/scenario-reporter.test.ts',
+      'tests/verdaccio-resolution.test.ts',
     ],
   },
 });
