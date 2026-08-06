@@ -4663,11 +4663,13 @@ describe('Delegation request context derivation', () => {
   });
 
   it('does not leak sub-agent context mutations into the parent context', async () => {
+    let toolRan = false;
     const writerTool = createTool({
       id: 'writer-tool',
       description: 'Writes a value into the request context',
       inputSchema: z.object({}),
       execute: async (_input, context) => {
+        toolRan = true;
         context?.requestContext?.set('subAgentWrote', true);
         return { ok: true };
       },
@@ -4699,6 +4701,7 @@ describe('Delegation request context derivation', () => {
       requestContext: parentContext,
     });
 
+    expect(toolRan).toBe(true);
     expect(parentContext.has('subAgentWrote')).toBe(false);
     expect(parentContext.get('tenantId')).toBe('acme');
   });
