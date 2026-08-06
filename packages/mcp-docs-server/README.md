@@ -4,7 +4,7 @@ Access Mastra's documentation via [Model Context Protocol (MCP)](https://modelco
 
 ## Usage
 
-Follow the [official installation](https://mastra.ai/docs/getting-started/mcp-docs-server) instructions.
+Follow the [official installation](https://mastra.ai/reference/build-with-ai#mcp-docs-server) instructions.
 
 ## Tools
 

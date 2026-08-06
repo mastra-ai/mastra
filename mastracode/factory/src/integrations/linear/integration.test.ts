@@ -17,6 +17,7 @@ const issue: LinearIssue = {
   stateType: 'unstarted',
   priorityLabel: 'High',
   assignee: 'Ada',
+  creator: 'Grace',
   team: 'ENG',
   labels: ['bug'],
   createdAt: '2026-07-01T00:00:00Z',

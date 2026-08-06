@@ -6,6 +6,20 @@ export const pruneCommandScenario: McE2eScenario = {
   description:
     'Exercise the /prune command: hands the terminal off from the TUI, prunes retention rows, and vacuums local libsql with progress output.',
   testName: 'closes the TUI and runs storage maintenance with progress output',
+  async inProcessApp({ dbPath, startMastraCodeApp }) {
+    return startMastraCodeApp({
+      onCreated(result) {
+        // The Vitest backend intercepts process.exit(), so libsql's cached
+        // statements remain alive in this process and prevent a real inode
+        // swap. The native reclamation path is covered by SDK tests; this
+        // scenario exercises the TUI shutdown and progress-output choreography.
+        result.storageMaintenance.reclaimDisk = async onFileStart => {
+          onFileStart?.(dbPath, 1024, 512);
+          return [{ file: dbPath, bytesBefore: 1024, bytesAfter: 512 }];
+        };
+      },
+    });
+  },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
