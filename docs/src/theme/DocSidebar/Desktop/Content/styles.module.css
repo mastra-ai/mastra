@@ -2,6 +2,7 @@
   .menu {
     flex-grow: 1;
     padding: 0.5rem;
+    margin-top: 0.5rem;
   }
   @supports (scrollbar-gutter: stable) {
     .menu {
