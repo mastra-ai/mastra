@@ -95,6 +95,10 @@ export function CandidateCard({
           onRunPrompt={prompt => onRun(defaultAction, prompt)}
           menuExtras={
             <>
+              <DropdownMenu.Item render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
+                <ArrowUpRight aria-hidden />
+                <span>{externalLinkLabel(candidate.source)}</span>
+              </DropdownMenu.Item>
               {showTriage && (
                 <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
                   <Stethoscope aria-hidden />

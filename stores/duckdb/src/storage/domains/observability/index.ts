@@ -237,6 +237,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     return tracingOps.listTraces(this.db, args);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    if (args.mode === 'delta') {
+      return super.listTracesLight(args);
+    }
     return tracingOps.listTracesLight(this.db, args);
   }
   async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {

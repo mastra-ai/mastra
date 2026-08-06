@@ -83,6 +83,7 @@ import { WorkspaceInstructionsProcessor } from '../processors/processors/workspa
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
+import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
@@ -528,6 +529,13 @@ export class Agent<
   public name: string;
   public source?: DefinitionSource;
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+  /**
+   * Schedules declared by a file-based agent's `schedules/` directory, attached
+   * by `assembleAgentFromFsEntry`. Mastra reads these at boot and syncs them
+   * into schedule storage. Empty for code-defined agents, which register
+   * schedules through `mastra.schedules.create(...)` instead.
+   */
+  #declaredSchedules: DeclaredAgentSchedule[] = [];
   readonly #description?: string;
   readonly #metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
@@ -2505,6 +2513,25 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Attach the schedules declared under `agents/<id>/schedules/`. Called by
+   * `assembleAgentFromFsEntry` during file-based agent assembly.
+   *
+   * @internal — not part of the public agent API.
+   */
+  public __setDeclaredSchedules(schedules: DeclaredAgentSchedule[]): void {
+    this.#declaredSchedules = schedules;
+  }
+
+  /**
+   * Returns the schedules declared by this agent's `schedules/` directory, in
+   * stable (path-sorted) order. Mastra syncs these into schedule storage at
+   * boot; see `registerDeclarativeSchedules`.
+   */
+  public getDeclaredSchedules(): DeclaredAgentSchedule[] {
+    return this.#declaredSchedules;
   }
 
   /**
@@ -5022,7 +5049,10 @@ export class Agent<
               const subAgentUserMessage: MastraDBMessage = {
                 id: this.#mastra?.generateId() || randomUUID(),
                 role: 'user',
-                createdAt: new Date(),
+                // New runs let MessageList stamp this after it adds forwarded context.
+                // Resume runs do not add the prompt again, but still need a timestamp
+                // for the explicit transcript save below.
+                ...(resumeData ? { createdAt: new Date() } : {}),
                 threadId: subAgentThreadId,
                 resourceId: subAgentResourceId,
                 content: {
@@ -5034,7 +5064,7 @@ export class Agent<
                     },
                   ],
                 },
-              };
+              } as MastraDBMessage;
 
               // The sub-agent run receives only the delegation prompt as input; supervisor
               // history is forwarded separately via the `context` option so it reaches the
