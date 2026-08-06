@@ -392,6 +392,67 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when a column description is provided', () => {
+    function renderDescribedColumns() {
+      return render(
+        <Sankey data={data} columns={columns}>
+          <SankeyChart
+            getColumnDescription={column => (column.id === 'channel' ? 'Where the lead came from.' : undefined)}
+          />
+        </Sankey>,
+      );
+    }
+
+    function findColumnHeader(container: HTMLElement, label: string) {
+      const header = [...container.querySelectorAll('svg text[font-size="12"]')].find(
+        candidate => candidate.textContent === label,
+      );
+      if (!header) throw new Error(`Column header ${label} was not rendered`);
+      return header;
+    }
+
+    it('shows the description when the column header is hovered', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+
+      fireEvent.mouseEnter(header);
+
+      expect(screen.getByRole('tooltip').textContent).toContain('Where the lead came from.');
+    });
+
+    it('shows the description when the column header receives focus', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+
+      fireEvent.focus(header);
+
+      expect(screen.getByRole('tooltip').textContent).toContain('Where the lead came from.');
+    });
+
+    it('hides the description again when the pointer leaves the header', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+      fireEvent.mouseEnter(header);
+
+      fireEvent.mouseLeave(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
+    it('keeps headers without a description inert', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Region');
+
+      fireEvent.mouseEnter(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+  });
+
   describe('when a node has a long display label', () => {
     it('truncates the visible text and preserves the full accessible label', async () => {
       const longLabel = 'Adding a transcript to a workspace with a very descriptive name';

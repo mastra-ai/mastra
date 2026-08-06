@@ -1,11 +1,12 @@
 import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { snapshotSummaryLabel } from './sankey-signals-data';
-import { formatSignalName, formatSnapshotCutoff } from './signal-formatting';
+import { formatSignalName, formatSnapshotCutoff, SIGNAL_DESCRIPTIONS } from './signal-formatting';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
@@ -137,19 +138,26 @@ function SignalLifelines({
 
   return (
     <section aria-label={`${formatSignalName(signalName)} lifelines`} className="min-w-0">
-      <h3 className="text-neutral4 font-mono text-xs font-semibold tracking-widest uppercase">
-        <button
-          aria-expanded={!isCollapsed}
-          className="hover:text-neutral6 flex items-center gap-1.5 transition-colors"
-          onClick={() => setIsCollapsed(previous => !previous)}
-          type="button"
-        >
-          <ChevronDown
-            aria-hidden="true"
-            className={`size-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
-          />
-          {signalName}
-        </button>
+      <h3 className="font-mono text-xs font-semibold tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                aria-expanded={!isCollapsed}
+                className="flex items-center gap-1.5 transition-opacity hover:opacity-80"
+                onClick={() => setIsCollapsed(previous => !previous)}
+                type="button"
+              />
+            }
+          >
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+            />
+            {signalName}
+          </TooltipTrigger>
+          <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
+        </Tooltip>
       </h3>
       {isCollapsed ? undefined : rows.length === 0 ? (
         <p className="text-neutral3 mt-2 text-xs">No themes in these landmarks.</p>

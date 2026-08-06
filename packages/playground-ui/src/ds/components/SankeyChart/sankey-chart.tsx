@@ -9,7 +9,12 @@ import {
   SANKEY_NODE_WIDTH,
   truncateSankeyLabel,
 } from './sankey-chart-utils';
-import type { SankeyChartCurveSelection, SankeyChartNodeSelection, SankeyLabelWidths } from './sankey-chart-utils';
+import type {
+  SankeyChartColumn,
+  SankeyChartCurveSelection,
+  SankeyChartNodeSelection,
+  SankeyLabelWidths,
+} from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
@@ -28,6 +33,7 @@ export type SankeyChartProps = {
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
   onNodeClick?: (selection: SankeyChartNodeSelection) => void;
   isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
+  getColumnDescription?: (column: SankeyChartColumn) => string | undefined;
 };
 
 export function SankeyChart({
@@ -37,6 +43,7 @@ export function SankeyChart({
   onCurveClick,
   onNodeClick,
   isNodeClickable,
+  getColumnDescription,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
@@ -98,6 +105,7 @@ export function SankeyChart({
                     height={nodeGeometry?.height ?? props.height}
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
+                    columnDescription={node ? getColumnDescription?.(node.column) : undefined}
                     label={node?.label}
                     nodeValue={node?.displayValue}
                     layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
@@ -176,6 +184,7 @@ type SankeyLinkRendererProps = {
 type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
   columnLabel?: string;
+  columnDescription?: string;
   label?: string;
   nodeValue?: number;
   layoutValue?: number;
@@ -198,6 +207,7 @@ function SankeyNode({
   payload,
   hueMap,
   columnLabel,
+  columnDescription,
   label,
   nodeValue,
   layoutValue,
@@ -262,18 +272,15 @@ function SankeyNode({
   return (
     <>
       {/* Rendered outside the interactive group so hovering the header never opens a theme tooltip. */}
-      {showColumnLabel && visibleColumnLabel ? (
-        <text
+      {showColumnLabel && visibleColumnLabel && columnLabel ? (
+        <SankeyColumnHeader
           x={labelX}
-          y={18}
           textAnchor={textAnchor}
           fill={nodeColor(hue)}
-          fontSize={COLUMN_LABEL_FONT_SIZE}
-          fontWeight={600}
-        >
-          {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
-          {visibleColumnLabel}
-        </text>
+          label={visibleColumnLabel}
+          fullLabel={columnLabel}
+          description={columnDescription}
+        />
       ) : null}
       <g
         aria-describedby={description ? tooltipId : undefined}
@@ -336,6 +343,103 @@ function SankeyNode({
               }}
             >
               <div className="font-medium">{visibleDisplayLabel}</div>
+              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+/**
+ * Column header text. Inert for node tooltips, but when the caller supplies a
+ * column description it opens its own portal tooltip on hover or focus.
+ */
+function SankeyColumnHeader({
+  x,
+  textAnchor,
+  fill,
+  label,
+  fullLabel,
+  description,
+}: {
+  x: number;
+  textAnchor: 'start' | 'middle' | 'end';
+  fill: string;
+  label: string;
+  fullLabel: string;
+  description?: string;
+}) {
+  const tooltipId = useId();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<{
+    left: number;
+    top: number;
+    placement: 'above' | 'below';
+  }>();
+  const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
+  const showTooltipAt = (target: SVGTextElement) => {
+    const rect = target.getBoundingClientRect();
+    const placement = rect.top < 120 ? 'below' : 'above';
+    setTooltipPosition({
+      left: Math.min(Math.max(rect.left, 16), Math.max(window.innerWidth - 336, 16)),
+      top: placement === 'above' ? rect.top - 8 : rect.bottom + 8,
+      placement,
+    });
+  };
+
+  return (
+    <>
+      <text
+        aria-describedby={description ? tooltipId : undefined}
+        x={x}
+        y={18}
+        textAnchor={textAnchor}
+        fill={fill}
+        fontSize={COLUMN_LABEL_FONT_SIZE}
+        fontWeight={600}
+        tabIndex={description ? 0 : undefined}
+        onMouseEnter={
+          description
+            ? event => {
+                setIsHovered(true);
+                showTooltipAt(event.currentTarget);
+              }
+            : undefined
+        }
+        onMouseLeave={description ? () => setIsHovered(false) : undefined}
+        onFocus={
+          description
+            ? event => {
+                setIsFocused(true);
+                showTooltipAt(event.currentTarget);
+              }
+            : undefined
+        }
+        onBlur={description ? () => setIsFocused(false) : undefined}
+      >
+        {/* The custom tooltip already names the column; a native title would stack a second popup. */}
+        {label === fullLabel || description ? null : <title>{fullLabel}</title>}
+        {label}
+      </text>
+      {description && isTooltipVisible && tooltipPosition
+        ? createPortal(
+            <div
+              aria-label={`${fullLabel}: ${description}`}
+              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
+              id={tooltipId}
+              role="tooltip"
+              style={{
+                left: tooltipPosition.left,
+                maxWidth: 'min(20rem, calc(100vw - 2rem))',
+                top: tooltipPosition.top,
+                transform: tooltipPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
+                width: 'max-content',
+              }}
+            >
+              <div className="font-medium">{fullLabel}</div>
               <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
             </div>,
             document.body,

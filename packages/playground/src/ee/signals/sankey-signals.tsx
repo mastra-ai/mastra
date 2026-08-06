@@ -31,7 +31,7 @@ import {
   stabilizeThemeFlow,
 } from './sankey-signals-data';
 import { SignalDistributions } from './signal-distributions';
-import { formatSignalName } from './signal-formatting';
+import { formatSignalName, getSignalDescription } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
@@ -171,6 +171,7 @@ function FlowCard({
             margin={{ top: 64, right: 32, bottom: 24, left: 32 }}
             onNodeClick={onNodeClick}
             isNodeClickable={isNodeClickable}
+            getColumnDescription={column => getSignalDescription(column.id)}
           />
         </Sankey>
       </CardContent>

@@ -498,6 +498,15 @@ describe('SankeySignals', () => {
       expect(within(chart).queryByText(/HOVER OR FOCUS/)).toBeNull();
     });
 
+    it('describes the goal signal when its column header is hovered', async () => {
+      renderSankeySignals();
+      const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.mouseEnter(within(chart).getByText('GOAL'));
+
+      expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
+    });
+
     it('places a compact square-swatch legend at the right of the chart footer', async () => {
       renderSankeySignals();
 

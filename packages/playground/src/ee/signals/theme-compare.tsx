@@ -1,8 +1,11 @@
+import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { snapshotSummaryLabel } from './sankey-signals-data';
-import { formatSignalName } from './signal-formatting';
+import { formatSignalName, SIGNAL_DESCRIPTIONS } from './signal-formatting';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
@@ -104,7 +107,15 @@ function SignalDeltaColumn({
 
   return (
     <section aria-label={`${formatSignalName(signalName)} changes`} className="min-w-0">
-      <h3 className="text-neutral4 font-mono text-xs font-semibold tracking-widest uppercase">{signalName}</h3>
+      <h3
+        className="font-mono text-xs font-semibold tracking-widest uppercase"
+        style={{ color: nodeColor(getSignalHue(signalName)) }}
+      >
+        <Tooltip>
+          <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
+          <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
+        </Tooltip>
+      </h3>
       <ul className="mt-2 space-y-1.5">
         {deltas.length === 0 ? <li className="text-neutral3 text-xs">No themes in either snapshot.</li> : null}
         {deltas.map(delta => {

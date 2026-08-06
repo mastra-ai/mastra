@@ -235,6 +235,17 @@ describe('SankeySignals compare mode', () => {
       ).not.toBeNull();
     });
 
+    it('describes the goal signal from its column heading', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
+      fireEvent.focus(within(goalColumn).getByRole('button', { name: 'goal' }));
+
+      expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
+    });
+
     it('returns to the flow chart when the user switches back', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });

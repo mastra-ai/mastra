@@ -254,6 +254,18 @@ describe('SankeySignals lifelines mode', () => {
       ).not.toBeNull();
     });
 
+    it('describes the goal signal from its section heading', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
+      fireEvent.focus(within(goalSection).getByRole('button', { name: 'goal' }));
+
+      expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
+    });
+
     it('reuses the shared landmark timeline above the lifeline rows', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });

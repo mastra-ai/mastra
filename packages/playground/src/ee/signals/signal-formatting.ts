@@ -4,6 +4,23 @@ export function formatSignalName(signalName: TraceSignalName) {
   return signalName.charAt(0).toUpperCase() + signalName.slice(1);
 }
 
+/** Plain-language meaning of each trace signal, shown wherever a signal heading appears. */
+export const SIGNAL_DESCRIPTIONS: Record<TraceSignalName, string> = {
+  goal: 'What the user wanted from the interaction.',
+  sentiment: 'The tone the user expressed during the interaction.',
+  behavior: 'What the agent did in response.',
+  outcome: 'How the interaction ended.',
+};
+
+function isTraceSignalName(value: string): value is TraceSignalName {
+  return value in SIGNAL_DESCRIPTIONS;
+}
+
+/** Signal description lookup for callers that only hold an untyped column id. */
+export function getSignalDescription(signalName: string): string | undefined {
+  return isTraceSignalName(signalName) ? SIGNAL_DESCRIPTIONS[signalName] : undefined;
+}
+
 export function traceLabel(count: number) {
   return `${count} ${count === 1 ? 'trace' : 'traces'}`;
 }
