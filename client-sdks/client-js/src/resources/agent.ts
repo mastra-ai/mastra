@@ -2067,6 +2067,21 @@ export class Agent extends BaseResource {
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
+      const decoder = new TextDecoder();
+      let pendingText = '';
+
+      const enqueueReadableText = (text: string, isFinal = false) => {
+        pendingText += text;
+        const lines = pendingText.split('\n\n');
+        pendingText = isFinal ? '' : (lines.pop() ?? '');
+
+        const readableLines = lines
+          .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
+          .join('\n\n');
+        if (readableLines) {
+          controller.enqueue(new TextEncoder().encode(`${readableLines}\n\n`));
+        }
+      };
 
       // Pipe one branch directly to the controller
       const pipePromise = streamForController
@@ -2075,19 +2090,14 @@ export class Agent extends BaseResource {
             async write(chunk) {
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
-                const text = new TextDecoder().decode(chunk);
-                const lines = text.split('\n\n');
-                const readableLines = lines
-                  .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
-                  .join('\n\n');
-                if (readableLines) {
-                  const encoded = new TextEncoder().encode(readableLines);
-                  controller.enqueue(encoded);
-                }
+                enqueueReadableText(decoder.decode(chunk, { stream: true }));
               } catch (error) {
                 console.error('Error enqueueing to controller:', error);
                 controller.enqueue(chunk);
               }
+            },
+            close() {
+              enqueueReadableText(decoder.decode(), true);
             },
           }),
         )

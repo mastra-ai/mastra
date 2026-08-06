@@ -2,6 +2,8 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraScorer, MastraScorerEntry, MastraScorers } from '../../evals';
 import type { MastraMemory } from '../../memory/memory';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../processors';
+import { assertValidScheduleDefinition } from '../../schedules/define';
+import type { AgentScheduleDefinition, DeclaredAgentSchedule } from '../../schedules/define';
 import type { InlineSkill, SkillInput } from '../../skills/types';
 import type { DynamicArgument } from '../../types';
 import { Workspace, LocalFilesystem, LocalSandbox } from '../../workspace';
@@ -36,6 +38,13 @@ export function agentConfig(config: FsAgentConfig): FsAgentConfig {
   return config;
 }
 
+// Re-exported so authoring a file-based agent needs one import path: schedules
+// live next to `config.ts` in the same directory, so `defineSchedule` should be
+// reachable from the same module as `agentConfig`. `@mastra/core/schedules`
+// remains the canonical home.
+export { defineSchedule } from '../../schedules/define';
+export type { AgentScheduleDefinition, AgentScheduleHandler, DeclaredAgentSchedule } from '../../schedules/define';
+
 /**
  * A single tool discovered under `agents/<name>/tools/`. `key` defaults to the
  * filename slug; `tool` is the default export of that module.
@@ -54,6 +63,18 @@ export interface FsAgentToolEntry {
 export interface FsAgentScorerEntry {
   key: string;
   scorer: MastraScorer<any, any, any, any> | MastraScorerEntry;
+}
+
+/**
+ * A single schedule discovered under `agents/<name>/schedules/`. `key` is the
+ * file's path relative to `schedules/` with the extension stripped, so nested
+ * files keep a stable identity (`billing/sweep.ts` → `billing/sweep`).
+ * `schedule` is the default export of a `.ts` module or the parsed form of a
+ * `.md` file (cron frontmatter + body as the prompt).
+ */
+export interface FsAgentScheduleEntry {
+  key: string;
+  schedule: AgentScheduleDefinition;
 }
 
 export interface FsAgentEntry {
@@ -109,6 +130,15 @@ export interface FsAgentEntry {
    * `config.scorers`; config takes precedence on key collision.
    */
   scorers?: FsAgentScorerEntry[];
+  /**
+   * Schedules discovered under `agents/<name>/schedules/`, in stable
+   * (path-sorted) order. Attached to the assembled agent and synced into
+   * schedule storage by Mastra at boot. Only root agents may declare
+   * schedules — a schedule on a subagent is a build error, because subagents
+   * are wired into their parent's `agents` map rather than registered on the
+   * Mastra instance, so the scheduler could never resolve their `agentId`.
+   */
+  schedules?: FsAgentScheduleEntry[];
   /**
    * Declared subagents discovered under `agents/<name>/subagents/<childId>/`.
    * Each entry is assembled into its own `Agent` and wired into the parent's
@@ -169,6 +199,7 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
     inputProcessors = [],
     outputProcessors = [],
     scorers = [],
+    schedules = [],
     workspace,
     memory,
     defaultWorkspaceBasePath,
@@ -221,6 +252,14 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
         `Agent "${name}": config.ts exports a new Agent(), so discovered subagents under agents/${name}/subagents/ are ignored. Set 'agents' in the Agent config instead.`,
       );
     }
+    if (schedules.length > 0) {
+      // A code-defined agent is used verbatim, so attaching declared schedules
+      // here would be surprising: the author owns the whole Agent and can call
+      // `mastra.schedules.create(...)` instead.
+      onWarn(
+        `Agent "${name}": config.ts exports a new Agent(), so discovered schedules under agents/${name}/schedules/ are ignored. Create them with mastra.schedules.create(...) instead.`,
+      );
+    }
     return config;
   }
 
@@ -260,7 +299,50 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
     ...(mergedScorers !== undefined ? { scorers: mergedScorers } : {}),
   } as AgentConfig;
 
-  return new Agent(assembled);
+  const agent = new Agent(assembled);
+  agent.__setDeclaredSchedules(resolveSchedules(name, schedules, depth));
+  return agent;
+}
+
+/**
+ * Validate discovered schedules and pair each with its path-derived key.
+ *
+ * Only root agents may declare schedules. A schedule row targets an agent by
+ * id and the worker resolves it with `mastra.getAgentById(...)`; subagents live
+ * in their parent's `agents` map and are never registered on the Mastra
+ * instance, so a subagent schedule would fire forever against a missing agent.
+ * Failing the build is the only honest outcome.
+ */
+function resolveSchedules(name: string, schedules: FsAgentScheduleEntry[], depth: number): DeclaredAgentSchedule[] {
+  if (schedules.length === 0) return [];
+
+  if (depth > 0) {
+    throw new MastraError({
+      id: 'AGENT_FS_ROUTING_SUBAGENT_SCHEDULES_UNSUPPORTED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      details: { agentName: name },
+      text: `Agent "${name}": schedules are only supported on root agents, but agents/.../subagents/${name}/schedules/ declares ${schedules.length}. Move them to the root agent's schedules/ directory.`,
+    });
+  }
+
+  const seen = new Set<string>();
+  const resolved: DeclaredAgentSchedule[] = [];
+  for (const { key, schedule } of schedules) {
+    if (seen.has(key)) {
+      throw new MastraError({
+        id: 'AGENT_FS_ROUTING_SCHEDULE_NAME_COLLISION',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: name, scheduleKey: key },
+        text: `Agent "${name}": duplicate schedule "${key}" under agents/${name}/schedules/. Two files resolve to the same schedule id; rename one.`,
+      });
+    }
+    seen.add(key);
+    assertValidScheduleDefinition(schedule, `agents/${name}/schedules/${key}`);
+    resolved.push({ key, definition: schedule });
+  }
+  return resolved;
 }
 
 function resolveInstructions(

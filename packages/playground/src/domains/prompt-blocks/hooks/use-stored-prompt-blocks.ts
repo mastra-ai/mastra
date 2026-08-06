@@ -16,6 +16,7 @@ export const useStoredPromptBlocks = (params?: ListStoredPromptBlocksParams) => 
   return useQuery<ListStoredPromptBlocksResponse>({
     queryKey: ['stored-prompt-blocks', params, requestContext],
     queryFn: () => client.listStoredPromptBlocks(params),
+    placeholderData: previousData => previousData,
   });
 };
 

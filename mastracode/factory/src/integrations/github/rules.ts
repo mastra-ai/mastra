@@ -16,10 +16,12 @@ import type {
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
 const RULE_TIMEOUT_MS = 5_000;
+const FACTORY_TRIAGE_COMMENT_MARKER = '<!-- mastra-factory-triage -->';
 
 async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -54,6 +56,17 @@ function boolean(value: unknown): boolean | undefined {
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
+  if (parsed.event === 'issues' && action === 'edited') {
+    const changes = object(parsed.payload.changes);
+    return object(changes?.title) || object(changes?.body) ? 'issueEdited' : undefined;
+  }
+  if (parsed.event === 'issue_comment') {
+    const issue = object(parsed.payload.issue);
+    if (object(issue?.pull_request)) return undefined;
+    if (action === 'created') return 'issueCommentCreated';
+    if (action === 'edited') return 'issueCommentEdited';
+    if (action === 'deleted') return 'issueCommentDeleted';
+  }
   if (parsed.event === 'pull_request' && action === 'opened') return 'pullRequestOpened';
   if (parsed.event === 'pull_request' && action === 'synchronize') return 'pullRequestUpdated';
   if (parsed.event === 'pull_request' && action === 'closed') {
@@ -113,6 +126,7 @@ function pullRequestProvenance(data: Record<string, unknown> | undefined): Facto
 }
 
 export interface GithubRulesIntegration {
+  readonly slug?: string;
   getRepositoryCollaboratorPermission(
     installationId: number,
     repoFullName: string,
@@ -166,13 +180,15 @@ export class GithubRules {
     repositoryName: string,
     login: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'committed' | 'replayed' | 'missing' }> {
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const factoryProject = await this.options.projects.get({
       orgId: project.orgId,
       id: project.factoryProjectId,
     });
     if (!factoryProject) return { status: 'missing' };
     const issue = object(parsed.payload.issue);
+    const issueComment = object(parsed.payload.comment);
+    const changes = object(parsed.payload.changes);
     const pullRequest = object(parsed.payload.pull_request);
     const issueNumber = number(issue?.number);
     const pullRequestNumber = number(pullRequest?.number);
@@ -186,6 +202,12 @@ export class GithubRules {
           ).find(subscription => subscription.orgId === project.orgId)?.data,
         )
       : null;
+    // A review re-request targets the PR's own Review card, not the Work item
+    // that provenance would bind the event to — and the sender is whoever
+    // clicked re-request, so a Factory-authored PR must not brand a human
+    // requester as factory-authored.
+    const reviewRequested = event === 'pullRequestReviewRequested';
+    const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
     const relatedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,
@@ -193,14 +215,22 @@ export class GithubRules {
       issueNumber,
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
-      provenance,
+      reviewRequested ? null : provenance,
     );
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
       login,
-      factoryAuthored: provenance !== null,
+      factoryAuthored: (!reviewRequested && provenance !== null) || login === `${this.options.github.slug}[bot]`,
     });
+    if (
+      actor.type === 'github' &&
+      actor.factoryAuthored &&
+      (event === 'issueCommentCreated' || event === 'issueCommentEdited') &&
+      string(issueComment?.body)?.includes(FACTORY_TRIAGE_COMMENT_MARKER)
+    ) {
+      return { status: 'ignored' };
+    }
     const context: FactoryGithubRuleContext = {
       tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
       actor,
@@ -234,6 +264,23 @@ export class GithubRules {
               title: string(issue?.title)!,
               url: string(issue?.html_url)!,
               ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
+              ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
+            },
+          }
+        : {}),
+      ...(event === 'issueEdited'
+        ? { issueChange: { title: Boolean(object(changes?.title)), body: Boolean(object(changes?.body)) } }
+        : {}),
+      ...(number(issueComment?.id)
+        ? {
+            issueComment: {
+              id: number(issueComment?.id)!,
+              ...(string(issueComment?.body) ? { body: string(issueComment?.body) } : {}),
+              ...(string(issueComment?.html_url) ? { url: string(issueComment?.html_url) } : {}),
+              ...(string(object(issueComment?.user)?.login) ? { author: string(object(issueComment?.user)?.login) } : {}),
+              ...(string(object(issueComment?.user)?.type) ? { authorType: string(object(issueComment?.user)?.type) } : {}),
+              ...(string(issueComment?.created_at) ? { createdAt: string(issueComment?.created_at) } : {}),
+              ...(string(issueComment?.updated_at) ? { updatedAt: string(issueComment?.updated_at) } : {}),
             },
           }
         : {}),
@@ -245,9 +292,18 @@ export class GithubRules {
               url: string(pullRequest?.html_url)!,
               ...(string(pullRequest?.created_at) ? { createdAt: string(pullRequest?.created_at) } : {}),
               state: string(pullRequest?.state) === 'closed' ? ('closed' as const) : ('open' as const),
+              draft: boolean(pullRequest?.draft) ?? false,
               merged: boolean(pullRequest?.merged) ?? false,
               headBranch: string(object(pullRequest?.head)?.ref) ?? '',
               baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
+            },
+          }
+        : {}),
+      ...(reviewRequested && requestedReviewer
+        ? {
+            reviewRequest: {
+              reviewer: requestedReviewer,
+              factoryReviewer: requestedReviewer === `${this.options.github.slug}[bot]`,
             },
           }
         : {}),
@@ -347,9 +403,11 @@ export interface ReconcilePullRequestState {
   title: string;
   url: string;
   state: 'open' | 'closed';
+  draft: boolean;
   merged: boolean;
   headBranch: string;
   baseBranch: string;
+  author?: string;
   createdAt?: string;
   mergedBy?: string;
 }
@@ -429,12 +487,37 @@ export function reconciledClosedEvent(
         html_url: state.url,
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         state: 'closed',
+        draft: state.draft,
         merged: state.merged,
         head: { ref: state.headBranch },
         base: { ref: state.baseBranch },
       },
     },
   };
+}
+
+/**
+ * The webhook handler retires subscriptions itself; the sweep replays only the
+ * rules ingress, so without this the thread's PR chip and the workspace row
+ * stay `open` forever on a deployment GitHub cannot reach.
+ */
+async function retireReconciledSubscriptions(
+  storage: IntegrationStorageHandle,
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  merged: boolean,
+): Promise<void> {
+  const target = changeRequestTargetKey({
+    installationExternalId: String(repository.installationId),
+    repositoryExternalId: String(repository.id),
+    changeRequestId: String(pullRequestNumber),
+  });
+  const rows = await storage.subscriptions.listByTarget(target);
+  await Promise.all(
+    rows
+      .filter(row => row.status === 'open')
+      .map(row => storage.subscriptions.updateStatus(row.id, merged ? 'merged' : 'closed')),
+  );
 }
 
 /**
@@ -475,31 +558,40 @@ export function createGithubPullRequestReconciler(
     for (const repository of scoped) {
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
-      let numbers: Set<number>;
+      let cardsByNumber: Map<number, WorkItemRow[]>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
           repositoryExternalId: String(repository.id),
         });
         if (projects.length === 0) continue;
-        numbers = new Set<number>();
+        cardsByNumber = new Map<number, WorkItemRow[]>();
         for (const project of projects) {
           const items = await options.storage.list({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
-            const stage = item.stages[0];
-            if (stage === 'done' || stage === 'canceled') continue;
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
-            if (pullRequestNumber) numbers.add(pullRequestNumber);
+            if (!pullRequestNumber) continue;
+            const stage = item.stages[0];
+            const metadata = item.metadata ?? {};
+            const hasReconciledMetadata =
+              (metadata.state === 'open' || metadata.state === 'closed') &&
+              typeof metadata.draft === 'boolean' &&
+              typeof metadata.merged === 'boolean' &&
+              typeof metadata.author === 'string';
+            if ((stage === 'done' || stage === 'canceled') && hasReconciledMetadata) continue;
+            const cards = cardsByNumber.get(pullRequestNumber) ?? [];
+            cards.push(item);
+            cardsByNumber.set(pullRequestNumber, cards);
           }
         }
       } catch (error) {
         recordFailure(repository, error);
         continue;
       }
-      for (const pullRequestNumber of numbers) {
+      for (const [pullRequestNumber, cards] of cardsByNumber) {
         try {
           const state = await fetchPullRequest({
             installationId: repository.installationId,
@@ -507,8 +599,34 @@ export function createGithubPullRequestReconciler(
             number: pullRequestNumber,
           });
           summary.checked += 1;
-          if (!state || state.state !== 'closed') continue;
+          if (!state) continue;
+          for (const card of cards) {
+            const metadata = card.metadata ?? {};
+            const statusChanged =
+              metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
+            const authorChanged = state.author !== undefined && metadata.author !== state.author;
+            if (!statusChanged && !authorChanged) continue;
+            try {
+              await options.storage.update({
+                orgId: card.orgId,
+                id: card.id,
+                userId: 'factory-rule-dispatcher',
+                patch: {
+                  metadata: {
+                    state: state.state,
+                    draft: state.draft,
+                    merged: state.merged,
+                    ...(state.author ? { author: state.author } : {}),
+                  },
+                },
+              });
+            } catch (error) {
+              recordFailure(repository, error, pullRequestNumber);
+            }
+          }
+          if (state.state !== 'closed') continue;
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
+          await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {
@@ -520,7 +638,10 @@ export function createGithubPullRequestReconciler(
   };
 }
 
-function githubRulesOptions(github: GithubRulesIntegration, context: IntegrationContext): GithubRulesOptions | undefined {
+function githubRulesOptions(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+): GithubRulesOptions | undefined {
   if (!context.rules) return undefined;
   return {
     github,

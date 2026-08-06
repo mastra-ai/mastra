@@ -198,13 +198,16 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Install mdx2vast
+        run: npm install -g --ignore-scripts mdx2vast@0.3.1
+
       - name: Check formatting
         working-directory: ./docs
         run: pnpm format:check
 
-      - name: Lint with remark
+      - name: Validate reference sidebar sort order
         working-directory: ./docs
-        run: pnpm lint:remark
+        run: pnpm validate:reference-sidebar
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -220,11 +223,29 @@ jobs:
         working-directory: ./docs
         run: pnpm dlx tsx scripts/validate-frontmatter.ts
 
-      - name: Validate reference sidebar sort order
-        working-directory: ./docs
-        run: pnpm validate:reference-sidebar
-
       - name: Check for docs not linked in sidebars
         if: steps.mdx-changes.outputs.has_changes == 'true'
         working-directory: ./docs
         run: pnpm validate:sidebar-docs
+
+      - name: Lint with remark
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        working-directory: ./docs
+        run: pnpm lint:remark
+
+      - name: Prepare Vale CI config
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        run: |
+          sed \
+            -e '/^Packages =/d' \
+            -e 's#^StylesPath = styles#StylesPath = docs/styles#' \
+            docs/.vale.ini > .vale-ci.ini
+
+      - name: Lint with Vale
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        uses: vale-cli/vale-action@85f9f7f2c5f449ac0ae5b66662961bae3f77ca6a
+        with:
+          version: 3.13.1 # TODO: Update to newer version
+          files: '["docs/src/content/en/docs", "docs/src/content/en/guides", "docs/src/content/en/reference"]'
+          vale_flags: '--config=.vale-ci.ini --minAlertLevel=error'
+          fail_on_error: true
