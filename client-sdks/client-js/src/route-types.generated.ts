@@ -1477,6 +1477,7 @@ type Shared_Type_71 =
   | 'input_step_processor'
   | 'output_processor'
   | 'output_step_processor'
+  | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
   | 'workflow_run'
