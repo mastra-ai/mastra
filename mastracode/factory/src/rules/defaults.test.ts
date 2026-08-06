@@ -140,6 +140,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.github.issueCommentEdited?.onEvent).toBeTypeOf('function');
     expect(rules.github.issueCommentDeleted?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
+    expect(rules.github.pullRequestReviewRequested?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
     expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
     expect(rules.work.triage?.linearIssue?.onEnter).toBeTypeOf('function');
@@ -339,6 +340,67 @@ describe('defaultFactoryRules', () => {
     ]) {
       expect(await rule?.(context)).toBeUndefined();
     }
+  });
+
+  describe('pullRequestReviewRequested', () => {
+    const prItem = {
+      ...item,
+      source: 'github-pr' as const,
+      sourceKey: 'github-pr:17',
+      title: 'PR 17',
+      url: 'https://github.test/acme/repo/pull/17',
+      stages: ['done'],
+    };
+
+    function reReviewContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
+      return {
+        ...githubContext('pullRequestReviewRequested'),
+        item: prItem,
+        board: 'review',
+        itemRevision: 5,
+        reviewRequest: { reviewer: 'factory-app[bot]', factoryReviewer: true },
+        ...overrides,
+      };
+    }
+
+    it('re-enters Review when review is re-requested from Factory on a finished card', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewRequested?.onEvent;
+      expect(await rule?.(reReviewContext())).toMatchObject({
+        type: 'transition',
+        idempotencyKey: 'delivery-1:re-review-requested',
+        board: 'review',
+        stage: 'review',
+      });
+    });
+
+    it('ignores re-requests that do not target Factory or come from untrusted senders', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewRequested?.onEvent;
+      for (const context of [
+        // Review requested from a human reviewer, not Factory's bot.
+        reReviewContext({ reviewRequest: { reviewer: 'ada', factoryReviewer: false } }),
+        reReviewContext({ reviewRequest: undefined }),
+        // Untrusted sender.
+        reReviewContext({ actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } }),
+        // Factory-authored ingress must not restart its own review.
+        reReviewContext({ actor: { type: 'github', login: 'factory-app[bot]', trusted: true, factoryAuthored: true } }),
+        // No linked Review card.
+        reReviewContext({ item: undefined, board: undefined, itemRevision: undefined }),
+        // Card already in Reviewing: a pass is pending or running.
+        reReviewContext({ item: { ...prItem, stages: ['review'] } }),
+      ]) {
+        expect(await rule?.(context)).toBeUndefined();
+      }
+    });
+
+    it('ignores re-requests on closed or merged pull requests', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewRequested?.onEvent;
+      const closed = reReviewContext();
+      closed.pullRequest = { ...closed.pullRequest!, state: 'closed' };
+      const merged = reReviewContext();
+      merged.pullRequest = { ...merged.pullRequest!, merged: true };
+      expect(await rule?.(closed)).toBeUndefined();
+      expect(await rule?.(merged)).toBeUndefined();
+    });
   });
 
   it.each(['issueOpened', 'pullRequestOpened'] as const)(

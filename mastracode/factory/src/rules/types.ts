@@ -123,6 +123,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     headBranch: string;
     baseBranch: string;
   };
+  /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
+  reviewRequest?: { reviewer: string; factoryReviewer: boolean };
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {

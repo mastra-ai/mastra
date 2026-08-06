@@ -521,6 +521,240 @@ describe('GithubRules', () => {
     );
   });
 
+  it('commits a re-review transition when review is re-requested from the Factory bot', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const reviewed = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    const reviewRequested = (deliveryId: string, reviewer: string) => ({
+      event: 'pull_request',
+      deliveryId,
+      payload: {
+        action: 'review_requested',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'maintainer' },
+        requested_reviewer: { login: reviewer },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          created_at: '2030-01-01T00:00:00Z',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    // A human reviewer re-request is not Factory's signal: no decision.
+    expect(await service.ingest(reviewRequested('delivery-rr-human', 'ada'))).toEqual({ status: 'committed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+
+    // Re-requesting from Factory's own bot restarts the review pass.
+    expect(await service.ingest(reviewRequested('delivery-rr-factory', 'factory-app[bot]'))).toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: reviewed.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+      }),
+    ]);
+  });
+
+  it('re-reviews a Factory-authored PR: provenance binds neither the card nor the human requester', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // The Work item Factory implemented the PR from, bound by provenance.
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+    });
+    // The PR's own Review card, already reviewed once.
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest({
+        event: 'pull_request',
+        deliveryId: 'delivery-rr-provenance',
+        payload: {
+          action: 'review_requested',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: 'maintainer' },
+          requested_reviewer: { login: 'factory-app[bot]' },
+          pull_request: {
+            number: 17,
+            title: 'PR 17',
+            html_url: 'https://github.com/acme/repo/pull/17',
+            created_at: '2030-01-01T00:00:00Z',
+            state: 'open',
+            merged: false,
+            head: { ref: 'feature' },
+            base: { ref: 'main' },
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+
+    // The re-review lands on the PR's Review card, not the provenance-bound Work item.
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+      }),
+    ]);
+  });
+
+  it('dispatches a re-review transition back into Reviewing and queues a fresh factory-review pass', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const rules = builtInFactoryRules();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      storage: workItems,
+      ownerId: 'worker-1',
+    });
+
+    const reviewRequested = (deliveryId: string) => ({
+      event: 'pull_request',
+      deliveryId,
+      payload: {
+        action: 'review_requested',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'maintainer' },
+        requested_reviewer: { login: 'factory-app[bot]' },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          created_at: '2030-01-01T00:00:00Z',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    await expect(service.ingest(reviewRequested('delivery-rr-dispatch'))).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    // The card is back in Reviewing and the review onEnter rule queued a fresh pass.
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' }),
+        }),
+      ]),
+    );
+
+    // Replaying the same delivery does not stack another pass.
+    await expect(service.ingest(reviewRequested('delivery-rr-dispatch'))).resolves.toEqual({ status: 'replayed' });
+    // A second re-request while the card is already Reviewing is a guarded no-op.
+    await expect(service.ingest(reviewRequested('delivery-rr-again'))).resolves.toEqual({ status: 'committed' });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
+    expect(decisions.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
+  });
+
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
     const seen = vi.fn(() => undefined);
