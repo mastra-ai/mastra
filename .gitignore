@@ -86,6 +86,7 @@ om-reflector-fixture.json
 !.mastracode/resources/CRITICAL_PATHS.md
 .tmp-mc-e2e-vitest/
 .local/
+.pnpm-store/
 
 # Local git worktrees (scratch checkouts; never part of a commit)
 .worktrees/

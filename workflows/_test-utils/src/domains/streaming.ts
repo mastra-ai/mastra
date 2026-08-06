@@ -719,7 +719,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
     // Stream event format tests - verify streaming APIs work and produce correct events
     describe('Stream Events', () => {
-      it('should produce correct streamLegacy events', async () => {
+      it.skipIf(skipTests.streamingLegacyEvents)('should produce correct streamLegacy events', async () => {
         const { workflow } = registry!['streaming-test-workflow']!;
         const { stream } = ctx;
 

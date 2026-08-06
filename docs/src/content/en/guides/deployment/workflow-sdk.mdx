@@ -1,0 +1,170 @@
+---
+title: "Workflow SDK | Deployment"
+description: "Deploy Mastra workflows with Vercel's Workflow SDK"
+---
+
+# Workflow SDK workflow
+
+The [Workflow SDK](https://workflow-sdk.dev) is Vercel's durable execution runtime. The `@mastra/workflow-sdk` package lets you author workflows with the standard Mastra API and run them on the Workflow SDK, so runs survive crashes and deploys, and suspended runs wait on durable hooks instead of holding a process open.
+
+:::warning
+`@mastra/workflow-sdk` is experimental and not ready for production use. The API may change between releases. See the [package README](https://github.com/mastra-ai/mastra/tree/main/workflows/workflow-sdk) for the current state and a capability matrix against the default engine.
+:::
+
+## How the Workflow SDK works with Mastra
+
+The Workflow SDK marks durable code with `"use workflow"` and `"use step"` directives, which its compiler transforms at build time. `@mastra/workflow-sdk` provides one generic durable workflow, `mastraRunner`, that receives your workflow's serialized step graph as input and walks it deterministically inside the Workflow SDK runtime:
+
+- Each run of a Mastra workflow becomes one Workflow SDK run driven by `mastraRunner`.
+- Your code (step `execute` handlers, branch conditions, and loop conditions) runs through a `"use step"` dispatcher, which looks the live `Workflow` object up by id and invokes the real function with a full Mastra execution context.
+- Each step's result is journaled, so a replay skips completed steps, `suspend()` parks on a durable hook, and `.sleep()` survives a redeploy.
+
+When a run starts through `mastra.getWorkflow(...).createRun().start(...)`, the Mastra client hands control to the Workflow SDK, which drives durable execution and persistence from there.
+
+## Setup
+
+Install the required packages:
+
+```bash npm2yarn
+npm install @mastra/workflow-sdk@latest workflow
+```
+
+The Workflow SDK compiles the workflow directives during your framework's build, so your app must run through a framework the SDK integrates with, such as Next.js or Nitro. Follow the [Workflow SDK setup guide](https://workflow-sdk.dev) for your framework. For Next.js this means wrapping your config with `withWorkflow` from `workflow/next`.
+
+## Building a Workflow SDK-backed workflow
+
+This guide walks through creating a workflow with the Workflow SDK and Mastra, demonstrating a counter application that increments a value.
+
+### Registering the runner
+
+The Workflow SDK compiler discovers durable code by scanning your project's `workflows/` directory. Create one file there that re-exports the package's runner and imports your Mastra entrypoint:
+
+```ts title="workflows/mastra.ts"
+export * from '@mastra/workflow-sdk/workflows'
+import '../src/mastra'
+```
+
+Both lines are required:
+
+- The re-export puts the runner and its steps into the workflow build, so the compiler can assign them ids and register them.
+- The side-effect import loads your Mastra workflow definitions in the process that executes steps. Steps look the live `Workflow` object up by id at execution time. Without this import that lookup finds nothing and every step fails.
+
+### Creating steps
+
+Initialize the integration with `init()` to obtain Mastra-compatible workflow helpers bound to the runner, then define steps as usual:
+
+```ts title="src/mastra/workflows/index.ts"
+import { init } from '@mastra/workflow-sdk'
+import { mastraRunner } from '@mastra/workflow-sdk/workflows'
+import { z } from 'zod'
+
+const { createWorkflow, createStep } = init({ runner: mastraRunner })
+
+const incrementStep = createStep({
+  id: 'increment',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 }
+  },
+})
+```
+
+### Creating the workflow
+
+Compose the steps into a workflow:
+
+```ts title="src/mastra/workflows/index.ts"
+const workflow = createWorkflow({
+  id: 'increment-workflow',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+}).then(incrementStep)
+
+workflow.commit()
+
+export { workflow as incrementWorkflow }
+```
+
+### Configuring the Mastra instance
+
+Register the workflow with Mastra:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+import { incrementWorkflow } from './workflows'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: process.env.DATABASE_URL!,
+  }),
+  workflows: { incrementWorkflow },
+})
+```
+
+Storage is optional for starting runs, but required to resume, watch, or cancel a run from a different process than the one that started it. The mapping between the Mastra run id and the Workflow SDK run id lives on the run snapshot.
+
+## Running workflows
+
+Trigger a run from any code that imports your Mastra instance, such as an API route:
+
+```ts title="app/api/increment/route.ts"
+import { mastra } from '@/src/mastra'
+
+export async function POST(request: Request) {
+  const { value } = await request.json()
+
+  const run = await mastra.getWorkflow('incrementWorkflow').createRun()
+  const result = await run.start({ inputData: { value } })
+
+  return Response.json(result)
+}
+```
+
+You can inspect the underlying Workflow SDK runs with the SDK's local dashboard:
+
+```bash
+npx workflow web
+```
+
+### Suspend and resume
+
+`suspend()` and `resume()` work exactly as they do on other Mastra engines. A suspended step parks on a durable Workflow SDK hook, and a later request can pick the run back up by id:
+
+```ts title="app/api/approve/route.ts"
+import { mastra } from '@/src/mastra'
+
+export async function POST(request: Request) {
+  const { runId, approved } = await request.json()
+
+  const run = await mastra.getWorkflow('incrementWorkflow').createRun({ runId })
+  const result = await run.resume({ resumeData: { approved } })
+
+  return Response.json(result)
+}
+```
+
+Because the resume can happen on a different HTTP request (or a different machine) than the start, this pattern requires storage on the `Mastra` instance. Point it at a shared database rather than a `file:` path when deploying to serverless.
+
+## Constraints and notes
+
+- The `workflows/mastra.ts` registration file is mandatory. If a step fails with a "workflow not registered" error, check that the side-effect import points at your Mastra entrypoint.
+- The Workflow SDK needs its own build step, so apps run through the framework's dev server (for example `next dev` or `nitro dev`) rather than `mastra dev`.
+- `streamLegacy()` isn't supported and throws. Use `run.stream()` or `run.watch()` instead.
+
+## Related
+
+- [Workflow SDK example](https://github.com/mastra-ai/mastra/tree/main/examples/workflow-sdk): a complete Nitro app with a suspend/resume order-approval flow
+- [Workflow runners](/docs/deployment/workflow-runners)
+- [Workflows overview](/docs/workflows/overview)
+- [Workflow SDK documentation](https://workflow-sdk.dev)
