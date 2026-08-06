@@ -1,4 +1,4 @@
-import React, { type ReactNode } from 'react'
+import React, { type ReactNode, useRef } from 'react'
 import { ThemeClassNames } from '@docusaurus/theme-common'
 import DocSidebarItems from '@theme/DocSidebarItems'
 import type { PropSidebarItem } from '@docusaurus/plugin-content-docs'
@@ -13,14 +13,30 @@ type Props = Readonly<{
   label: string
   onBack: () => void
   onItemClick?: (item: PropSidebarItem) => void
+  paneClassName?: string
+  entryAnimationClassName?: string
+  animateEntry?: boolean
 }>
 
-export default function ContextualContent({ activePath, items, label, onBack, onItemClick }: Props): ReactNode {
+export default function ContextualContent({
+  activePath,
+  items,
+  label,
+  onBack,
+  onItemClick,
+  paneClassName,
+  entryAnimationClassName,
+  animateEntry = false,
+}: Props): ReactNode {
+  const shouldAnimateEntry = useRef(animateEntry).current
+  const contentClassName = cn(paneClassName, shouldAnimateEntry && entryAnimationClassName)
+
   return (
     <>
       <div
         className={cn(
           styles.header,
+          contentClassName,
           'rounded-lg border-[0.5px] border-(--border) text-(--mastra-text-secondary) hover:bg-(--mastra-surface-2) dark:bg-(--mastra-surface-4) hover:text-(--mastra-text-primary)',
         )}
       >
@@ -30,7 +46,10 @@ export default function ContextualContent({ activePath, items, label, onBack, on
         </button>
       </div>
       <ContextualSidebarPaneProvider>
-        <ul className={`${ThemeClassNames.docs.docSidebarMenu} menu__list`}>
+        <ul
+          data-sidebar-panel="contextual"
+          className={cn(ThemeClassNames.docs.docSidebarMenu, 'menu__list', contentClassName)}
+        >
           <DocSidebarItems items={items} activePath={activePath} level={1} onItemClick={onItemClick} />
         </ul>
       </ContextualSidebarPaneProvider>

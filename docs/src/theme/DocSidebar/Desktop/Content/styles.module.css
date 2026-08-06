@@ -11,6 +11,7 @@
   }
 
   .menu {
+    position: relative;
     flex-grow: 1;
     min-height: 0;
     padding-right: 0.5rem;
@@ -19,6 +20,25 @@
   .menu[data-sidebar-pane='contextual'] {
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
+  }
+
+  .pane {
+    transition:
+      transform 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1),
+      opacity 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  }
+
+  .rootPaneInactive {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-0.5rem);
+  }
+
+  .contextualPane {
+    animation: contextual-pane-enter 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
   }
 
   .bottomFade {
@@ -50,5 +70,21 @@
 
   .menuWithAnnouncementBar {
     margin-bottom: var(--docusaurus-announcement-bar-height);
+  }
+}
+
+@keyframes contextual-pane-enter {
+  from {
+    transform: translateX(0.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    transition: none;
+  }
+
+  .contextualPane {
+    animation: none;
   }
 }

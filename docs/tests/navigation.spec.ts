@@ -230,7 +230,7 @@ function visibleSidebarPane(page: Page, pane: 'root' | 'contextual') {
 
 function contextualTopLevelLinks(pane: Locator) {
   return pane.locator(
-    ':scope > ul.menu__list > li > a.menu__link, :scope > ul.menu__list > li > .menu__list-item-collapsible > a.menu__link',
+    ':scope > ul[data-sidebar-panel="contextual"] > li > a.menu__link, :scope > ul[data-sidebar-panel="contextual"] > li > .menu__list-item-collapsible > a.menu__link',
   )
 }
 

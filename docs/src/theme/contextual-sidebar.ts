@@ -207,9 +207,13 @@ export function isContextualSidebarVisible(
   pathname: string,
 ): state is ContextualSidebarState {
   const normalizedPathname = normalizePathname(pathname)
-  return Boolean(
-    state?.phase === 'active' && normalizedPathname && state.destinationPathnames.includes(normalizedPathname),
-  )
+  if (!state || !normalizedPathname) {
+    return false
+  }
+
+  return state.phase === 'pending'
+    ? normalizedPathname === state.entryPathname || state.destinationPathnames.includes(normalizedPathname)
+    : state.destinationPathnames.includes(normalizedPathname)
 }
 
 export function getContextualSidebarItems(

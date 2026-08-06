@@ -80,18 +80,28 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
           className,
         )}
       >
-        {contextualSidebar ? (
+        <ul
+          data-sidebar-panel="root"
+          className={clsx(
+            ThemeClassNames.docs.docSidebarMenu,
+            'menu__list',
+            styles.pane,
+            contextualSidebar && styles.rootPaneInactive,
+          )}
+        >
+          <DocSidebarItems items={sidebar} activePath={path} level={1} />
+        </ul>
+        {contextualSidebar && (
           <ContextualContent
             activePath={path}
             items={contextualSidebar.items}
             label={contextualSidebar.state.categoryLabel}
             onBack={handleBack}
             onItemClick={() => activateSidebar(contextualSidebar.state)}
+            paneClassName={styles.pane}
+            entryAnimationClassName={styles.contextualPane}
+            animateEntry={contextualSidebar.state.phase === 'pending'}
           />
-        ) : (
-          <ul className={clsx(ThemeClassNames.docs.docSidebarMenu, 'menu__list')}>
-            <DocSidebarItems items={sidebar} activePath={path} level={1} />
-          </ul>
         )}
       </nav>
       <div

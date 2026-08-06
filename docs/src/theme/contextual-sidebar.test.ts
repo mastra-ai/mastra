@@ -137,7 +137,8 @@ describe('contextual sidebar model', () => {
     const state = enterContextualSidebar(category, '/docs', siteUrl)
 
     expect(state).toBeDefined()
-    expect(isContextualSidebarVisible(state, '/docs')).toBe(false)
+    expect(isContextualSidebarVisible(state, '/docs')).toBe(true)
+    expect(isContextualSidebarVisible(state, '/docs/agents/overview/')).toBe(true)
     expect(observeContextualSidebarPathname(state, '/docs')).toBe(state)
 
     const promoted = observeContextualSidebarPathname(state, '/docs/agents/overview/')
@@ -153,7 +154,8 @@ describe('contextual sidebar model', () => {
 
     expect(observeContextualSidebarPathname(state, '/docs')).toBe(state)
     expect(observeContextualSidebarPathname(state, '/docs/workflows/overview')).toBeUndefined()
-    expect(isContextualSidebarVisible(state, '/docs')).toBe(false)
+    expect(isContextualSidebarVisible(state, '/docs')).toBe(true)
+    expect(isContextualSidebarVisible(state, '/docs/workflows/overview')).toBe(false)
   })
 
   it('clears active context when browser history returns to the entry pathname', () => {
