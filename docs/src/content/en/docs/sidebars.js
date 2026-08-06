@@ -895,7 +895,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'datasets/running-experiments',
-              label: 'Running Experiments',
+              label: 'Experiments',
             },
           ],
         },
