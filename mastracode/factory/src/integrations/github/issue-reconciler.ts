@@ -2,15 +2,22 @@ import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
 import type { GithubIntegration } from './integration.js';
+import type { ReconcileRepository } from './rules.js';
 
-export type GithubIssueReconciler = IssueReconciler;
+/**
+ * Repo-scoped issue reconciler. Callers pass the same
+ * `ReconcileRepository[]` the PR reconciler receives so the issue sweep only
+ * touches issue cards for repositories the caller has already resolved to
+ * live installations.
+ */
+export type GithubIssueReconciler = IssueReconciler<ReconcileRepository>;
 
 export function attachGithubIssueReconciler(
   github: Pick<GithubIntegration, 'intake'>,
   context: IntegrationContext,
 ): GithubIssueReconciler | undefined {
   if (!context.rules || !github.intake.resolveIntakeDispatch) return undefined;
-  return createIssueReconciler({
+  return createIssueReconciler<ReconcileRepository>({
     integrationId: 'github',
     intake: github.intake,
     projects: context.storage.projects,
@@ -35,4 +42,13 @@ export function attachGithubIssueReconciler(
       labels: issue.labels ?? [],
     }),
   });
+}
+
+/** Build the scope the reconciler applies to filter issue cards by repository. */
+export function githubIssueReconcileScope(repositories: ReconcileRepository[]) {
+  return {
+    scopes: repositories,
+    matches: (item: import('../../storage/domains/work-items/base.js').WorkItemRow, target: ReconcileRepository) =>
+      item.metadata?.githubRepositoryId === target.id,
+  };
 }

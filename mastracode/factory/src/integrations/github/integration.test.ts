@@ -601,19 +601,22 @@ describe('GithubIntegration merge reconciler', () => {
 });
 
 describe('GithubIntegration workers', () => {
-  it('registers the issue reconciler alongside the PR reconciler', () => {
+  it('registers a single reconcile worker that folds PR and issue sweeps', () => {
     const github = new GithubIntegration(validConfig());
     const context = {
       controller: {},
       storage: {
         generic: {},
-        sourceControl: {},
+        sourceControl: {
+          projectRepositories: { listConfiguredExternalKeys: async () => [], listByExternalRepository: async () => [] },
+          repositories: { findByExternalId: async () => null },
+        },
         projects: { listAll: async () => [] },
         intake: {},
       },
       rules: { config: {}, workItems: {} },
     } as any;
 
-    expect(github.workers(context).map(worker => worker.name)).toContain('github-issue-reconcile');
+    expect(github.workers(context).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
   });
 });

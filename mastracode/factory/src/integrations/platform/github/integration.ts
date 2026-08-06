@@ -57,7 +57,6 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
-import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -701,7 +700,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
-    const issues = this.#reconcileEnabled ? attachGithubIssueReconciler(this, ctx) : undefined;
     return [
       new PlatformGithubEventWorker({
         client: this.#client,
@@ -712,18 +710,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         reconcileFactoryState: this.#reconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
+        reconcileIssuesFactoryState: this.#reconcileEnabled ? attachGithubIssueReconciler(this, ctx) : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
       }),
-      ...(issues
-        ? [
-            new IssueReconcileWorker({
-              integrationId: this.id,
-              reconcile: issues,
-              ...(this.#pollingIntervalMs ? { intervalMs: this.#pollingIntervalMs } : {}),
-            }),
-          ]
-        : []),
     ];
   }
 

@@ -5,7 +5,7 @@ import type { FactoryProject } from '../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { IntegrationContext } from './base.js';
 import type { GithubIntegration } from './github/integration.js';
-import { attachGithubIssueReconciler } from './github/issue-reconciler.js';
+import { attachGithubIssueReconciler, githubIssueReconcileScope } from './github/issue-reconciler.js';
 import type { LinearIntegration } from './linear/integration.js';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.js';
 
@@ -86,6 +86,35 @@ function context(workItem: WorkItemRow, intake: Intake) {
 }
 
 describe('issue reconcilers', () => {
+  it('skips GitHub issue cards for repositories outside the caller-supplied scope', async () => {
+    const inScope = item('github', { githubRepositoryId: 101, githubIssueNumber: 1 });
+    const outOfScope = { ...item('github', { githubRepositoryId: 202, githubIssueNumber: 2 }), id: 'other' };
+    const intake = {
+      resolveIntakeDispatch: vi.fn(async () => ({
+        connection: { type: 'github-app' as const, installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '1',
+      })),
+      getIssue: vi.fn(async () => issue()),
+    } as unknown as Intake;
+    const update = vi.fn();
+    const ctx = {
+      storage: { projects: { listAll: vi.fn(async () => [project]) } },
+      rules: {
+        workItems: {
+          list: vi.fn(async () => [inScope, outOfScope]),
+          update,
+        },
+      },
+    } as unknown as IntegrationContext;
+    const reconcile = attachGithubIssueReconciler({ intake } as Pick<GithubIntegration, 'intake'>, ctx);
+    const scope = githubIssueReconcileScope([{ id: 101, fullName: 'acme/app', installationId: 7 }]);
+
+    // Only the in-scope item is checked; the 202 item is filtered before dispatch.
+    await expect(reconcile?.(scope)).resolves.toMatchObject({ checked: 1 });
+    expect(intake.resolveIntakeDispatch).toHaveBeenCalledTimes(1);
+  });
+
   it('reconciles GitHub issue author, state, assignees, and labels', async () => {
     const workItem = item('github', { githubRepositoryId: 101, githubIssueNumber: 42, assignees: ['old'] });
     const intake = {
@@ -98,8 +127,9 @@ describe('issue reconcilers', () => {
     } as unknown as Intake;
     const test = context(workItem, intake);
     const reconcile = attachGithubIssueReconciler({ intake } as Pick<GithubIntegration, 'intake'>, test.context);
+    const scope = githubIssueReconcileScope([{ id: 101, fullName: 'acme/app', installationId: 7 }]);
 
-    await expect(reconcile?.()).resolves.toMatchObject({ projects: 1, checked: 1, updated: 1, failed: 0 });
+    await expect(reconcile?.(scope)).resolves.toMatchObject({ projects: 1, checked: 1, updated: 1, failed: 0 });
     expect(intake.resolveIntakeDispatch).toHaveBeenCalledWith({
       orgId: 'org-1',
       externalSource: { type: 'issue', externalId: '101:42' },
@@ -178,7 +208,10 @@ describe('issue reconcilers', () => {
       author: 'octocat',
       assignees: ['monalisa', 'hubot'],
     });
-    const failed = { ...item('github', { githubIssueNumber: 43 }), id: 'failed-item' };
+    const failed = {
+      ...item('github', { githubRepositoryId: 101, githubIssueNumber: 43 }),
+      id: 'failed-item',
+    };
     const intake = {
       resolveIntakeDispatch: vi.fn(async () => ({
         connection: { type: 'github-app' as const, installationId: 7 },
@@ -201,8 +234,9 @@ describe('issue reconcilers', () => {
       },
     } as unknown as IntegrationContext;
     const reconcile = attachGithubIssueReconciler({ intake } as Pick<GithubIntegration, 'intake'>, ctx);
+    const scope = githubIssueReconcileScope([{ id: 101, fullName: 'acme/app', installationId: 7 }]);
 
-    await expect(reconcile?.()).resolves.toMatchObject({ checked: 2, updated: 0, failed: 1 });
+    await expect(reconcile?.(scope)).resolves.toMatchObject({ checked: 2, updated: 0, failed: 1 });
     expect(update).not.toHaveBeenCalled();
   });
 });

@@ -745,10 +745,7 @@ describe('PlatformGithubIntegration', () => {
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
-    expect(integration.workers(context).map(worker => worker.name)).toEqual([
-      'platform-github-events',
-      'github-issue-reconcile',
-    ]);
+    expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-github-events']);
     expect(integration.diagnostics()).toEqual({
       mode: 'platform',
       endpointHost: 'platform.example.com',

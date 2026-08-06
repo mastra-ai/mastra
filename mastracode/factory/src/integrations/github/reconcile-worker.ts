@@ -10,6 +10,8 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import type { GithubIssueReconciler } from './issue-reconciler.js';
+import { githubIssueReconcileScope } from './issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from './rules.js';
 
 export const DEFAULT_GITHUB_RECONCILE_INTERVAL_MS = 5 * 60_000;
@@ -32,6 +34,13 @@ export interface GithubReconcileRepositorySource {
 
 export interface GithubReconcileWorkerConfig {
   reconcile: GithubPullRequestReconciler;
+  /**
+   * Optional issue-metadata sweep. When provided, the worker folds it into the
+   * same tick as the PR reconciler, sharing the lease and the same
+   * `ReconcileRepository` target discovery. Mirrors how webhook-driven ingress
+   * flows both issues and PRs through one path.
+   */
+  reconcileIssues?: GithubIssueReconciler;
   sourceControl: GithubReconcileRepositorySource;
   intervalMs?: number;
 }
@@ -45,6 +54,7 @@ export class GithubReconcileWorker extends MastraWorker {
   readonly name = 'github-pull-request-reconcile';
 
   readonly #reconcile: GithubPullRequestReconciler;
+  readonly #reconcileIssues: GithubIssueReconciler | undefined;
   readonly #sourceControl: GithubReconcileRepositorySource;
   readonly #intervalMs: number;
   readonly #leaseTtlMs: number;
@@ -58,6 +68,7 @@ export class GithubReconcileWorker extends MastraWorker {
   constructor(config: GithubReconcileWorkerConfig) {
     super();
     this.#reconcile = config.reconcile;
+    this.#reconcileIssues = config.reconcileIssues;
     this.#sourceControl = config.sourceControl;
     this.#intervalMs = config.intervalMs ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
@@ -125,6 +136,35 @@ export class GithubReconcileWorker extends MastraWorker {
         this.deps?.logger.info('GitHub pull request reconcile replayed missed merges/closes', context);
       } else {
         this.deps?.logger.debug('GitHub pull request reconcile sweep completed', context);
+      }
+      // Fold the issue-metadata sweep into the same tick so a single lease
+      // covers both writers of card state for these repositories.
+      if (this.#reconcileIssues) {
+        const issueStartedAt = Date.now();
+        try {
+          const { errors: issueErrors, ...issueCounts } = await this.#reconcileIssues(
+            githubIssueReconcileScope(targets),
+          );
+          const issueContext = {
+            ...issueCounts,
+            candidateRepositories: targets.length,
+            durationMs: Date.now() - issueStartedAt,
+          };
+          if (issueCounts.failed > 0) {
+            this.deps?.logger.warn('GitHub issue reconcile sweep completed with failures', {
+              ...issueContext,
+              errors: issueErrors,
+            });
+          } else if (issueCounts.updated > 0) {
+            this.deps?.logger.info('GitHub issue reconcile patched stale metadata', issueContext);
+          } else {
+            this.deps?.logger.debug('GitHub issue reconcile sweep completed', issueContext);
+          }
+        } catch (issueError) {
+          this.deps?.logger.warn('GitHub issue reconcile sweep failed', {
+            error: issueError instanceof Error ? issueError.message : String(issueError),
+          });
+        }
       }
     } catch (error) {
       this.deps?.logger.warn('GitHub pull request reconcile sweep failed', {
