@@ -1,6 +1,8 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ArrowUpRight,
@@ -11,6 +13,7 @@ import {
   MessagesSquare,
   Play,
   Trash2,
+  TriangleAlert,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -282,12 +285,32 @@ export function WorkItemCard({
         )}
         {!evaluating && decision !== undefined && (
           <div className="flex items-center justify-between gap-2">
-            <span
-              role={decision.status === 'failed' ? 'alert' : 'status'}
-              className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
-            >
-              {decisionStatusText(decision)}
-            </span>
+            {decision.status === 'failed' ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Badge
+                      variant="error"
+                      size="xs"
+                      icon={<TriangleAlert aria-hidden />}
+                      role="alert"
+                      aria-label={decisionStatusText(decision)}
+                      tabIndex={0}
+                      className="focus-visible:ring-accent1 relative z-20 cursor-help outline-hidden focus-visible:ring-2"
+                    >
+                      Error
+                    </Badge>
+                  }
+                />
+                <TooltipContent side="top" className="max-w-80">
+                  <span className="wrap-anywhere whitespace-pre-wrap">{decisionStatusText(decision)}</span>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span role="status" className="text-ui-xs text-icon4">
+                {decisionStatusText(decision)}
+              </span>
+            )}
             {decision.status === 'failed' ? (
               <Button
                 type="button"
