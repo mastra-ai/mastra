@@ -318,6 +318,46 @@ test.describe('Contextual sidebar', () => {
     expect(getErrors(), 'JS errors during contextual sidebar navigation').toEqual([])
   })
 
+  test('desktop: resets sidebar scrolling when switching panes', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
+    await page.setViewportSize({ width: 1200, height: 360 })
+
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    const rootPane = visibleSidebarPane(page, 'root')
+    const agentsLink = await expectContextualCategoryRootLink(rootPane)
+    const rootScrollTop = await rootPane.evaluate(element => {
+      element.scrollTop = element.scrollHeight
+      return element.scrollTop
+    })
+    expect(rootScrollTop).toBeGreaterThan(0)
+
+    await agentsLink.evaluate((element: HTMLAnchorElement) => element.click())
+    const contextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(contextualPane).toBeVisible()
+    await expect.poll(() => contextualPane.evaluate(element => element.scrollTop)).toBe(0)
+
+    const contextualScrollTop = await contextualPane.evaluate(element => {
+      element.scrollTop = element.scrollHeight
+      return element.scrollTop
+    })
+    expect(contextualScrollTop).toBeGreaterThan(0)
+
+    await contextualPane
+      .getByRole('button', { name: 'Back to global sidebar' })
+      .evaluate((element: HTMLButtonElement) => element.click())
+    const restoredRootPane = visibleSidebarPane(page, 'root')
+    await expect(restoredRootPane).toBeVisible()
+    await expect.poll(() => restoredRootPane.evaluate(element => element.scrollTop)).toBe(0)
+
+    await page.goto('/docs/observability/overview', { waitUntil: 'domcontentloaded' })
+    const shortContextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(shortContextualPane).toBeVisible()
+    expect(
+      await shortContextualPane.evaluate(element => element.scrollHeight > element.clientHeight + 1),
+      'A short contextual pane should not inherit overflow from the hidden root pane',
+    ).toBe(false)
+  })
+
   test('desktop: body links switch to the destination contextual sidebar', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
 

@@ -1,4 +1,4 @@
-import React, { type ReactNode, useEffect, useRef, useState } from 'react'
+import React, { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { ThemeClassNames } from '@docusaurus/theme-common'
 import { useAnnouncementBar, useScrollPosition } from '@docusaurus/theme-common/internal'
@@ -31,6 +31,17 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const bottomFadeRef = useRef<HTMLDivElement>(null)
   const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
   const contextualSidebar = resolveSidebar(sidebar)
+  const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
+  const previousPaneKey = useRef(paneKey)
+
+  useLayoutEffect(() => {
+    if (previousPaneKey.current !== paneKey) {
+      if (navigationRef.current) {
+        navigationRef.current.scrollTop = 0
+      }
+      previousPaneKey.current = paneKey
+    }
+  }, [paneKey])
 
   useEffect(() => {
     const navigation = navigationRef.current

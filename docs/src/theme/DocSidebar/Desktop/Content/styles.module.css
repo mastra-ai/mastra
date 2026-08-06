@@ -18,8 +18,7 @@
   }
 
   .menu[data-sidebar-pane='contextual'] {
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
+    padding: 0 0.5rem !important;
   }
 
   .pane {
@@ -31,6 +30,7 @@
   .rootPaneInactive {
     position: absolute;
     inset: 0;
+    overflow: hidden;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
