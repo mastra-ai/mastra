@@ -2539,8 +2539,7 @@ export class SessionBus {
 
   subscribe(listener: AgentControllerEventListener): () => void {
     // Replay buffered workspace lifecycle events so late subscribers learn the
-    // current workspace status. The workspace is initialized during session
-    // creation, before any external caller can subscribe.
+    // current workspace status after lazy initialization has completed.
     for (const event of this.#lastWorkspaceEvents) {
       try {
         const result = listener(event);
