@@ -12,7 +12,6 @@ import { flushSync } from 'react-dom';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
-import { useEnsureMaterializedSandbox } from '../../hooks/useEnsureMaterializedSandbox';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryMetrics } from '../../hooks/useFactoryMetrics';
 import { useWorkspaceActivity } from '../../hooks/useWorkspaceActivity';
@@ -207,17 +206,18 @@ function useAgentsRunningCount(): number {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const repository = factoryQuery.data?.repositories[0];
-  const materializeQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
   const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
   const workspaceSessions = workspaces.data?.workspaces ?? [];
-  const resourceId = materializeQuery.data?.resourceId;
+  // The factory-level session address is the factory project id, so read
+  // activity without materializing a sandbox for a page that only renders counts.
+  const resourceId = factoryQuery.data?.id;
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId: resourceId ?? '',
     scope: repository?.projectRepositoryId,
     worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: materializeQuery.isSuccess && Boolean(resourceId && repository?.projectRepositoryId),
+    enabled: Boolean(resourceId && repository?.projectRepositoryId),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }

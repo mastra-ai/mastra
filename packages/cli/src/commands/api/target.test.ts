@@ -384,6 +384,82 @@ describe('resolveTarget', () => {
     });
   });
 
+  describe('platform-hosted --url', () => {
+    it.each([
+      ['https://shipyard.factory.mastra.cloud', 'production factory'],
+      ['https://shipyard.studio.mastra.cloud', 'production studio'],
+      ['https://shipyard.factory.staging.mastra.cloud', 'staging factory'],
+      ['https://shipyard.studio.staging.mastra.cloud', 'staging studio'],
+    ])('attaches Bearer from stored credentials for %s (%s)', async url => {
+      await expect(resolveTarget(options({ url }))).resolves.toEqual({
+        baseUrl: url,
+        headers: { Authorization: 'Bearer platform-token' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['https://shipyard.server.mastra.cloud', 'production user-provided server'],
+      ['https://shipyard.server.staging.mastra.cloud', 'staging user-provided server'],
+      ['https://runtime.example.com', 'arbitrary custom URL'],
+      ['http://shipyard.factory.mastra.cloud', 'non-HTTPS platform host'],
+    ])('does not attach Bearer for %s (%s)', async url => {
+      await expect(resolveTarget(options({ url }))).resolves.toEqual({
+        baseUrl: url,
+        headers: {},
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('respects an explicit Authorization header for platform-hosted URLs', async () => {
+      await expect(
+        resolveTarget(
+          options({
+            url: 'https://shipyard.factory.mastra.cloud',
+            header: ['Authorization: Bearer override'],
+          }),
+        ),
+      ).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: { Authorization: 'Bearer override' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('matches an explicit Authorization header case-insensitively', async () => {
+      await expect(
+        resolveTarget(
+          options({
+            url: 'https://shipyard.factory.mastra.cloud',
+            header: ['authorization: Bearer override'],
+          }),
+        ),
+      ).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: { authorization: 'Bearer override' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('omits Authorization when no stored credentials are available', async () => {
+      mocks.getToken.mockRejectedValueOnce(new Error('not logged in'));
+
+      await expect(resolveTarget(options({ url: 'https://shipyard.factory.mastra.cloud' }))).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: {},
+        timeoutMs: 30_000,
+      });
+    });
+  });
+
   it('throws malformed header errors before probing targets', async () => {
     await expect(resolveTarget(options({ header: ['invalid'] }))).rejects.toMatchObject({
       code: 'MALFORMED_HEADER',

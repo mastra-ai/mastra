@@ -2703,6 +2703,31 @@ export interface DatasetRecord {
   updatedAt: string | Date;
 }
 
+export interface ExperimentProvenance {
+  source?: string;
+  sourceId?: string;
+  sourceVersion?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ExperimentRunnerAttestation {
+  runnerId: string;
+  invocationId: string;
+  runnerVersion?: string;
+}
+
+export interface ExperimentGrouping {
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
+}
+
+export interface ListExperimentsParams extends ExperimentGrouping {
+  page?: number;
+  perPage?: number;
+}
+
 export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
@@ -2714,6 +2739,12 @@ export interface DatasetExperiment {
   name?: string;
   /** Longer description shown as secondary detail (e.g. in a tooltip). */
   description?: string;
+  provenance: ExperimentProvenance | null;
+  runnerAttestation: ExperimentRunnerAttestation | null;
+  experimentSetId: string | null;
+  comparisonId: string | null;
+  variantId: string | null;
+  trialIndex: number | null;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   succeededCount: number;
@@ -2861,6 +2892,8 @@ export interface TriggerDatasetExperimentParams {
   version?: number;
   agentVersion?: string;
   maxConcurrency?: number;
+  provenance?: ExperimentProvenance;
+  grouping?: ExperimentGrouping;
   requestContext?: Record<string, unknown>;
 }
 

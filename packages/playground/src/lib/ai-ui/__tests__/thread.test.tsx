@@ -101,10 +101,13 @@ const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; thr
   );
 };
 
-const renderThreadTree = (
-  initialMessages: MastraDBMessage[],
-  options: { hasModelList?: boolean; threadId?: string; suggestedPrompts?: string[] } = {},
-) => {
+interface RenderThreadOptions {
+  hasModelList?: boolean;
+  threadId?: string;
+  suggestedPrompts?: string[];
+}
+
+const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
   const { hasModelList = true, threadId = 'thread-1', suggestedPrompts } = options;
 
   return (
@@ -131,10 +134,8 @@ const renderThreadTree = (
   );
 };
 
-const renderThread = (
-  initialMessages: MastraDBMessage[],
-  options: { hasModelList?: boolean; threadId?: string; suggestedPrompts?: string[] } = { hasModelList: true },
-) => render(renderThreadTree(initialMessages, options));
+const renderThread = (initialMessages: MastraDBMessage[], options?: RenderThreadOptions) =>
+  render(renderThreadTree(initialMessages, options));
 
 const userMessage = (text: string): MastraDBMessage => ({
   id: `m-${text}`,
@@ -230,12 +231,12 @@ describe('Thread', () => {
         renderThread([], { suggestedPrompts: ['Check the weather'] });
       });
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Check the weather' }));
-        await new Promise(resolve => setTimeout(resolve, 80));
+      fireEvent.click(screen.getByRole('button', { name: 'Check the weather' }));
+
+      await waitFor(() => {
+        expect(captured).toHaveLength(1);
       });
 
-      expect(captured).toHaveLength(1);
       expect(JSON.stringify(captured[0].body.messages ?? [])).toContain('Check the weather');
     });
   });

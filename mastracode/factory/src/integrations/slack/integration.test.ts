@@ -5,27 +5,14 @@ vi.mock('@mastra/slack', () => ({
   createSlackAdapter: vi.fn(() => ({ __adapter: true })),
 }));
 
-const { adaptSourceControlOwner } = vi.hoisted(() => ({
-  adaptSourceControlOwner: vi.fn(() => ({ __sourceControl: true })),
-}));
-
-vi.mock('./slack.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('./slack.js')>()),
-  adaptSourceControlOwner,
-}));
-
 import { SlackIntegration } from './integration.js';
 
 function ctxWith(overrides: Record<string, unknown> = {}) {
   return {
-    storage: { channelIdentity: {}, projects: {}, ...overrides },
+    storage: { channelIdentity: {}, projects: {}, memorySettings: {}, ...overrides },
     rules: { workItems: {} },
   } as any;
 }
-
-beforeEach(() => {
-  adaptSourceControlOwner.mockClear();
-});
 
 describe('SlackIntegration.channels', () => {
   it('returns a channels config (not a built instance) with the slack adapter entry in config form', () => {
@@ -42,22 +29,22 @@ describe('SlackIntegration.channels', () => {
     expect(config.resolveThreadId).toBeTypeOf('function');
   });
 
-  it('wires a source-control adapter from the context source-control owner when present', () => {
+  it('reports repo-backed sessions when the context carries a source-control owner', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
-    const sourceControlOwner = { integrationId: 'github' };
 
-    integration.channels(ctxWith({ sourceControlOwner }));
+    const config = integration.channels(ctxWith({ sourceControlOwner: { integrationId: 'github' } }));
 
-    expect(adaptSourceControlOwner).toHaveBeenCalledWith(sourceControlOwner);
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: true });
+    // Sessions the channel machinery creates are configured through this hook;
+    // without it they would run on the SDK's built-in model defaults.
+    expect(config.onSessionStart).toBeTypeOf('function');
   });
 
-  it('wires no source-control adapter when the context has no source-control owner', () => {
+  it('reports no repo-backed sessions when the context has no source-control owner', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
 
     integration.channels(ctxWith());
 
-    expect(adaptSourceControlOwner).not.toHaveBeenCalled();
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: false });
   });
 });

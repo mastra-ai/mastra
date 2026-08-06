@@ -1,7 +1,7 @@
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { TokenCounter } from '../token-counter';
+import { TokenCounter } from './token-counter';
 
 vi.mock('probe-image-size', () => ({
   default: vi.fn(),
@@ -1276,6 +1276,34 @@ describe('TokenCounter', () => {
       const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
       expect(estimate?.key).toContain('tool-result-denied');
       expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
+    });
+  });
+
+  describe('failed tools (output-error)', () => {
+    it('counts the tool error instead of rejecting async message counting', async () => {
+      const counter = new TokenCounter();
+      const errorText = 'File not found: __intentional_missing_file_for_tool_error_test__';
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              args: { path: '__intentional_missing_file_for_tool_error_test__' },
+              errorText,
+            },
+          },
+        ],
+      });
+
+      await expect(counter.countMessagesAsync([message])).resolves.toBeGreaterThan(0);
+      expect(counter.countMessage(message)).toBeGreaterThan(0);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      expect(estimate?.key).toContain('tool-result-error');
+      expect(estimate?.tokens).toBe(counter.countString(errorText));
     });
   });
 

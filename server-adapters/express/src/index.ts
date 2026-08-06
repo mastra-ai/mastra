@@ -331,7 +331,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error');
+          void reader.cancel('response write error').catch(() => {});
         };
         response.once('error', onResError);
 

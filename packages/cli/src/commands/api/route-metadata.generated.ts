@@ -1728,6 +1728,7 @@ export const API_ROUTE_METADATA = {
     "path": "/observability/traces/light",
     "pathParams": [],
     "queryParams": [
+      "after",
       "dateRange",
       "direction",
       "endedAt",
@@ -1739,7 +1740,9 @@ export const API_ROUTE_METADATA = {
       "experimentId",
       "field",
       "hasChildError",
+      "limit",
       "metadata",
+      "mode",
       "name",
       "organizationId",
       "page",
@@ -5125,8 +5128,12 @@ export const API_ROUTE_METADATA = {
     "path": "/experiments",
     "pathParams": [],
     "queryParams": [
+      "comparisonId",
+      "experimentSetId",
       "page",
-      "perPage"
+      "perPage",
+      "trialIndex",
+      "variantId"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5157,8 +5164,12 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [
+      "comparisonId",
+      "experimentSetId",
       "page",
-      "perPage"
+      "perPage",
+      "trialIndex",
+      "variantId"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5178,7 +5189,9 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "agentVersion",
+      "grouping",
       "maxConcurrency",
+      "provenance",
       "requestContext",
       "scorerIds",
       "targetId",
