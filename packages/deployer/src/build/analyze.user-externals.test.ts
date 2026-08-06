@@ -71,5 +71,7 @@ describe('validateOutput stubbedExternals (issue #16626)', () => {
     for (const [, opts] of vi.mocked(validate).mock.calls) {
       expect(opts.stubbedExternals).toEqual(expect.arrayContaining(['drizzle-orm', 'pg']));
     }
-  }, 15000);
+    // Bundling a real @mastra/core entry through rollup is slow under parallel
+    // suite load (observed up to ~30s locally), so give it generous headroom.
+  }, 60000);
 });
