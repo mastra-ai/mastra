@@ -12,15 +12,6 @@ import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-
 import { DataList, DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
 
-/** Span attributes fields the list view reads directly. Extra unknown keys are allowed so callers
- *  can pass the full attributes record from @mastra/core/storage without mapping. */
-export type TraceAttributes = {
-  status?: string | null;
-  agentId?: string | null;
-  workflowId?: string | null;
-  [key: string]: unknown;
-};
-
 export type TracesListViewTrace = {
   traceId: string;
   /** Required for branch rows; absent on plain trace rows (which are root-rooted). */
@@ -32,7 +23,8 @@ export type TracesListViewTrace = {
   entityId?: string | null;
   entityName?: string | null;
   status?: string | null;
-  attributes?: TraceAttributes | null;
+  /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
+  inputPreview?: string | null;
   input?: unknown;
   metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
@@ -173,8 +165,7 @@ export function TracesListView({
             const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
             const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
             const displayDate = trace.startedAt ?? trace.createdAt;
-            const entityName =
-              trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
+            const entityName = trace.entityName || trace.entityId;
             const usage = usageByTraceId?.get(trace.traceId);
 
             return (
@@ -194,12 +185,12 @@ export function TracesListView({
                   showLevelTooltip={isBranchesMode}
                 />
                 {hasTraceColumn(columnPreferences, 'input') && (
-                  <TracesDataList.InputCell input={getInputPreview(trace.input)} />
+                  <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
                 {hasTraceColumn(columnPreferences, 'entity') && (
                   <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
                 )}
-                <TracesDataList.StatusCell status={trace.status ?? trace.attributes?.status} />
+                <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell>{formatSpanDuration(trace.startedAt, trace.endedAt)}</DataList.NumberCell>
                 )}

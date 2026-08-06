@@ -139,7 +139,7 @@ interface SourceControlOwnerSlice {
  * {@link SlackSourceControl} surface. Nothing here is GitHub-specific — the
  * owner is whichever integration owns source control, matched by its own
  * `integrationId`. Repo resolution mirrors the factory's own
- * `ensureFactoryRuleSession`: the owner's connection on the factory → its
+ * `ensureFactorySourceSession`: the owner's connection on the factory → its
  * first linked repository → pinned branch or repo default as the base.
  */
 export function adaptSourceControlOwner(owner: SourceControlOwnerSlice): SlackSourceControl {

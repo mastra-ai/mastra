@@ -574,9 +574,11 @@ describe('GithubIntegration merge reconciler', () => {
       title: 'Ship intake',
       url: 'https://github.com/acme/app/pull/34',
       state: 'closed',
+      draft: false,
       merged: true,
       headBranch: 'feat/intake',
       baseBranch: 'main',
+      author: 'ada',
       createdAt: '2026-07-01T00:00:00Z',
     });
   });

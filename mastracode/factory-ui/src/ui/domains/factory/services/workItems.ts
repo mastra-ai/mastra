@@ -21,6 +21,7 @@ export interface WorkItemStageEntry {
   enteredAt: string;
   exitedAt?: string;
   by: string;
+  exitedBy?: string;
 }
 
 export interface WorkItem {
