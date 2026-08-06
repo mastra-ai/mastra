@@ -38,6 +38,9 @@ function createSettingsStorage(initial: unknown = null) {
 function createGithub(): PlatformGithubEventDispatchIntegration {
   return {
     integrationStorage: {} as never,
+    sourceControlStorage: {
+      sessions: { getBySessionId: async () => ({ userId: 'user-1', orgId: 'org-1' }) },
+    },
     getRepositoryCollaboratorPermission: vi.fn<
       PlatformGithubEventDispatchIntegration['getRepositoryCollaboratorPermission']
     >(async () => 'write'),
@@ -240,6 +243,43 @@ describe('PlatformGithubEventWorker', () => {
     expect(settings.read()).toEqual({
       version: 1,
       repositories: { '101': { afterEventId: '1001-0' } },
+    });
+    await worker.stop();
+  });
+
+  it('hands the dispatch its integration, so a woken session can be attributed to its owner', async () => {
+    const settings = createSettingsStorage();
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+      delivered: 1,
+      failed: 0,
+      ignored: false,
+    });
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) return json({ repositories: [{ id: 101 }] });
+      if (url.pathname.endsWith('/repositories/101/events')) {
+        if (url.searchParams.has('afterEventId')) return json({ events: [], nextCursor: null });
+        return json({
+          events: [{ id: '1001-0', deliveryId: 'delivery-1', event: 'pull_request', payload: { action: 'closed' } }],
+          nextCursor: '1001-0',
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({ fetchImpl, storage: settings.storage, intervalMs: 1_000, dispatch });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const { github } = dispatch.mock.calls[0]![1];
+    await expect(github?.sourceControlStorage.sessions.getBySessionId('session-1')).resolves.toEqual({
+      userId: 'user-1',
+      orgId: 'org-1',
     });
     await worker.stop();
   });

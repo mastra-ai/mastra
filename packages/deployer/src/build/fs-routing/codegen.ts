@@ -98,6 +98,22 @@ async function emitAgentEntry(
     }
   }
 
+  // Schedules: `.ts`/`.js` modules are imported so handler-mode schedules keep
+  // a live function; markdown schedules are inlined as plain data.
+  const scheduleExprs: string[] = [];
+  const agentSchedules = agent.schedules ?? [];
+  for (let s = 0; s < agentSchedules.length; s++) {
+    const schedule = agentSchedules[s]!;
+    const keyField = `key: ${JSON.stringify(schedule.key)}`;
+    if (schedule.kind === 'module') {
+      const ident = sanitizeIdentifier(`${agent.name}_schedule`, 'schedule', `${idPath}_${s}`);
+      lines.push(`import ${ident} from ${JSON.stringify(schedule.path)};`);
+      scheduleExprs.push(`{ ${keyField}, schedule: ${ident} }`);
+    } else {
+      scheduleExprs.push(`{ ${keyField}, schedule: ${JSON.stringify(schedule.definition)} }`);
+    }
+  }
+
   let instructionsMd: string | undefined;
   if (agent.instructionsPath) {
     instructionsMd = await readFile(agent.instructionsPath, 'utf-8');
@@ -135,6 +151,9 @@ async function emitAgentEntry(
   if (scorerIdents.length > 0) {
     const scorerEntries = scorerIdents.map(({ key, ident }) => `{ key: ${JSON.stringify(key)}, scorer: ${ident} }`);
     entryFields.push(`scorers: [${scorerEntries.join(', ')}]`);
+  }
+  if (scheduleExprs.length > 0) {
+    entryFields.push(`schedules: [${scheduleExprs.join(', ')}]`);
   }
   if (subagentExprs.length > 0) {
     entryFields.push(`subagents: [${subagentExprs.join(', ')}]`);
@@ -277,14 +296,6 @@ export async function generateFsAgentsModule(
   }
   lines.push(`];`);
   lines.push(``);
-  lines.push(`const __fsAgents = Object.create(null);`);
-  lines.push(`for (const __entry of __fsAgentEntries) {`);
-  lines.push(`  __fsAgents[__entry.name] = assembleAgentFromFsEntry(__entry, {`);
-  lines.push(`    onWarn: msg => __mastra?.getLogger?.()?.warn?.(msg) ?? console.warn(msg),`);
-  lines.push(`  });`);
-  lines.push(`}`);
-  lines.push(``);
-
   // Singleton registration (storage, observability, etc.) MUST run before
   // agents/workflows. `addMemory`/`addAgent` bind the current store to
   // storage-dependent primitives at registration time, so the fs singletons
@@ -327,6 +338,14 @@ export async function generateFsAgentsModule(
     lines.push(`}`);
     lines.push(``);
   }
+
+  lines.push(`const __fsAgents = Object.create(null);`);
+  lines.push(`for (const __entry of __fsAgentEntries) {`);
+  lines.push(`  __fsAgents[__entry.name] = assembleAgentFromFsEntry(__entry, {`);
+  lines.push(`    onWarn: msg => __mastra?.getLogger?.()?.warn?.(msg) ?? console.warn(msg),`);
+  lines.push(`  });`);
+  lines.push(`}`);
+  lines.push(``);
 
   lines.push(`if (__mastra && typeof __mastra.__registerFsAgents === 'function') {`);
   lines.push(`  __mastra.__registerFsAgents(__fsAgents);`);

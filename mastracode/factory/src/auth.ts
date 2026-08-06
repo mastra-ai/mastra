@@ -45,6 +45,8 @@ export interface FactoryAuthUser {
   id?: string;
   email?: string;
   name?: string;
+  /** Provider-supplied profile picture URL, when the auth provider exposes one. */
+  avatarUrl?: string;
   /**
    * Organization id. The org is the top-level tenant: it owns the GitHub
    * App installation and connected projects, while each user inside the org gets
@@ -172,13 +174,14 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
 
   // Session-shaped results: { session, user }.
   if (record.user && typeof record.user === 'object' && record.session && typeof record.session === 'object') {
-    const user = record.user as { id?: unknown; email?: unknown; name?: unknown };
+    const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown };
     const session = record.session as { activeOrganizationId?: unknown };
     if (typeof user.id !== 'string') return null;
     return {
       id: user.id,
       email: typeof user.email === 'string' ? user.email : undefined,
       name: typeof user.name === 'string' ? user.name : undefined,
+      avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : undefined,
       organizationId: typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
     };
   }
@@ -189,6 +192,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     workosId?: unknown;
     email?: unknown;
     name?: unknown;
+    avatarUrl?: unknown;
     organizationId?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
@@ -199,6 +203,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     workosId,
     email: typeof flat.email === 'string' ? flat.email : undefined,
     name: typeof flat.name === 'string' ? flat.name : undefined,
+    avatarUrl: typeof flat.avatarUrl === 'string' ? flat.avatarUrl : undefined,
     organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
   };
 }

@@ -11,6 +11,30 @@ export type WorkspacePackageInfo = {
   location: string;
   dependencies: Record<string, string> | undefined;
   version: string | undefined;
+  exports?: unknown;
+};
+
+const isExportTargetImportable = (target: unknown): boolean => {
+  if (!target) return false;
+  if (typeof target === 'string') return true;
+  if (Array.isArray(target)) return target.some(isExportTargetImportable);
+  if (typeof target !== 'object') return false;
+
+  return Object.values(target).some(isExportTargetImportable);
+};
+
+export const hasRootExport = (exportsField: unknown): boolean => {
+  if (exportsField === undefined) return true;
+  if (typeof exportsField === 'string' || Array.isArray(exportsField)) return isExportTargetImportable(exportsField);
+  if (!exportsField || typeof exportsField !== 'object') return false;
+
+  const exportMap = exportsField as Record<string, unknown>;
+  const exportKeys = Object.keys(exportMap);
+  if (exportKeys.length === 0) return false;
+  if (Object.prototype.hasOwnProperty.call(exportMap, '.')) return isExportTargetImportable(exportMap['.']);
+  if (exportKeys.some(key => key.startsWith('./'))) return false;
+
+  return isExportTargetImportable(exportMap);
 };
 
 type TransitiveDependencyResult = {
@@ -54,6 +78,7 @@ export async function getWorkspaceInformation({
         location: workspace.location,
         dependencies: workspace.package.dependencies,
         version: workspace.package.version,
+        exports: workspace.package.exports,
       },
     ]) ?? [],
   );
