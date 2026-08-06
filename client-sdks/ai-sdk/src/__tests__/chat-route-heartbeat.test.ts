@@ -53,6 +53,25 @@ function createRouteContext(fullStream: ReadableStream) {
   };
 }
 
+function createSseFrameReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  let buffer = '';
+
+  return async () => {
+    while (true) {
+      const frameEnd = buffer.indexOf('\n\n');
+      if (frameEnd !== -1) {
+        const frame = buffer.slice(0, frameEnd + 2);
+        buffer = buffer.slice(frameEnd + 2);
+        return frame;
+      }
+
+      const result = await reader.read();
+      if (result.done) throw new Error('Stream ended before receiving a complete SSE frame');
+      buffer += decoder.decode(result.value, { stream: true });
+    }
+  };
+}
+
 async function invokeRoute(
   route: ReturnType<typeof chatRoute>,
   context: ReturnType<typeof createRouteContext>['context'],
@@ -312,6 +331,7 @@ describe('chatRoute heartbeat', () => {
 
     const response = await invokeRoute(route, context);
     const reader = response.body!.getReader();
+    const readFrame = createSseFrameReader(reader);
 
     streamController.enqueue({
       type: 'start',
@@ -325,14 +345,14 @@ describe('chatRoute heartbeat', () => {
       from: 'AGENT',
       payload: { id: 'text-1' },
     });
-    const startEvent = decoder.decode((await reader.read()).value);
-    const textStartEvent = decoder.decode((await reader.read()).value);
+    const startEvent = await readFrame();
+    const textStartEvent = await readFrame();
     expect(JSON.parse(startEvent.slice('data: '.length))).toMatchObject({ type: 'start' });
     expect(JSON.parse(textStartEvent.slice('data: '.length))).toEqual({ type: 'text-start', id: 'text-1' });
 
-    const heartbeat = reader.read();
+    const heartbeat = readFrame();
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(decoder.decode((await heartbeat).value)).toBe(': heartbeat\n\n');
+    expect(await heartbeat).toBe(': heartbeat\n\n');
 
     await reader.cancel();
     streamController.close();
