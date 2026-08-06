@@ -408,10 +408,28 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByRole('button', { name: /Transcript located.+1 trace \(100%\)/ })).not.toBeNull();
     });
 
+    it('opens the details panel and isolates the flow in one click', async () => {
+      useFlowHandlers();
+      renderSignals();
+
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+
+      expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
+      expect(await screen.findByLabelText('Active theme drill-in')).not.toBeNull();
+      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · '));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
+      expect(screen.getByLabelText('Active theme drill-in')).not.toBeNull();
+      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
+    });
+
     it('opens theme details from the drill-in banner', async () => {
       useFlowHandlers();
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
       const detailsButton = await screen.findByRole('button', { name: 'View theme details for Add transcript' });
 
       fireEvent.click(detailsButton);
@@ -595,6 +613,8 @@ describe('SankeySignals drill-in', () => {
       useFlowHandlers();
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
       const trigger = await screen.findByRole('button', { name: 'View theme details for Add transcript' });
       trigger.focus();
       fireEvent.click(trigger);
@@ -779,7 +799,7 @@ describe('SankeySignals drill-in', () => {
   });
 
   describe('when the snapshot exceeds the client drill-in limit', () => {
-    it('disables node activation without requesting paths', async () => {
+    it('opens theme details without isolating the flow or requesting paths', async () => {
       let pathsRequestCount = 0;
       useFlowHandlers(() => {
         pathsRequestCount += 1;
@@ -794,7 +814,11 @@ describe('SankeySignals drill-in', () => {
       expect(
         await screen.findByTitle('Drill-in is unavailable for snapshots with more than 2,000 traces.'),
       ).not.toBeNull();
-      expect(screen.queryByRole('button', { name: /Add transcript.+2 traces/ })).toBeNull();
+
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces/ }));
+
+      expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
+      expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
       expect(pathsRequestCount).toBe(0);
     });
   });

@@ -492,10 +492,11 @@ export function SankeySignals({
 
   const stages = flow.stages;
   // Noise nodes open the noise details panel (noise has no themeId, so it
-  // cannot drill in) and stay clickable even when drill-in is unavailable.
+  // cannot drill in). Theme nodes always open details; they additionally
+  // isolate the flow when the snapshot is under the drill-in limit.
   const isNodeClickable = (selection: SankeyChartNodeSelection) =>
     findNoiseSelection(flow, selection.column.id, selection.value) !== undefined ||
-    (drillInAvailable && findThemeSelection(flow, selection.column.id, selection.value) !== undefined);
+    findThemeSelection(flow, selection.column.id, selection.value) !== undefined;
   const handleNodeClick = (selection: SankeyChartNodeSelection) => {
     const noiseSignal = findNoiseSelection(flow, selection.column.id, selection.value);
     if (noiseSignal) {
@@ -503,9 +504,11 @@ export function SankeySignals({
       setNoiseSignalName(noiseSignal);
       return;
     }
-    if (!drillInAvailable) return;
     const nextSelection = findThemeSelection(flow, selection.column.id, selection.value);
-    if (nextSelection) setDrillIn(nextSelection);
+    if (!nextSelection) return;
+    setNoiseSignalName(undefined);
+    setDetailSelection(nextSelection);
+    if (drillInAvailable) setDrillIn(nextSelection);
   };
   const drillInDisabledReason = drillInAvailable
     ? undefined
