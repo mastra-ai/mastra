@@ -2,9 +2,7 @@
 '@mastra/memory': patch
 ---
 
-preserve markdown links when optimizing observations for context
-
-`optimizeObservationsForContext` stripped every `[...]` group, which removed
-the label from any markdown link an observation contained and left a bare,
-unlabelled URL in the agent-facing context. Link labels are now preserved.
-Semantic tag stripping and collapsed item markers are unchanged.
+Fixed observational memory removing Markdown link labels from the observation
+context given to agents. Links shared in observations previously collapsed to
+bare, unlabelled URLs; their label text is now preserved. Semantic tags are
+still stripped and collapsed-item markers behave as before.
