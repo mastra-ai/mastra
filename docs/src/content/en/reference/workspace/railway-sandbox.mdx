@@ -133,14 +133,14 @@ const sandbox = new RailwaySandbox({
 
 Use one stable checkpoint name for each independent filesystem. Don't share a checkpoint name across unrelated sessions or projects.
 
-### Derived sandbox checkpoints
+### Cloned sandbox checkpoints
 
-Use `derive({ checkpointName })` when a configured `RailwaySandbox` acts as the template for a sandbox fleet:
+Use `clone({ checkpointName })` when a configured `RailwaySandbox` acts as the template for a sandbox fleet:
 
 ```typescript
 const template = new RailwaySandbox({ idleTimeoutMinutes: 30 })
 
-const sessionSandbox = template.derive({
+const sessionSandbox = template.clone({
   id: 'session-42',
   checkpointName: 'project-session-42',
 })
@@ -148,7 +148,7 @@ const sessionSandbox = template.derive({
 await sessionSandbox.start()
 ```
 
-A derived sandbox uses the checkpoint passed to `derive()`. If no override is passed, it inherits the template sandbox's `checkpointName`.
+A cloned sandbox uses the checkpoint passed to `clone()`. If no override is passed, it inherits the template sandbox's `checkpointName`.
 
 ### Streaming output
 
@@ -307,10 +307,10 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
       'Clone this running sandbox into a new, independent RailwaySandbox. The returned sandbox is already started and reattached to the forked Railway sandbox. Accepts optional id, idleTimeoutMinutes, networkIsolation, and env overrides. Throws SandboxNotReadyError if this sandbox has not been started.',
   },
   {
-    name: 'derive',
+    name: 'clone',
     type: '(options?) => RailwaySandbox',
     description:
-      'Construct an unstarted sibling sandbox that inherits credentials and defaults. Accepts optional id, sandboxId, env, idleTimeoutMinutes, and checkpointName overrides. The derived sandbox uses options.checkpointName when set, otherwise it inherits the template checkpointName.',
+      'Construct an unstarted sibling sandbox that inherits credentials and defaults. Accepts optional id, sandboxId, env, idleTimeoutMinutes, and checkpointName overrides. The cloned sandbox uses options.checkpointName when set, otherwise it inherits the template checkpointName.',
   },
 ]}
 />

@@ -182,6 +182,7 @@ const processorPhaseSchema = z.enum([
   'processOutputStream',
   'processOutputResult',
   'processOutputStep',
+  'processToolResult',
 ]);
 
 /**

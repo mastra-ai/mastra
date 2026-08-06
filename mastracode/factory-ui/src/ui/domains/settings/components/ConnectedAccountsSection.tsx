@@ -9,17 +9,13 @@ import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 
-/** The env the server needs before any Slack route exists. */
-const SLACK_ENV_VARS = [
-  'SLACK_APP_SIGNING_SECRET',
-  'SLACK_APP_BOT_TOKEN',
-  'SLACK_APP_CLIENT_ID',
-  'SLACK_APP_CLIENT_SECRET',
-];
-
 /**
- * Shown when the server mounts no channel routes at all. Names the env rather
- * than offering a Connect button that would 404.
+ * Shown when Slack isn't available on this server, instead of a Connect button
+ * that would 404. Deliberately says nothing about how to enable it: naming the
+ * env vars would be a half-truth, since they only turn Slack on in deployments
+ * whose entry actually registers `SlackIntegration`, and the server can't see
+ * whether this one does. Link a setup guide here once factory Slack docs exist
+ * — the published channels page documents the raw adapter, not this.
  */
 export function SlackNotConfigured() {
   return (
@@ -36,12 +32,13 @@ export function SlackNotConfigured() {
                 Not configured
               </Txt>
             </span>
-            <Txt as="span" variant="ui-xs" className="text-icon3 max-w-80 pl-3">
-              Missing required environment variables: {SLACK_ENV_VARS.join(', ')}
-            </Txt>
           </span>
         }
-      />
+      >
+        <Txt as="span" variant="ui-sm" className="text-icon3 text-right">
+          Slack is not set up for this factory.
+        </Txt>
+      </SettingsRow>
     </SettingsCard>
   );
 }
@@ -70,7 +67,9 @@ export function ConnectedAccountsSection() {
     );
   }
 
-  if (accountsQuery.data?.unavailable) return <SlackNotConfigured />;
+  if (accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable) {
+    return <SlackNotConfigured />;
+  }
 
   const slackLabel = (
     <span className="flex items-center gap-3">
