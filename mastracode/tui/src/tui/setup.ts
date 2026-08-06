@@ -14,7 +14,7 @@ import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
 import { SimpleProgressComponent } from './components/simple-progress.js';
 import { TaskProgressComponent } from './components/task-progress.js';
-import { showError, showInfo } from './display.js';
+import { notifyForInputRequest, showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
@@ -573,6 +573,10 @@ export function setupKeyHandlers(
 export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
   const listener: AgentControllerEventListener = event => {
+    // Notify at receipt, before queueing: a pending prompt blocks the serial
+    // queue until answered, which would starve any notification queued behind
+    // it — exactly when the user has walked away and needs the ping.
+    notifyForInputRequest(state, event);
     eventQueue = eventQueue.then(async () => {
       try {
         await handleEvent(event);

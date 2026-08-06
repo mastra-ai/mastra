@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { ensureFactorySourceSession, hydrateFactorySession, resolveFactoryDefaultModelId } from './factory-session.js';
+import {
+  ensureFactorySourceSession,
+  hydrateFactorySession,
+  resolveFactoryDefaultModelId,
+  resolveFactoryProjectForSession,
+  resolveFactorySourceRepository,
+} from './factory-session.js';
 
-type StarterSession = Parameters<typeof hydrateFactorySession>[0];
+type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
 async function seedLinkedRepository(options?: { pinnedBranch?: string }) {
   const seeded = await createFactoryStorageForTests();
@@ -46,7 +52,7 @@ function createSessionDouble() {
     state: { set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
   };
-  return { session: session as unknown as StarterSession, double: session, calls };
+  return { session: session as unknown as FactorySessionHandle, double: session, calls };
 }
 
 describe('ensureFactorySourceSession', () => {
@@ -227,5 +233,114 @@ describe('resolveFactoryDefaultModelId', () => {
     await expect(resolveFactoryDefaultModelId(undefined, 'project-1')).resolves.toBeUndefined();
     await expect(resolveFactoryDefaultModelId(seeded.projects, undefined)).resolves.toBeUndefined();
     await expect(resolveFactoryDefaultModelId(seeded.projects, 'missing-project')).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Repo resolution encodes real policy — which connection counts, which
+ * repository, and what the base branch is. It backs both the autonomous
+ * entry points and the Slack wiring, so it is tested directly against seeded
+ * storage rather than through either caller.
+ */
+describe('resolveFactorySourceRepository', () => {
+  it('resolves the repository linked to the owner-owned connection, defaulting the base branch to the repo default', async () => {
+    const { sourceControl, project, projectRepository } = await seedLinkedRepository();
+
+    const result = await resolveFactorySourceRepository({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+    });
+
+    expect(result).toEqual({
+      found: true,
+      projectRepositoryId: projectRepository.id,
+      baseBranch: 'main',
+      connectedByUserId: 'user-1',
+    });
+  });
+
+  it('prefers the branch pinned on the project repository over the repository default', async () => {
+    const { sourceControl, project } = await seedLinkedRepository({ pinnedBranch: 'develop' });
+
+    const result = await resolveFactorySourceRepository({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+    });
+
+    expect(result).toMatchObject({ found: true, baseBranch: 'develop' });
+  });
+
+  // A project can carry connections for several integrations; only the one
+  // belonging to this owner can back a session.
+  it('ignores connections belonging to other integrations', async () => {
+    const { seeded, project } = await seedLinkedRepository();
+
+    const result = await resolveFactorySourceRepository({
+      sourceControl: seeded.sourceControl.forIntegration('linear'),
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+    });
+
+    expect(result).toEqual({ found: false, reason: 'connection' });
+  });
+
+  it('reports a missing repository apart from a missing connection', async () => {
+    const { seeded, sourceControl, project } = await seedLinkedRepository();
+    const bareProject = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'No repos' },
+    });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: bareProject.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+
+    await expect(
+      resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: bareProject.id }),
+    ).resolves.toEqual({ found: false, reason: 'repository' });
+    // The seeded project still resolves, so the miss is about this project.
+    await expect(
+      resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
+    ).resolves.toMatchObject({ found: true });
+  });
+});
+
+/**
+ * A repo-backed channel thread is keyed by its Factory session id, and that id
+ * is the only handle a session-start hook receives. This is the walk back to
+ * the project whose configuration the session should adopt.
+ */
+describe('resolveFactoryProjectForSession', () => {
+  it('walks a session id back to its project, org, and owner', async () => {
+    const { sourceControl, project, repository } = await seedLinkedRepository();
+    const created = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      repositorySlug: repository.slug,
+      branch: 'slack/1700-42',
+    });
+
+    await expect(resolveFactoryProjectForSession({ sourceControl, sessionId: created.sessionId })).resolves.toEqual({
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+    });
+  });
+
+  it('resolves nothing for a session id that does not exist', async () => {
+    const { sourceControl } = await seedLinkedRepository();
+
+    await expect(resolveFactoryProjectForSession({ sourceControl, sessionId: 'not-a-session' })).resolves.toBeNull();
   });
 });
