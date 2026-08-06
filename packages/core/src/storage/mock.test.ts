@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { MessageList } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
@@ -378,7 +377,7 @@ describe('InMemoryStore - listMessagesById', () => {
     messageCounter += 1;
 
     const defaults = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       role: 'user' as const,
       resourceId,
       createdAt: new Date(Date.now() + messageCounter * 1000),

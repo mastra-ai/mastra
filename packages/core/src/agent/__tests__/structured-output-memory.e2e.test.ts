@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -22,8 +21,8 @@ const profileSchema = z.object({
 
 describe('Structured output memory inheritance (e2e)', { timeout: 180_000 }, () => {
   it('uses prior thread memory when structured output runs on a separate model after multiple turns', async () => {
-    const threadId = randomUUID();
-    const resourceId = `structured-output-memory-e2e-${randomUUID()}`;
+    const threadId = crypto.randomUUID();
+    const resourceId = `structured-output-memory-e2e-${crypto.randomUUID()}`;
     const memory = new MockMemory();
 
     await memory.createThread({ threadId, resourceId });

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
@@ -545,7 +544,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       it(`should order tool calls/results and response text properly`, async () => {
-        const threadId = randomUUID();
+        const threadId = crypto.randomUUID();
         const resourceId = 'ordering';
 
         const mockMemory = new MockMemory();

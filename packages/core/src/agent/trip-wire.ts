@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ObservabilityContext } from '../observability';
@@ -104,7 +103,7 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
       returnScorerData: options.returnScorerData,
       requestContext: options.requestContext,
     },
-    messageId: randomUUID(),
+    messageId: crypto.randomUUID(),
   });
 
   return modelOutput;

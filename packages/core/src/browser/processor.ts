@@ -19,7 +19,6 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
@@ -27,7 +26,7 @@ import type {
   ProcessInputResult,
 } from '../processors/index';
 
-const BROWSER_PROCESS_ID = randomUUID();
+const BROWSER_PROCESS_ID = crypto.randomUUID();
 
 /**
  * Browser context stored in RequestContext.

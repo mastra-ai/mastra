@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { getErrorFromUnknown } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
@@ -229,7 +227,7 @@ export class AgentThreadStreamRuntime {
   }
 
   #getSourceId(): string {
-    this.#id ??= randomUUID();
+    this.#id ??= crypto.randomUUID();
     return this.#id;
   }
 
@@ -420,7 +418,7 @@ export class AgentThreadStreamRuntime {
   #nextStreamIdentity(state: AgentThreadRuntimeState, runId: string) {
     const streamSeq = (state.streamSeqByRunId.get(runId) ?? 0) + 1;
     state.streamSeqByRunId.set(runId, streamSeq);
-    return { streamId: randomUUID(), streamSeq };
+    return { streamId: crypto.randomUUID(), streamSeq };
   }
 
   #markRunSuspending(
@@ -1100,7 +1098,7 @@ export class AgentThreadStreamRuntime {
       // old owner already lost the lease (e.g. a pubsub blip let the TTL lapse
       // and another process took over), forward the signal to the new winner
       // instead of starting a competing run here.
-      const nextRunId = randomUUID();
+      const nextRunId = crypto.randomUUID();
       state.activeThreadRunIds.set(key, nextRunId);
       state.threadKeysByRunId.set(nextRunId, key);
       const owns = await this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, previousRun.runId);
@@ -1256,7 +1254,7 @@ export class AgentThreadStreamRuntime {
   ): { accepted: true; runId: string } {
     const state = this.#getState(pubsub);
     const key = this.#threadKey(target.resourceId, target.threadId);
-    const runId = target.runId ?? randomUUID();
+    const runId = target.runId ?? crypto.randomUUID();
     const pending: PendingContinuation<OUTPUT> = {
       agent,
       messages,
@@ -1884,7 +1882,7 @@ export class AgentThreadStreamRuntime {
       id: this.#generateSignalMessageId(agent, { resourceId, threadId }),
       acceptedAt,
     });
-    const queuedRunId = randomUUID();
+    const queuedRunId = crypto.randomUUID();
     const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
 
     if (activeRecord) {
@@ -2130,7 +2128,11 @@ export class AgentThreadStreamRuntime {
       }
     }
 
-    runId = randomUUID();
+    if (!resourceId || !threadId) {
+      throw new Error('No active agent run found for signal target');
+    }
+
+    runId = crypto.randomUUID();
     key ??= this.#threadKey(resourceId, threadId);
     if (idleBehavior === 'persist') {
       // Transient signals are never written to storage, so an idle `persist` behavior drops

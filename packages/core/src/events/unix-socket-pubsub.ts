@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdir, open, stat, unlink } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
@@ -194,7 +193,7 @@ export class UnixSocketPubSub extends PubSub {
     if (options?.localOnly) {
       const localEvent: Event = {
         ...event,
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         createdAt: new Date(),
         deliveryAttempt: 1,
       };
@@ -615,7 +614,7 @@ export class UnixSocketPubSub extends PubSub {
   ) {
     const brokerEvent: Event = {
       ...event,
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       createdAt: new Date(),
       deliveryAttempt: 1,
     };
