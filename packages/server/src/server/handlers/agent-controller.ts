@@ -381,10 +381,8 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
  * `"error": {}` and clients could only render a generic "Error". Flatten the
  * Error into a plain object so the actual failure reaches the client.
  *
- * `display_state_changed` events carry Maps (activeTools, pendingSuspensions,
- * activeSubagents, …) that JSON-serialize to `{}`, so wire clients received
- * empty objects where the TUI sees live tool state. Convert them to plain
- * records keyed the same way.
+ * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
+ * records so wire clients get the tool state the in-process TUI sees.
  */
 function toWireEvent(event: unknown): unknown {
   if (typeof event !== 'object' || event === null) return event;

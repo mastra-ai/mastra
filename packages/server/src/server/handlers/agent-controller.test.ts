@@ -450,8 +450,6 @@ describe('agent-controller routes', () => {
       await reader.cancel();
 
       expect(received).toBeDefined();
-      // Map fields JSON-serialize to `{}`; the wire event must carry plain
-      // objects so clients actually receive the tracked tool state.
       const wire = JSON.parse(JSON.stringify(received));
       expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
     });

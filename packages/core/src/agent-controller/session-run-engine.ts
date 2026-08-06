@@ -308,10 +308,8 @@ export class SessionRunEngine {
   }
 
   /**
-   * Fold a tool outcome (`tool-result` or `tool-error` chunk) into the current
-   * message's invocation part and notify subscribers. Shared so an errored tool
-   * reaches a terminal part state too — leaving it at `call` kept clients
-   * spinning on a tool that already failed.
+   * Fold a `tool-result`/`tool-error` chunk into the invocation part and
+   * notify — an errored tool must reach a terminal state or clients spin forever.
    */
   private applyToolOutcome(
     state: StreamState,
