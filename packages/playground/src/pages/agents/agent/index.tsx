@@ -73,6 +73,9 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   }, [isSettingsView, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
+  const suggestedPrompts = Array.isArray(agent?.metadata?.suggestedPrompts)
+    ? agent.metadata.suggestedPrompts.filter(prompt => typeof prompt === 'string').slice(0, 3)
+    : [];
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
@@ -166,6 +169,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                               refreshThreadList={handleRefreshThreadList}
                               modelList={agent?.modelList}
                               messageId={messageId}
+                              suggestedPrompts={suggestedPrompts}
                               isNewThread={isNewThread}
                               runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
                             />
