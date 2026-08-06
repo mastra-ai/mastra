@@ -148,9 +148,8 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
   ) {
     return `factory/pr-${pullRequestNumber}`;
   }
-  const linearIdentifier = metadata.identifier ?? metadata.linearIssueIdentifier;
-  if (item.externalSource?.integrationId === 'linear' && typeof linearIdentifier === 'string') {
-    return `factory/linear-${linearIdentifier.toLowerCase()}`;
+  if (item.externalSource?.integrationId === 'linear' && typeof metadata.identifier === 'string') {
+    return `factory/linear-${metadata.identifier.toLowerCase()}`;
   }
   throw new Error('Factory skill invocation requires a supported issue or pull request identifier.');
 }
