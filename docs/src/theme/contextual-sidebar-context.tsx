@@ -25,13 +25,28 @@ type ContextualSidebarContextValue = Readonly<{
 
 const ContextualSidebarContext = createContext<ContextualSidebarContextValue | undefined>(undefined)
 const ContextualSidebarPaneContext = createContext(false)
+const ContextualSidebarEnabledContext = createContext(true)
 
 export function ContextualSidebarPaneProvider({ children }: { children: ReactNode }): ReactNode {
   return <ContextualSidebarPaneContext.Provider value>{children}</ContextualSidebarPaneContext.Provider>
 }
 
+export function ContextualSidebarEnabledProvider({
+  children,
+  enabled,
+}: {
+  children: ReactNode
+  enabled: boolean
+}): ReactNode {
+  return <ContextualSidebarEnabledContext.Provider value={enabled}>{children}</ContextualSidebarEnabledContext.Provider>
+}
+
 export function useIsContextualSidebarPane(): boolean {
   return useContext(ContextualSidebarPaneContext)
+}
+
+export function useIsContextualSidebarEnabled(): boolean {
+  return useContext(ContextualSidebarEnabledContext)
 }
 
 export function ContextualSidebarProvider({ children }: { children: ReactNode }): ReactNode {

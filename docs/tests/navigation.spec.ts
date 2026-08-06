@@ -230,6 +230,15 @@ async function expectContextualCategoryRootLink(rootPane: Locator) {
   return agentsLink
 }
 
+async function expectStandardMobileCategory(rootPane: Locator) {
+  const agentsLink = rootPane.getByRole('link', { name: 'Agents', exact: true })
+  const agentsItem = agentsLink.locator('xpath=ancestor::li[1]')
+  expect(await agentsLink.getAttribute('href')).toBeTruthy()
+  await expect(agentsLink).toHaveClass(/menu__link--sublist/)
+  await expect(agentsItem.locator(':scope > div > button.menu__caret')).toHaveCount(1)
+  return { agentsItem, agentsLink }
+}
+
 async function openMobileSidebar(page: Page) {
   const hamburger = page.getByRole('button', { name: 'Toggle navigation bar' })
   await hamburger.click()
@@ -252,7 +261,7 @@ test.describe('Contextual sidebar', () => {
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
     const backButton = contextualPane.getByRole('button', { name: 'Back to global sidebar' })
-    await expect(backButton).toHaveText(/←\s*Agents/)
+    await expect(backButton).toHaveText('Agents')
     await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
 
     const topLevelLinks = contextualTopLevelLinks(contextualPane)
@@ -368,48 +377,7 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(childPage, 'contextual')).toBeVisible()
   })
 
-  test('mobile and tablet: modified click leaves the drawer and root pane unchanged', async ({
-    page,
-    context,
-    isMobile,
-  }) => {
-    test.skip(!isMobile, 'Mobile sidebar only renders on mobile and tablet')
-
-    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
-    await openMobileSidebar(page)
-    const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
-    const overviewHref = await agentsLink.getAttribute('href')
-    expect(overviewHref).toBeTruthy()
-    const newPagePromise = context.waitForEvent('page')
-    await agentsLink.click({ button: 'middle' })
-    const newPage = await newPagePromise
-    await newPage.waitForLoadState('domcontentloaded')
-
-    await expect(page).toHaveURL('/docs')
-    await expect(page.locator('.navbar-sidebar')).toBeVisible()
-    const unchangedRootPane = visibleSidebarPane(page, 'root')
-    await expect(unchangedRootPane).toBeVisible()
-    await expectContextualCategoryRootLink(unchangedRootPane)
-    await expect(newPage).toHaveURL(overviewHref!)
-    await openMobileSidebar(newPage)
-    const directContextualPane = visibleSidebarPane(newPage, 'contextual')
-    await expect(directContextualPane).toBeVisible()
-
-    const { link: childLink, href: childHref } = await firstContextualChild(directContextualPane)
-    const childPagePromise = context.waitForEvent('page')
-    await childLink.click({ button: 'middle' })
-    const childPage = await childPagePromise
-    await childPage.waitForLoadState('domcontentloaded')
-
-    await expect(newPage).toHaveURL(overviewHref!)
-    await expect(newPage.locator('.navbar-sidebar')).toBeVisible()
-    await expect(visibleSidebarPane(newPage, 'contextual')).toBeVisible()
-    await expect(childPage).toHaveURL(childHref)
-    await openMobileSidebar(childPage)
-    await expect(visibleSidebarPane(childPage, 'contextual')).toBeVisible()
-  })
-
-  test('mobile and tablet: drawer closes on navigation and Back swaps panes without closing', async ({
+  test('mobile and tablet: contextual categories use standard expandable sidebar behavior', async ({
     page,
     isMobile,
   }) => {
@@ -418,7 +386,19 @@ test.describe('Contextual sidebar', () => {
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await openMobileSidebar(page)
-    const agentsLink = await expectContextualCategoryRootLink(visibleSidebarPane(page, 'root'))
+    const rootPane = visibleSidebarPane(page, 'root')
+    const { agentsItem, agentsLink } = await expectStandardMobileCategory(rootPane)
+    await expect(visibleSidebarPane(page, 'contextual')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Back to global sidebar' })).toHaveCount(0)
+    await expect(agentsItem).toHaveClass(/menu__list-item--collapsed/)
+
+    await agentsItem.locator(':scope > div > button.menu__caret').click()
+    await expect(agentsItem).not.toHaveClass(/menu__list-item--collapsed/)
+    const childLinks = agentsItem.locator(':scope > ul.menu__list a.menu__link[href]')
+    expect(await childLinks.count()).toBeGreaterThan(0)
+    const childHref = await childLinks.first().getAttribute('href')
+    expect(childHref).toBeTruthy()
+
     const overviewHref = await agentsLink.getAttribute('href')
     expect(overviewHref).toBeTruthy()
     await agentsLink.click()
@@ -426,34 +406,53 @@ test.describe('Contextual sidebar', () => {
     await expect(page.locator('.navbar-sidebar')).not.toBeVisible()
 
     await openMobileSidebar(page)
-    const contextualPane = visibleSidebarPane(page, 'contextual')
-    await expect(contextualPane.getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
-    const { link: childLink, href: childHref } = await firstContextualChild(contextualPane)
-    await childLink.click()
-    await expect(page).toHaveURL(childHref)
+    const activeRootPane = visibleSidebarPane(page, 'root')
+    const activeCategory = await expectStandardMobileCategory(activeRootPane)
+    await expect(activeCategory.agentsItem).not.toHaveClass(/menu__list-item--collapsed/)
+    await expect(visibleSidebarPane(page, 'contextual')).toHaveCount(0)
+    await activeCategory.agentsItem.locator(`a.menu__link[href="${childHref}"]`).click()
+    await expect(page).toHaveURL(childHref!)
     await expect(page.locator('.navbar-sidebar')).not.toBeVisible()
 
-    await openMobileSidebar(page)
-    const urlBeforeBack = page.url()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
-    const rootPane = visibleSidebarPane(page, 'root')
-    await expect(rootPane).toBeVisible()
-    await expect(page.locator('.navbar-sidebar')).toBeVisible()
-    await expect(page).toHaveURL(urlBeforeBack)
-    await expect(rootPane).toBeFocused()
-    await expectContextualCategoryRootLink(rootPane)
-
-    await page.goto(childHref, { waitUntil: 'domcontentloaded' })
     await page.reload()
     await openMobileSidebar(page)
-    const directChildPane = visibleSidebarPane(page, 'contextual')
-    await expect(directChildPane).toBeVisible()
-    await expect(directChildPane.locator(`a.menu__link[href="${childHref}"]`)).toHaveAttribute('aria-current', 'page')
+    const directRootPane = visibleSidebarPane(page, 'root')
+    await expectStandardMobileCategory(directRootPane)
+    await expect(directRootPane.locator(`a.menu__link[href="${childHref}"]`)).toHaveAttribute('aria-current', 'page')
+    await expect(visibleSidebarPane(page, 'contextual')).toHaveCount(0)
 
-    expect(getErrors(), 'JS errors during mobile contextual sidebar navigation').toEqual([])
+    expect(getErrors(), 'JS errors during mobile sidebar navigation').toEqual([])
+  })
+
+  test('mobile and tablet: modified clicks keep the standard sidebar in both tabs', async ({
+    page,
+    context,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, 'Mobile sidebar only renders on mobile and tablet')
+
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await openMobileSidebar(page)
+    const rootPane = visibleSidebarPane(page, 'root')
+    const { agentsLink } = await expectStandardMobileCategory(rootPane)
+    const overviewHref = await agentsLink.getAttribute('href')
+    expect(overviewHref).toBeTruthy()
+
+    const newPagePromise = context.waitForEvent('page')
+    await agentsLink.click({ button: 'middle' })
+    const newPage = await newPagePromise
+    await newPage.waitForLoadState('domcontentloaded')
+
+    await expect(page).toHaveURL('/docs')
+    await expect(page.locator('.navbar-sidebar')).toBeVisible()
+    await expectStandardMobileCategory(visibleSidebarPane(page, 'root'))
+    await expect(visibleSidebarPane(page, 'contextual')).toHaveCount(0)
+
+    await expect(newPage).toHaveURL(overviewHref!)
+    await openMobileSidebar(newPage)
+    await expectStandardMobileCategory(visibleSidebarPane(newPage, 'root'))
+    await expect(visibleSidebarPane(newPage, 'contextual')).toHaveCount(0)
+    await expect(newPage.getByRole('button', { name: 'Back to global sidebar' })).toHaveCount(0)
   })
 })
 

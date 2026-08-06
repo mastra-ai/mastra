@@ -17,7 +17,11 @@ import SidebarBadge from '@site/src/components/SidebarBadge'
 
 import type { PropSidebarItemCategory, PropSidebarItemLink } from '@docusaurus/plugin-content-docs'
 import { isPlainPrimaryClick } from '../../contextual-sidebar'
-import { useContextualSidebar, useIsContextualSidebarPane } from '../../contextual-sidebar-context'
+import {
+  useContextualSidebar,
+  useIsContextualSidebarEnabled,
+  useIsContextualSidebarPane,
+} from '../../contextual-sidebar-context'
 import styles from './styles.module.css'
 import { getBadgeType } from '../utils'
 
@@ -140,7 +144,10 @@ function DocSidebarItemCategoryCollapsible({
   ...props
 }: Props): ReactNode {
   const { items, label, collapsible, className, href } = item
-  const isContextualSidebarCategory = Boolean(href && item.customProps?.contextualSidebar === true)
+  const isContextualSidebarEnabled = useIsContextualSidebarEnabled()
+  const isContextualSidebarCategory = Boolean(
+    isContextualSidebarEnabled && href && item.customProps?.contextualSidebar === true,
+  )
   const isContextualSidebarPane = useIsContextualSidebarPane()
   const { enterSidebar } = useContextualSidebar()
   // Get tags from customProps in sidebar config
