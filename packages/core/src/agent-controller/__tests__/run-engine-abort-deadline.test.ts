@@ -129,6 +129,97 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(session.stream.isOpen()).toBe(false);
   });
 
+  it('Given an aborted subscribed run that finishes within the grace period, Then the stale deadline does not kill a follow-up run', async () => {
+    vi.useFakeTimers();
+    const { engine, events, session } = createHarness();
+
+    const queue: StreamChunk[] = [];
+    let notify: (() => void) | undefined;
+    const push = (value: StreamChunk) => {
+      queue.push(value);
+      notify?.();
+      notify = undefined;
+    };
+    const subscription = {
+      stream: (async function* () {
+        while (true) {
+          while (queue.length > 0) yield queue.shift()!;
+          await new Promise<void>(resolve => {
+            notify = resolve;
+          });
+        }
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    void engine.processSubscribedThreadStream(subscription);
+
+    push(chunk({ type: 'text-start', payload: { id: 't1' } }));
+    push(chunk({ type: 'text-delta', payload: { id: 't1', text: 'first run' } }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    session.abortRun();
+    await vi.advanceTimersByTimeAsync(1_000);
+    push(chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+
+    push(chunk({ type: 'text-start', payload: { id: 't2' } }));
+    push(chunk({ type: 'text-delta', payload: { id: 't2', text: 'follow-up' } }));
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(session.run.isRunning()).toBe(true);
+    expect(session.stream.isOpen()).toBe(true);
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(2);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
+  });
+
+  it('Given an abort of a later run on the same subscription, When that run hangs, Then the re-armed deadline still bails it', async () => {
+    vi.useFakeTimers();
+    const { engine, events, session } = createHarness();
+
+    const queue: StreamChunk[] = [];
+    let notify: (() => void) | undefined;
+    const push = (value: StreamChunk) => {
+      queue.push(value);
+      notify?.();
+      notify = undefined;
+    };
+    const subscription = {
+      stream: (async function* () {
+        while (true) {
+          while (queue.length > 0) yield queue.shift()!;
+          await new Promise<void>(resolve => {
+            notify = resolve;
+          });
+        }
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    const processed = engine.processSubscribedThreadStream(subscription);
+
+    push(chunk({ type: 'text-start', payload: { id: 't1' } }));
+    push(chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'complete' });
+
+    push(chunk({ type: 'text-start', payload: { id: 't2' } }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    session.abortRun();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await processed;
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(session.run.isRunning()).toBe(false);
+    expect(session.stream.isOpen()).toBe(false);
+  });
+
   it('Given a stream that reacts to the abort signal in time, Then the deadline never fires', async () => {
     const { engine, events, session } = createHarness();
     const abortController = session.run.ensureAbortController();

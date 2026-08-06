@@ -185,27 +185,33 @@ const ABORT_STREAM_GRACE_MS = 5_000;
 const abortBailed = Symbol('abort-bailed');
 
 /**
- * Resolves `graceMs` after an abort is requested for the session's run. Raced
- * against the chunk-consuming loop: a hung upstream await (e.g. a model call
- * that never settles) ignores the abort signal and would otherwise leave the
- * loop suspended forever with the session stuck in `running` — the only
- * recovery being a server restart. `guard` cancels the deadline once the loop
- * settles on its own (the value still resolves, but the race is already won).
+ * Resolves `graceMs` after an abort is requested for the session's run, but
+ * only while that abort is still pending. Raced against the chunk-consuming
+ * loop: a hung upstream await (e.g. a model call that never settles) ignores
+ * the abort signal and would otherwise leave the loop suspended forever with
+ * the session stuck in `running` — the only recovery being a server restart.
+ *
+ * The deadline is scoped to the abort request that armed it: if the aborted
+ * run settles on its own during the grace (terminal chunk → `run.reset()`,
+ * observed via teardown), the deadline re-arms for the next abort instead of
+ * firing. A persistent consumer (subscribed thread stream) outlives many runs,
+ * and a stale deadline must never bail a follow-up run. `guard` cancels the
+ * deadline once the consuming loop settles (the value still resolves, but the
+ * race is already won).
  */
 async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: number): Promise<typeof abortBailed> {
-  await run.waitForAbortRequest(guard);
-  if (!guard.aborted) {
-    await new Promise<void>(resolve => {
-      const timer = setTimeout(resolve, graceMs);
-      guard.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+  while (!guard.aborted) {
+    await run.waitForAbortRequest(guard);
+    if (guard.aborted) break;
+    if (!run.isAbortRequested()) continue;
+    const graceExpired = await new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => resolve(true), graceMs);
+      void run.waitForTeardown(guard).then(() => {
+        clearTimeout(timer);
+        resolve(false);
+      });
     });
+    if (graceExpired && run.isAbortRequested()) break;
   }
   return abortBailed;
 }
