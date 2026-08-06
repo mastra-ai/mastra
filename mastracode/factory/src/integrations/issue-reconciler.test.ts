@@ -86,7 +86,7 @@ function context(workItem: WorkItemRow, intake: Intake) {
 }
 
 describe('issue reconcilers', () => {
-  it('reconciles GitHub issue author, state, and all assignees', async () => {
+  it('reconciles GitHub issue author, state, assignees, and labels', async () => {
     const workItem = item('github', { githubRepositoryId: 101, githubIssueNumber: 42, assignees: ['old'] });
     const intake = {
       resolveIntakeDispatch: vi.fn(async () => ({
@@ -94,7 +94,7 @@ describe('issue reconcilers', () => {
         sourceId: 'acme/app',
         issueId: 'github-issue:42',
       })),
-      getIssue: vi.fn(async () => issue()),
+      getIssue: vi.fn(async () => issue({ labels: ['bug', 'p1'] })),
     } as unknown as Intake;
     const test = context(workItem, intake);
     const reconcile = attachGithubIssueReconciler({ intake } as Pick<GithubIntegration, 'intake'>, test.context);
@@ -114,6 +114,7 @@ describe('issue reconcilers', () => {
             state: 'open',
             author: 'octocat',
             assignees: ['hubot', 'monalisa'],
+            labels: ['bug', 'p1'],
           }),
         },
       }),
@@ -138,6 +139,7 @@ describe('issue reconcilers', () => {
           assignee: 'Linear Grace',
           assignees: undefined,
           source: 'ENG',
+          labels: ['triage', 'ux'],
         }),
       ),
     } as unknown as Intake;
@@ -161,6 +163,7 @@ describe('issue reconcilers', () => {
             assignee: 'Linear Grace',
             creator: 'Linear Ada',
             author: 'Linear Ada',
+            labels: ['triage', 'ux'],
           }),
         },
       }),

@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { issueCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
 import {
+  boardLabels,
+  boardLabelsFromQuery,
+  boardLabelsQueryValue,
   boardParticipants,
   boardRelevanceFromQuery,
   boardRelevanceOptions,
   boardRelevanceQueryValue,
+  candidateMatchesLabels,
   candidateMatchesRelevance,
+  workItemMatchesLabels,
   workItemMatchesRelevance,
   workItemRelevance,
 } from './boardRelevance';
@@ -158,6 +163,32 @@ describe('board relevance', () => {
     expect(boardRelevanceQueryValue(new Set(['worked', 'assigned']), 'work')).toBe('worked,assigned');
     expect(boardRelevanceQueryValue(new Set(), 'review')).toBe('none');
     expect(boardRelevanceQueryValue(new Set(['worked', 'authored', 'assigned']), 'work')).toBeUndefined();
+  });
+
+  it('collects and matches labels across items and candidates and serializes the label query', () => {
+    const labelled: WorkItem = { ...item, metadata: { ...item.metadata, labels: ['bug', 'p1'] } };
+    const candidate = issueCandidate({
+      number: 8,
+      title: 'Fix cache',
+      url: 'https://github.com/acme/app/issues/8',
+      author: 'hubot',
+      assignee: null,
+      labels: ['ux', 'p1'],
+      comments: 0,
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
+
+    expect(boardLabels({ items: [labelled], candidates: [candidate] })).toEqual(['bug', 'p1', 'ux']);
+    expect(workItemMatchesLabels(labelled, new Set())).toBe(true);
+    expect(workItemMatchesLabels(labelled, new Set(['bug', 'p1']))).toBe(true);
+    expect(workItemMatchesLabels(labelled, new Set(['bug', 'missing']))).toBe(false);
+    expect(candidateMatchesLabels(candidate, new Set(['p1']))).toBe(true);
+    expect(candidateMatchesLabels(candidate, new Set(['bug']))).toBe(false);
+    expect(boardLabelsFromQuery(null)).toEqual(new Set());
+    expect([...boardLabelsFromQuery('bug,p1')]).toEqual(['bug', 'p1']);
+    expect(boardLabelsQueryValue(new Set())).toBeUndefined();
+    expect(boardLabelsQueryValue(new Set(['p1', 'bug']))).toBe('bug,p1');
   });
 
   it('offers review-requested only on review boards', () => {

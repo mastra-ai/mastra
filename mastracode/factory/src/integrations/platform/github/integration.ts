@@ -121,6 +121,7 @@ type GithubPullRequest = {
   user: GithubActor;
   assignees?: string[];
   requestedReviewers?: string[];
+  labels?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -753,6 +754,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         user?: { login?: string } | null;
         assignees?: Array<{ login?: string }> | null;
         requested_reviewers?: Array<{ login?: string }> | null;
+        labels?: Array<{ name?: string } | string> | null;
         merged_by?: { login?: string } | null;
         head?: { ref?: string };
         base?: { ref?: string };
@@ -769,6 +771,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
         requestedReviewers: (result.requested_reviewers ?? []).flatMap(reviewer =>
           reviewer.login ? [reviewer.login] : [],
+        ),
+        labels: (result.labels ?? []).flatMap(label =>
+          typeof label === 'string' ? [label] : label.name ? [label.name] : [],
         ),
         headBranch: result.head?.ref ?? '',
         baseBranch: result.base?.ref ?? '',
@@ -1317,6 +1322,7 @@ function parsePullRequest(pullRequest: GithubPullRequest): PullRequest {
     author: pullRequest.user?.login ?? null,
     assignees: pullRequest.assignees ?? [],
     requestedReviewers: pullRequest.requestedReviewers ?? [],
+    labels: pullRequest.labels ?? [],
     body: pullRequest.body?.trim() ? pullRequest.body : null,
     state: pullRequest.state,
     draft: pullRequest.draft,

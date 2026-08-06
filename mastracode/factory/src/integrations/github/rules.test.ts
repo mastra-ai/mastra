@@ -200,7 +200,9 @@ describe('GithubRules', () => {
 
     await expect(
       service.ingest(
-        issueComment('created', 'delivery-human-marker', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+        issueComment('created', 'delivery-human-marker', {
+          body: '<!-- mastra-factory-triage -->\nNew investigation lead',
+        }),
       ),
     ).resolves.toEqual({ status: 'committed' });
 
@@ -967,6 +969,7 @@ describe('createGithubPullRequestReconciler', () => {
       merged: true,
       assignees: ['assignee'],
       requestedReviewers: ['reviewer'],
+      labels: ['bug'],
       headBranch: 'feature',
       baseBranch: 'main',
       author: 'pr-author',
@@ -1060,6 +1063,7 @@ describe('createGithubPullRequestReconciler', () => {
         merged: true,
         assignees: [],
         requestedReviewers: [],
+        labels: [],
       },
     });
     await createCard(context, { number: 18 });
@@ -1101,6 +1105,7 @@ describe('createGithubPullRequestReconciler', () => {
         merged: false,
         assignees: ['assignee'],
         requestedReviewers: ['reviewer'],
+        labels: ['bug'],
       },
     });
   });
@@ -1110,7 +1115,7 @@ describe('createGithubPullRequestReconciler', () => {
     const card = await createCard(context, {
       number: 17,
       stages: ['done'],
-      metadata: { state: 'closed', draft: false, merged: true, assignees: [], requestedReviewers: [] },
+      metadata: { state: 'closed', draft: false, merged: true, assignees: [], requestedReviewers: [], labels: [] },
     });
     const fetchPullRequest = vi.fn(async () => mergedState(17));
     const reconcile = createReconciler(context, fetchPullRequest);

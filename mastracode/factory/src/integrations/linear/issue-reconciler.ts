@@ -31,6 +31,7 @@ export function attachLinearIssueReconciler(
       assignee: issue.assignee,
       creator: issue.author,
       author: issue.author,
+      labels: issue.labels ?? [],
     }),
   });
 }

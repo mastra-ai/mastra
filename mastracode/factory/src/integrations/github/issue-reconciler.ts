@@ -32,6 +32,7 @@ export function attachGithubIssueReconciler(
       state: issue.state,
       author: issue.author,
       assignees: issue.assignees ?? (issue.assignee ? [issue.assignee] : []),
+      labels: issue.labels ?? [],
     }),
   });
 }
