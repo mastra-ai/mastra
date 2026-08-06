@@ -149,7 +149,7 @@ export async function gitInit({ cwd }: { cwd: string }) {
     [
       'commit',
       '-m',
-      '"Initial commit from Mastra"',
+      'Initial commit from Mastra',
       '--author="dane-ai-mastra[bot] <dane-ai-mastra[bot]@users.noreply.github.com>"',
     ],
     { cwd, stdio: 'ignore' },
