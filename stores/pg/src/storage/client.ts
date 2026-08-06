@@ -84,7 +84,11 @@ export interface TxClient {
   manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]>;
   many<T = any>(query: string, values?: QueryValues): Promise<T[]>;
   query(query: string, values?: QueryValues): Promise<QueryResult>;
-  /** Execute multiple promises in parallel */
+  /**
+   * Await multiple query promises. Prefer collecting results from
+   * TransactionClient methods (which serialize onto one PoolClient);
+   * do not start raw `client.query` calls concurrently.
+   */
   batch<T>(promises: Promise<T>[]): Promise<T[]>;
 }
 
@@ -181,62 +185,95 @@ export class PoolAdapter implements DbClient {
 
 /**
  * Transaction client that wraps a PoolClient for executing queries within a transaction.
+ *
+ * Query methods are serialized through a tail promise (same pattern as
+ * PinnedClientAdapter). Callers such as memory.updateMessages historically
+ * did `queries.push(t.none(...))` then `await t.batch(queries)` — each
+ * `t.none()` is async and starts `client.query` immediately, so by the time
+ * batch runs, N queries are already in flight on one PoolClient. pg@8 queues
+ * those internally and emits a DeprecationWarning; pg@9 will throw.
+ * (#20820)
  */
 class TransactionClient implements TxClient {
+  /**
+   * Serialization tail. Without this gate, concurrent t.none()/t.query()
+   * from Promise.all / batch land on the same PoolClient at once.
+   */
+  #tail: Promise<unknown> = Promise.resolve();
+
   constructor(private readonly client: PoolClient) {}
 
-  async none(query: string, values?: QueryValues): Promise<null> {
-    await this.client.query(query, values);
-    return null;
+  #enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.#tail.then(fn, fn);
+    this.#tail = next.catch(() => undefined);
+    return next;
   }
 
-  async one<T = any>(query: string, values?: QueryValues): Promise<T> {
-    const result = await this.client.query(query, values);
-    if (result.rows.length === 0) {
-      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
-    }
-    if (result.rows.length > 1) {
-      throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
-    }
-    return result.rows[0] as T;
-  }
-
-  async oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
-    const result = await this.client.query(query, values);
-    if (result.rows.length === 0) {
+  none(query: string, values?: QueryValues): Promise<null> {
+    return this.#enqueue(async () => {
+      await this.client.query(query, values);
       return null;
-    }
-    if (result.rows.length > 1) {
-      throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
-    }
-    return result.rows[0] as T;
+    });
   }
 
-  async any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
-    const result = await this.client.query(query, values);
-    return result.rows as T[];
+  one<T = any>(query: string, values?: QueryValues): Promise<T> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      if (result.rows.length === 0) {
+        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+      }
+      if (result.rows.length > 1) {
+        throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
+      }
+      return result.rows[0] as T;
+    });
   }
 
-  async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+  oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      if (result.rows.length === 0) {
+        return null;
+      }
+      if (result.rows.length > 1) {
+        throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
+      }
+      return result.rows[0] as T;
+    });
+  }
+
+  any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      return result.rows as T[];
+    });
+  }
+
+  manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     return this.any<T>(query, values);
   }
 
-  async many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
-    const result = await this.client.query(query, values);
-    if (result.rows.length === 0) {
-      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
-    }
-    return result.rows as T[];
+  many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      if (result.rows.length === 0) {
+        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+      }
+      return result.rows as T[];
+    });
   }
 
-  async query(query: string, values?: QueryValues): Promise<QueryResult> {
-    return this.client.query(query, values);
+  query(query: string, values?: QueryValues): Promise<QueryResult> {
+    return this.#enqueue(() => this.client.query(query, values));
   }
 
   async batch<T>(promises: Promise<T>[]): Promise<T[]> {
+    // Promises are already enqueued (and thus serialized) by the query
+    // methods above; awaiting them together is fine.
     return Promise.all(promises);
   }
 }
+
 
 /**
  * DbClient adapter that pins all queries to a single PoolClient.
