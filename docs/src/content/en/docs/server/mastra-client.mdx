@@ -64,7 +64,7 @@ The Mastra Client SDK exposes all resources served by the Mastra Server.
 
 Use `upsertStoredWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition, registers it with the running Mastra instance, and makes it available through the standard workflow execution API.
 
-The following example creates a mapping workflow, reads the stored definition, runs it, and then deletes it:
+The following example shows the full lifecycle of a mapping workflow, from creation and inspection through execution and deletion:
 
 ```typescript title="lib/stored-workflow.ts"
 import { MastraClient } from '@mastra/client-js'

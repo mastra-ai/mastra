@@ -41,6 +41,12 @@ export interface MastraCodeState {
    * project-scope instruction files are skipped entirely.
    */
   baseRef?: string;
+  /**
+   * Skip the home-directory instruction files (~/.claude/AGENTS.md and
+   * friends). Hosts running sessions for someone else set this so a run never
+   * inherits the machine owner's personal configuration.
+   */
+  skipGlobalInstructions?: boolean;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -112,6 +118,8 @@ export const stateSchema = z.object({
   untrustedCheckout: z.boolean().optional(),
   // Trusted ref to serve instruction files from on untrusted checkouts.
   baseRef: z.string().optional(),
+  // Skip the operator machine's home-directory instruction files.
+  skipGlobalInstructions: z.boolean().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),

@@ -26,7 +26,8 @@ describe('Agent Learning theme flow hooks', () => {
           expect(request.headers.get('X-Mastra-Project-Id')).toBeNull();
           expect(url.searchParams.get('entityType')).toBe('agent');
           expect(url.searchParams.get('signalNames')).toBe('goal,outcome');
-          expect(url.searchParams.get('limit')).toBe('50');
+          expect(url.searchParams.get('presentation')).toBe('landmarks');
+          expect(url.searchParams.get('limit')).toBe('24');
           return HttpResponse.json(themeSnapshotsResponse);
         }),
       );

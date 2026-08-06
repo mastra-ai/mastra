@@ -211,11 +211,18 @@ export function createDurableLLMMappingStep() {
                 modelOutput = normalizeModelOutput(modelOutput);
                 mappingSpan?.end({ output: modelOutput });
 
-                const existingMastra = (toolResult.providerMetadata as any)?.mastra;
-                providerMetadata = {
-                  ...toolResult.providerMetadata,
-                  mastra: { ...existingMastra, modelOutput },
-                };
+                // A nullish return means "no special mapping needed" — the raw result is
+                // already what the model should see (see read-file.ts / sandboxToModelOutput).
+                // Writing the key anyway would make the consumer in MessageList (which keys
+                // off presence) override the real result with `undefined`, producing a tool
+                // message with no `output`. Mirrors the non-durable llm-mapping-step.
+                if (modelOutput != null) {
+                  const existingMastra = (toolResult.providerMetadata as any)?.mastra;
+                  providerMetadata = {
+                    ...toolResult.providerMetadata,
+                    mastra: { ...existingMastra, modelOutput },
+                  };
+                }
               } catch (err) {
                 mappingSpan?.error({ error: err as Error, endSpan: true });
                 // toModelOutput errors are non-fatal — the tool result is still usable
@@ -229,11 +236,15 @@ export function createDurableLLMMappingStep() {
           const updated = messageList.updateToolInvocation({
             type: 'tool-invocation' as const,
             toolInvocation: {
-              state: 'result' as const,
+              // A tool error must be recorded as `output-error` with the message in
+              // `errorText` so the transcript/adapters read it as a failure rather than
+              // a normal result. Successful results keep `state: 'result'` + `result`.
+              ...(toolResult.error
+                ? { state: 'output-error' as const, errorText: toolResult.error.message }
+                : { state: 'result' as const, result }),
               toolCallId: toolResult.toolCallId,
               toolName: toolResult.toolName,
               args: toolResult.args,
-              result,
               // Preserve the approval decision for an approved approval-gated tool so it
               // round-trips on recall as `approval: { approved: true }`.
               ...(toolResult.approval ? { approval: toolResult.approval } : {}),

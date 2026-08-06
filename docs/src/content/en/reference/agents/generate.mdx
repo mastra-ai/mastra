@@ -223,7 +223,7 @@ const result = await agent.generate('message for agent')
                     type: '(context: DelegationStartContext) => DelegationStartResult | void | Promise<DelegationStartResult | void>',
                     isOptional: true,
                     description:
-                      'Called before delegating to a subagent. Use this to modify the delegation parameters or reject the delegation entirely.',
+                      "Called before delegating to a subagent. Use this to modify the delegation parameters, reject the delegation entirely, or mutate `context.requestContext` to add entries to the subagent run's request context.",
                   },
                 ],
               },
@@ -847,7 +847,7 @@ const result = await agent.generate('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/editor/overview#versioning).',
             properties: [
               {
                 type: 'VersionOverrides',

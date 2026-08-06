@@ -137,6 +137,35 @@ console.log(`Status: ${summary2.status}`)
     description:
       'Controls undeclared agent tool calls. `allow` executes them live. `deny` fails the item with `TOOL_MOCK_NOT_DECLARED` before execution. An item-level value overrides this experiment default.',
   },
+  {
+    name: 'persistence',
+    type: 'ExperimentPersistencePolicy',
+    isOptional: true,
+    description:
+      'Controls whether this run writes experiment records and score records. Targets and scorers still execute, and results remain available in the returned summary.',
+    properties: [
+      {
+        type: 'ExperimentPersistencePolicy',
+        parameters: [
+          {
+            name: 'experiments',
+            type: "'default' | 'none'",
+            isOptional: true,
+            defaultValue: "'default'",
+            description:
+              'Set to `none` to skip experiment creation, item results, progress, and terminal status writes.',
+          },
+          {
+            name: 'scores',
+            type: "'default' | 'none'",
+            isOptional: true,
+            defaultValue: "'default'",
+            description: 'Set to `none` to skip score writes while still running scorers.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
