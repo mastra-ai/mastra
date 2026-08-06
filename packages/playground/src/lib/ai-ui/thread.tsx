@@ -36,6 +36,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
@@ -47,6 +48,7 @@ import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
+const EMPTY_SUGGESTED_PROMPTS: string[] = [];
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously, so
@@ -232,33 +234,12 @@ export interface ThreadWelcomeProps {
   suggestedPrompts?: string[];
 }
 
-const ThreadWelcome = ({ agentName, suggestedPrompts = [] }: ThreadWelcomeProps) => {
-  const send = useChatSend();
-  const { isRunning, canSendWhileStreaming } = useChatRunning();
-  const { canExecute } = usePermissions();
-  const canExecuteAgent = canExecute('agents');
-  const sendBlocked = isRunning && !canSendWhileStreaming;
-
+const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
   return (
     <div className="flex w-full grow flex-col items-center pt-[15vh]">
       <Avatar name={agentName || 'Agent'} size="lg" />
       <p className="mt-4 font-medium">How can I help you today?</p>
-      {suggestedPrompts.length > 0 && (
-        <div className="mt-6 flex max-w-full flex-row gap-2 overflow-x-auto px-4">
-          {suggestedPrompts.map(prompt => (
-            <Button
-              key={prompt}
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={sendBlocked || !canExecuteAgent}
-              onClick={() => send({ message: prompt })}
-            >
-              {prompt}
-            </Button>
-          ))}
-        </div>
-      )}
+      <SuggestedPromptList prompts={suggestedPrompts} />
     </div>
   );
 };

@@ -7,6 +7,22 @@ import { Thread } from '@/lib/ai-ui/thread';
 
 import type { ChatProps } from '@/types';
 
+interface AvailableSuggestedPromptsOptions {
+  suggestedPrompts?: string[];
+  isNewThread?: boolean;
+  isMessagesLoading: boolean;
+}
+
+const getAvailableSuggestedPrompts = ({
+  suggestedPrompts,
+  isNewThread,
+  isMessagesLoading,
+}: AvailableSuggestedPromptsOptions) => {
+  if (isNewThread) return suggestedPrompts;
+  if (isMessagesLoading) return undefined;
+  return suggestedPrompts;
+};
+
 export const AgentChat = ({
   agentId,
   agentName,
@@ -65,6 +81,11 @@ export const AgentChat = ({
   }
 
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
+  const availableSuggestedPrompts = getAvailableSuggestedPrompts({
+    suggestedPrompts,
+    isNewThread,
+    isMessagesLoading,
+  });
 
   return (
     <ChatProvider
@@ -83,7 +104,7 @@ export const AgentChat = ({
         agentName={agentName ?? ''}
         agentId={agentId}
         threadId={threadId}
-        suggestedPrompts={isNewThread || !isMessagesLoading ? suggestedPrompts : undefined}
+        suggestedPrompts={availableSuggestedPrompts}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
         refreshThreadList={refreshThreadList}
