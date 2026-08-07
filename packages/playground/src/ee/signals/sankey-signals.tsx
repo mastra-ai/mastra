@@ -1,4 +1,4 @@
-import type { DraggableStateSnapshot, DropResult, DroppableProvided } from '@hello-pangea/dnd';
+import type { DragStart, DragUpdate, DraggableStateSnapshot, DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable, useMouseSensor, useTouchSensor } from '@hello-pangea/dnd';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
@@ -225,8 +225,21 @@ function FlowCard({
       .map(stage => stage.signalName)
       .filter(signalName => linkedColumnIds.has(signalName) && !orderedSignalSet.has(signalName)),
   ];
+  const [dragProjection, setDragProjection] = useState<{ sourceIndex: number; destinationIndex: number }>();
+
+  const handleDragStart = (start: DragStart) => {
+    setDragProjection({ sourceIndex: start.source.index, destinationIndex: start.source.index });
+  };
+
+  const handleDragUpdate = (update: DragUpdate) => {
+    setDragProjection({
+      sourceIndex: update.source.index,
+      destinationIndex: update.destination?.index ?? update.source.index,
+    });
+  };
 
   const handleDragEnd = (result: DropResult) => {
+    setDragProjection(undefined);
     const destinationIndex = result.destination?.index;
     if (destinationIndex === undefined || destinationIndex === result.source.index) return;
 
@@ -255,7 +268,13 @@ function FlowCard({
             <GutterLabel className="top-1/2 mt-4 -translate-y-1/2">THEMES</GutterLabel>
           </div>
           <div className="min-w-0 flex-1">
-            <DragDropContext enableDefaultSensors={false} sensors={DRAG_SENSORS} onDragEnd={handleDragEnd}>
+            <DragDropContext
+              enableDefaultSensors={false}
+              sensors={DRAG_SENSORS}
+              onDragEnd={handleDragEnd}
+              onDragStart={handleDragStart}
+              onDragUpdate={handleDragUpdate}
+            >
               <Droppable direction="horizontal" droppableId="signal-column-headers">
                 {(provided: DroppableProvided) => (
                   <div
@@ -267,10 +286,25 @@ function FlowCard({
                   >
                     {headerSignalNames.map((signalName, index) => {
                       const label = formatSignalName(signalName);
+                      let projectedIndex = index;
+                      if (dragProjection) {
+                        const { sourceIndex, destinationIndex } = dragProjection;
+                        if (index === sourceIndex) projectedIndex = destinationIndex;
+                        else if (sourceIndex < destinationIndex && index > sourceIndex && index <= destinationIndex)
+                          projectedIndex = index - 1;
+                        else if (destinationIndex < sourceIndex && index >= destinationIndex && index < sourceIndex)
+                          projectedIndex = index + 1;
+                      }
                       const offsetPercent =
-                        headerSignalNames.length > 1 ? (index / (headerSignalNames.length - 1) - 0.5) * 100 : 0;
+                        headerSignalNames.length > 1
+                          ? (projectedIndex / (headerSignalNames.length - 1) - 0.5) * 100
+                          : 0;
                       const headerAnchor =
-                        index === 0 ? 'start' : index === headerSignalNames.length - 1 ? 'end' : 'middle';
+                        projectedIndex === 0
+                          ? 'start'
+                          : projectedIndex === headerSignalNames.length - 1
+                            ? 'end'
+                            : 'middle';
                       const contentOffsetClass =
                         headerAnchor === 'start' ? 'translate-x-1/2' : headerAnchor === 'end' ? '-translate-x-1/2' : '';
                       return (

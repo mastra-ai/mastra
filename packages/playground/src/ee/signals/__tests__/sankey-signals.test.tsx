@@ -87,7 +87,7 @@ function rectangle(left: number, width: number, height: number) {
   };
 }
 
-async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
+async function reorderOutcomeAfterBehavior(beforeDrop?: () => void | Promise<void>) {
   const headerRow = screen.getByLabelText('Trace signal column headers');
   const headers = screen.getAllByTestId('signal-column-header');
   headers.forEach((header, index) => {
@@ -106,7 +106,7 @@ async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
   await waitFor(() => expect(outcomeDraggable.style.position).toBe('fixed'));
   fireEvent.mouseMove(window, { buttons: 1, clientX: 650, clientY: 20 });
   await waitFor(() => expect(outcomeDraggable.style.transform).not.toBe(''));
-  beforeDrop?.();
+  await beforeDrop?.();
   fireEvent.mouseUp(window, { button: 0, buttons: 0, clientX: 650, clientY: 20 });
 }
 
@@ -703,10 +703,20 @@ describe('SankeySignals', () => {
 
       await screen.findByLabelText('Reorder Outcome');
       expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
-      await reorderOutcomeAfterBehavior(() => {
+      await reorderOutcomeAfterBehavior(async () => {
         expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
         expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment']);
         expect(screen.getByLabelText('Reorder Outcome').closest('[data-dragging="true"]')).not.toBeNull();
+        await waitFor(() => {
+          const outcomeRail = screen
+            .getByLabelText('Reorder Outcome')
+            .closest('[data-testid="signal-column-header-content"]')?.parentElement;
+          const behaviorRail = screen
+            .getByLabelText('Reorder Behavior')
+            .closest('[data-testid="signal-column-header-content"]')?.parentElement;
+          expect(outcomeRail?.style.translate).toBe('16.666666666666664%');
+          expect(behaviorRail?.style.translate).toBe('-16.666666666666668%');
+        });
       });
 
       await waitFor(() =>
