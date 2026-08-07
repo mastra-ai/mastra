@@ -128,13 +128,25 @@ describe('AgentController session preference persistence (thinkingLevel, notific
 
     // Jam the update queue so the preference write is still pending when the
     // session switches threads.
-    void session.state.update(async () => {
-      await new Promise(resolve => setTimeout(resolve, 25));
+    let releaseBlock!: () => void;
+    let markBlockStarted!: () => void;
+    const block = new Promise<void>(resolve => {
+      releaseBlock = resolve;
+    });
+    const blockStarted = new Promise<void>(resolve => {
+      markBlockStarted = resolve;
+    });
+    const blocker = session.state.update(async () => {
+      markBlockStarted();
+      await block;
       return { updates: {}, result: undefined };
     });
+    await blockStarted;
     const pending = session.state.set({ thinkingLevel: 'high' } as any);
 
     const threadB = await session.thread.create();
+    releaseBlock();
+    await blocker;
     await pending;
 
     const memory = await storage.getStore('memory');
