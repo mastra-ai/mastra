@@ -10,6 +10,8 @@ const EMPTY_SUMMARY: ReconcileSweepSummary = {
   checked: 1,
   merged: 0,
   closed: 0,
+  issuesChecked: 0,
+  issuesClosed: 0,
   failed: 0,
   errors: [],
 };

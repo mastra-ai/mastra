@@ -84,6 +84,7 @@ jobs:
       unit_test_files: ${{ steps.compute.outputs.unit_test_files }}
       e2e_test_files: ${{ steps.compute.outputs.e2e_test_files }}
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
+      experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
       mastracode_e2e_changed: ${{ steps.compute.outputs.mastracode_e2e_changed }}
       stores_changed: ${{ steps.compute.outputs.stores_changed }}
       workspaces_changed: ${{ steps.compute.outputs.workspaces_changed }}
@@ -104,9 +105,12 @@ jobs:
 
       - name: Compute affected test files
         id: compute
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA...$HEAD_SHA" \
             > /tmp/changed-files.txt
 
           CHANGED=$(grep -E '/src/.*\.(ts|tsx)$' /tmp/changed-files.txt \
@@ -175,7 +179,9 @@ jobs:
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
           const e2eChanged = affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
-            file.startsWith('e2e-tests/') ||
+            (file.startsWith('e2e-tests/') &&
+              !file.startsWith('e2e-tests/experiment-worker/') &&
+              !file.startsWith('e2e-tests/_local-registry-setup/')) ||
             file.startsWith('packages/playground/e2e/') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
@@ -192,8 +198,21 @@ jobs:
           output(`affected_memory_tests=${affectedMemoryTests}\n`);
           output(`stores_changed=${storesChanged}\n`);
           output(`workspaces_changed=${workspacesChanged}\n`);
+          const { experimentWorkerE2eChanged } = require('./.github/scripts/experiment-worker-routing.cjs');
+          const experimentEntryFiles = ['packages/cli/src/commands/index.ts', 'packages/cli/src/index.ts'];
+          const changedEntryFiles = changedFiles.filter(file => experimentEntryFiles.includes(file));
+          const experimentEntryDiff = changedEntryFiles.length
+            ? require('child_process').execFileSync(
+                'git',
+                ['diff', '--unified=0', `${process.env.BASE_SHA}...${process.env.HEAD_SHA}`, '--', ...changedEntryFiles],
+                { encoding: 'utf8' },
+              )
+            : '';
+          const experimentWorkerChanged = experimentWorkerE2eChanged(nonMarkdownChangedFiles, experimentEntryDiff);
+
           output(`memory_changed=${memoryChanged}\n`);
           output(`e2e_changed=${e2eChanged}\n`);
+          output(`experiment_worker_e2e_changed=${experimentWorkerChanged}\n`);
           output(`mastracode_e2e_changed=${mastracodeE2eChanged}\n`);
 
           console.error(`Affected: ${count}/${total} tests (${(ratio * 100).toFixed(1)}%)`);
@@ -219,6 +238,7 @@ jobs:
         if: always()
         env:
           E2E_CHANGED: ${{ steps.compute.outputs.e2e_changed }}
+          EXPERIMENT_WORKER_E2E_CHANGED: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
           MASTRACODE_E2E_CHANGED: ${{ steps.compute.outputs.mastracode_e2e_changed }}
           STORES_CHANGED: ${{ steps.compute.outputs.stores_changed }}
           WORKSPACES_CHANGED: ${{ steps.compute.outputs.workspaces_changed }}
@@ -231,6 +251,7 @@ jobs:
         run: |
           mkdir -p /tmp/affected-outputs
           echo "$E2E_CHANGED" > /tmp/affected-outputs/e2e_changed.txt
+          echo "$EXPERIMENT_WORKER_E2E_CHANGED" > /tmp/affected-outputs/experiment_worker_e2e_changed.txt
           echo "$MASTRACODE_E2E_CHANGED" > /tmp/affected-outputs/mastracode_e2e_changed.txt
           echo "$STORES_CHANGED" > /tmp/affected-outputs/stores_changed.txt
           echo "$WORKSPACES_CHANGED" > /tmp/affected-outputs/workspaces_changed.txt
@@ -271,12 +292,13 @@ jobs:
   e2e-tests:
     name: E2E Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.e2e_changed == 'true' && needs.prebuild.result == 'success'
+    if: always() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.prebuild.result == 'success'
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
     with:
       head_sha: ${{ github.event.pull_request.head.sha }}
+      experiment_worker_e2e_changed: ${{ needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

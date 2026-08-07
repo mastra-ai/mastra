@@ -56,6 +56,7 @@ if (customOutOverlapsMonorepo) {
 }
 
 const RUNTIME_DEPENDENCIES = [
+  '@mastra/auth-workos',
   '@mastra/code-sdk',
   '@mastra/core',
   '@mastra/factory',

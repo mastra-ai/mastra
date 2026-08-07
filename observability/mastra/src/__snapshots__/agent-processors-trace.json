@@ -541,7 +541,8 @@
                     "content": "Mock V2 stream response",
                     "metadata": {
                       "modelId": "mock-model-id",
-                      "provider": "mock-provider"
+                      "provider": "mock-provider",
+                      "traceId": "<trace-1>"
                     }
                   },
                   "createdAt": "<date>"
