@@ -15,6 +15,11 @@ type TimelineNameColProps = {
   isExpanded?: boolean;
 };
 
+// Nested rows mount late, once expansion opens their ancestors.
+const revealRow = (node: HTMLDivElement | null) => {
+  node?.scrollIntoView({ block: 'nearest' });
+};
+
 export function TimelineNameCol({
   span,
   spanUI,
@@ -27,13 +32,15 @@ export function TimelineNameCol({
   isRootSpan,
   isExpanded: _isExpanded,
 }: TimelineNameColProps) {
+  const isSelected = selectedSpanId === span.id;
+
   return (
     <div
-      data-span-id={span.id}
+      ref={isSelected ? revealRow : undefined}
       aria-label={`View details for span ${span.name}`}
       className={cn('flex min-h-8 items-center rounded-md rounded-l-lg opacity-80', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
-        'bg-surface4': selectedSpanId === span.id,
+        'bg-surface4': isSelected,
       })}
       style={{ paddingLeft: `${depth * 1}rem` }}
     >

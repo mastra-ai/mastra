@@ -9,7 +9,7 @@ import {
   SaveIcon,
   WrenchIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
@@ -91,7 +91,6 @@ export function TraceDataPanelView({
 
   const { download: downloadTraceJson, isPending: isDownloadingTrace } = useDownloadTraceJson();
 
-  const contentRef = useRef<HTMLDivElement>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
 
   // Sync selected span when initialSpanId or trace data changes
@@ -127,17 +126,6 @@ export function TraceDataPanelView({
       setExpandedSpanIds(getAllSpanIds(hierarchicalSpans));
     }
   }, [hierarchicalSpans]);
-
-  // A nested span only reaches the DOM once expansion opens its ancestors, a
-  // commit after the trace loads -- hence the retry on `expandedSpanIds`.
-  const scrolledToSpanRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (isLoading || !selectedSpanId || scrolledToSpanRef.current === selectedSpanId) return;
-    const el = contentRef.current?.querySelector(`[data-span-id="${selectedSpanId}"]`);
-    if (!el) return;
-    scrolledToSpanRef.current = selectedSpanId;
-    el.scrollIntoView({ block: 'nearest' });
-  }, [selectedSpanId, isLoading, expandedSpanIds]);
 
   const rootSpan = useMemo(
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
@@ -221,7 +209,7 @@ export function TraceDataPanelView({
         ) : hierarchicalSpans.length === 0 ? (
           <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
         ) : (
-          <DataPanel.Content ref={contentRef}>
+          <DataPanel.Content>
             {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
 
             {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
