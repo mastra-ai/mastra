@@ -71,7 +71,8 @@ pnpm --filter ./mastracode/factory-ui web
 ```
 
 Open `http://localhost:5173`. To restart one side without losing the other, run
-`web:api` and `dev` in separate terminals.
+`pnpm --filter ./mastracode/factory-ui web:api` and
+`pnpm --filter ./mastracode/factory-ui dev` in separate terminals.
 
 ### Slack channels (optional)
 
