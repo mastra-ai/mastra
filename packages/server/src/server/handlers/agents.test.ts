@@ -2532,7 +2532,7 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).subscribeToThread = vi.fn(async target => {
         capturedTarget = target;
         return {
-          activeRunId: () => null,
+          activeRunId: () => 'subscribed-run-id',
           abort,
           unsubscribe,
           stream: (async function* () {
@@ -2553,6 +2553,18 @@ describe('Agent Routes Authorization', () => {
 
       expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
       const reader = stream.getReader();
+      await expect(reader.read()).resolves.toEqual({
+        value: {
+          type: 'data-thread-state',
+          data: {
+            runId: 'subscribed-run-id',
+            status: 'running',
+            updatedAt: expect.any(String),
+          },
+          transient: true,
+        },
+        done: false,
+      });
       await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
       expect(abort).not.toHaveBeenCalled();
       expect(unsubscribe).not.toHaveBeenCalled();
@@ -2591,6 +2603,14 @@ describe('Agent Routes Authorization', () => {
         } as any)) as ReadableStream;
 
         const reader = stream.getReader();
+        await expect(reader.read()).resolves.toMatchObject({
+          value: {
+            type: 'data-thread-state',
+            data: { status: 'idle' },
+            transient: true,
+          },
+          done: false,
+        });
         const read = reader.read();
         await vi.advanceTimersByTimeAsync(25_000);
 
@@ -2632,6 +2652,14 @@ describe('Agent Routes Authorization', () => {
         } as any)) as ReadableStream;
 
         const reader = stream.getReader();
+        await expect(reader.read()).resolves.toMatchObject({
+          value: {
+            type: 'data-thread-state',
+            data: { status: 'idle' },
+            transient: true,
+          },
+          done: false,
+        });
         abortController.abort();
         await Promise.resolve();
 
