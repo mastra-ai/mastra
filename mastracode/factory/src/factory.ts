@@ -652,7 +652,12 @@ export class MastraFactory {
                       transitionService,
                       // Heals crash-resumed sessions: recovered addresses re-seed
                       // projectRepositoryId/baseRef from the source session record.
-                      sessions: sourceControlStorage.forIntegration('github').sessions,
+                      // Only offered while the source-control domain is ready — a
+                      // throwing lookup would abort recovery's catch block and also
+                      // skip the metadata baseRef fallback.
+                      ...(storage.isDomainReady('source-control')
+                        ? { sessions: sourceControlStorage.forIntegration('github').sessions }
+                        : {}),
                     }),
                   );
                 }
