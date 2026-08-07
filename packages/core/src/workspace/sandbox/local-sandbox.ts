@@ -28,7 +28,13 @@ import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
-import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
+import {
+  detectIsolation,
+  isIsolationAvailable,
+  generateSeatbeltProfile,
+  isGeneratedSeatbeltProfile,
+  wrapCommand,
+} from './native-sandbox';
 import type { SandboxCloneOptions } from './sandbox';
 import type { SandboxInfo } from './types';
 
@@ -165,8 +171,9 @@ export class LocalSandbox extends MastraSandbox {
   private _nativeSandboxConfig: NativeSandboxConfig;
   /**
    * SBPL the user wrote, read from `seatbeltProfilePath` at start. Set only when that file
-   * already existed. While it is undefined, `wrapCommand()` generates the profile from the
-   * live `_nativeSandboxConfig` on every call, so the profile always tracks the allowlist.
+   * already existed and does not carry our generated-profile marker. While it is undefined,
+   * `wrapCommand()` generates the profile from the live `_nativeSandboxConfig` on every call,
+   * so the profile always tracks the allowlist.
    */
   private _customSeatbeltProfile?: string;
   /** Where the profile file lives on disk: the configured path, or one we generated. */
@@ -265,16 +272,22 @@ export class LocalSandbox extends MastraSandbox {
         this._seatbeltProfilePath = userProvidedPath;
 
         // Check if file exists at user's path
+        let existingProfile: string | undefined;
         try {
-          // The user wrote this SBPL. Keep it and pass it to sandbox-exec exactly as written.
-          this._customSeatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
+          existingProfile = await fs.readFile(userProvidedPath, 'utf-8');
         } catch (err: unknown) {
           if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw err;
           }
-          // File doesn't exist, generate default and write to user's path.
-          // `_customSeatbeltProfile` stays undefined: this profile is ours, so it must keep
-          // tracking the allowlist that mounts change.
+        }
+
+        if (existingProfile !== undefined && !isGeneratedSeatbeltProfile(existingProfile)) {
+          // The user wrote this SBPL. Keep it and pass it to sandbox-exec exactly as written.
+          this._customSeatbeltProfile = existingProfile;
+        } else {
+          // The file is missing, or it carries our marker from an earlier run. Either way the
+          // profile is ours, so generate it again and leave `_customSeatbeltProfile` undefined:
+          // it must keep tracking the allowlist that mounts change.
           const generatedProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
           // Ensure parent directory exists
           await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });

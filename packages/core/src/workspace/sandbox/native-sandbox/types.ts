@@ -47,9 +47,10 @@ export interface NativeSandboxConfig {
    * If the file exists, its contents are used as the sandbox profile.
    * If the file doesn't exist, a default profile is generated and written to this path.
    * Must contain valid SBPL (Sandbox Profile Language) if provided.
-   * An existing profile is used exactly as written: mounted filesystem paths are not added
+   * A profile you wrote is used exactly as written: mounted filesystem paths are not added
    * to it, so the profile must already allow access to the paths you mount. A generated
-   * profile does allow mounted paths.
+   * profile does allow mounted paths. Generated profiles carry a marker comment, so a later
+   * run regenerates them instead of reading them back as user-authored SBPL.
    */
   seatbeltProfilePath?: string;
 

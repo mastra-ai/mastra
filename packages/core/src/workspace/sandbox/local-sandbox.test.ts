@@ -1051,6 +1051,47 @@ describe('LocalSandbox', () => {
       }
     });
 
+    it('should keep generating mount-aware profiles when restarted on a generated profile file', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // The first run writes a generated profile to the configured path. The second run finds
+      // that file, so it must recognise the profile as ours and keep it mount-aware.
+      const profilePath = path.join(tempDir, 'generated-then-reused.sb');
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-restart-profile-mount-'));
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      const firstRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      await firstRun._start();
+      await firstRun._destroy();
+      await expect(fs.readFile(profilePath, 'utf-8')).resolves.toContain('(version 1)');
+
+      const secondRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+
+      try {
+        await secondRun._start();
+        expect(activeSeatbeltProfile(secondRun)).not.toContain(realMountTarget);
+
+        await secondRun.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(secondRun)).toContain(realMountTarget);
+
+        await secondRun.unmount('/data');
+        expect(activeSeatbeltProfile(secondRun)).not.toContain(realMountTarget);
+      } finally {
+        await secondRun._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
     it('should respect readOnly working directory restriction', async () => {
       if (os.platform() !== 'darwin') {
         return;
