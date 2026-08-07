@@ -28,6 +28,16 @@ describe('buildFilterQuery - top-level vs nested metadata field operators', () =
     const { sql: sqlNe } = buildFilterQuery({ status: { $ne: 'inactive' } }, 0, 10);
     expect(sqlNe).toContain(`metadata->>'status' != $3::text`);
   });
+
+  it('preserves $nor negation in search and delete filters', () => {
+    const filter = { $nor: [{ status: 'active' }, { priority: 'high' }] };
+
+    const { sql: searchSql } = buildFilterQuery(filter, 0, 10);
+    expect(searchSql).toContain(`NOT (metadata->>'status' = $3 OR metadata->>'priority' = $4)`);
+
+    const { sql: deleteSql } = buildDeleteFilterQuery(filter);
+    expect(deleteSql).toContain(`NOT (metadata->>'status' = $1 OR metadata->>'priority' = $2)`);
+  });
 });
 
 describe('buildFilterQuery - numeric range operators', () => {

@@ -237,7 +237,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   $and: key => ({ sql: `(${key})`, needsValue: false }),
   $or: key => ({ sql: `(${key})`, needsValue: false }),
   $not: key => ({ sql: `(${key})`, needsValue: false }),
-  $nor: key => ({ sql: `(${key})`, needsValue: false }),
+  $nor: key => ({ sql: `NOT (${key})`, needsValue: false }),
 
   // Regex Operators
   $regex: (key, paramIndex) => {
