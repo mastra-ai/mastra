@@ -6,6 +6,7 @@ export const stateCommandsScenario: McE2eScenario = {
   description:
     'Exercise visible mode, thinking, permissions, sandbox, resource, cost, observability, and feedback surfaces.',
   testName: 'shows state command feedback in the real TUI',
+  env: () => ({ MASTRACODE_MODEL_ID: 'openai/gpt-5.6-codex' }),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
@@ -33,6 +34,22 @@ export const stateCommandsScenario: McE2eScenario = {
     terminal.submit('/think default');
     await runtime.waitForScreenText(/Thinking → .+\((?:.+ mode default|global default)\)/i, terminal);
     runtime.printScreen('after /think default', terminal);
+
+    // Change the global default through the real Settings overlay, then verify
+    // this session inherits it without a session override.
+    terminal.submit('/settings');
+    await runtime.waitForScreenText(/Thinking level\s+(?:none|Off)/i, terminal);
+    terminal.write('\x1b[B'.repeat(2));
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Balanced reasoning/i, terminal);
+    terminal.write('\x1b[B'.repeat(2));
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Thinking level\s+Medium/i, terminal);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Settings/i, terminal, 8_000);
+    terminal.submit('/think status');
+    await runtime.waitForScreenText(/Thinking: Medium \(global default\)/i, terminal);
+    runtime.printScreen('after inherited Settings default', terminal);
 
     terminal.submit('/permissions');
     await runtime.waitForScreenText(/Tool Approval Permissions/i, terminal);
