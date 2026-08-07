@@ -1,10 +1,9 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Server } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 
 const server = new Server({ name: 'Env Reporter', version: '1.0.0' }, { capabilities: { tools: {} } });
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
+server.setRequestHandler('tools/list', async () => ({
   tools: [
     {
       name: 'getEnvKeys',
@@ -14,7 +13,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async () => ({
+server.setRequestHandler('tools/call', async () => ({
   content: [{ type: 'text', text: JSON.stringify(Object.keys(process.env)) }],
 }));
 

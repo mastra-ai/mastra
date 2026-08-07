@@ -43,13 +43,11 @@ export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecute
       ? getInitData()
       : getStepResult(
           Array.isArray(m.step)
-            ? m.step.find((s: any) => {
-                const stepRes = getStepResult(s);
-                if (typeof stepRes === 'object' && stepRes !== null) {
-                  return Object.keys(stepRes).length > 0;
-                }
-                return stepRes;
-              })
+            ? // getStepResult returns null for any arm that did not run successfully,
+              // and the arm's real output (including {}, 0, false, '') for the one that
+              // did. So `!== null` is the correct "which arm executed" test; a
+              // truthiness/emptiness check drops valid falsy outputs. See #20894.
+              m.step.find((s: any) => getStepResult(s) !== null)
             : m.step,
         );
 

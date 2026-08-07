@@ -84,6 +84,45 @@ describe('InMemoryTaskStore', () => {
     });
   });
 
+  it('keeps a canceled task when an opt-in stale save tries to overwrite it', async () => {
+    const store = new InMemoryTaskStore();
+
+    await store.save({
+      agentId: 'agent-1',
+      data: createTask({
+        id: 'task-1',
+        status: {
+          state: 'canceled',
+          timestamp: '2025-05-08T11:48:38.458Z',
+        },
+      }),
+    });
+
+    const storedTask = await store.save({
+      agentId: 'agent-1',
+      skipIfCanceled: true,
+      data: createTask({
+        id: 'task-1',
+        status: {
+          state: 'completed',
+          timestamp: '2025-05-08T11:49:38.458Z',
+        },
+      }),
+    });
+
+    const canceledTask = createTask({
+      id: 'task-1',
+      status: {
+        state: 'canceled',
+        timestamp: '2025-05-08T11:48:38.458Z',
+      },
+    });
+
+    expect(storedTask).toEqual(canceledTask);
+    await expect(store.load({ agentId: 'agent-1', taskId: 'task-1' })).resolves.toEqual(canceledTask);
+    expect(store.getVersion({ agentId: 'agent-1', taskId: 'task-1' })).toBe(1);
+  });
+
   it('waitForNextUpdate removes listeners and rejects on abort', async () => {
     const store = new InMemoryTaskStore();
     const task = createTask();

@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { McpServer } from '@modelcontextprotocol/server';
+import type { CallToolResult } from '@modelcontextprotocol/server';
+import { SSEServerTransport } from '@modelcontextprotocol/server-legacy/sse';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 
 import { InternalMastraMCPClient } from './client.js';
 import { isReconnectableMCPError } from './error-utils.js';
@@ -340,10 +340,12 @@ type TestMcpServer = {
 
 function buildMcpServer(): McpServer {
   const mcpServer = new McpServer({ name: 'url-policy-test-server', version: '1.0.0' }, { capabilities: { tools: {} } });
-  mcpServer.tool(
+  mcpServer.registerTool(
     'greet',
-    'A simple greeting tool',
-    { name: z.string().describe('Name to greet').default('World') },
+    {
+      description: 'A simple greeting tool',
+      inputSchema: z.object({ name: z.string().describe('Name to greet').default('World') }),
+    },
     async ({ name }): Promise<CallToolResult> => ({ content: [{ type: 'text', text: `Hello, ${name}!` }] }),
   );
   return mcpServer;
@@ -383,7 +385,7 @@ async function startStreamableServer(
       return;
     }
     await mcpServer.close().catch(() => {});
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcpServer.connect(transport);
     await transport.handleRequest(req, res);
   });
@@ -405,7 +407,7 @@ async function startStreamableServer(
 async function startStatefulStreamableServer(): Promise<TestMcpServer> {
   const mcpServer = buildMcpServer();
   const requests: { method: string; url: string }[] = [];
-  const serverTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+  const serverTransport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
   await mcpServer.connect(serverTransport);
 
   const httpServer = createServer();

@@ -1885,6 +1885,164 @@ describe('A2A Handler', () => {
       expect(done.done).toBe(true);
     });
 
+    it('passes request abortSignal to agent stream execution', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const requestAbortController = new AbortController();
+      let streamAbortSignal: AbortSignal | undefined;
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        streamAbortSignal = options.abortSignal;
+        return createStreamResult({ chunks: ['Hello'] });
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+        abortSignal: requestAbortController.signal,
+      });
+
+      const first = await gen.next();
+      requestAbortController.abort('client disconnected');
+      const canceled = await gen.next();
+
+      expect(streamAbortSignal?.aborted).toBe(true);
+      expect(streamAbortSignal?.reason).toBe('client disconnected');
+      expect(canceled.value).toMatchObject({
+        result: {
+          final: true,
+          status: { state: 'canceled' },
+        },
+      });
+      expect(await mockTaskStore.load({ agentId, taskId: (first.value?.result as { id: string }).id })).toMatchObject({
+        status: { state: 'canceled' },
+      });
+    });
+
+    it('does not mark request-driven abort errors as failed', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const requestAbortController = new AbortController();
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        throw options.abortSignal?.reason;
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+        abortSignal: requestAbortController.signal,
+      });
+
+      const first = await gen.next();
+      requestAbortController.abort(new DOMException('Client disconnected.', 'AbortError'));
+      const canceled = await gen.next();
+
+      expect(canceled.value).toMatchObject({
+        result: {
+          final: true,
+          status: { state: 'canceled' },
+        },
+      });
+      expect(await mockTaskStore.load({ agentId, taskId: (first.value?.result as { id: string }).id })).toMatchObject({
+        status: { state: 'canceled' },
+      });
+    });
+
+    it('aborts the active stream and does not let late chunks overwrite a canceled task', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'cancel-stream-task';
+      const continueStream = createDeferred<void>();
+      let streamAbortSignal: AbortSignal | undefined;
+
+      const params: MessageSendParams = {
+        message: { messageId, taskId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      await seedTask(mockTaskStore, taskId);
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        streamAbortSignal = options.abortSignal;
+        return {
+          ...createStreamResult({ chunks: [], text: 'First second' }),
+          fullStream: (async function* () {
+            yield { type: 'text-delta', textDelta: 'First ' };
+            await continueStream.promise;
+            yield { type: 'text-delta', textDelta: 'second' };
+          })(),
+        };
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+      });
+
+      await gen.next();
+      const nextStreamEvent = gen.next();
+      await vi.waitFor(() => {
+        expect(streamAbortSignal).toBeDefined();
+      });
+
+      const cancelResult = await handleTaskCancel({
+        requestId: 'cancel-request-id',
+        taskStore: mockTaskStore,
+        agentId,
+        taskId,
+      });
+
+      expect(cancelResult.result?.status.state).toBe('canceled');
+      expect(streamAbortSignal?.aborted).toBe(true);
+
+      continueStream.resolve();
+      const canceledUpdate = await nextStreamEvent;
+      expect(canceledUpdate.value).toMatchObject({
+        id: requestId,
+        jsonrpc: '2.0',
+        result: {
+          final: true,
+          kind: 'status-update',
+          status: {
+            state: 'canceled',
+          },
+          taskId,
+        },
+      });
+
+      const savedTask = await mockTaskStore.load({ agentId, taskId });
+      expect(savedTask?.status.state).toBe('canceled');
+      await gen.return(undefined);
+    });
+
     it('should stream structured output as a data artifact part', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
@@ -3676,7 +3834,7 @@ describe('A2A Handler', () => {
         agentId: 'test-agent',
         requestContext: new RequestContext(),
         taskStore: mockTaskStore,
-        abortSignal: AbortSignal.abort(),
+        abortSignal: new AbortController().signal,
         id: 42,
         method: 'message/stream',
         params: {
