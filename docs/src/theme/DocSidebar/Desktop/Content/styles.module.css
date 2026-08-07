@@ -46,7 +46,7 @@
     bottom: 0;
     flex-shrink: 0;
     margin-top: auto;
-    padding-top: 0.5rem;
+    padding-top: 1rem;
     background: var(--ifm-navbar-background-color);
   }
 
