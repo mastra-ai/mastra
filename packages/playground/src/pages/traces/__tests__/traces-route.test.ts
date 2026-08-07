@@ -16,17 +16,21 @@ async function navigateTo(entry: string) {
 }
 
 describe('traces routes', () => {
-  it('serves the traces list on a direct /traces visit', async () => {
-    const router = await navigateTo('/traces');
+  describe('when /traces is opened directly', () => {
+    it('serves the traces list', async () => {
+      const router = await navigateTo('/traces');
 
-    expect(router.state.errors).toBeNull();
-    expect(router.state.matches.at(-1)?.route.path).toBe('/traces');
+      expect(router.state.errors).toBeNull();
+      expect(router.state.matches.at(-1)?.route.path).toBe('/traces');
+    });
   });
 
-  it('redirects the legacy /observability path to /traces, keeping its filters', async () => {
-    const router = await navigateTo('/observability?entity=weather');
+  describe('when a legacy /observability link is opened', () => {
+    it('redirects to /traces and keeps its filters', async () => {
+      const router = await navigateTo('/observability?entity=weather');
 
-    expect(router.state.location.pathname).toBe('/traces');
-    expect(router.state.location.search).toBe('?entity=weather');
+      expect(router.state.location.pathname).toBe('/traces');
+      expect(router.state.location.search).toBe('?entity=weather');
+    });
   });
 });
