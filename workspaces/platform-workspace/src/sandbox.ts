@@ -100,6 +100,25 @@ interface ExecLeaseResponse {
  */
 const LEASE_REFRESH_MARGIN_MS = 60_000;
 
+/**
+ * How long before the upstream sandbox's idle-destroy window we schedule a
+ * safety-net checkpoint refresh. Wide enough (3 min) that a Cloud Run cold
+ * start, scale event, or brief network partition during the refresh window
+ * does not lose the race with the upstream idle destroy. If a caller
+ * reduces the idle timeout below this margin, the refresh falls back to
+ * the 1-second floor and fires almost immediately after start — surfacing
+ * the misconfiguration rather than silently skipping the refresh.
+ *
+ * Mirrors OSS `@mastra/railway` `RailwaySandbox` `CHECKPOINT_REFRESH_MARGIN_MS`
+ * so both providers race the same window. Previously the workspace-proxy
+ * ran this timer server-side, which was unreliable on serverless
+ * (Cloud Run kills the process during idle recycles — the timer that was
+ * supposed to protect the idle window couldn't fire during it). Moving the
+ * timer client-side puts it in the persistent factory process that owns
+ * the sandbox handle, same layer where `RailwaySandbox` runs it.
+ */
+const CHECKPOINT_REFRESH_MARGIN_MS = 180_000;
+
 interface CreateSandboxResponse {
   id: string;
   providerResourceId?: string | null;
@@ -364,6 +383,16 @@ export class PlatformSandbox extends MastraSandbox {
    * before the first one resolves. Cleared when the request settles.
    */
   private _captureInFlight: Promise<CaptureCheckpointResult> | null = null;
+  /**
+   * Scheduled safety-net refresh. Fires `CHECKPOINT_REFRESH_MARGIN_MS` before
+   * the upstream sandbox's idle-destroy window and issues a
+   * {@link captureCheckpoint} on this instance. Cancelled and re-armed on
+   * every successful capture (so a busy sandbox keeps pushing the timer out
+   * — only a genuinely idle sandbox ever fires it). Cancelled on
+   * {@link stop} / {@link destroy}. `.unref()`d so it never holds the
+   * process open past when the caller is done.
+   */
+  private _checkpointRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -440,6 +469,7 @@ export class PlatformSandbox extends MastraSandbox {
         if (!json.destroyedAt) {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           this._populateAddressFromResponse(json);
+          this._scheduleCheckpointRefresh();
           return;
         }
         this._sandboxId = undefined;
@@ -486,6 +516,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this._populateAddressFromResponse(json);
+    this._scheduleCheckpointRefresh();
   }
 
   /**
@@ -525,9 +556,11 @@ export class PlatformSandbox extends MastraSandbox {
    */
   async stop(): Promise<void> {
     // Await any in-flight capture so the preserved checkpoint reflects the
-    // latest capture the caller triggered. Never rethrow — a failing capture
-    // must not block teardown; the proxy's safety-net refresh timer is a
-    // fallback for the checkpoint state.
+    // latest capture the caller triggered. Never rethrow — a failing
+    // capture must not block teardown; the caller can always retry against
+    // a fresh sandbox that restores from whatever checkpoint the last
+    // successful capture wrote. `_teardownSandbox()` below cancels the
+    // safety-net refresh timer regardless of what this capture did.
     if (this._captureInFlight) {
       await this._captureInFlight.catch(error => {
         this.logger.warn(`stop(): failed to flush in-flight capture before teardown:`, error);
@@ -597,6 +630,13 @@ export class PlatformSandbox extends MastraSandbox {
    * before this call.
    */
   private async _teardownSandbox(): Promise<void> {
+    // Cancel the refresh timer before we tear down — a timer left armed
+    // after the VM DELETE would fire against a dead sandbox and either
+    // burn a POST /checkpoint that logs 410 or (worse, after id reuse)
+    // capture against a stranger's resource. Cancel here so both stop()
+    // and destroy() converge on the same clean state without needing to
+    // duplicate the cancel at each call site.
+    this._cancelCheckpointRefresh();
     if (!this._sandboxId) return;
     const destroyedSandboxId = this._sandboxId;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
@@ -614,6 +654,60 @@ export class PlatformSandbox extends MastraSandbox {
     // or reattach) will re-populate the entry from the workspace-proxy's
     // response.
     this._addressRegistry?.delete(destroyedSandboxId);
+  }
+
+  /**
+   * Arm (or re-arm) the safety-net refresh timer.
+   *
+   * Fires `CHECKPOINT_REFRESH_MARGIN_MS` before the upstream sandbox's
+   * idle-destroy window and issues a {@link captureCheckpoint} on this
+   * instance. Called at the end of {@link start} and after every successful
+   * {@link captureCheckpoint} — so a busy sandbox keeps pushing the timer
+   * out, and only a genuinely idle sandbox ever fires it.
+   *
+   * No-op when:
+   *   - no recovery `id` was supplied (nothing to capture under a stable
+   *     name — a random id is never a meaningful recovery key);
+   *   - no `idleTimeoutMinutes` was configured (no idle-destroy racing us);
+   *   - the sandbox is not started (no `_sandboxId`).
+   *
+   * `.unref()`d so the timer never holds the process open.
+   *
+   * Mirrors OSS `@mastra/railway` `RailwaySandbox._scheduleCheckpointRefresh`.
+   */
+  private _scheduleCheckpointRefresh(): void {
+    if (!this._hasRecoveryKey) return;
+    if (!this._idleTimeoutMinutes) return;
+    if (!this._sandboxId) return;
+
+    this._cancelCheckpointRefresh();
+
+    const delayMs = Math.max(1_000, this._idleTimeoutMinutes * 60_000 - CHECKPOINT_REFRESH_MARGIN_MS);
+    this._checkpointRefreshTimer = setTimeout(() => {
+      this._checkpointRefreshTimer = null;
+      if (!this._sandboxId) return;
+      // captureCheckpoint() handles its own coalescing with any in-flight
+      // capture, its own re-arm on success, and its own error/skip
+      // reporting. All we do here is fire it; a rejection is
+      // best-effort-logged and swallowed so a transient proxy failure
+      // never crashes the caller's process.
+      this.captureCheckpoint().catch(error => {
+        this.logger.warn(`checkpoint refresh timer: failed to capture checkpoint:`, error);
+      });
+    }, delayMs);
+    this._checkpointRefreshTimer.unref?.();
+  }
+
+  /**
+   * Cancel the safety-net refresh timer if one is armed. Idempotent —
+   * safe to call from teardown paths and from {@link _scheduleCheckpointRefresh}
+   * before it re-arms.
+   */
+  private _cancelCheckpointRefresh(): void {
+    if (this._checkpointRefreshTimer) {
+      clearTimeout(this._checkpointRefreshTimer);
+      this._checkpointRefreshTimer = null;
+    }
   }
 
   /**
@@ -682,6 +776,23 @@ export class PlatformSandbox extends MastraSandbox {
       }
     });
     this._captureInFlight = capture;
+    // Re-arm the safety-net timer from this capture, so a busy sandbox
+    // keeps pushing the timer out and only a genuinely idle one fires it.
+    // Runs after the capture settles so the new window is measured from
+    // real work, not from timer-arm. `.then` on the same promise so we
+    // only re-arm on captured/coalesced (not on the 410→skip path, which
+    // clears local state and would immediately no-op the schedule check).
+    capture
+      .then(result => {
+        if (result.status === 'captured' || result.status === 'coalesced') {
+          this._scheduleCheckpointRefresh();
+        }
+      })
+      .catch(() => {
+        // Errors already surfaced to the awaiting caller — swallow the
+        // reject on this fire-and-forget branch so unhandledrejection
+        // doesn't fire.
+      });
     return capture;
   }
 
@@ -736,6 +847,11 @@ export class PlatformSandbox extends MastraSandbox {
    * the cached `'running'` state (see `MastraSandbox._start`).
    */
   private _clearDestroyedState(destroyedSandboxId: string): void {
+    // Cancel any pending refresh — the sandbox is gone, so a firing
+    // refresh would just POST /checkpoint against a dead id (best case:
+    // proxy 410, log noise; worst case: after id reuse, capturing
+    // against a different sandbox entirely).
+    this._cancelCheckpointRefresh();
     this._sandboxId = undefined;
     this._createdAt = null;
     this._lease = null;

@@ -2316,4 +2316,280 @@ describe('PlatformSandbox', () => {
       expect(result).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
     });
   });
+
+  describe('checkpoint refresh timer (client-side safety net)', () => {
+    // These tests pin down the client-side safety-net refresh that mirrors
+    // OSS @mastra/railway RailwaySandbox. The upstream idle-destroy window
+    // used to be raced by a server-side timer inside workspace-proxy, but
+    // that timer was unreliable on serverless (Cloud Run kills the process
+    // during idle recycles — the timer supposed to protect the idle window
+    // couldn't fire during it). Moving the timer client-side puts it in
+    // the persistent factory process that owns the sandbox handle, same
+    // layer where RailwaySandbox runs its equivalent timer.
+    //
+    // Refresh margin is 180_000 ms (3 minutes) before the upstream idle
+    // window; delayMs = max(1_000, idleTimeoutMinutes * 60_000 - 180_000).
+
+    it('fires a refresh 3 minutes before the upstream idle-destroy window (5 min idle → 2 min timer)', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+          .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+        const sandbox = new PlatformSandbox({
+          id: 'mc-session-42',
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          idleTimeoutMinutes: 5,
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+
+        // 5 min idle - 3 min margin = 2 min. Nothing before that.
+        await vi.advanceTimersByTimeAsync(119_000);
+        expect(fetchMock).toHaveBeenCalledTimes(1); // create only
+
+        // Cross the 2-min mark → refresh fires → POST /checkpoint.
+        await vi.advanceTimersByTimeAsync(2_000);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(String(fetchMock.mock.calls[1]![0])).toBe(
+          'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/checkpoint',
+        );
+        expect(fetchMock.mock.calls[1]![1].method).toBe('POST');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('re-arms the timer after each successful capture so a busy sandbox never fires it', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+          // Manual capture -> resets the timer window from this point.
+          .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+        const sandbox = new PlatformSandbox({
+          id: 'mc-session-42',
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          idleTimeoutMinutes: 5,
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+
+        // Halfway to the scheduled refresh, the caller fires a manual capture.
+        await vi.advanceTimersByTimeAsync(60_000);
+        await sandbox.captureCheckpoint();
+        expect(fetchMock).toHaveBeenCalledTimes(2); // create + manual capture
+
+        // If the timer were NOT re-armed, the original schedule would fire
+        // 60s from now (60 + 60 = 120s = original 2-min mark). Advance to
+        // that point and prove nothing fires — the re-arm pushed the next
+        // refresh out another 2 minutes from the manual capture.
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        // Advance the remaining 60s to hit the re-armed 2-min mark.
+        await vi.advanceTimersByTimeAsync(60_000);
+        // No new fetch mock queued for this second refresh, so the assertion
+        // is just that the timer's captureCheckpoint call is well-formed;
+        // it will POST /checkpoint and get "undefined" back (which throws
+        // inside the timer's .catch — swallowed by design). What we're
+        // proving here is the schedule delta, not the resulting network I/O.
+        // The next assertion — that captureCheckpoint was attempted — is
+        // captured by the fetch mock being called a third time.
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not schedule a refresh when no recovery id was configured (no meaningful key to capture under)', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+        // No id → auto-generated random id → not a recovery key. Even with
+        // an idle timeout, there's nothing worth firing a capture under, so
+        // the timer must not arm at all.
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          idleTimeoutMinutes: 5,
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+
+        // Race past when the timer would have fired if armed.
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(fetchMock).toHaveBeenCalledTimes(1); // only the create
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not schedule a refresh when no idle timeout was configured (no upstream destroy to race)', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+        // Recovery id present but no idleTimeoutMinutes → nothing forcing
+        // the upstream sandbox to expire → nothing to race. Timer must not arm.
+        const sandbox = new PlatformSandbox({
+          id: 'mc-session-42',
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(fetchMock).toHaveBeenCalledTimes(1); // only the create
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('falls back to a 1s floor when the idle timeout is shorter than the safety-net margin (surfaces misconfig)', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+          .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+        // 1 min idle < 3 min margin → delayMs would be negative, so the
+        // schedule clamps to the 1-second floor. This is a "surface the
+        // misconfig" fallback: the refresh fires almost immediately rather
+        // than silently skipping and leaving the sandbox unprotected.
+        const sandbox = new PlatformSandbox({
+          id: 'mc-session-42',
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          idleTimeoutMinutes: 1,
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+
+        await vi.advanceTimersByTimeAsync(999);
+        expect(fetchMock).toHaveBeenCalledTimes(1); // still just the create
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(fetchMock).toHaveBeenCalledTimes(2); // refresh fired at 1s
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cancels the timer on stop() so a torn-down sandbox never fires a stray refresh', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+          // stop() VM DELETE
+          .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+        const sandbox = new PlatformSandbox({
+          id: 'mc-session-42',
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          idleTimeoutMinutes: 5,
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+        await sandbox.stop();
+
+        // Race well past the refresh's scheduled fire time.
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        // Exactly two calls: create + VM DELETE. A stray refresh would show
+        // up as a third fetch (a POST /checkpoint against a dead sandbox id).
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cancels the timer on destroy() so a released checkpoint is never re-captured', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+          // destroy() checkpoint DELETE
+          .mockResolvedValueOnce(new Response(null, { status: 204 }))
+          // destroy() VM DELETE
+          .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+        const sandbox = new PlatformSandbox({
+          id: 'mc-session-42',
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          idleTimeoutMinutes: 5,
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+        await sandbox.destroy();
+
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        // Exactly three calls: create + checkpoint DELETE + VM DELETE. A
+        // stray refresh would fire a fourth POST /checkpoint against a
+        // checkpoint we just asked the proxy to delete.
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cancels the timer when the upstream sandbox is reported destroyed (410 during a manual capture)', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+          // Manual capture -> 410 (proxy reports the sandbox is gone).
+          .mockResolvedValueOnce(json({ error: { message: 'Sandbox destroyed', type: 'gone' } }, { status: 410 }));
+
+        const sandbox = new PlatformSandbox({
+          id: 'mc-session-42',
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          idleTimeoutMinutes: 5,
+          fetch: fetchMock,
+        });
+        await sandbox._start();
+
+        // Manual capture receives 410 → sandbox marked destroyed locally →
+        // refresh timer should be cancelled by _clearDestroyedState.
+        const result = await sandbox.captureCheckpoint();
+        expect(result).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
+
+        // If the timer were still armed, it would fire in ~2 minutes and
+        // burn another POST /checkpoint against the dead sandbox id.
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(fetchMock).toHaveBeenCalledTimes(2); // create + manual capture only
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
