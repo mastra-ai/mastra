@@ -10,12 +10,16 @@
 
   .menu {
     position: relative;
+    display: flex;
+    flex-direction: column;
     flex-grow: 1;
     min-height: 0;
-    padding: 0 1rem !important;
+    padding: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem !important;
+    scrollbar-gutter: stable;
   }
 
   .pane {
+    flex-shrink: 0;
     transition:
       transform 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1),
       opacity 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
@@ -35,24 +39,31 @@
     animation: contextual-pane-enter 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
   }
 
-  .bottomFade {
-    position: absolute;
-    right: 0.75rem;
+  .versionControl {
+    position: sticky;
+    z-index: 1;
     bottom: 0;
+    flex-shrink: 0;
+    margin-top: auto;
+    padding-top: 0.5rem;
+    background: var(--ifm-navbar-background-color);
+  }
+
+  .versionControl::before {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
     left: 0;
     height: 3rem;
     pointer-events: none;
+    content: '';
     background: linear-gradient(to bottom, transparent, var(--ifm-navbar-background-color));
     opacity: 0;
     transition: opacity 150ms ease-in-out;
   }
 
-  .bottomFade[data-visible='true'] {
+  .versionControl[data-fade-visible='true']::before {
     opacity: 1;
-  }
-
-  .bottomFadeWithAnnouncementBar {
-    bottom: var(--docusaurus-announcement-bar-height);
   }
 
   .menuWithAnnouncementBar {

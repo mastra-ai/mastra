@@ -5,6 +5,7 @@ import { useAnnouncementBar, useScrollPosition } from '@docusaurus/theme-common/
 import { translate } from '@docusaurus/Translate'
 import DocSidebarItems from '@theme/DocSidebarItems'
 import type { Props } from '@theme/DocSidebar/Desktop/Content'
+import VersionControl from '@site/src/components/version-control'
 import ContextualContent from '../../ContextualContent'
 import { useContextualSidebar } from '../../../contextual-sidebar-context'
 
@@ -28,7 +29,7 @@ function useShowAnnouncementBar() {
 export default function DocSidebarDesktopContent({ path, sidebar, className }: Props): ReactNode {
   const showAnnouncementBar = useShowAnnouncementBar()
   const navigationRef = useRef<HTMLElement>(null)
-  const bottomFadeRef = useRef<HTMLDivElement>(null)
+  const versionControlRef = useRef<HTMLDivElement>(null)
   const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
   const contextualSidebar = resolveSidebar(sidebar)
   const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
@@ -44,14 +45,30 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
     }
   }, [paneKey])
 
+  useLayoutEffect(() => {
+    const navigation = navigationRef.current
+    if (!navigation) return
+
+    const updateScrollbarGutter = () => {
+      const gutterWidth = navigation.offsetWidth - navigation.clientWidth
+      navigation.style.setProperty('--sidebar-scrollbar-gutter', `${gutterWidth}px`)
+    }
+
+    updateScrollbarGutter()
+    const resizeObserver = new ResizeObserver(updateScrollbarGutter)
+    resizeObserver.observe(navigation)
+
+    return () => resizeObserver.disconnect()
+  }, [])
+
   useEffect(() => {
     const navigation = navigationRef.current
-    const bottomFade = bottomFadeRef.current
-    if (!navigation || !bottomFade) return
+    const versionControl = versionControlRef.current
+    if (!navigation || !versionControl) return
 
     const updateBottomFade = () => {
       const hasMoreContent = navigation.scrollTop + navigation.clientHeight < navigation.scrollHeight - 1
-      bottomFade.dataset.visible = String(hasMoreContent)
+      versionControl.dataset.fadeVisible = String(hasMoreContent)
     }
 
     updateBottomFade()
@@ -115,12 +132,10 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
             animateEntry={shouldAnimateContextualEntry}
           />
         )}
+        <div ref={versionControlRef} className={styles.versionControl}>
+          <VersionControl />
+        </div>
       </nav>
-      <div
-        ref={bottomFadeRef}
-        className={clsx(styles.bottomFade, showAnnouncementBar && styles.bottomFadeWithAnnouncementBar)}
-        aria-hidden="true"
-      />
     </div>
   )
 }
