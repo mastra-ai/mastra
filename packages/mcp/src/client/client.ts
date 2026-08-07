@@ -136,18 +136,12 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 
-const MCP_SCALAR_STRUCTURED_CONTENT = Symbol.for('mastra.mcp.scalarStructuredContent');
-
-function isMcpScalarStructuredWrapper(output: unknown): output is Record<symbol, unknown> {
-  return output !== null && typeof output === 'object' && MCP_SCALAR_STRUCTURED_CONTENT in output;
-}
-
-function attachMcpCallToolContent(structuredContent: unknown, content: unknown): unknown {
-  if (
-    structuredContent !== null &&
-    typeof structuredContent === 'object' &&
-    !isMcpScalarStructuredWrapper(structuredContent)
-  ) {
+function attachMcpCallToolContent(
+  structuredContent: unknown,
+  content: unknown,
+  scalarMcpContentByResult: Map<unknown, unknown>,
+): unknown {
+  if (structuredContent !== null && typeof structuredContent === 'object') {
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
       value: content,
       enumerable: false,
@@ -156,43 +150,36 @@ function attachMcpCallToolContent(structuredContent: unknown, content: unknown):
     return structuredContent;
   }
 
-  const wrapper = Object.create(null) as Record<symbol, unknown>;
-  Object.defineProperty(wrapper, MCP_SCALAR_STRUCTURED_CONTENT, {
-    value: structuredContent,
-    enumerable: false,
-    configurable: true,
-  });
-  Object.defineProperty(wrapper, MCP_CALL_TOOL_CONTENT, {
-    value: content,
-    enumerable: false,
-    configurable: true,
-  });
-  return wrapper;
+  scalarMcpContentByResult.set(structuredContent, content);
+  return structuredContent;
 }
 
-function getMcpCallToolContent(output: unknown): unknown {
+function getMcpCallToolContent(output: unknown, scalarMcpContentByResult: Map<unknown, unknown>): unknown {
   if (output !== null && typeof output === 'object') {
-    return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
+    const attached = (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
+    if (attached !== undefined) {
+      return attached;
+    }
   }
+
+  if (scalarMcpContentByResult.has(output)) {
+    const content = scalarMcpContentByResult.get(output);
+    scalarMcpContentByResult.delete(output);
+    return content;
+  }
+
   return undefined;
 }
 
-function getMcpStructuredToolOutput(output: unknown): unknown {
-  if (isMcpScalarStructuredWrapper(output)) {
-    return output[MCP_SCALAR_STRUCTURED_CONTENT];
-  }
-  return output;
-}
-
-function createStructuredToolToModelOutput(): (
-  output: unknown,
-) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
+function createStructuredToolToModelOutput(
+  scalarMcpContentByResult: Map<unknown, unknown>,
+): (output: unknown) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
   return output => {
-    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
+    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output, scalarMcpContentByResult));
     if (modelText !== undefined) {
       return { type: 'text', value: modelText };
     }
-    return { type: 'json', value: getMcpStructuredToolOutput(output) };
+    return { type: 'json', value: output };
   };
 }
 
@@ -1284,6 +1271,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
+        const scalarMcpContentByResult = new Map<unknown, unknown>();
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1303,7 +1291,7 @@ export class InternalMastraMCPClient extends MastraBase {
             forwardInstructions: this.forwardInstructions,
             instructionsMaxLength: this.instructionsMaxLength,
           },
-          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
+          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput(scalarMcpContentByResult) } : {}),
           execute: async (
             input: any,
             context?: {
@@ -1358,7 +1346,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
-                  return attachMcpCallToolContent(res.structuredContent, res.content);
+                  return attachMcpCallToolContent(res.structuredContent, res.content, scalarMcpContentByResult);
                 }
 
                 return res;

@@ -1087,6 +1087,7 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     const tool = tools['count_tool'];
     const result = await tool.execute?.({ query: 'test' });
 
+    expect(result).toBe(0);
     expect(tool.toModelOutput?.(result)).toEqual({
       type: 'text',
       value: 'count is zero',
@@ -1122,6 +1123,7 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     const tool = tools['nullable_tool'];
     const result = await tool.execute?.({ query: 'test' });
 
+    expect(result).toBeNull();
     expect(tool.toModelOutput?.(result)).toEqual({
       type: 'text',
       value: 'no data available',
