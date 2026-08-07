@@ -385,7 +385,10 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     ) {
       s['anyOf'] = [
         ...['string', 'number', 'integer', 'boolean', 'object'].map(t => ({ type: t })),
-        { type: 'array', items: { anyOf: ['string', 'number', 'integer', 'boolean', 'object'].map(t => ({ type: t })) } },
+        {
+          type: 'array',
+          items: { anyOf: ['string', 'number', 'integer', 'boolean', 'object'].map(t => ({ type: t })) },
+        },
       ];
       s['nullable'] = true;
     }

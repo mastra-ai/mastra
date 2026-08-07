@@ -4724,7 +4724,7 @@ export class Agent<
             const subAgentRequestContext: RequestContext = new RequestContext<unknown>(
               [...requestContext.entries()].filter(
                 ([key]) => key !== 'MastraMemory' && key !== MASTRA_THREAD_ID_KEY && key !== MASTRA_RESOURCE_ID_KEY,
-              ) as Iterable<readonly [string, unknown]>,
+              ),
             );
 
             // Build delegation start context

@@ -653,7 +653,10 @@ describe('RecordedTrace', () => {
       };
     }
 
-    function createMastraWithStorageExporter(storage: MockStore, scoringMirror: ReturnType<typeof createScoringMirror>) {
+    function createMastraWithStorageExporter(
+      storage: MockStore,
+      scoringMirror: ReturnType<typeof createScoringMirror>,
+    ) {
       const observability = new Observability({
         configs: {
           default: {
