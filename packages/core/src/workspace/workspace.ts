@@ -31,10 +31,10 @@
  */
 
 import * as path from 'node:path';
-import pMap, { pMapSkip } from 'p-map';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
+import { pMap, pMapSkip } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
