@@ -12,6 +12,12 @@ export interface AuditTarget {
   name?: string;
 }
 
+export interface AuditActorProfile {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface AuditEvent {
   id: string;
   orgId: string;
@@ -32,6 +38,7 @@ export interface AuditEvent {
 
 export interface AuditEventPage {
   events: AuditEvent[];
+  actors: Record<string, AuditActorProfile>;
   /** Pass back as `before` to fetch the next (older) page; absent at the end. */
   nextCursor?: string;
 }
@@ -52,10 +59,11 @@ async function throwRequestError(res: Response): Promise<never> {
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,
-  options: { actions?: string[]; before?: string; limit?: number } = {},
+  options: { actions?: string[]; actorIds?: string[]; before?: string; limit?: number } = {},
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
   if (options.actions && options.actions.length > 0) query.set('actions', options.actions.join(','));
+  if (options.actorIds && options.actorIds.length > 0) query.set('actorIds', options.actorIds.join(','));
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   const qs = query.size > 0 ? `?${query}` : '';

@@ -4,6 +4,13 @@ function createAbortError() {
   return new DOMException('The operation was aborted.', 'AbortError');
 }
 
+export class TaskStoreVersionConflictError extends Error {
+  constructor(expectedVersion: number, currentVersion: number) {
+    super(`Task version conflict: expected ${expectedVersion}, received ${currentVersion}`);
+    this.name = 'TaskStoreVersionConflictError';
+  }
+}
+
 export class InMemoryTaskStore {
   private store: Map<string, Task> = new Map();
   private versions: Map<string, number> = new Map();
@@ -38,15 +45,28 @@ export class InMemoryTaskStore {
     };
   }
 
-  async save({ agentId, data }: { agentId: string; data: Task }): Promise<void> {
+  async save({
+    agentId,
+    data,
+    expectedVersion,
+  }: {
+    agentId: string;
+    data: Task;
+    expectedVersion?: number;
+  }): Promise<void> {
     // Store copies to prevent internal mutation if caller reuses objects
     const key = this.getKey(agentId, data.id);
     if (!data.id) {
       throw new Error('Task ID is required');
     }
 
+    const currentVersion = this.versions.get(key) ?? 0;
+    if (expectedVersion !== undefined && currentVersion !== expectedVersion) {
+      throw new TaskStoreVersionConflictError(expectedVersion, currentVersion);
+    }
+
     const storedTask = { ...data };
-    const nextVersion = (this.versions.get(key) ?? 0) + 1;
+    const nextVersion = currentVersion + 1;
 
     this.store.set(key, storedTask);
     this.versions.set(key, nextVersion);

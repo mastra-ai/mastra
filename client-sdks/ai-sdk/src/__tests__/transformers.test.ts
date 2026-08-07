@@ -1027,7 +1027,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
 });
 
 describe('AgentNetworkToAISDKTransformer', () => {
-  it('should return NetworkDataPart on each agent-execution-event and workflow-execution-event', async () => {
+  it('should keep data-network output and leak no data-tool-agent-step parts on agent-execution-event and workflow-execution-event', async () => {
     const mockStream = new ReadableStream({
       async start(controller) {
         // Network start
@@ -1129,6 +1129,7 @@ describe('AgentNetworkToAISDKTransformer', () => {
 
     // Find all NetworkDataPart chunks
     const networkChunks = chunks.filter(chunk => chunk.type === 'data-network' || chunk.type === 'data-tool-network');
+    const agentStepChunks = chunks.filter(chunk => chunk.type === 'data-tool-agent-step');
 
     // Should have NetworkDataPart chunks for:
     // 1. routing-agent-start
@@ -1138,6 +1139,7 @@ describe('AgentNetworkToAISDKTransformer', () => {
     // 5. workflow-execution-event-workflow-start (our new behavior - returns NetworkDataPart)
     // 6. network-execution-event-finish
     expect(networkChunks.length).toBeGreaterThanOrEqual(6);
+    expect(agentStepChunks).toHaveLength(0);
 
     // Verify that agent-execution-event-start returns a NetworkDataPart
     // The chunk should have the step with updated task from transformAgent
@@ -1173,6 +1175,332 @@ describe('AgentNetworkToAISDKTransformer', () => {
     expect(workflowStep).toBeDefined();
     expect(workflowStep?.task).toBeDefined();
     expect(workflowStep?.task.name).toBe('test-workflow'); // From transformWorkflow
+  });
+
+  it('preserves task.steps[0].toolResults on the network path after agent-execution-event-finish', async () => {
+    // After step-finish the network adapter holds a compact snapshot (toolResults stripped).
+    // The finish event must produce a full snapshot so that the terminal task is complete.
+    const mockStream = new ReadableStream({
+      async start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'net-run-1',
+          payload: {
+            networkId: 'test-net',
+            agentId: 'worker-agent',
+            runId: 'agent-run-1',
+            inputData: { iteration: 0, task: null, threadId: 'thread-1', threadResourceId: 'res-1' },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-start',
+          runId: 'net-run-1',
+          payload: { agentId: 'worker-agent', runId: 'agent-run-1', args: { prompt: 'do work', iteration: 0 } },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-start',
+          runId: 'net-run-1',
+          payload: { type: 'start', runId: 'agent-run-1', from: 'AGENT', payload: { id: 'worker-agent' } },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-call',
+          runId: 'net-run-1',
+          payload: {
+            type: 'tool-call',
+            runId: 'agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-call',
+              toolCallId: 'call-net-0',
+              toolName: 'search',
+              args: { q: 'test' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-result',
+          runId: 'net-run-1',
+          payload: {
+            type: 'tool-result',
+            runId: 'agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-result',
+              toolCallId: 'call-net-0',
+              toolName: 'search',
+              result: { answer: 'network-path result preserved' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-step-finish',
+          runId: 'net-run-1',
+          payload: {
+            type: 'step-finish',
+            runId: 'agent-run-1',
+            from: 'AGENT',
+            payload: {
+              id: 'step-net-0',
+              stepResult: { reason: 'tool-calls', warnings: [] },
+              output: { usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+              metadata: { timestamp: new Date(), modelId: 'test-model' },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-finish',
+          runId: 'net-run-1',
+          payload: {
+            type: 'finish',
+            runId: 'agent-run-1',
+            from: 'AGENT',
+            payload: {
+              stepResult: { reason: 'stop', warnings: [] },
+              output: { usage: { inputTokens: 50, outputTokens: 50, totalTokens: 100 } },
+              response: { id: 'resp-1', modelId: 'test-model', messages: [] },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'network-execution-event-finish',
+          runId: 'net-run-1',
+          payload: { result: 'done', usage: { inputTokens: 50, outputTokens: 50, totalTokens: 100 } },
+        });
+
+        controller.close();
+      },
+    });
+
+    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of aiSdkStream) {
+      chunks.push(chunk);
+    }
+
+    const networkChunks = chunks.filter(chunk => chunk.type === 'data-network' || chunk.type === 'data-tool-network');
+    const agentStepChunks = chunks.filter(chunk => chunk.type === 'data-tool-agent-step');
+
+    // No data-tool-agent-step must leak onto the network wire.
+    expect(agentStepChunks).toHaveLength(0);
+
+    // Find the chunk produced by agent-execution-event-finish.
+    // It is the last network chunk before network-execution-event-finish.
+    const finishChunk = networkChunks.at(-2);
+    expect(finishChunk).toBeDefined();
+
+    // The routing-agent step is the first with id='agent-run-1'; agent-execution-event-*
+    // updates it in place. Find by task presence to avoid ambiguity with the second step.
+    const agentStep = finishChunk?.data?.steps?.find((s: any) => s.name === 'worker-agent' && s.task);
+    expect(agentStep).toBeDefined();
+
+    // Terminal task must carry the completed step's toolResults after finish.
+    expect(agentStep?.task?.steps).toHaveLength(1);
+    expect(agentStep?.task?.steps?.[0]?.toolResults?.[0]?.result).toEqual({
+      answer: 'network-path result preserved',
+    });
+  });
+
+  it('preserves task.steps[0].toolResults on the network path when the agent terminates without finish (suspended)', async () => {
+    // Suspended/failed sub-agents never emit a finish event, so the only opportunity
+    // to capture full step detail is at step-finish via the completed-step delta.
+    const mockStream = new ReadableStream({
+      async start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'sus-net-1',
+          payload: {
+            networkId: 'test-net-sus',
+            agentId: 'sus-agent',
+            runId: 'sus-agent-run-1',
+            inputData: { iteration: 0, task: null, threadId: 'thread-sus', threadResourceId: 'res-sus' },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-start',
+          runId: 'sus-net-1',
+          payload: { agentId: 'sus-agent', runId: 'sus-agent-run-1', args: { prompt: 'do work', iteration: 0 } },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-start',
+          runId: 'sus-net-1',
+          payload: { type: 'start', runId: 'sus-agent-run-1', from: 'AGENT', payload: { id: 'sus-agent' } },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-call',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-call',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-call',
+              toolCallId: 'call-sus-0',
+              toolName: 'lookup',
+              args: { q: 'suspended-query' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-result',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-result',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-result',
+              toolCallId: 'call-sus-0',
+              toolName: 'lookup',
+              result: { answer: 'suspension-path result preserved' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        // step-finish but no subsequent finish (suspended termination)
+        controller.enqueue({
+          type: 'agent-execution-event-step-finish',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'step-finish',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              id: 'step-sus-0',
+              stepResult: { reason: 'tool-calls', warnings: [] },
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              metadata: { timestamp: new Date(), modelId: 'test-model' },
+            },
+          },
+        });
+
+        // A second tool-call / tool-result / step-finish pair exercises the
+        // multi-entry branch of the re-application loop (completedSteps.size > 1).
+        controller.enqueue({
+          type: 'agent-execution-event-tool-call',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-call',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-call',
+              toolCallId: 'call-sus-1',
+              toolName: 'lookup',
+              args: { q: 'suspended-query-2' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-tool-result',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'tool-result',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              type: 'tool-result',
+              toolCallId: 'call-sus-1',
+              toolName: 'lookup',
+              result: { answer: 'suspension-path result-2 preserved' },
+              payload: { dynamic: false },
+            },
+          },
+        });
+
+        controller.enqueue({
+          type: 'agent-execution-event-step-finish',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'step-finish',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: {
+              id: 'step-sus-1',
+              stepResult: { reason: 'tool-calls', warnings: [] },
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              metadata: { timestamp: new Date(), modelId: 'test-model' },
+            },
+          },
+        });
+
+        // A text-delta arrives after both step-finishes. Without the fix this
+        // overwrites step.task with a compact snapshot that has empty toolResults
+        // for both completed steps, demonstrating the regression.
+        controller.enqueue({
+          type: 'agent-execution-event-text-delta',
+          runId: 'sus-net-1',
+          payload: {
+            type: 'text-delta',
+            runId: 'sus-agent-run-1',
+            from: 'AGENT',
+            payload: { text: 'step-2 text' },
+          },
+        });
+
+        // Network finishes without a sub-agent finish (mirrors suspension)
+        controller.enqueue({
+          type: 'network-execution-event-finish',
+          runId: 'sus-net-1',
+          payload: { result: 'suspended', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+        });
+
+        controller.close();
+      },
+    });
+
+    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of aiSdkStream) {
+      chunks.push(chunk);
+    }
+
+    const networkChunks = chunks.filter(chunk => chunk.type === 'data-network' || chunk.type === 'data-tool-network');
+    const agentStepChunks = chunks.filter(chunk => chunk.type === 'data-tool-agent-step');
+
+    // No data-tool-agent-step must leak onto the network wire.
+    expect(agentStepChunks).toHaveLength(0);
+
+    // Assert on the last chunk produced before network-execution-event-finish.
+    // In production each chunk is serialized at emit time, so the last
+    // pre-termination chunk is the one that carries the final merged step state.
+    // Here all chunks share the same in-memory step object (shallow spread), so
+    // every chunk reads the final state; the at(-2) position is what matters in
+    // production and is kept for accuracy.
+    const lastAgentChunk = networkChunks.at(-2);
+    expect(lastAgentChunk).toBeDefined();
+
+    const agentStep = lastAgentChunk?.data?.steps?.find((s: any) => s.name === 'sus-agent' && s.task);
+    expect(agentStep).toBeDefined();
+
+    // Both completed steps' full detail must be present even without a finish event.
+    // This exercises the multi-entry branch (completedSteps.size > 1) of the
+    // re-application loop.
+    expect(agentStep?.task?.steps).toHaveLength(2);
+    expect(agentStep?.task?.steps?.[0]?.toolResults?.[0]?.result).toEqual({
+      answer: 'suspension-path result preserved',
+    });
+    expect(agentStep?.task?.steps?.[1]?.toolResults?.[0]?.result).toEqual({
+      answer: 'suspension-path result-2 preserved',
+    });
   });
 });
 
