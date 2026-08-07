@@ -665,6 +665,7 @@ input[type='search']::-ms-clear {
   font-weight: 400;
   border-radius: 12px;
   transition: all 0.2s ease-in-out;
+  height: 34px;
 
   &:hover {
     color: var(--mastra-text-primary);
