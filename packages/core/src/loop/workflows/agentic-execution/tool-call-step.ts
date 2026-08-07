@@ -685,6 +685,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
+              const innerApproval =
+                typeof options.requireToolApproval === 'object' && options.requireToolApproval
+                  ? options.requireToolApproval
+                  : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
+                    ? suspendPayload.requireToolApproval
+                    : null;
+
+              const approvalToolName = innerApproval?.toolName ?? inputData.toolName;
+              const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : inputData.args;
+
               await stopGoalActivity({
                 agentId,
                 runId,
@@ -697,8 +707,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   from: ChunkFrom.AGENT,
                   payload: {
                     toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
                     resumeSchema: JSON.stringify(
                       standardSchemaToJSONSchema(
                         toStandardSchema(
@@ -725,8 +735,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // Add approval metadata to message before persisting
               addToolMetadata({
                 toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args: inputData.args,
+                toolName: approvalToolName,
+                args: approvalArgs,
                 type: 'approval',
                 suspendedToolRunId: options.runId,
                 resumeSchema: JSON.stringify(
@@ -752,8 +762,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   requireToolApproval: {
                     toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
                   },
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
