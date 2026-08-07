@@ -364,6 +364,18 @@ export class PlatformSandbox extends MastraSandbox {
    * before the first one resolves. Cleared when the request settles.
    */
   private _captureInFlight: Promise<CaptureCheckpointResult> | null = null;
+  /**
+   * In-flight `start()` attempt. Concurrent callers on a fresh instance
+   * coalesce onto this single promise so a `POST /sandbox` is not fired
+   * N times when N fleet callers race to bring the same logical sandbox
+   * up. Published **synchronously** with `??=` before the first `await`
+   * so a later caller cannot slip through the null check while the
+   * originator is mid-round-trip. Cleared when the shared attempt
+   * settles (success or failure) so the next call sees a clean slot.
+   *
+   * Mirrors OSS `@mastra/railway` `RailwaySandbox._startInFlight`.
+   */
+  private _startInFlight: Promise<void> | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -430,6 +442,30 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async start(): Promise<void> {
+    // Coalesce concurrent callers onto a single in-flight attempt. `??=`
+    // publishes the promise **synchronously** before the first `await`
+    // below, so a second caller entering `start()` while the first is
+    // mid-round-trip sees a populated `_startInFlight` and joins it
+    // instead of racing to `POST /sandbox` alongside the originator. On
+    // settle (success or failure) the slot is cleared so the next call
+    // starts fresh — a failed attempt is not a permanent latch.
+    // Mirrors OSS @mastra/railway RailwaySandbox._startInFlight.
+    this._startInFlight ??= this._doStart().finally(() => {
+      this._startInFlight = null;
+    });
+    return this._startInFlight;
+  }
+
+  /**
+   * The single `start` attempt behind {@link start}'s coalescing wrapper.
+   *
+   * Split out so the wrapper can install a shared in-flight promise
+   * synchronously (before the first `await`) without inlining the reattach
+   * / retry logic. Joined callers observe whatever outcome this method
+   * produces — success returns normally, failures propagate to every
+   * awaiter.
+   */
+  private async _doStart(): Promise<void> {
     if (this._sandboxId) {
       try {
         const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
@@ -510,11 +546,93 @@ export class PlatformSandbox extends MastraSandbox {
     this._addressRegistry.set(json.id, json.instanceUrl);
   }
 
+  /**
+   * Stop the sandbox while **preserving its recovery checkpoint**.
+   *
+   * Semantic parity with `@mastra/railway` `RailwaySandbox.stop()`: the VM
+   * is released but the on-provider checkpoint survives, so a subsequent
+   * `start()` on a sandbox constructed with the same `id` can restore from
+   * it. Any in-flight capture is awaited first so the preserved checkpoint
+   * reflects the latest disk state we asked for.
+   *
+   * Corresponds to `DELETE /v1/projects/:pid/sandbox/:sandboxId` on
+   * workspace-proxy, which by contract does not touch the checkpoint. Use
+   * {@link destroy} when you want the checkpoint released too.
+   */
   async stop(): Promise<void> {
-    await this.destroy();
+    // Await any in-flight capture so the preserved checkpoint reflects the
+    // latest capture the caller triggered. Never rethrow — a failing capture
+    // must not block teardown; the proxy's safety-net refresh timer is a
+    // fallback for the checkpoint state.
+    if (this._captureInFlight) {
+      await this._captureInFlight.catch(error => {
+        this.logger.warn(`stop(): failed to flush in-flight capture before teardown:`, error);
+      });
+    }
+    await this._teardownSandbox();
   }
 
+  /**
+   * Destroy the sandbox **and release its recovery checkpoint**.
+   *
+   * Semantic parity with `@mastra/railway` `RailwaySandbox.destroy()`:
+   * cancels any in-flight capture (the checkpoint is about to be deleted
+   * — no reason to burn a capture on state we're releasing), asks the
+   * proxy to delete the checkpoint, then releases the VM. Both remote
+   * operations are best-effort logged failures — a stray checkpoint or a
+   * transient proxy error must not leave the caller with a half-torn-down
+   * sandbox they can't safely retry.
+   *
+   * Requires the caller to have constructed with a recovery `id` (there is
+   * no checkpoint to delete otherwise); callers without one skip the
+   * checkpoint DELETE and behave identically to {@link stop}.
+   */
   async destroy(): Promise<void> {
+    if (!this._sandboxId) return;
+    const destroyedSandboxId = this._sandboxId;
+
+    // Drop the in-flight capture promise — we're about to delete the
+    // checkpoint, so completing an in-flight capture is at best a wasted
+    // round-trip and at worst races with the delete. Callers get whatever
+    // resolution the pending capture already had; we don't rethrow.
+    this._captureInFlight = null;
+
+    if (this._hasRecoveryKey) {
+      // Body mirrors the POST /checkpoint shape (`{ id }`) so the proxy
+      // can hash the same recovery key into the same checkpoint name.
+      // Best-effort: a proxy 404/410 means the checkpoint is already
+      // absent (idle GC, prior delete) and we can proceed with the VM
+      // teardown; other failures are surfaced in logs but do not abort
+      // — the VM DELETE below is the operation the caller most needs.
+      try {
+        await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}/checkpoint`, {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: this.id }),
+        });
+      } catch (error) {
+        if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) {
+          this.logger.debug(`destroy(): checkpoint already absent upstream (status=${error.status})`);
+        } else {
+          this.logger.warn(`destroy(): failed to delete checkpoint upstream:`, error);
+        }
+      }
+    }
+
+    await this._teardownSandbox();
+  }
+
+  /**
+   * Release the remote sandbox VM and clear the local state pointing at it.
+   *
+   * Shared body of {@link stop} and {@link destroy} — both funnel through
+   * here after they've dealt with the checkpoint (preserve vs release).
+   * The VM DELETE is safe to issue in either mode: the proxy's DELETE
+   * route does not touch the checkpoint on its own, so `stop()` correctly
+   * leaves the checkpoint intact and `destroy()` has already removed it
+   * before this call.
+   */
+  private async _teardownSandbox(): Promise<void> {
     if (!this._sandboxId) return;
     const destroyedSandboxId = this._sandboxId;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });

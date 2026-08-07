@@ -16,6 +16,7 @@ import { MockMemory } from '../../../memory/mock';
 import { MockStore } from '../../../storage/mock';
 import { askUserTool, createTool } from '../../../tools';
 import { delay } from '../../../utils';
+import { createStep, createWorkflow } from '../../../workflows';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
@@ -1047,6 +1048,117 @@ describe('DurableAgent foreach tool execution', () => {
 
     expect(toolErrors.length).toBeGreaterThan(0);
 
+    cleanup();
+  });
+});
+
+// ============================================================================
+// Workflow-as-Tool Suspension and Resume Tests
+// ============================================================================
+
+describe('DurableAgent workflow-as-tool suspension and resume', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  it('should resume a suspended workflow tool with the preserved runId and deliver resumeData', async () => {
+    const mockModel = createToolCallThenTextModel(
+      'workflow-askUserWorkflow',
+      { inputData: { topic: 'lunch' } },
+      'All done',
+    );
+
+    const receivedResumeData: any[] = [];
+    let stepExecutions = 0;
+
+    const askStep = createStep({
+      id: 'ask-user',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+      resumeSchema: z.object({ answer: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        stepExecutions++;
+        if (!resumeData?.answer) {
+          return suspend({ question: `What do you want for ${inputData.topic}?` });
+        }
+        receivedResumeData.push(resumeData);
+        return { answer: resumeData.answer };
+      },
+    });
+
+    const askUserWorkflow = createWorkflow({
+      id: 'askUserWorkflow',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+    })
+      .then(askStep)
+      .commit();
+
+    const baseAgent = new Agent({
+      id: 'workflow-resume-agent',
+      name: 'Workflow Resume Agent',
+      instructions: 'Use the askUserWorkflow to ask the user questions',
+      model: mockModel as LanguageModelV2,
+      workflows: { askUserWorkflow },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    // Register with Mastra for storage (needed for the inner workflow's snapshot persistence)
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'workflow-resume-agent': durableAgent as any },
+    });
+
+    let suspendedData: any = null;
+    const { runId, cleanup } = await durableAgent.stream('Ask me about lunch', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+
+    await vi.waitFor(() => expect(suspendedData).not.toBeNull(), { timeout: 10000 });
+
+    // The workflow suspended with its question payload
+    expect(suspendedData.type).toBe('suspension');
+    expect(suspendedData.toolName).toBe('workflow-askUserWorkflow');
+    expect(suspendedData.suspendPayload).toEqual({ question: 'What do you want for lunch?' });
+    expect(stepExecutions).toBe(1);
+
+    // Resume with the user's answer
+    let finishData: any = null;
+    const resumeResult = await durableAgent.resume(
+      runId,
+      { answer: 'pizza' },
+      {
+        onFinish: data => {
+          finishData = data;
+        },
+      },
+    );
+
+    await vi.waitFor(() => expect(finishData).not.toBeNull(), { timeout: 10000 });
+
+    // The suspended step received the answer (a fresh run would have re-suspended
+    // without resumeData, and a lost runId fails with
+    // AGENT_WORKFLOW_TOOL_EXECUTION_FAILED before reaching the step)
+    expect(receivedResumeData).toEqual([{ answer: 'pizza' }]);
+    expect(stepExecutions).toBe(2);
+
+    // No workflow tool execution error in the finish payload
+    const toolErrors = (finishData?.steps ?? [])
+      .flatMap((step: any) => step?.toolResults ?? [])
+      .filter((result: any) => result?.error);
+    expect(toolErrors).toEqual([]);
+
+    resumeResult.cleanup();
     cleanup();
   });
 });
