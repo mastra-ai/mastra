@@ -340,7 +340,17 @@ export function setupAutocomplete(state: TUIState): void {
     },
     { name: 'logout', description: 'Logout from OAuth provider' },
     { name: 'hooks', description: 'Show/reload configured hooks' },
-    { name: 'mcp', description: 'Show/reload MCP server connections' },
+    {
+      name: 'mcp',
+      description: 'Show/reload/enable/disable MCP server connections',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'reload', label: 'reload', description: 'Disconnect and reconnect all servers' },
+          { value: 'status', label: 'status', description: 'Show server status as text' },
+          { value: 'disable', label: 'disable', description: 'Disable a server or all servers' },
+          { value: 'enable', label: 'enable', description: 'Re-enable a server or all servers' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
     {
       name: 'thread:tag-dir',
       description: 'Tag current thread with this directory',

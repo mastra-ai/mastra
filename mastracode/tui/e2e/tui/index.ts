@@ -53,6 +53,7 @@ import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
 import { loginPreservesModelPackScenario } from './login-preserves-model-pack.js';
 import { loginSeedsOmDefaultScenario } from './login-seeds-om-default.js';
+import { mcpDisableEnableScenario } from './mcp-disable-enable.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
 import { mcpOauthAuthenticateScenario } from './mcp-oauth-authenticate.js';
@@ -222,6 +223,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'login-preserves-model-pack': loginPreservesModelPackScenario,
   'login-seeds-om-default': loginSeedsOmDefaultScenario,
   'modal-and-shell': modalAndShellScenario,
+  'mcp-disable-enable': mcpDisableEnableScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
   'mcp-oauth-authenticate': mcpOauthAuthenticateScenario,

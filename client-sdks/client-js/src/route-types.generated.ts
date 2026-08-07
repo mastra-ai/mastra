@@ -17911,6 +17911,16 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   targetType: 'agent' | 'workflow' | 'scorer';
   /** ID of the target */
   targetId: string;
+  /** Name of the experiment */
+  name?: string | undefined;
+  /** Description of the experiment */
+  description?: string | undefined;
+  /** Additional metadata */
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   /** IDs of scorers to apply */
   scorerIds?: string[] | undefined;
   /** Pin to specific dataset version */
