@@ -1243,7 +1243,7 @@ function generateProvidersSidebarItems(grouped: GroupedProviders, aiSdkProviders
     }),
   ].sort((a, b) => a.label.localeCompare(b.label));
 
-  return [{ type: 'doc', id: 'providers/index', label: 'Providers' }, ...popularProviders, ...otherProviders];
+  return [...popularProviders, ...otherProviders];
 }
 
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
@@ -1282,10 +1282,7 @@ function generateGatewaysSidebarItems(grouped: GroupedProviders): any[] {
   // Sort gateways alphabetically
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  const items = [
-    { type: 'doc', id: 'gateways/index', label: 'Gateways' },
-    { type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' },
-  ];
+  const items = [{ type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' }];
 
   for (const gatewayId of gatewaysList) {
     const providers = grouped.gateways.get(gatewayId);
@@ -1328,12 +1325,20 @@ const sidebars = {
       type: "category",
       label: "Gateways",
       collapsed: false,
+      link: {
+        type: "doc",
+        id: "gateways/index",
+      },
       items: ${JSON.stringify(gatewaysItems, null, 6).replace(/^/gm, '      ').trim()},
     },
     {
       type: "category",
       label: "Providers",
       collapsed: false,
+      link: {
+        type: "doc",
+        id: "providers/index",
+      },
       items: ${JSON.stringify(providersItems, null, 6).replace(/^/gm, '      ').trim()},
     },
   ],

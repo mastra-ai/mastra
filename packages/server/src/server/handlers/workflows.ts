@@ -685,10 +685,16 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      void _run.start({
-        ...params,
-        requestContext,
-      });
+      // Fire-and-forget: attach .catch so a rejected start (e.g. invalid input
+      // schema) cannot become an unhandledRejection and tear down the process.
+      void _run
+        .start({
+          ...params,
+          requestContext,
+        })
+        .catch(error => {
+          mastra.getLogger().error('Failed to start workflow run', { error, workflowId, runId });
+        });
 
       return { message: 'Workflow run started' };
     } catch (e) {
@@ -903,7 +909,11 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.resume({ ...params, requestContext });
+      // Fire-and-forget: attach .catch so a rejected resume cannot become an
+      // unhandledRejection and tear down the process.
+      void _run.resume({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to resume workflow run', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run resumed' };
     } catch (error) {
@@ -1000,7 +1010,9 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart({ ...params, requestContext });
+      void _run.restart({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to restart workflow run in background', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
@@ -1161,7 +1173,11 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.timeTravel({ ...params, requestContext });
+      // Fire-and-forget: attach .catch so a rejected time travel cannot become
+      // an unhandledRejection and tear down the process.
+      void _run.timeTravel({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to time travel workflow run', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run time travel started' };
     } catch (error) {

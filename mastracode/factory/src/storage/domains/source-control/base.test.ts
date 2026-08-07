@@ -404,6 +404,40 @@ describe('SourceControlStorage', () => {
     ).rejects.toThrow(/does not belong to the connection installation/);
   });
 
+  it('round-trips nullable session titles', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const titled = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000001',
+      baseBranch: 'main',
+      title: 'Fix login flow',
+    });
+    const untitled = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000002',
+      baseBranch: 'main',
+    });
+
+    expect(titled.title).toBe('Fix login flow');
+    expect(untitled.title).toBeNull();
+    await expect(github.sessions.getBySessionId(titled.sessionId)).resolves.toMatchObject({
+      title: 'Fix login flow',
+    });
+    await expect(github.sessions.list({ projectRepositoryId: link.id, userId: 'user-1' })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sessionId: titled.sessionId, title: 'Fix login flow' }),
+        expect.objectContaining({ sessionId: untitled.sessionId, title: null }),
+      ]),
+    );
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

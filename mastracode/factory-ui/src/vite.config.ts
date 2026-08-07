@@ -1,9 +1,11 @@
+import fs from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import path, { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import ts from 'typescript';
 import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
 import type { Plugin } from 'vite';
 
@@ -50,6 +52,199 @@ function runtimeConfigPlugin(): Plugin {
 }
 
 /**
+ * Emit `routes-manifest.json` alongside the built SPA — a sorted array of the
+ * SPA's top-level URL segments (e.g. `factories`, `signin`). Deployers that
+ * front the API server (e.g. `@mastra/deployer-vercel`) read this to build a
+ * route table that hands SPA-owned paths to the static bundle instead of the
+ * function.
+ *
+ * Parses `src/ui/router.tsx` with the TypeScript compiler, finds the array
+ * literal returned by `createAppRoutes()`, and walks every nested route object
+ * to collect the first path segment. Falling back to source parsing (rather
+ * than importing the router at build time) avoids pulling React + the whole
+ * SPA graph into the Vite config just to enumerate paths.
+ */
+const routesManifestPlugin = (): Plugin => {
+  const getPropertyName = (name: ts.PropertyName) => {
+    if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+      return name.text;
+    }
+
+    return undefined;
+  };
+
+  /**
+   * Compose the child's absolute URL from its parent. React Router treats a
+   * leading `/` as an absolute reset (child ignores its parent), everything
+   * else is appended relative to the parent's URL.
+   */
+  const joinRoutePath = (parentAbsolutePath: string, childPath: string) => {
+    if (childPath.startsWith('/')) {
+      return childPath;
+    }
+
+    if (parentAbsolutePath === '/') {
+      return `/${childPath}`;
+    }
+
+    return `${parentAbsolutePath.replace(/\/$/, '')}/${childPath}`;
+  };
+
+  const getRootSegment = (absolutePath: string) => {
+    if (!absolutePath.startsWith('/')) {
+      return undefined;
+    }
+
+    const [firstSegment] = absolutePath.slice(1).split('/');
+    if (!firstSegment) {
+      return undefined;
+    }
+
+    // Params (`:factoryId`) and wildcards (`*`) can't anchor a deployer route
+    // rule — they'd match everything, defeating the fall-through to the API.
+    if (firstSegment === '*' || firstSegment.startsWith(':')) {
+      return undefined;
+    }
+
+    return firstSegment;
+  };
+
+  const collectRouteRoots = async (sourcePath: string) => {
+    const sourceText = await fs.readFile(sourcePath, 'utf8');
+    const sourceFile = ts.createSourceFile(sourcePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+    const collectedRoots = new Set<string>();
+    const visitedArrayExpressions = new Set<ts.ArrayLiteralExpression>();
+
+    const collectFromExpression = (expression: ts.Expression | undefined, parentAbsolutePath: string) => {
+      if (!expression) {
+        return;
+      }
+
+      if (ts.isArrayLiteralExpression(expression)) {
+        if (visitedArrayExpressions.has(expression)) {
+          return;
+        }
+
+        visitedArrayExpressions.add(expression);
+
+        for (const element of expression.elements) {
+          collectFromArrayElement(element, parentAbsolutePath);
+        }
+
+        return;
+      }
+
+      if (ts.isParenthesizedExpression(expression)) {
+        collectFromExpression(expression.expression, parentAbsolutePath);
+        return;
+      }
+
+      if (ts.isConditionalExpression(expression)) {
+        collectFromExpression(expression.whenTrue, parentAbsolutePath);
+        collectFromExpression(expression.whenFalse, parentAbsolutePath);
+        return;
+      }
+
+      if (ts.isSpreadElement(expression)) {
+        collectFromExpression(expression.expression, parentAbsolutePath);
+      }
+    };
+
+    const collectFromArrayElement = (element: ts.Expression | ts.SpreadElement, parentAbsolutePath: string) => {
+      if (ts.isObjectLiteralExpression(element)) {
+        collectFromObjectLiteral(element, parentAbsolutePath);
+        return;
+      }
+
+      if (ts.isSpreadElement(element)) {
+        collectFromExpression(element.expression, parentAbsolutePath);
+        return;
+      }
+
+      if (ts.isConditionalExpression(element)) {
+        collectFromExpression(element.whenTrue, parentAbsolutePath);
+        collectFromExpression(element.whenFalse, parentAbsolutePath);
+        return;
+      }
+
+      if (ts.isParenthesizedExpression(element)) {
+        collectFromExpression(element.expression, parentAbsolutePath);
+      }
+    };
+
+    const collectFromObjectLiteral = (objectLiteral: ts.ObjectLiteralExpression, parentAbsolutePath: string) => {
+      let absolutePath = parentAbsolutePath;
+
+      for (const property of objectLiteral.properties) {
+        if (!ts.isPropertyAssignment(property)) {
+          continue;
+        }
+
+        if (getPropertyName(property.name) === 'path' && ts.isStringLiteralLike(property.initializer)) {
+          absolutePath = joinRoutePath(parentAbsolutePath, property.initializer.text);
+
+          const rootSegment = getRootSegment(absolutePath);
+          if (rootSegment) {
+            collectedRoots.add(rootSegment);
+          }
+        }
+      }
+
+      for (const property of objectLiteral.properties) {
+        if (!ts.isPropertyAssignment(property)) {
+          continue;
+        }
+
+        if (getPropertyName(property.name) === 'children') {
+          collectFromExpression(property.initializer, absolutePath);
+        }
+      }
+    };
+
+    // Locate `export function createAppRoutes(...): RouteObject[]` and walk the
+    // array literal it returns. Keyed on the function name (not variable
+    // shape) so the manifest stays in sync when the route table is edited.
+    const visit = (node: ts.Node) => {
+      if (ts.isFunctionDeclaration(node) && node.name?.text === 'createAppRoutes' && node.body) {
+        for (const statement of node.body.statements) {
+          if (ts.isReturnStatement(statement) && statement.expression) {
+            // Start with an empty parent so top-level `path: '/'` seeds the URL.
+            collectFromExpression(statement.expression, '');
+          }
+        }
+      }
+
+      ts.forEachChild(node, visit);
+    };
+
+    visit(sourceFile);
+
+    return [...collectedRoots].sort();
+  };
+
+  let resolvedConfig: { root: string; build: { outDir: string } } | undefined;
+
+  return {
+    name: 'routes-manifest',
+    apply: 'build',
+    configResolved(config) {
+      resolvedConfig = config;
+    },
+    async writeBundle() {
+      const root = resolvedConfig?.root ?? resolve(here, 'ui');
+      const outDir = path.resolve(root, resolvedConfig?.build?.outDir ?? 'dist');
+      // Router lives in the Vite root (`src/ui`), one level below this config.
+      const sourcePath = path.resolve(root, 'router.tsx');
+      const manifest = JSON.stringify(await collectRouteRoots(sourcePath), null, 2) + '\n';
+
+      await fs.mkdir(outDir, { recursive: true });
+      await fs.writeFile(path.join(outDir, 'routes-manifest.json'), manifest, 'utf8');
+    },
+  };
+};
+
+/**
  * Vite config for the MastraCode Factory UI.
  *
  * For split UI/API development, `pnpm api` (from mastracode/web) runs
@@ -84,7 +279,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(here, 'ui'),
     envDir: process.env.MASTRACODE_ENV_DIR ?? resolve(here, '..'),
-    plugins: [react(), tailwindcss(), runtimeConfigPlugin()],
+    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single

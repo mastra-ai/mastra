@@ -343,6 +343,10 @@ async function validateOutput(
     binaryMapData = JSON.parse(binaryMap);
   }
 
+  const stubbedExternals = [
+    ...new Set([...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...userExternals, ...result.externalDependencies.keys()]),
+  ];
+
   for (const file of output) {
     if (file.type === 'asset') {
       continue;
@@ -359,7 +363,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...userExternals],
+      stubbedExternals,
     });
   }
 

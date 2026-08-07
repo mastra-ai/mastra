@@ -67,6 +67,8 @@ export interface WorkspaceSkillsImplConfig {
   searchEngine?: SkillSearchEngine;
   /** Validate skills on load (default: true) */
   validateOnLoad?: boolean;
+  /** Assert that the owning workspace can still serve skill operations. */
+  assertAvailable?: () => void;
   /**
    * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
    * Enables detection of in-place file edits (e.g., fixing validation errors).
@@ -84,10 +86,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #skillsResolver: SkillsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
+  readonly #assertAvailable?: () => void;
   readonly #checkSkillFileMtime: boolean;
 
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
   #skills: Map<string, InternalSkill[]> = new Map();
+
+  /** Map of remapped location -> skill path, registered by SkillsProcessor formatLocation overrides */
+  #locationAliases: Map<string, string> = new Map();
 
   /** Whether skills have been discovered */
   #initialized = false;
@@ -112,6 +118,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
+    this.#assertAvailable = config.assertAvailable;
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
   }
 
@@ -142,8 +149,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async get(name: string): Promise<Skill | null> {
     await this.#ensureInitialized();
-    // Try name-based lookup first, then fall back to path-based (escape hatch)
-    const skill = (await this.#resolveByName(name)) ?? this.#resolveByPath(name);
+    // Try name-based lookup first, then fall back to path-based (escape hatch),
+    // then to registered location aliases (formatLocation overrides)
+    const skill = (await this.#resolveByName(name)) ?? this.#resolveByPath(name) ?? this.#resolveByAlias(name);
     if (!skill) return null;
 
     // Return without internal indexableContent field
@@ -153,7 +161,24 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async has(name: string): Promise<boolean> {
     await this.#ensureInitialized();
-    return ((await this.#resolveByName(name)) ?? this.#resolveByPath(name)) !== null;
+    return ((await this.#resolveByName(name)) ?? this.#resolveByPath(name) ?? this.#resolveByAlias(name)) !== null;
+  }
+
+  /**
+   * Register an alternate location string that resolves to the skill at `skillPath`.
+   * Called by SkillsProcessor when a `formatLocation` override remaps the advertised
+   * location, so the `skill` and `skill_read` tools can resolve the remapped
+   * location back to the underlying skill.
+   *
+   * Both the exact location and its `/SKILL.md`-stripped form are registered so
+   * lookups succeed whether or not the model preserves the suffix.
+   */
+  registerLocationAlias(location: string, skillPath: string): void {
+    this.#locationAliases.set(location, skillPath);
+    const normalized = location.replace(/\/SKILL\.md$/, '');
+    if (normalized !== location) {
+      this.#locationAliases.set(normalized, skillPath);
+    }
   }
 
   // ===========================================================================
@@ -183,6 +208,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (match) return match;
     }
     return null;
+  }
+
+  /**
+   * Resolve a skill via a registered location alias (formatLocation override).
+   * Tried last so canonical names and paths always win over aliases.
+   */
+  #resolveByAlias(location: string): InternalSkill | null {
+    const target =
+      this.#locationAliases.get(location) ?? this.#locationAliases.get(location.replace(/\/SKILL\.md$/, ''));
+    if (!target) return null;
+    return this.#resolveByPath(target);
   }
 
   async #getCanonicalSkillPath(skillPath: string): Promise<string> {
@@ -269,6 +305,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   async refresh(): Promise<void> {
+    this.#assertAvailable?.();
+
     // Remove only skill entries from the shared search engine (not workspace content)
     for (const candidates of this.#skills.values()) {
       for (const skill of candidates) {
@@ -560,6 +598,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Uses a promise to prevent concurrent discovery.
    */
   async #ensureInitialized(): Promise<void> {
+    this.#assertAvailable?.();
+
     if (this.#initialized) {
       return;
     }

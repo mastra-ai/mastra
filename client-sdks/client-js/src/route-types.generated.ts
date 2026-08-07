@@ -17,7 +17,7 @@ type Shared_Auxiliary_290 =
       [key: string]: Shared_Auxiliary_290;
     };
 
-type Shared_Auxiliary_1074 =
+type Shared_Auxiliary_1077 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1074 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1074[];
+      args: Shared_Auxiliary_1077[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1074;
+      arg: Shared_Auxiliary_1077;
     };
 
-type Shared_Auxiliary_1215 = {
+type Shared_Auxiliary_1218 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1215[] | undefined;
+  children?: Shared_Auxiliary_1218[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -1995,14 +1995,28 @@ type Shared_Type_86 = {
 };
 
 type Shared_Type_87 = {
+  text?: string | undefined;
+  raw?: string | undefined;
+  url?: string | undefined;
+  data?: unknown | undefined;
+  filename?: string | undefined;
+  mediaType?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+type Shared_Type_88 = {
   /** Event type */
-  kind: 'message';
+  kind?: 'message' | undefined;
   /** Identifier created by the message creator */
   messageId: string;
   /** Message sender's role */
-  role: 'user' | 'agent';
+  role: 'user' | 'agent' | 'ROLE_USER' | 'ROLE_AGENT';
   /** Message content */
-  parts: (Shared_Type_82 | Shared_Type_85 | Shared_Type_86)[];
+  parts: ((Shared_Type_82 | Shared_Type_85 | Shared_Type_86) | Shared_Type_87)[];
   /** The context the message is associated with */
   contextId?: string | undefined;
   /** Identifier of task the message is related to */
@@ -2019,36 +2033,39 @@ type Shared_Type_87 = {
     | undefined;
 };
 
-type Shared_Type_88 = {
+type Shared_Type_89 = {
   /** Supported authentication schemes - e.g. Basic, Bearer */
   schemes: string[];
   /** Optional credentials */
   credentials?: string | undefined;
 };
 
-type Shared_Type_89 = {
+type Shared_Type_90 = {
   /** URL for sending the push notifications */
   url: string;
   /** Push Notification ID - created by server to support multiple callbacks */
   id?: string | undefined;
   /** Token unique to this task/session */
   token?: string | undefined;
-  authentication?: Shared_Type_88 | undefined;
+  authentication?: Shared_Type_89 | undefined;
 };
 
-type Shared_Type_90 = {
+type Shared_Type_91 = {
   /** Accepted output modalities by the client */
   acceptedOutputModes?: string[] | undefined;
   /** If the server should treat the client as a blocking request */
   blocking?: boolean | undefined;
+  /** If the v1 server should return before task completion */
+  returnImmediately?: boolean | undefined;
   /** Number of recent messages to be retrieved */
   historyLength?: number | undefined;
-  pushNotificationConfig?: Shared_Type_89 | undefined;
+  pushNotificationConfig?: Shared_Type_90 | undefined;
+  taskPushNotificationConfig?: Shared_Type_90 | undefined;
 };
 
-type Shared_Type_91 = {
-  message: Shared_Type_87;
-  configuration?: Shared_Type_90 | undefined;
+type Shared_Type_92 = {
+  message: Shared_Type_88;
+  configuration?: Shared_Type_91 | undefined;
   /** Extension metadata */
   metadata?:
     | {
@@ -2057,7 +2074,7 @@ type Shared_Type_91 = {
     | undefined;
 };
 
-type Shared_Type_92 = {
+type Shared_Type_93 = {
   name: string;
   description?: string | undefined;
   inputSchema: unknown;
@@ -2070,7 +2087,7 @@ type Shared_Type_92 = {
     | undefined;
 };
 
-type Shared_Type_93 =
+type Shared_Type_94 =
   | (
       | (
           | {
@@ -2085,7 +2102,7 @@ type Shared_Type_93 =
     )
   | undefined;
 
-type Shared_Type_94 =
+type Shared_Type_95 =
   | (
       | (
           | Shared_Type_4
@@ -2099,7 +2116,7 @@ type Shared_Type_94 =
     )
   | undefined;
 
-type Shared_Type_95 =
+type Shared_Type_96 =
   | (
       | (
           | {
@@ -2116,7 +2133,7 @@ type Shared_Type_95 =
     )
   | undefined;
 
-type Shared_Type_96 =
+type Shared_Type_97 =
   | (
       | (
           | {
@@ -2133,7 +2150,7 @@ type Shared_Type_96 =
     )
   | undefined;
 
-type Shared_Type_97 =
+type Shared_Type_98 =
   | (
       | (
           | {
@@ -2150,7 +2167,7 @@ type Shared_Type_97 =
     )
   | undefined;
 
-type Shared_Type_98 =
+type Shared_Type_99 =
   | (
       | (
           | (
@@ -2170,7 +2187,7 @@ type Shared_Type_98 =
     )
   | undefined;
 
-type Shared_Type_99 = {
+type Shared_Type_100 = {
   /** Unique identifier for the version (UUID) */
   id: string;
   /** ID of the agent this version belongs to */
@@ -2307,7 +2324,7 @@ type Shared_Type_99 = {
   createdAt: Date;
 };
 
-type Shared_Type_100 = {
+type Shared_Type_101 = {
   /** The field path that changed */
   field: string;
   /** The value in the "from" version */
@@ -2316,7 +2333,7 @@ type Shared_Type_100 = {
   currentValue: unknown;
 };
 
-type Shared_Type_101 = {
+type Shared_Type_102 = {
   id: string;
   description?: string | undefined;
   metadata?:
@@ -2336,7 +2353,7 @@ type Shared_Type_101 = {
   updatedAt: Date | string;
 };
 
-type Shared_Type_102 = {
+type Shared_Type_103 = {
   type: 'agent';
   id: string;
   agentId: string;
@@ -2358,7 +2375,7 @@ type Shared_Type_102 = {
     | undefined;
 };
 
-type Shared_Type_103 = {
+type Shared_Type_104 = {
   type: 'tool';
   id: string;
   toolId: string;
@@ -2375,9 +2392,9 @@ type Shared_Type_103 = {
     | undefined;
 };
 
-type Shared_Type_104 =
-  | Shared_Type_102
+type Shared_Type_105 =
   | Shared_Type_103
+  | Shared_Type_104
   | {
       type: 'mapping';
       id: string;
@@ -2390,11 +2407,11 @@ type Shared_Type_104 =
       description?: string | undefined;
     };
 
-type Shared_Type_105 = {
+type Shared_Type_106 = {
   type: 'foreach';
   step:
-    | Shared_Type_102
     | Shared_Type_103
+    | Shared_Type_104
     | {
         type: 'workflow';
         id: string;
@@ -2408,9 +2425,9 @@ type Shared_Type_105 = {
     | undefined;
 };
 
-type Shared_Type_106 =
-  | Shared_Type_102
+type Shared_Type_107 =
   | Shared_Type_103
+  | Shared_Type_104
   | {
       type: 'mapping';
       id: string;
@@ -2424,9 +2441,9 @@ type Shared_Type_106 =
     }
   | {
       type: 'parallel';
-      steps: Shared_Type_104[];
+      steps: Shared_Type_105[];
     }
-  | Shared_Type_105
+  | Shared_Type_106
   | {
       type: 'sleep';
       id: string;
@@ -2439,17 +2456,17 @@ type Shared_Type_106 =
     }
   | {
       type: 'conditional';
-      steps: Shared_Type_104[];
-      predicates: Shared_Auxiliary_1074[];
+      steps: Shared_Type_105[];
+      predicates: Shared_Auxiliary_1077[];
     }
   | {
       type: 'loop';
-      step: Shared_Type_104;
+      step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1074;
+      predicate: Shared_Auxiliary_1077;
     };
 
-type Shared_Type_107 = {
+type Shared_Type_108 = {
   /** Transport type: stdio for local processes, http for remote servers */
   type: 'stdio' | 'http';
   /** Command to run (stdio only) */
@@ -2468,7 +2485,7 @@ type Shared_Type_107 = {
   timeout?: number | undefined;
 };
 
-type Shared_Type_108 = {
+type Shared_Type_109 = {
   id: string;
   /** MCP client status: draft, published, or archived */
   status: string;
@@ -2487,11 +2504,11 @@ type Shared_Type_108 = {
   description?: string | undefined;
   /** Map of server name to server configuration */
   servers: {
-    [key: string]: Shared_Type_107;
+    [key: string]: Shared_Type_108;
   };
 };
 
-type Shared_Type_109 = {
+type Shared_Type_110 = {
   type: 'stdio' | 'http';
   command?: string | undefined;
   args?: string[] | undefined;
@@ -2504,7 +2521,7 @@ type Shared_Type_109 = {
   timeout?: number | undefined;
 };
 
-type Shared_Type_110 = {
+type Shared_Type_111 = {
   /** Unique identifier for the version (UUID) */
   id: string;
   /** ID of the MCP client this version belongs to */
@@ -2516,7 +2533,7 @@ type Shared_Type_110 = {
   /** Description of the MCP client */
   description?: string | undefined;
   servers: {
-    [key: string]: Shared_Type_109;
+    [key: string]: Shared_Type_110;
   };
   /** Array of field names that changed from the previous version */
   changedFields?: string[] | undefined;
@@ -2526,7 +2543,7 @@ type Shared_Type_110 = {
   createdAt: Date;
 };
 
-type Shared_Type_111 = {
+type Shared_Type_112 = {
   id: string;
   /** Prompt block status: draft, published, or archived */
   status: string;
@@ -2557,7 +2574,7 @@ type Shared_Type_111 = {
     | undefined;
 };
 
-type Shared_Type_112 = {
+type Shared_Type_113 = {
   /** Unique identifier for the version (UUID) */
   id: string;
   /** ID of the prompt block this version belongs to */
@@ -2586,7 +2603,7 @@ type Shared_Type_112 = {
   createdAt: Date;
 };
 
-type Shared_Type_113 =
+type Shared_Type_114 =
   | 'llm-judge'
   | 'answer-relevancy'
   | 'answer-similarity'
@@ -2600,7 +2617,7 @@ type Shared_Type_113 =
   | 'tool-call-accuracy'
   | 'toxicity';
 
-type Shared_Type_114 = {
+type Shared_Type_115 = {
   id: string;
   /** Scorer status: draft, published, or archived */
   status: string;
@@ -2618,7 +2635,7 @@ type Shared_Type_114 = {
   /** Description of the scorer */
   description?: string | undefined;
   /** Scorer type: llm-judge for custom, or a preset type name */
-  type: Shared_Type_113;
+  type: Shared_Type_114;
   model?: Shared_Type_11 | undefined;
   /** System instructions for the judge LLM */
   instructions?: string | undefined;
@@ -2646,7 +2663,7 @@ type Shared_Type_114 = {
     | undefined;
 };
 
-type Shared_Type_115 =
+type Shared_Type_116 =
   | {
       /** Minimum score value (default: 0) */
       min?: number | undefined;
@@ -2655,7 +2672,7 @@ type Shared_Type_115 =
     }
   | undefined;
 
-type Shared_Type_116 = {
+type Shared_Type_117 = {
   /** Unique identifier for the version (UUID) */
   id: string;
   /** ID of the scorer this version belongs to */
@@ -2666,7 +2683,7 @@ type Shared_Type_116 = {
   name: string;
   /** Description of the scorer */
   description?: string | undefined;
-  type: Shared_Type_113;
+  type: Shared_Type_114;
   model?: Shared_Type_11 | undefined;
   instructions?: string | undefined;
   scoreRange?:
@@ -2699,7 +2716,7 @@ type Shared_Type_116 = {
   createdAt: Date;
 };
 
-type Shared_Type_117 = {
+type Shared_Type_118 = {
   id: string;
   /** Workspace status: draft, published, or archived */
   status: string;
@@ -2734,7 +2751,7 @@ type Shared_Type_117 = {
   operationTimeout?: number | undefined;
 };
 
-type Shared_Type_118 =
+type Shared_Type_119 =
   | {
       type: 'external';
       /** Package path for external source */
@@ -2751,7 +2768,7 @@ type Shared_Type_118 =
       mastraPath: string;
     };
 
-type Shared_Type_119 = {
+type Shared_Type_120 = {
   id: string;
   /** Skill status: draft, published, or archived */
   status: string;
@@ -2775,7 +2792,7 @@ type Shared_Type_119 = {
   /** Compatibility requirements */
   compatibility?: unknown | undefined;
   /** Source location of the skill */
-  source?: Shared_Type_118 | undefined;
+  source?: Shared_Type_119 | undefined;
   /** List of reference file paths */
   references?: string[] | undefined;
   /** List of script file paths */
@@ -2783,7 +2800,7 @@ type Shared_Type_119 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1215[] | undefined;
+  files?: Shared_Auxiliary_1218[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -2792,7 +2809,7 @@ type Shared_Type_119 = {
     | undefined;
 };
 
-type Shared_Type_120 = {
+type Shared_Type_121 = {
   id: string;
   name: string;
   description?: (string | undefined) | null;
@@ -2828,7 +2845,7 @@ type Shared_Type_120 = {
   updatedAt: Date;
 };
 
-type Shared_Type_121 = {
+type Shared_Type_122 = {
   /** Name of the tool this mock applies to */
   toolName: string;
   /** Arguments to match against the tool call */
@@ -2841,14 +2858,14 @@ type Shared_Type_121 = {
   matchArgs?: ('strict' | 'ignore') | undefined;
 };
 
-type Shared_Type_122 = {
+type Shared_Type_123 = {
   /** How this item was created */
   type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   /** Reference identifier (e.g., trace id, csv filename) */
   referenceId?: string | undefined;
 };
 
-type Shared_Type_123 = {
+type Shared_Type_124 = {
   id: string;
   datasetId: string;
   datasetVersion: number;
@@ -2857,7 +2874,7 @@ type Shared_Type_123 = {
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
-  toolMocks?: Shared_Type_121[] | undefined;
+  toolMocks?: Shared_Type_122[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   scorerIds?: string[] | undefined;
@@ -2872,12 +2889,12 @@ type Shared_Type_123 = {
       }
     | undefined;
   /** Source/provenance of this dataset item */
-  source?: Shared_Type_122 | undefined;
+  source?: Shared_Type_123 | undefined;
   createdAt: Date;
   updatedAt: Date;
 };
 
-type Shared_Type_124 = {
+type Shared_Type_125 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -2902,7 +2919,7 @@ type Shared_Type_124 = {
   success?: boolean | undefined;
 };
 
-type Shared_Type_125 = {
+type Shared_Type_126 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -2928,7 +2945,7 @@ type Shared_Type_125 = {
   success?: boolean | undefined;
 };
 
-type Shared_Type_126 = {
+type Shared_Type_127 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -2946,7 +2963,7 @@ type Shared_Type_126 = {
   finishReason?: string | undefined;
 };
 
-type Shared_Type_127 = {
+type Shared_Type_128 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -2961,7 +2978,7 @@ type Shared_Type_127 = {
   agentId?: string | undefined;
 };
 
-type Shared_Type_128 = {
+type Shared_Type_129 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -2982,7 +2999,7 @@ type Shared_Type_128 = {
     | undefined;
 };
 
-type Shared_Type_129 = {
+type Shared_Type_130 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -2998,7 +3015,7 @@ type Shared_Type_129 = {
   status?: string | undefined;
 };
 
-type Shared_Type_130 = {
+type Shared_Type_131 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -3014,7 +3031,7 @@ type Shared_Type_130 = {
   selectedSteps?: string[] | undefined;
 };
 
-type Shared_Type_131 = {
+type Shared_Type_132 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -3030,7 +3047,7 @@ type Shared_Type_131 = {
   parallelSteps?: string[] | undefined;
 };
 
-type Shared_Type_132 = {
+type Shared_Type_133 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -3046,7 +3063,7 @@ type Shared_Type_132 = {
   totalIterations?: number | undefined;
 };
 
-type Shared_Type_133 = {
+type Shared_Type_134 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -3062,7 +3079,7 @@ type Shared_Type_133 = {
   sleepType?: string | undefined;
 };
 
-type Shared_Type_134 = {
+type Shared_Type_135 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -3078,7 +3095,7 @@ type Shared_Type_134 = {
   eventReceived?: boolean | undefined;
 };
 
-type Shared_Type_135 = {
+type Shared_Type_136 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -3093,8 +3110,7 @@ type Shared_Type_135 = {
   processorId?: string | undefined;
 };
 
-type Shared_Type_136 =
-  | Shared_Type_124
+type Shared_Type_137 =
   | Shared_Type_125
   | Shared_Type_126
   | Shared_Type_127
@@ -3105,9 +3121,10 @@ type Shared_Type_136 =
   | Shared_Type_132
   | Shared_Type_133
   | Shared_Type_134
-  | Shared_Type_135;
+  | Shared_Type_135
+  | Shared_Type_136;
 
-type Shared_Type_137 = {
+type Shared_Type_138 = {
   /** Step name to match */
   name: string;
   durationMs?: number | undefined;
@@ -3121,9 +3138,9 @@ type Shared_Type_137 = {
   stepType?: undefined | undefined;
 };
 
-type Shared_Type_138 = {
+type Shared_Type_139 = {
   /** Expected steps for accuracy checking */
-  steps?: (Shared_Type_136 | Shared_Type_137)[] | undefined;
+  steps?: (Shared_Type_137 | Shared_Type_138)[] | undefined;
   /** How to compare step ordering (default: relaxed) */
   ordering?: ('strict' | 'relaxed' | 'unordered') | undefined;
   /** Whether to allow repeated steps (default: true) */
@@ -3144,7 +3161,7 @@ type Shared_Type_138 = {
   maxRetriesPerTool?: number | undefined;
 };
 
-type Shared_Type_139 = {
+type Shared_Type_140 = {
   source?: string | undefined;
   sourceId?: string | undefined;
   sourceVersion?: string | undefined;
@@ -3155,7 +3172,7 @@ type Shared_Type_139 = {
     | undefined;
 };
 
-type Shared_Type_140 = {
+type Shared_Type_141 = {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
@@ -3169,7 +3186,7 @@ type Shared_Type_140 = {
         [key: string]: unknown;
       }
     | undefined;
-  provenance?: (Shared_Type_139 | null) | undefined;
+  provenance?: (Shared_Type_140 | null) | undefined;
   runnerAttestation?:
     | ({
         runnerId: string;
@@ -3192,7 +3209,7 @@ type Shared_Type_140 = {
   updatedAt: Date;
 };
 
-type Shared_Type_141 = {
+type Shared_Type_142 = {
   served: {
     mockIndex: number;
     toolName: string;
@@ -3216,7 +3233,7 @@ type Shared_Type_141 = {
     | undefined;
 };
 
-type Shared_Type_142 = {
+type Shared_Type_143 = {
   id: string;
   experimentId: string;
   itemId: string;
@@ -3238,11 +3255,11 @@ type Shared_Type_142 = {
   tags?: (string[] | null) | undefined;
   comment?: (string | null) | undefined;
   /** Diagnostic receipt for item-level tool mocks */
-  toolMockReport?: (Shared_Type_141 | undefined) | null;
+  toolMockReport?: (Shared_Type_142 | undefined) | null;
   createdAt: Date;
 };
 
-type Shared_Type_143 = {
+type Shared_Type_144 = {
   id: string;
   status: 'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
   toolName: string;
@@ -3270,21 +3287,21 @@ type Shared_Type_143 = {
   suspendPayload?: unknown | undefined;
 };
 
-type Shared_Type_144 =
-  | {
-      kind: 'custom';
-      provider: string;
-      modelId?: string | undefined;
-    }
-  | {
-      provider: string;
-      modelId?: string | undefined;
-    };
-
 type Shared_Type_145 =
   | {
       kind: 'custom';
       provider: string;
+      modelId?: string | undefined;
+    }
+  | {
+      provider: string;
+      modelId?: string | undefined;
+    };
+
+type Shared_Type_146 =
+  | {
+      kind: 'custom';
+      provider: string;
       modelId: string;
     }
   | {
@@ -3292,7 +3309,7 @@ type Shared_Type_145 =
       modelId: string;
     };
 
-type Shared_Type_146 = {
+type Shared_Type_147 = {
   behavior?: ('deliver' | 'persist' | 'discard') | undefined;
   attributes?:
     | {
@@ -3301,7 +3318,7 @@ type Shared_Type_146 = {
     | undefined;
 };
 
-type Shared_Type_147 = {
+type Shared_Type_148 = {
   behavior?: ('wake' | 'persist' | 'discard') | undefined;
   attributes?:
     | {
@@ -3319,7 +3336,7 @@ type Shared_Type_147 = {
     | undefined;
 };
 
-type Shared_Type_148 = {
+type Shared_Type_149 = {
   id: string;
   agentId: string;
   workflowId?: undefined | undefined;
@@ -3341,8 +3358,8 @@ type Shared_Type_148 = {
         [key: string]: (string | number | boolean | null) | undefined;
       }
     | undefined;
-  ifActive?: Shared_Type_146 | undefined;
-  ifIdle?: Shared_Type_147 | undefined;
+  ifActive?: Shared_Type_147 | undefined;
+  ifIdle?: Shared_Type_148 | undefined;
   providerOptions?:
     | {
         [key: string]: unknown;
@@ -3357,7 +3374,7 @@ type Shared_Type_148 = {
   updatedAt: number;
 };
 
-type Shared_Type_149 = {
+type Shared_Type_150 = {
   status:
     | 'running'
     | 'success'
@@ -3376,7 +3393,7 @@ type Shared_Type_149 = {
   error?: string | undefined;
 };
 
-type Shared_Type_150 = {
+type Shared_Type_151 = {
   id: string;
   workflowId: string;
   agentId?: undefined | undefined;
@@ -3386,7 +3403,7 @@ type Shared_Type_150 = {
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
-  lastRun?: Shared_Type_149 | undefined;
+  lastRun?: Shared_Type_150 | undefined;
   inputData?: unknown | undefined;
   initialState?: unknown | undefined;
   requestContext?:
@@ -10711,13 +10728,13 @@ export type PostA2aAgentId_Body =
       jsonrpc: '2.0';
       id: string | number;
       method: 'message/send';
-      params: Shared_Type_91;
+      params: Shared_Type_92;
     }
   | {
       jsonrpc: '2.0';
       id: string | number;
       method: 'message/stream';
-      params: Shared_Type_91;
+      params: Shared_Type_92;
     }
   | {
       jsonrpc: '2.0';
@@ -10733,6 +10750,21 @@ export type PostA2aAgentId_Body =
               [key: string]: unknown;
             }
           | undefined;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/list';
+      params: {
+        tenant?: string | undefined;
+        contextId?: string | undefined;
+        status?: (string | number) | undefined;
+        pageSize?: number | undefined;
+        pageToken?: string | undefined;
+        historyLength?: number | undefined;
+        statusTimestampAfter?: string | undefined;
+        includeArtifacts?: boolean | undefined;
       };
     }
   | {
@@ -10770,7 +10802,7 @@ export type PostA2aAgentId_Body =
       params: {
         /** Task id */
         taskId: string;
-        pushNotificationConfig: Shared_Type_89;
+        pushNotificationConfig: Shared_Type_90;
       };
     }
   | {
@@ -12113,7 +12145,7 @@ export type GetMcpServerIdTools_PathParams = {
 };
 
 export type GetMcpServerIdTools_Response = {
-  tools: Shared_Type_92[];
+  tools: Shared_Type_93[];
 };
 
 export type GetMcpServerIdTools_Request = Simplify<
@@ -12141,7 +12173,7 @@ export type GetMcpServerIdToolsToolId_PathParams = {
   toolId: string;
 };
 
-export type GetMcpServerIdToolsToolId_Response = Shared_Type_92;
+export type GetMcpServerIdToolsToolId_Response = Shared_Type_93;
 
 export type GetMcpServerIdToolsToolId_Request = Simplify<
   (GetMcpServerIdToolsToolId_PathParams extends never ? {} : { params: GetMcpServerIdToolsToolId_PathParams }) &
@@ -12474,19 +12506,19 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
       )
     | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
-  tools?: Shared_Type_93;
+  tools?: Shared_Type_94;
   /** Default options for generate/stream calls — static or conditional */
-  defaultOptions?: Shared_Type_94;
+  defaultOptions?: Shared_Type_95;
   /** Workflow keys with optional per-workflow config — static or conditional */
-  workflows?: Shared_Type_93;
+  workflows?: Shared_Type_94;
   /** Agent keys with optional per-agent config — static or conditional */
-  agents?: Shared_Type_93;
+  agents?: Shared_Type_94;
   /** Map of tool provider IDs to their tool configurations — static or conditional */
-  integrationTools?: Shared_Type_95;
+  integrationTools?: Shared_Type_96;
   /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
-  toolProviders?: Shared_Type_96;
+  toolProviders?: Shared_Type_97;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
-  mcpClients?: Shared_Type_95;
+  mcpClients?: Shared_Type_96;
   /** Input processor graph — static or conditional */
   inputProcessors?: (Shared_Type_20 | undefined) | undefined;
   /** Output processor graph — static or conditional */
@@ -12508,7 +12540,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
       )
     | undefined;
   /** Scorer keys with optional sampling config — static or conditional */
-  scorers?: Shared_Type_97;
+  scorers?: Shared_Type_98;
   /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
@@ -12523,7 +12555,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
       )
     | undefined;
   /** Workspace reference (stored ID or inline config) — static or conditional */
-  workspace?: Shared_Type_98;
+  workspace?: Shared_Type_99;
   /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?: ((Shared_Type_41 | boolean | null) | undefined) | undefined;
   /** JSON Schema defining valid request context variables for conditional rule evaluation */
@@ -12590,19 +12622,19 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
       )
     | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
-  tools?: Shared_Type_93;
+  tools?: Shared_Type_94;
   /** Default options for generate/stream calls — static or conditional */
-  defaultOptions?: Shared_Type_94;
+  defaultOptions?: Shared_Type_95;
   /** Workflow keys with optional per-workflow config — static or conditional */
-  workflows?: Shared_Type_93;
+  workflows?: Shared_Type_94;
   /** Agent keys with optional per-agent config — static or conditional */
-  agents?: Shared_Type_93;
+  agents?: Shared_Type_94;
   /** Map of tool provider IDs to their tool configurations — static or conditional */
-  integrationTools?: Shared_Type_95;
+  integrationTools?: Shared_Type_96;
   /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
-  toolProviders?: Shared_Type_96;
+  toolProviders?: Shared_Type_97;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
-  mcpClients?: Shared_Type_95;
+  mcpClients?: Shared_Type_96;
   /** Input processor graph — static or conditional */
   inputProcessors?: (Shared_Type_20 | undefined) | undefined;
   /** Output processor graph — static or conditional */
@@ -12624,7 +12656,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
       )
     | undefined;
   /** Scorer keys with optional sampling config — static or conditional */
-  scorers?: Shared_Type_97;
+  scorers?: Shared_Type_98;
   /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
@@ -12639,7 +12671,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
       )
     | undefined;
   /** Workspace reference (stored ID or inline config) — static or conditional */
-  workspace?: Shared_Type_98;
+  workspace?: Shared_Type_99;
   /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?: ((Shared_Type_41 | boolean | null) | undefined) | undefined;
   /** JSON Schema defining valid request context variables for conditional rule evaluation */
@@ -13241,7 +13273,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  versions: Shared_Type_99[];
+  versions: Shared_Type_100[];
 };
 
 export type GetStoredAgentsAgentIdVersions_Request = Simplify<
@@ -13477,7 +13509,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_QueryParams = {
 
 export type GetStoredAgentsAgentIdVersionsCompare_Response = {
   /** List of differences between versions */
-  diffs: Shared_Type_100[];
+  diffs: Shared_Type_101[];
   /** The source version */
   fromVersion: {
     /** Unique identifier for the version (UUID) */
@@ -13785,7 +13817,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_PathParams = {
   versionId: string;
 };
 
-export type GetStoredAgentsAgentIdVersionsVersionId_Response = Shared_Type_99;
+export type GetStoredAgentsAgentIdVersionsVersionId_Response = Shared_Type_100;
 
 export type GetStoredAgentsAgentIdVersionsVersionId_Request = Simplify<
   (GetStoredAgentsAgentIdVersionsVersionId_PathParams extends never
@@ -14081,7 +14113,7 @@ export type GetStoredWorkflows_QueryParams = {
 };
 
 export type GetStoredWorkflows_Response = {
-  workflows: Shared_Type_101[];
+  workflows: Shared_Type_102[];
   total: number;
 };
 
@@ -14135,7 +14167,7 @@ export type PostStoredWorkflows_Body = {
       }
     | undefined;
   /** Static workflow graph — ordered array of serialized step entries with all refs as ids. */
-  graph: Shared_Type_106[];
+  graph: Shared_Type_107[];
   /** Helper workflow definitions this workflow nests. Saved with it as one unit — the whole set is validated together, hydrated in derived dependency order, and rejected together, so a failed save never leaves orphaned helpers behind. Each helper becomes an ordinary stored workflow in its own right. */
   dependencies?:
     | {
@@ -14166,7 +14198,7 @@ export type PostStoredWorkflows_Body = {
             }
           | undefined;
         /** Static workflow graph — ordered array of serialized step entries with all refs as ids. */
-        graph: Shared_Type_106[];
+        graph: Shared_Type_107[];
       }[]
     | undefined;
 };
@@ -14205,7 +14237,7 @@ export type GetStoredWorkflowsStoredWorkflowId_PathParams = {
   storedWorkflowId: string;
 };
 
-export type GetStoredWorkflowsStoredWorkflowId_Response = Shared_Type_101;
+export type GetStoredWorkflowsStoredWorkflowId_Response = Shared_Type_102;
 
 export type GetStoredWorkflowsStoredWorkflowId_Request = Simplify<
   (GetStoredWorkflowsStoredWorkflowId_PathParams extends never
@@ -14280,7 +14312,7 @@ export type GetStoredMcpClients_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  mcpClients: Shared_Type_108[];
+  mcpClients: Shared_Type_109[];
 };
 
 export type GetStoredMcpClients_Request = Simplify<
@@ -14312,7 +14344,7 @@ export type GetStoredMcpClientsStoredMCPClientId_PathParams = {
 
 export type GetStoredMcpClientsStoredMCPClientId_QueryParams = GetStoredAgentsStoredAgentId_QueryParams;
 
-export type GetStoredMcpClientsStoredMCPClientId_Response = Shared_Type_108;
+export type GetStoredMcpClientsStoredMCPClientId_Response = Shared_Type_109;
 
 export type GetStoredMcpClientsStoredMCPClientId_Request = Simplify<
   (GetStoredMcpClientsStoredMCPClientId_PathParams extends never
@@ -14355,7 +14387,7 @@ export type PostStoredMcpClients_Body = {
   description?: string | undefined;
   /** Map of server name to server configuration */
   servers: {
-    [key: string]: Shared_Type_107;
+    [key: string]: Shared_Type_108;
   };
 };
 
@@ -14402,7 +14434,7 @@ export type PatchStoredMcpClientsStoredMCPClientId_Body = {
   /** Map of server name to server configuration */
   servers?:
     | {
-        [key: string]: Shared_Type_107;
+        [key: string]: Shared_Type_108;
       }
     | undefined;
 };
@@ -14421,7 +14453,7 @@ export type PatchStoredMcpClientsStoredMCPClientId_Response =
       createdAt: Date;
       updatedAt: Date;
     }
-  | Shared_Type_108;
+  | Shared_Type_109;
 
 export type PatchStoredMcpClientsStoredMCPClientId_Request = Simplify<
   (PatchStoredMcpClientsStoredMCPClientId_PathParams extends never
@@ -14483,7 +14515,7 @@ export type GetStoredMcpClientsMcpClientIdVersions_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  versions: Shared_Type_110[];
+  versions: Shared_Type_111[];
 };
 
 export type GetStoredMcpClientsMcpClientIdVersions_Request = Simplify<
@@ -14524,7 +14556,7 @@ export type PostStoredMcpClientsMcpClientIdVersions_Response = {
   description?: (string | undefined) | undefined;
   servers?:
     | {
-        [key: string]: Shared_Type_109;
+        [key: string]: Shared_Type_110;
       }
     | undefined;
   /** Array of field names that changed from the previous version */
@@ -14566,7 +14598,7 @@ export type GetStoredMcpClientsMcpClientIdVersionsCompare_QueryParams =
 
 export type GetStoredMcpClientsMcpClientIdVersionsCompare_Response = {
   /** List of differences between versions */
-  diffs: Shared_Type_100[];
+  diffs: Shared_Type_101[];
   /** The source version */
   fromVersion: {
     /** Unique identifier for the version (UUID) */
@@ -14580,7 +14612,7 @@ export type GetStoredMcpClientsMcpClientIdVersionsCompare_Response = {
     /** Description of the MCP client */
     description?: string | undefined;
     servers: {
-      [key: string]: Shared_Type_109;
+      [key: string]: Shared_Type_110;
     };
     /** Array of field names that changed from the previous version */
     changedFields?: string[] | undefined;
@@ -14602,7 +14634,7 @@ export type GetStoredMcpClientsMcpClientIdVersionsCompare_Response = {
     /** Description of the MCP client */
     description?: string | undefined;
     servers: {
-      [key: string]: Shared_Type_109;
+      [key: string]: Shared_Type_110;
     };
     /** Array of field names that changed from the previous version */
     changedFields?: string[] | undefined;
@@ -14644,7 +14676,7 @@ export type GetStoredMcpClientsMcpClientIdVersionsVersionId_PathParams = {
   versionId: string;
 };
 
-export type GetStoredMcpClientsMcpClientIdVersionsVersionId_Response = Shared_Type_110;
+export type GetStoredMcpClientsMcpClientIdVersionsVersionId_Response = Shared_Type_111;
 
 export type GetStoredMcpClientsMcpClientIdVersionsVersionId_Request = Simplify<
   (GetStoredMcpClientsMcpClientIdVersionsVersionId_PathParams extends never
@@ -14769,7 +14801,7 @@ export type GetStoredPromptBlocks_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  promptBlocks: Shared_Type_111[];
+  promptBlocks: Shared_Type_112[];
 };
 
 export type GetStoredPromptBlocks_Request = Simplify<
@@ -14801,7 +14833,7 @@ export type GetStoredPromptBlocksStoredPromptBlockId_PathParams = {
 
 export type GetStoredPromptBlocksStoredPromptBlockId_QueryParams = GetStoredAgentsStoredAgentId_QueryParams;
 
-export type GetStoredPromptBlocksStoredPromptBlockId_Response = Shared_Type_111;
+export type GetStoredPromptBlocksStoredPromptBlockId_Response = Shared_Type_112;
 
 export type GetStoredPromptBlocksStoredPromptBlockId_Request = Simplify<
   (GetStoredPromptBlocksStoredPromptBlockId_PathParams extends never
@@ -14920,7 +14952,7 @@ export type PatchStoredPromptBlocksStoredPromptBlockId_Response =
       createdAt: Date;
       updatedAt: Date;
     }
-  | Shared_Type_111;
+  | Shared_Type_112;
 
 export type PatchStoredPromptBlocksStoredPromptBlockId_Request = Simplify<
   (PatchStoredPromptBlocksStoredPromptBlockId_PathParams extends never
@@ -14983,7 +15015,7 @@ export type GetStoredPromptBlocksPromptBlockIdVersions_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  versions: Shared_Type_112[];
+  versions: Shared_Type_113[];
 };
 
 export type GetStoredPromptBlocksPromptBlockIdVersions_Request = Simplify<
@@ -15075,7 +15107,7 @@ export type GetStoredPromptBlocksPromptBlockIdVersionsCompare_QueryParams =
 
 export type GetStoredPromptBlocksPromptBlockIdVersionsCompare_Response = {
   /** List of differences between versions */
-  diffs: Shared_Type_100[];
+  diffs: Shared_Type_101[];
   /** The source version */
   fromVersion: {
     /** Unique identifier for the version (UUID) */
@@ -15167,7 +15199,7 @@ export type GetStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams = {
   versionId: string;
 };
 
-export type GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Response = Shared_Type_112;
+export type GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Response = Shared_Type_113;
 
 export type GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Request = Simplify<
   (GetStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams extends never
@@ -15292,7 +15324,7 @@ export type GetStoredScorers_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  scorerDefinitions: Shared_Type_114[];
+  scorerDefinitions: Shared_Type_115[];
 };
 
 export type GetStoredScorers_Request = Simplify<
@@ -15324,7 +15356,7 @@ export type GetStoredScorersStoredScorerId_PathParams = {
 
 export type GetStoredScorersStoredScorerId_QueryParams = GetStoredAgentsStoredAgentId_QueryParams;
 
-export type GetStoredScorersStoredScorerId_Response = Shared_Type_114;
+export type GetStoredScorersStoredScorerId_Response = Shared_Type_115;
 
 export type GetStoredScorersStoredScorerId_Request = Simplify<
   (GetStoredScorersStoredScorerId_PathParams extends never
@@ -15366,13 +15398,13 @@ export type PostStoredScorers_Body = {
   /** Description of the scorer */
   description?: string | undefined;
   /** Scorer type: llm-judge for custom, or a preset type name */
-  type: Shared_Type_113;
+  type: Shared_Type_114;
   /** Model configuration for LLM judge */
   model?: Shared_Type_11 | undefined;
   /** System instructions for the judge LLM (used when type is llm-judge) */
   instructions?: string | undefined;
   /** Score range configuration (used when type is llm-judge) */
-  scoreRange?: Shared_Type_115;
+  scoreRange?: Shared_Type_116;
   /** Serializable config options for preset scorers */
   presetConfig?:
     | {
@@ -15434,13 +15466,13 @@ export type PatchStoredScorersStoredScorerId_Body = {
   /** Description of the scorer */
   description?: (string | undefined) | undefined;
   /** Scorer type: llm-judge for custom, or a preset type name */
-  type?: Shared_Type_113 | undefined;
+  type?: Shared_Type_114 | undefined;
   /** Model configuration for LLM judge */
   model?: (Shared_Type_11 | undefined) | undefined;
   /** System instructions for the judge LLM (used when type is llm-judge) */
   instructions?: (string | undefined) | undefined;
   /** Score range configuration (used when type is llm-judge) */
-  scoreRange?: Shared_Type_115 | undefined;
+  scoreRange?: Shared_Type_116 | undefined;
   /** Serializable config options for preset scorers */
   presetConfig?:
     | (
@@ -15481,7 +15513,7 @@ export type PatchStoredScorersStoredScorerId_Response =
       createdAt: Date;
       updatedAt: Date;
     }
-  | Shared_Type_114;
+  | Shared_Type_115;
 
 export type PatchStoredScorersStoredScorerId_Request = Simplify<
   (PatchStoredScorersStoredScorerId_PathParams extends never
@@ -15543,7 +15575,7 @@ export type GetStoredScorersScorerIdVersions_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  versions: Shared_Type_116[];
+  versions: Shared_Type_117[];
 };
 
 export type GetStoredScorersScorerIdVersions_Request = Simplify<
@@ -15582,7 +15614,7 @@ export type PostStoredScorersScorerIdVersions_Response = {
   name?: string | undefined;
   /** Description of the scorer */
   description?: (string | undefined) | undefined;
-  type?: Shared_Type_113 | undefined;
+  type?: Shared_Type_114 | undefined;
   model?: (Shared_Type_11 | undefined) | undefined;
   instructions?: (string | undefined) | undefined;
   scoreRange?:
@@ -15653,7 +15685,7 @@ export type GetStoredScorersScorerIdVersionsCompare_QueryParams = GetStoredAgent
 
 export type GetStoredScorersScorerIdVersionsCompare_Response = {
   /** List of differences between versions */
-  diffs: Shared_Type_100[];
+  diffs: Shared_Type_101[];
   /** The source version */
   fromVersion: {
     /** Unique identifier for the version (UUID) */
@@ -15666,7 +15698,7 @@ export type GetStoredScorersScorerIdVersionsCompare_Response = {
     name: string;
     /** Description of the scorer */
     description?: string | undefined;
-    type: Shared_Type_113;
+    type: Shared_Type_114;
     model?: Shared_Type_11 | undefined;
     instructions?: string | undefined;
     scoreRange?:
@@ -15710,7 +15742,7 @@ export type GetStoredScorersScorerIdVersionsCompare_Response = {
     name: string;
     /** Description of the scorer */
     description?: string | undefined;
-    type: Shared_Type_113;
+    type: Shared_Type_114;
     model?: Shared_Type_11 | undefined;
     instructions?: string | undefined;
     scoreRange?:
@@ -15775,7 +15807,7 @@ export type GetStoredScorersScorerIdVersionsVersionId_PathParams = {
   versionId: string;
 };
 
-export type GetStoredScorersScorerIdVersionsVersionId_Response = Shared_Type_116;
+export type GetStoredScorersScorerIdVersionsVersionId_Response = Shared_Type_117;
 
 export type GetStoredScorersScorerIdVersionsVersionId_Request = Simplify<
   (GetStoredScorersScorerIdVersionsVersionId_PathParams extends never
@@ -15963,7 +15995,7 @@ export type GetStoredWorkspacesStoredWorkspaceId_PathParams = {
   storedWorkspaceId: string;
 };
 
-export type GetStoredWorkspacesStoredWorkspaceId_Response = Shared_Type_117;
+export type GetStoredWorkspacesStoredWorkspaceId_Response = Shared_Type_118;
 
 export type GetStoredWorkspacesStoredWorkspaceId_Request = Simplify<
   (GetStoredWorkspacesStoredWorkspaceId_PathParams extends never
@@ -16089,7 +16121,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Response =
       createdAt: Date;
       updatedAt: Date;
     }
-  | Shared_Type_117;
+  | Shared_Type_118;
 
 export type PatchStoredWorkspacesStoredWorkspaceId_Request = Simplify<
   (PatchStoredWorkspacesStoredWorkspaceId_PathParams extends never
@@ -16171,7 +16203,7 @@ export type GetStoredSkills_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  skills: Shared_Type_119[];
+  skills: Shared_Type_120[];
 };
 
 export type GetStoredSkills_Request = Simplify<
@@ -16201,7 +16233,7 @@ export type GetStoredSkillsStoredSkillId_PathParams = {
   storedSkillId: string;
 };
 
-export type GetStoredSkillsStoredSkillId_Response = Shared_Type_119;
+export type GetStoredSkillsStoredSkillId_Response = Shared_Type_120;
 
 export type GetStoredSkillsStoredSkillId_Request = Simplify<
   (GetStoredSkillsStoredSkillId_PathParams extends never ? {} : { params: GetStoredSkillsStoredSkillId_PathParams }) &
@@ -16239,7 +16271,7 @@ export type PostStoredSkills_Body = {
   /** Compatibility requirements */
   compatibility?: unknown | undefined;
   /** Source location of the skill */
-  source?: Shared_Type_118 | undefined;
+  source?: Shared_Type_119 | undefined;
   /** List of reference file paths */
   references?: string[] | undefined;
   /** List of script file paths */
@@ -16247,7 +16279,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1215[] | undefined;
+  files?: Shared_Auxiliary_1218[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16297,7 +16329,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** Compatibility requirements */
   compatibility?: (unknown | undefined) | undefined;
   /** Source location of the skill */
-  source?: (Shared_Type_118 | undefined) | undefined;
+  source?: (Shared_Type_119 | undefined) | undefined;
   /** List of reference file paths */
   references?: (string[] | undefined) | undefined;
   /** List of script file paths */
@@ -16305,7 +16337,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1215[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1218[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -16327,7 +16359,7 @@ export type PatchStoredSkillsStoredSkillId_Response =
       createdAt: Date;
       updatedAt: Date;
     }
-  | Shared_Type_119;
+  | Shared_Type_120;
 
 export type PatchStoredSkillsStoredSkillId_Request = Simplify<
   (PatchStoredSkillsStoredSkillId_PathParams extends never
@@ -17183,7 +17215,7 @@ export interface GetSystemApiSchema_RouteContract {
 export type GetDatasets_QueryParams = GetScoresRunRunId_QueryParams;
 
 export type GetDatasets_Response = {
-  datasets: Shared_Type_120[];
+  datasets: Shared_Type_121[];
   pagination: {
     total: number;
     page: number;
@@ -17251,7 +17283,7 @@ export type PostDatasets_Body = {
   scorerIds?: string[] | undefined;
 };
 
-export type PostDatasets_Response = Shared_Type_120;
+export type PostDatasets_Response = Shared_Type_121;
 
 export type PostDatasets_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -17287,7 +17319,7 @@ export type GetDatasetsDatasetId_QueryParams = {
   projectId?: string | undefined;
 };
 
-export type GetDatasetsDatasetId_Response = Shared_Type_120 | null;
+export type GetDatasetsDatasetId_Response = Shared_Type_121 | null;
 
 export type GetDatasetsDatasetId_Request = Simplify<
   (GetDatasetsDatasetId_PathParams extends never ? {} : { params: GetDatasetsDatasetId_PathParams }) &
@@ -17420,7 +17452,7 @@ export type GetDatasetsDatasetIdItems_QueryParams = {
 };
 
 export type GetDatasetsDatasetIdItems_Response = {
-  items: Shared_Type_123[];
+  items: Shared_Type_124[];
   pagination: {
     total: number;
     page: number;
@@ -17461,9 +17493,9 @@ export type PostDatasetsDatasetIdItems_Body = {
   /** Expected output for comparison */
   groundTruth?: unknown | undefined;
   /** Expected trajectory configuration for trajectory scoring */
-  expectedTrajectory?: (Shared_Type_138 | undefined) | null;
+  expectedTrajectory?: (Shared_Type_139 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
-  toolMocks?: Shared_Type_121[] | undefined;
+  toolMocks?: Shared_Type_122[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** IDs of scorers selected for this item */
@@ -17481,10 +17513,10 @@ export type PostDatasetsDatasetIdItems_Body = {
       }
     | undefined;
   /** Source/provenance of this dataset item */
-  source?: Shared_Type_122 | undefined;
+  source?: Shared_Type_123 | undefined;
 };
 
-export type PostDatasetsDatasetIdItems_Response = Shared_Type_123;
+export type PostDatasetsDatasetIdItems_Response = Shared_Type_124;
 
 export type PostDatasetsDatasetIdItems_Request = Simplify<
   (PostDatasetsDatasetIdItems_PathParams extends never ? {} : { params: PostDatasetsDatasetIdItems_PathParams }) &
@@ -17516,9 +17548,9 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     input: unknown;
     groundTruth?: unknown | undefined;
     /** Expected trajectory configuration for trajectory scoring */
-    expectedTrajectory?: (Shared_Type_138 | undefined) | null;
+    expectedTrajectory?: (Shared_Type_139 | undefined) | null;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
-    toolMocks?: Shared_Type_121[] | undefined;
+    toolMocks?: Shared_Type_122[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     scorerIds?: string[] | undefined;
@@ -17533,12 +17565,12 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
         }
       | undefined;
     /** Source/provenance of this dataset item */
-    source?: Shared_Type_122 | undefined;
+    source?: Shared_Type_123 | undefined;
   }[];
 };
 
 export type PostDatasetsDatasetIdItemsBatch_Response = {
-  items: Shared_Type_123[];
+  items: Shared_Type_124[];
   count: number;
 };
 
@@ -17608,7 +17640,7 @@ export type GetDatasetsDatasetIdItemsItemId_PathParams = {
   itemId: string;
 };
 
-export type GetDatasetsDatasetIdItemsItemId_Response = Shared_Type_123 | null;
+export type GetDatasetsDatasetIdItemsItemId_Response = Shared_Type_124 | null;
 
 export type GetDatasetsDatasetIdItemsItemId_Request = Simplify<
   (GetDatasetsDatasetIdItemsItemId_PathParams extends never
@@ -17638,9 +17670,9 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   /** Expected output for comparison */
   groundTruth?: unknown | undefined;
   /** Expected trajectory configuration for trajectory scoring */
-  expectedTrajectory?: (Shared_Type_138 | undefined) | null;
+  expectedTrajectory?: (Shared_Type_139 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
-  toolMocks?: Shared_Type_121[] | undefined;
+  toolMocks?: Shared_Type_122[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** IDs of scorers selected for this item */
@@ -17658,7 +17690,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
       }
     | undefined;
   /** Source/provenance of this dataset item */
-  source?: Shared_Type_122 | undefined;
+  source?: Shared_Type_123 | undefined;
 };
 
 export type PatchDatasetsDatasetIdItemsItemId_Response = PostDatasetsDatasetIdItems_Response;
@@ -17763,7 +17795,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
-    toolMocks?: Shared_Type_121[] | undefined;
+    toolMocks?: Shared_Type_122[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     scorerIds?: string[] | undefined;
@@ -17840,7 +17872,7 @@ export type GetExperiments_QueryParams = {
 };
 
 export type GetExperiments_Response = {
-  experiments: Shared_Type_140[];
+  experiments: Shared_Type_141[];
   pagination: {
     total: number;
     page: number;
@@ -17936,6 +17968,16 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   targetType: 'agent' | 'workflow' | 'scorer';
   /** ID of the target */
   targetId: string;
+  /** Name of the experiment */
+  name?: string | undefined;
+  /** Description of the experiment */
+  description?: string | undefined;
+  /** Additional metadata */
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   /** IDs of scorers to apply */
   scorerIds?: string[] | undefined;
   /** Pin to specific dataset version */
@@ -18010,7 +18052,7 @@ export type PostDatasetsDatasetIdExperiments_Response = {
     completedAt: Date;
     retryCount: number;
     /** Diagnostic receipt for item-level tool mocks */
-    toolMockReport?: (Shared_Type_141 | undefined) | null;
+    toolMockReport?: (Shared_Type_142 | undefined) | null;
     scores: {
       scorerId: string;
       scorerName: string;
@@ -18052,7 +18094,7 @@ export type GetDatasetsDatasetIdExperimentsExperimentId_PathParams = {
   experimentId: string;
 };
 
-export type GetDatasetsDatasetIdExperimentsExperimentId_Response = Shared_Type_140 | null;
+export type GetDatasetsDatasetIdExperimentsExperimentId_Response = Shared_Type_141 | null;
 
 export type GetDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
   (GetDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
@@ -18080,7 +18122,7 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_PathParams =
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = GetScoresRunRunId_QueryParams;
 
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
-  results: Shared_Type_142[];
+  results: Shared_Type_143[];
   pagination: {
     total: number;
     page: number;
@@ -18128,7 +18170,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body = 
   comment?: (string | null) | undefined;
 };
 
-export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_142;
+export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_143;
 
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Request = Simplify<
   (PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathParams extends never
@@ -18368,7 +18410,7 @@ export type GetBackgroundTasks_QueryParams = {
 };
 
 export type GetBackgroundTasks_Response = {
-  tasks: Shared_Type_143[];
+  tasks: Shared_Type_144[];
   total: number;
 };
 
@@ -18398,7 +18440,7 @@ export type GetBackgroundTasksBackgroundTaskId_PathParams = {
   backgroundTaskId: string;
 };
 
-export type GetBackgroundTasksBackgroundTaskId_Response = Shared_Type_143;
+export type GetBackgroundTasksBackgroundTaskId_Response = Shared_Type_144;
 
 export type GetBackgroundTasksBackgroundTaskId_Request = Simplify<
   (GetBackgroundTasksBackgroundTaskId_PathParams extends never
@@ -18447,8 +18489,8 @@ export type GetEditorBuilderSettings_Response = {
           | {
               models?:
                 | {
-                    allowed?: Shared_Type_144[] | undefined;
-                    default?: Shared_Type_145 | undefined;
+                    allowed?: Shared_Type_145[] | undefined;
+                    default?: Shared_Type_146 | undefined;
                   }
                 | undefined;
               tools?:
@@ -18475,8 +18517,8 @@ export type GetEditorBuilderSettings_Response = {
     | {
         active: boolean;
         pickerVisible?: boolean | undefined;
-        allowed?: Shared_Type_144[] | undefined;
-        default?: Shared_Type_145 | undefined;
+        allowed?: Shared_Type_145[] | undefined;
+        default?: Shared_Type_146 | undefined;
       }
     | undefined;
   picker?:
@@ -19293,7 +19335,7 @@ export type GetSchedules_QueryParams = {
 };
 
 export type GetSchedules_Response = {
-  schedules: (Shared_Type_148 | Shared_Type_150)[];
+  schedules: (Shared_Type_149 | Shared_Type_151)[];
 };
 
 export type GetSchedules_Request = Simplify<
@@ -19322,7 +19364,7 @@ export type GetSchedulesScheduleId_PathParams = {
   scheduleId: string;
 };
 
-export type GetSchedulesScheduleId_Response = Shared_Type_148 | Shared_Type_150;
+export type GetSchedulesScheduleId_Response = Shared_Type_149 | Shared_Type_151;
 
 export type GetSchedulesScheduleId_Request = Simplify<
   (GetSchedulesScheduleId_PathParams extends never ? {} : { params: GetSchedulesScheduleId_PathParams }) &
@@ -19359,8 +19401,8 @@ export type PostSchedules_Body =
             [key: string]: (string | number | boolean | null) | undefined;
           }
         | undefined;
-      ifActive?: Shared_Type_146 | undefined;
-      ifIdle?: Shared_Type_147 | undefined;
+      ifActive?: Shared_Type_147 | undefined;
+      ifIdle?: Shared_Type_148 | undefined;
       providerOptions?:
         | {
             [key: string]: unknown;
@@ -19435,8 +19477,8 @@ export type PatchSchedulesScheduleId_Body = {
         [key: string]: (string | number | boolean | null) | undefined;
       }
     | undefined;
-  ifActive?: Shared_Type_146 | undefined;
-  ifIdle?: Shared_Type_147 | undefined;
+  ifActive?: Shared_Type_147 | undefined;
+  ifIdle?: Shared_Type_148 | undefined;
   providerOptions?:
     | {
         [key: string]: unknown;
@@ -19536,7 +19578,7 @@ export type GetSchedulesScheduleIdTriggers_Response = {
           [key: string]: unknown;
         }
       | undefined;
-    run?: Shared_Type_149 | undefined;
+    run?: Shared_Type_150 | undefined;
   }[];
 };
 
@@ -19962,7 +20004,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   settings?:
     | {
         yolo: boolean;
-        thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+        thinkingLevel?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') | undefined;
         notifications: 'off' | 'bell' | 'system' | 'both';
         smartEditing: boolean;
       }

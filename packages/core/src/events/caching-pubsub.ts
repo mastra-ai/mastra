@@ -121,12 +121,31 @@ export class CachingPubSub extends PubSub {
    *
    * Uses atomic increment for index assignment to prevent race conditions
    * when multiple events are published concurrently.
+   *
+   * `localOnly` events bypass the cache entirely — no list entry, no index, no
+   * counter allocation — and are handed straight to the inner PubSub. They are
+   * never relayed to other instances, so a shared replay cache can have no
+   * reader for them; caching them only grows the store without bound (some
+   * payloads, e.g. `workflow.events.v2.*` watch events carrying cumulative step
+   * results, are multiple megabytes each). Consumers of `localOnly` topics
+   * subscribe live and never replay, and every downstream `index` check is
+   * guarded for absence, so dropping the index is safe.
    */
   async publish(
     topic: string,
     event: Omit<Event, 'id' | 'createdAt' | 'index'>,
     options?: { localOnly?: boolean },
   ): Promise<void> {
+    if (options?.localOnly) {
+      const fullEvent: Event = {
+        ...event,
+        id: crypto.randomUUID(),
+        createdAt: new Date(),
+      };
+      await this.inner.publish(topic, fullEvent, options);
+      return;
+    }
+
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 

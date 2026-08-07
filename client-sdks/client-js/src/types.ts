@@ -2888,6 +2888,9 @@ export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   scorerIds?: string[];
   version?: number;
   agentVersion?: string;
