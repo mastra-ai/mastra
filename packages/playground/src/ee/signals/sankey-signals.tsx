@@ -1,4 +1,4 @@
-import type { DropResult, DroppableProvided } from '@hello-pangea/dnd';
+import type { DraggableStateSnapshot, DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable, useMouseSensor, useTouchSensor } from '@hello-pangea/dnd';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
@@ -200,6 +200,7 @@ function FlowCard({
   isNodeClickable,
   drillInDisabledReason,
   onOrderChange,
+  signalOrder,
   reorderDisabled,
 }: {
   columns: SankeyChartColumn[];
@@ -210,13 +211,20 @@ function FlowCard({
   isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
   drillInDisabledReason?: string;
   onOrderChange: (signalNames: TraceSignalName[]) => void;
+  signalOrder: TraceSignalName[];
   reorderDisabled: boolean;
 }) {
   const chartColumns = columns.map(column => ({ ...column, label: column.label.toUpperCase() }));
-  // Header order mirrors the chart columns; stages carry the typed signal
-  // names, including signals the chart dropped for having no links.
+  // Keep the dropped header order visible while the matching chart data loads.
   const linkedColumnIds = new Set(columns.map(column => column.id));
-  const headerSignalNames = stages.map(stage => stage.signalName).filter(signalName => linkedColumnIds.has(signalName));
+  const orderedLinkedSignals = signalOrder.filter(signalName => linkedColumnIds.has(signalName));
+  const orderedSignalSet = new Set(orderedLinkedSignals);
+  const headerSignalNames = [
+    ...orderedLinkedSignals,
+    ...stages
+      .map(stage => stage.signalName)
+      .filter(signalName => linkedColumnIds.has(signalName) && !orderedSignalSet.has(signalName)),
+  ];
 
   const handleDragEnd = (result: DropResult) => {
     const destinationIndex = result.destination?.index;
@@ -254,7 +262,7 @@ function FlowCard({
                     {...provided.droppableProps}
                     ref={provided.innerRef}
                     aria-label="Trace signal column headers"
-                    className="flex items-center justify-between px-8 pb-1"
+                    className="flex items-center gap-1 px-4 pb-1"
                     role="group"
                   >
                     {headerSignalNames.map((signalName, index) => {
@@ -266,11 +274,16 @@ function FlowCard({
                           index={index}
                           isDragDisabled={reorderDisabled}
                         >
-                          {dragProvided => (
+                          {(dragProvided, dragSnapshot: DraggableStateSnapshot) => (
                             <div
                               ref={dragProvided.innerRef}
                               {...dragProvided.draggableProps}
-                              className="flex shrink-0 items-center gap-0.5"
+                              className={`flex min-w-0 flex-1 basis-0 items-center justify-center gap-0.5 rounded-md border border-transparent px-2 py-1 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${
+                                dragSnapshot.isDragging
+                                  ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg'
+                                  : 'hover:border-border1 hover:bg-surface2'
+                              }`}
+                              data-dragging={dragSnapshot.isDragging}
                               style={dragProvided.draggableProps.style}
                             >
                               <Tooltip>
@@ -287,7 +300,7 @@ function FlowCard({
                                 {...dragProvided.dragHandleProps}
                                 aria-disabled={reorderDisabled}
                                 aria-label={`Reorder ${label}`}
-                                className="text-neutral3 hover:text-neutral5 cursor-grab rounded-xs p-0.5 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                                className="text-neutral3 hover:text-neutral5 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
                                 title={`Drag to reorder the ${label} column`}
                               >
                                 <GripVertical aria-hidden="true" className="size-3.5" />
@@ -302,25 +315,34 @@ function FlowCard({
                 )}
               </Droppable>
             </DragDropContext>
-            <Sankey
-              data={records}
-              columns={chartColumns}
-              columnOrder={chartColumns.map(column => column.id)}
-              getColumnHue={column => getSignalHue(column.id)}
-              getRecordNodeId={getSignalRecordNodeId}
-              getRecordNodeLabel={getSignalRecordNodeLabel}
-              getRecordNodeValue={getSignalRecordNodeValue}
-              getRecordWeight={record => Number(record.traceCount)}
-              getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
+            <div
+              key={chartColumns.map(column => column.id).join(':')}
+              aria-busy={reorderDisabled}
+              className={`motion-safe:animate-in motion-safe:fade-in motion-safe:transition-opacity motion-safe:duration-500 ${
+                reorderDisabled ? 'opacity-55' : 'opacity-100'
+              }`}
+              data-testid="sankey-order-transition"
             >
-              <SankeyChart
-                height={height ?? 'clamp(340px, 42vw, 460px)'}
-                margin={{ top: 40, right: 32, bottom: 24, left: 32 }}
-                onNodeClick={onNodeClick}
-                isNodeClickable={isNodeClickable}
-                hideColumnLabels
-              />
-            </Sankey>
+              <Sankey
+                data={records}
+                columns={chartColumns}
+                columnOrder={chartColumns.map(column => column.id)}
+                getColumnHue={column => getSignalHue(column.id)}
+                getRecordNodeId={getSignalRecordNodeId}
+                getRecordNodeLabel={getSignalRecordNodeLabel}
+                getRecordNodeValue={getSignalRecordNodeValue}
+                getRecordWeight={record => Number(record.traceCount)}
+                getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
+              >
+                <SankeyChart
+                  height={height ?? 'clamp(340px, 42vw, 460px)'}
+                  margin={{ top: 40, right: 32, bottom: 24, left: 32 }}
+                  onNodeClick={onNodeClick}
+                  isNodeClickable={isNodeClickable}
+                  hideColumnLabels
+                />
+              </Sankey>
+            </div>
           </div>
         </div>
       </CardContent>
@@ -344,6 +366,7 @@ export function SankeySignals({
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
+  const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
@@ -464,7 +487,11 @@ export function SankeySignals({
       }
       return nextSignalNames;
     },
-    onSuccess: setSignalNames,
+    onSuccess: nextSignalNames => {
+      setSignalNames(nextSignalNames);
+      setPendingSignalNames(undefined);
+    },
+    onError: () => setPendingSignalNames(undefined),
   });
 
   if (snapshotsQuery.isPending) {
@@ -561,6 +588,7 @@ export function SankeySignals({
     setIsPlaying(false);
     setDetailSelection(undefined);
     setNoiseSignalName(undefined);
+    setPendingSignalNames(nextSignalNames);
     perspectiveMutation.mutate(nextSignalNames);
   };
 
@@ -659,6 +687,7 @@ export function SankeySignals({
               isNodeClickable={isNodeClickable}
               drillInDisabledReason={drillInDisabledReason}
               onOrderChange={handleSignalOrderChange}
+              signalOrder={pendingSignalNames ?? signalNames}
               reorderDisabled={perspectiveMutation.isPending}
             />
           )}
