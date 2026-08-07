@@ -1,13 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/memory';
 import type { QueryResult } from 'pg';
 import { describe, expect, it } from 'vitest';
-import type { DbClient, QueryValues, TxClient } from '../../client';
+import type { QueryValues, TxClient } from '../../client';
+import type { RecordedQuery } from './test-utils';
+import { RecordingDbClientBase } from './test-utils';
 import { MemoryPG } from './index';
-
-type RecordedQuery = {
-  query: string;
-  values?: QueryValues;
-};
 
 class RecordingTxClient implements TxClient {
   queries: RecordedQuery[] = [];
@@ -47,16 +44,15 @@ class RecordingTxClient implements TxClient {
   }
 }
 
-class RecordingDbClient implements DbClient {
-  readonly $pool = {} as DbClient['$pool'];
+class RecordingDbClient extends RecordingDbClientBase {
   readonly txClient = new RecordingTxClient();
   readonly threads = new Map<string, Record<string, unknown>>();
-  readonly queries: RecordedQuery[] = [];
 
   constructor({
     thread,
     threads,
   }: { thread?: Record<string, unknown> | null; threads?: Record<string, unknown>[] } = {}) {
+    super();
     const defaultThread = {
       id: 'thread-1',
       resourceId: 'resource-1',
@@ -71,42 +67,22 @@ class RecordingDbClient implements DbClient {
     }
   }
 
-  connect(): Promise<never> {
-    throw new Error('not implemented');
-  }
-
-  async none(query: string, values?: QueryValues): Promise<null> {
+  override async none(query: string, values?: QueryValues): Promise<null> {
     this.queries.push({ query, values });
     return null;
   }
 
-  async one<T = any>(): Promise<T> {
-    throw new Error('not implemented');
-  }
-
-  async oneOrNone<T = any>(_query?: string, values?: QueryValues): Promise<T | null> {
+  override async oneOrNone<T = any>(_query: string, values?: QueryValues): Promise<T | null> {
     const id = Array.isArray(values) ? values[0] : undefined;
     return id ? ((this.threads.get(String(id)) as T | undefined) ?? null) : null;
   }
 
-  async any<T = any>(): Promise<T[]> {
-    throw new Error('not implemented');
-  }
-
-  async manyOrNone<T = any>(query?: string): Promise<T[]> {
+  override async manyOrNone<T = any>(query: string): Promise<T[]> {
     if (query?.includes('information_schema.columns')) return [];
     throw new Error('not implemented');
   }
 
-  async many<T = any>(): Promise<T[]> {
-    throw new Error('not implemented');
-  }
-
-  async query(): Promise<QueryResult> {
-    throw new Error('not implemented');
-  }
-
-  async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+  override async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
     return callback(this.txClient);
   }
 }
