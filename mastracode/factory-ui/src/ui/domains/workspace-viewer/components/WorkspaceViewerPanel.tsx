@@ -15,19 +15,38 @@ interface WorkspaceViewerPanelProps {
   visible?: boolean;
 }
 
-export function WorkspaceViewerPanel({ workspacePath, renderedPaths, ...props }: WorkspaceViewerPanelProps) {
+export function WorkspaceViewerPanel({
+  workspacePath,
+  renderedPaths,
+  visible = true,
+  ...props
+}: WorkspaceViewerPanelProps) {
   const resetKey = [workspacePath, ...renderedPaths.map(path => `${path.id}:${path.root}`)].join('|');
 
   return (
-    <WorkspaceViewerPanelReset key={resetKey} workspacePath={workspacePath} renderedPaths={renderedPaths} {...props} />
+    <WorkspaceViewerPanelReset
+      key={resetKey}
+      workspacePath={workspacePath}
+      renderedPaths={renderedPaths}
+      visible={visible}
+      {...props}
+    />
   );
 }
 
-function WorkspaceViewerPanelReset(props: WorkspaceViewerPanelProps) {
+type MountedPanelProps = Omit<WorkspaceViewerPanelProps, 'visible'> & { visible: boolean };
+
+function WorkspaceViewerPanelReset(props: MountedPanelProps) {
   const [view, setView] = useState<'files' | 'changes'>('files');
 
   if (view === 'changes') {
-    return <WorkspaceChangesPanel workspacePath={props.workspacePath} onShowFiles={() => setView('files')} />;
+    return (
+      <WorkspaceChangesPanel
+        workspacePath={props.workspacePath}
+        visible={props.visible}
+        onShowFiles={() => setView('files')}
+      />
+    );
   }
 
   return <WorkspaceViewerPanelInner {...props} onShowChanges={() => setView('changes')} />;
@@ -38,8 +57,8 @@ function WorkspaceViewerPanelInner({
   renderedPaths,
   onExpandedChange,
   onShowChanges,
-  visible = true,
-}: WorkspaceViewerPanelProps & { onShowChanges: () => void }) {
+  visible,
+}: MountedPanelProps & { onShowChanges: () => void }) {
   const [selectedRenderedPathId, setSelectedRenderedPathId] = useState(renderedPaths[0]?.id ?? '');
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [viewerOpen, setViewerOpenState] = useState(false);
