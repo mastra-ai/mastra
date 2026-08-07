@@ -13,7 +13,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { useWorkspacesQuery } from '../useWorkspaces';
 import { useStartFactoryRun } from '../useStartFactoryRun';
 
@@ -125,7 +125,7 @@ function startRun(current: () => ReturnType<typeof useStartFactoryRun>, role: st
 describe('useStartFactoryRun', () => {
   it('advances the pending run phase workspace → kickoff → cleared, then offers the thread from a toast', async () => {
     const { sessionGate, runGate } = stubKickoffEndpoints();
-    const { router, current } = renderStartFactoryRun();
+    const { router, current, client } = renderStartFactoryRun();
 
     await waitFor(() => expect(current().enabled).toBe(true));
 
@@ -146,7 +146,8 @@ describe('useStartFactoryRun', () => {
 
     // Settled: the pending run clears and the board stays exactly where it was.
     runGate.resolve();
-    await waitFor(() => expect(current().pendingRuns).toHaveLength(0));
+    await waitForMutationsIdle(client);
+    expect(current().pendingRuns).toHaveLength(0);
     await screen.findByText('Investigate #1 (investigator) is ready');
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
 
@@ -161,7 +162,7 @@ describe('useStartFactoryRun', () => {
 
   it('keeps the board available so several runs can be started back to back', async () => {
     const { sessionGate, runGate } = stubKickoffEndpoints();
-    const { router, current } = renderStartFactoryRun();
+    const { router, current, client } = renderStartFactoryRun();
 
     await waitFor(() => expect(current().enabled).toBe(true));
 
@@ -175,7 +176,8 @@ describe('useStartFactoryRun', () => {
     sessionGate.resolve();
     runGate.resolve();
 
-    await waitFor(() => expect(current().pendingRuns).toHaveLength(0));
+    await waitForMutationsIdle(client);
+    expect(current().pendingRuns).toHaveLength(0);
     await screen.findByText('Investigate #1 (investigator) is ready');
     await screen.findByText('Investigate #1 (reviewer) is ready');
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
@@ -212,10 +214,9 @@ describe('useStartFactoryRun', () => {
     sessionGate.resolve();
     runGate.resolve();
 
-    await waitFor(() =>
-      expect(current().workspaces.data?.workspaces).toEqual([
-        expect.objectContaining({ sessionId: 'session-1', branch: 'feat/investigate-1' }),
-      ]),
-    );
+    await waitForMutationsIdle(client);
+    expect(current().workspaces.data?.workspaces).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', branch: 'feat/investigate-1' }),
+    ]);
   });
 });
