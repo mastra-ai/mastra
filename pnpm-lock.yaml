@@ -188,6 +188,7 @@ patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
   '@earendil-works/pi-tui@0.80.6': 88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b
   gray-matter@4.0.3: 058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8
+  read-yaml-file@1.1.0: 834a9a43c1785ff0b4911ae833daf9fc54055df0834080003b572e6cf4131eb9
 
 importers:
 
@@ -39651,7 +39652,7 @@ snapshots:
       '@manypkg/find-root': 1.1.0
       fs-extra: 8.1.0
       globby: 11.1.0
-      read-yaml-file: 1.1.0
+      read-yaml-file: 1.1.0(patch_hash=834a9a43c1785ff0b4911ae833daf9fc54055df0834080003b572e6cf4131eb9)
 
   '@manypkg/get-packages@3.1.0':
     dependencies:
@@ -55530,7 +55531,7 @@ snapshots:
       json-parse-even-better-errors: 6.0.0
       npm-normalize-package-bin: 6.0.0
 
-  read-yaml-file@1.1.0:
+  read-yaml-file@1.1.0(patch_hash=834a9a43c1785ff0b4911ae833daf9fc54055df0834080003b572e6cf4131eb9):
     dependencies:
       graceful-fs: 4.2.11
       js-yaml: 5.2.3

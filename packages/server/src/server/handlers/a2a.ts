@@ -654,6 +654,31 @@ function shouldSendPushNotification(previousTask: Task | undefined, nextTask: Ta
   return previousTask?.status.state !== nextTask.status.state;
 }
 
+function createLinkedAbortController(abortSignal?: AbortSignal) {
+  const controller = new AbortController();
+
+  if (!abortSignal) {
+    return { controller, cleanup: () => {} };
+  }
+
+  const abortFromSignal = () => {
+    if (!controller.signal.aborted) {
+      controller.abort(abortSignal.reason);
+    }
+  };
+
+  if (abortSignal.aborted) {
+    abortFromSignal();
+  } else {
+    abortSignal.addEventListener('abort', abortFromSignal, { once: true });
+  }
+
+  return {
+    controller,
+    cleanup: () => abortSignal.removeEventListener('abort', abortFromSignal),
+  };
+}
+
 async function saveTaskAndMaybeSendPushNotification({
   taskStore,
   pushNotificationSender,
@@ -670,22 +695,28 @@ async function saveTaskAndMaybeSendPushNotification({
   agentId: string;
   expectedVersion?: number;
   logger?: IMastraLogger;
-}) {
-  await taskStore.save({ agentId, data: nextTask, expectedVersion });
+}): Promise<Task> {
+  const storedTask = await taskStore.save({ agentId, data: nextTask, expectedVersion, skipIfCanceled: true });
 
-  if (!shouldSendPushNotification(previousTask, nextTask)) {
-    return;
+  if (storedTask.status.state === 'canceled' && nextTask.status.state !== 'canceled') {
+    return storedTask;
+  }
+
+  if (!shouldSendPushNotification(previousTask, storedTask)) {
+    return storedTask;
   }
 
   void pushNotificationSender
     .sendNotifications({
       agentId,
-      task: nextTask,
+      task: storedTask,
       logger,
     })
     .catch(error => {
       logger?.error('Failed to schedule A2A push notification', error);
     });
+
+  return storedTask;
 }
 
 function extractFullStreamTextDelta(value: unknown): string | null {
@@ -1303,6 +1334,7 @@ export async function* handleMessageStream({
   agentId,
   logger,
   requestContext,
+  abortSignal,
 }: {
   requestId: number | string;
   params: MessageSendParams;
@@ -1313,6 +1345,7 @@ export async function* handleMessageStream({
   agentId: string;
   logger?: IMastraLogger;
   requestContext: RequestContext;
+  abortSignal?: AbortSignal;
 }) {
   validateMessageSendParams(params);
 
@@ -1371,27 +1404,47 @@ export async function* handleMessageStream({
     logger,
   });
 
-  yield createSuccessResponse(requestId, currentData);
+  const { controller: taskAbortController, cleanup: cleanupLinkedAbortController } =
+    createLinkedAbortController(abortSignal);
+  const unregisterTaskAbortController = taskStore.registerAbortController({
+    agentId,
+    taskId,
+    controller: taskAbortController,
+  });
 
   try {
+    yield createSuccessResponse(requestId, currentData);
+
     const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
     const result = resume
       ? await agent.resumeStream(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
           ...(resume.toolCallId ? { toolCallId: resume.toolCallId } : {}),
           requestContext,
+          abortSignal: taskAbortController.signal,
         })
       : await agent.stream([convertToCoreMessage(message)], {
           runId: taskId,
           requestContext,
+          abortSignal: taskAbortController.signal,
           ...(contextId ? { threadId: contextId, resourceId } : {}),
         });
     let sawTextArtifact = false;
     let pendingTextChunk: string | undefined;
     let structuredData: Record<string, unknown> | undefined;
     let suspended = false;
+    let streamCanceled = false;
 
     for await (const chunk of result.fullStream) {
+      if (taskAbortController.signal.aborted) {
+        const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+        if (latestTask) {
+          currentData = latestTask;
+        }
+        streamCanceled = true;
+        break;
+      }
+
       if (isSuspensionChunk(chunk)) {
         suspended = true;
         continue;
@@ -1413,13 +1466,17 @@ export async function* handleMessageStream({
         });
 
         currentData = applyUpdateToTask(currentData, textUpdate);
-        await saveTaskAndMaybeSendPushNotification({
+        currentData = await saveTaskAndMaybeSendPushNotification({
           taskStore,
           pushNotificationSender: resolvedPushNotificationSender,
           nextTask: currentData,
           agentId,
           logger,
         });
+        if (currentData.status.state === 'canceled') {
+          streamCanceled = true;
+          break;
+        }
         yield createSuccessResponse(requestId, textUpdate);
 
         sawTextArtifact = true;
@@ -1433,7 +1490,36 @@ export async function* handleMessageStream({
       }
     }
 
-    if (suspended) {
+    if (!streamCanceled && taskAbortController.signal.aborted) {
+      const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+      if (latestTask) {
+        currentData = latestTask;
+      }
+      streamCanceled = true;
+    }
+
+    if (streamCanceled && abortSignal?.aborted && currentData.status.state !== 'canceled') {
+      const previousTask = currentData;
+      currentData = applyUpdateToTask(currentData, {
+        state: 'canceled',
+        message: {
+          messageId: crypto.randomUUID(),
+          role: 'agent',
+          parts: [{ kind: 'text', text: 'Task canceled because the request was aborted.' }],
+          kind: 'message',
+        },
+      });
+      currentData = await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvedPushNotificationSender,
+        previousTask,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
+    }
+
+    if (!streamCanceled && suspended) {
       // Agent suspensions (tool approval, suspend()) surface as the A2A
       // `input-required` state so clients can provide the missing input and
       // continue the task (HITL per the A2A spec). Skip the completed path
@@ -1448,20 +1534,21 @@ export async function* handleMessageStream({
         });
 
         currentData = applyUpdateToTask(currentData, textUpdate);
-        await saveTaskAndMaybeSendPushNotification({
+        currentData = await saveTaskAndMaybeSendPushNotification({
           taskStore,
           pushNotificationSender: resolvedPushNotificationSender,
           nextTask: currentData,
           agentId,
           logger,
         });
-        yield createSuccessResponse(requestId, textUpdate);
+        if (currentData.status.state === 'canceled') {
+          streamCanceled = true;
+        } else {
+          yield createSuccessResponse(requestId, textUpdate);
+        }
       }
 
-      const previousTask = currentData;
-      // `suspendPayload`/`resumeSchema` resolve as soon as the suspension chunk
-      // is processed, so awaiting them here is safe and keeps the reported
-      // payload identical to the non-streaming path.
+      const suspensionTask = currentData;
       currentData = applySuspensionToTask({
         task: currentData,
         suspendPayload: await result.suspendPayload,
@@ -1470,15 +1557,20 @@ export async function* handleMessageStream({
         logger,
       });
 
-      await saveTaskAndMaybeSendPushNotification({
+      currentData = await saveTaskAndMaybeSendPushNotification({
         taskStore,
         pushNotificationSender: resolvedPushNotificationSender,
-        previousTask,
+        previousTask: suspensionTask,
         nextTask: currentData,
         agentId,
         logger,
       });
-    } else {
+      if (currentData.status.state === 'canceled') {
+        streamCanceled = true;
+      }
+    }
+
+    if (!streamCanceled && !suspended) {
       structuredData ??= (await result.object) as Record<string, unknown> | undefined;
 
       if (!pendingTextChunk && !sawTextArtifact) {
@@ -1498,20 +1590,24 @@ export async function* handleMessageStream({
         });
 
         currentData = applyUpdateToTask(currentData, textUpdate);
-        await saveTaskAndMaybeSendPushNotification({
+        currentData = await saveTaskAndMaybeSendPushNotification({
           taskStore,
           pushNotificationSender: resolvedPushNotificationSender,
           nextTask: currentData,
           agentId,
           logger,
         });
-        yield createSuccessResponse(requestId, textUpdate);
+        if (currentData.status.state === 'canceled') {
+          streamCanceled = true;
+        } else {
+          yield createSuccessResponse(requestId, textUpdate);
+        }
 
         sawTextArtifact = true;
         pendingTextChunk = undefined;
       }
 
-      if (structuredData) {
+      if (!streamCanceled && structuredData) {
         const dataUpdate = createDataArtifactUpdate({
           taskId: currentData.id,
           contextId: currentData.contextId,
@@ -1520,73 +1616,119 @@ export async function* handleMessageStream({
         });
 
         currentData = applyUpdateToTask(currentData, dataUpdate);
-        await saveTaskAndMaybeSendPushNotification({
+        currentData = await saveTaskAndMaybeSendPushNotification({
           taskStore,
           pushNotificationSender: resolvedPushNotificationSender,
           nextTask: currentData,
           agentId,
           logger,
         });
-        yield createSuccessResponse(requestId, dataUpdate);
+        if (currentData.status.state === 'canceled') {
+          streamCanceled = true;
+        } else {
+          yield createSuccessResponse(requestId, dataUpdate);
+        }
       }
 
-      const previousTask = currentData;
-      const completedTask = applyUpdateToTask(currentData, {
-        state: 'completed',
-        message: undefined,
-      });
+      if (!streamCanceled) {
+        const previousTask = currentData;
+        const completedTask = applyUpdateToTask(currentData, {
+          state: 'completed',
+          message: undefined,
+        });
 
-      completedTask.metadata = {
-        ...clearSuspensionMetadata(completedTask.metadata),
-        execution: {
-          toolCalls: await result.toolCalls,
-          toolResults: await result.toolResults,
-          usage: await result.usage,
-          finishReason: await result.finishReason,
-        },
-      };
+        completedTask.metadata = {
+          ...clearSuspensionMetadata(completedTask.metadata),
+          execution: {
+            toolCalls: await result.toolCalls,
+            toolResults: await result.toolResults,
+            usage: await result.usage,
+            finishReason: await result.finishReason,
+          },
+        };
 
-      currentData = completedTask;
-
-      await saveTaskAndMaybeSendPushNotification({
-        taskStore,
-        pushNotificationSender: resolvedPushNotificationSender,
-        previousTask,
-        nextTask: currentData,
-        agentId,
-        logger,
-      });
+        currentData = await saveTaskAndMaybeSendPushNotification({
+          taskStore,
+          pushNotificationSender: resolvedPushNotificationSender,
+          previousTask,
+          nextTask: completedTask,
+          agentId,
+          logger,
+        });
+      }
     }
   } catch (handlerError) {
-    const previousTask = currentData;
-    currentData = applyUpdateToTask(currentData, {
-      state: 'failed',
-      message: {
-        messageId: crypto.randomUUID(),
-        role: 'agent',
-        parts: [
-          {
-            kind: 'text',
-            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
+    const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+    if (latestTask?.status.state === 'canceled') {
+      currentData = latestTask;
+    } else if (taskAbortController.signal.aborted) {
+      currentData = latestTask ?? currentData;
+      if (abortSignal?.aborted) {
+        const previousTask = currentData;
+        currentData = applyUpdateToTask(currentData, {
+          state: 'canceled',
+          message: {
+            messageId: crypto.randomUUID(),
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Task canceled because the request was aborted.' }],
+            kind: 'message',
           },
-        ],
-        kind: 'message',
-      },
-    });
+        });
 
-    try {
-      await saveTaskAndMaybeSendPushNotification({
-        taskStore,
-        pushNotificationSender: resolvedPushNotificationSender,
-        previousTask,
-        nextTask: currentData,
-        agentId,
-        logger,
+        try {
+          currentData = await saveTaskAndMaybeSendPushNotification({
+            taskStore,
+            pushNotificationSender: resolvedPushNotificationSender,
+            previousTask,
+            nextTask: currentData,
+            agentId,
+            logger,
+          });
+        } catch (saveError) {
+          // @ts-expect-error saveError is an unknown error
+          logger?.error(`Failed to save task ${currentData.id} after request abort:`, saveError?.message);
+        }
+      }
+    } else {
+      currentData = latestTask ?? currentData;
+      const previousTask = currentData;
+      currentData = applyUpdateToTask(currentData, {
+        state: 'failed',
+        message: {
+          messageId: crypto.randomUUID(),
+          role: 'agent',
+          parts: [
+            {
+              kind: 'text',
+              text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
+            },
+          ],
+          kind: 'message',
+        },
       });
-    } catch (saveError) {
-      // @ts-expect-error saveError is an unknown error
-      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
+
+      try {
+        currentData = await saveTaskAndMaybeSendPushNotification({
+          taskStore,
+          pushNotificationSender: resolvedPushNotificationSender,
+          previousTask,
+          nextTask: currentData,
+          agentId,
+          logger,
+        });
+      } catch (saveError) {
+        // @ts-expect-error saveError is an unknown error
+        logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
+      }
     }
+  } finally {
+    unregisterTaskAbortController();
+    cleanupLinkedAbortController();
+  }
+
+  const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+  if (latestTask?.status.state === 'canceled') {
+    currentData = latestTask;
   }
 
   yield createSuccessResponse(requestId, {
@@ -1751,6 +1893,11 @@ export async function handleTaskCancel({
     }
 
     taskStore.activeCancellations.add(taskId);
+    taskStore.abortTask({
+      agentId,
+      taskId,
+      reason: new DOMException('Task cancelled by request.', 'AbortError'),
+    });
 
     const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
       state: 'canceled',
@@ -1861,6 +2008,7 @@ export async function getAgentExecutionHandler({
           agentId,
           logger,
           requestContext,
+          abortSignal,
         });
         return result;
       }
