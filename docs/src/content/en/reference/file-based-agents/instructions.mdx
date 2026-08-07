@@ -65,7 +65,7 @@ Both files can also live in a [subagent](/reference/file-based-agents/subagents)
 
 ## Build-time behavior
 
-The two files reach the deployed agent differently:
+`instructions.md` and `instructions.ts` reach the deployed agent differently:
 
 - `instructions.md`: Mastra reads the file and inlines its contents into the generated code at build time.
 - `instructions.ts`: The generated code imports the module, so it's bundled like any other TypeScript file and can import from the rest of your project.
