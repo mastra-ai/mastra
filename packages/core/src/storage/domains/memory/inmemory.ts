@@ -104,6 +104,12 @@ export class InMemoryMemory extends MemoryStorage {
     });
   }
 
+  /**
+   * Lists a thread's messages, optionally pinning extra messages through `include`.
+   *
+   * When `resourceId` is supplied it scopes the paginated messages, the pinned messages,
+   * and their before/after windows, so an id from another resource returns nothing.
+   */
   async listMessages({
     threadId,
     resourceId: optionalResourceId,
@@ -197,7 +203,7 @@ export class InMemoryMemory extends MemoryStorage {
     if (include && include.length > 0) {
       for (const includeItem of include) {
         const targetMessage = this.db.messages.get(includeItem.id);
-        if (targetMessage) {
+        if (targetMessage && (!optionalResourceId || targetMessage.resourceId === optionalResourceId)) {
           // Convert StorageMessageType to MastraDBMessage
           const convertedMessage = {
             id: targetMessage.id,
@@ -218,7 +224,11 @@ export class InMemoryMemory extends MemoryStorage {
           // Add previous messages if requested
           if (includeItem.withPreviousMessages) {
             const allThreadMessages = Array.from(this.db.messages.values())
-              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
+              .filter(
+                (msg: any) =>
+                  msg.thread_id === (includeItem.threadId || threadId) &&
+                  (!optionalResourceId || msg.resourceId === optionalResourceId),
+              )
               .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
             const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
@@ -246,7 +256,11 @@ export class InMemoryMemory extends MemoryStorage {
           // Add next messages if requested
           if (includeItem.withNextMessages) {
             const allThreadMessages = Array.from(this.db.messages.values())
-              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
+              .filter(
+                (msg: any) =>
+                  msg.thread_id === (includeItem.threadId || threadId) &&
+                  (!optionalResourceId || msg.resourceId === optionalResourceId),
+              )
               .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
             const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);

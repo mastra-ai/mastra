@@ -535,7 +535,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages(include: StorageListMessagesInput['include']): Promise<MastraDBMessage[]> {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, drops any pinned or context message owned by another
+   * resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages(
+    include: StorageListMessagesInput['include'],
+    resourceId?: string,
+  ): Promise<MastraDBMessage[]> {
     if (!include?.length) return [];
 
     const messageIds = new Set<string>();
@@ -582,7 +592,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       pipeline.get(getMessageKey(tId, id as string));
     });
     const results = await pipeline.exec();
-    return results.filter(result => result !== null) as MastraDBMessage[];
+    const includedMessages = results.filter(result => result !== null) as MastraDBMessage[];
+    return resourceId ? includedMessages.filter(message => message.resourceId === resourceId) : includedMessages;
   }
 
   private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number }): MastraDBMessage {
@@ -719,7 +730,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Get included messages with context if specified
       let includedMessages: MastraDBMessage[] = [];
       if (include && include.length > 0) {
-        const included = (await this._getIncludedMessages(include)) as MastraDBMessage[];
+        const included = (await this._getIncludedMessages(include, resourceId)) as MastraDBMessage[];
         includedMessages = included.map(this.parseStoredMessage);
       }
 

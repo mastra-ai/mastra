@@ -807,6 +807,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  /**
+   * Lists a thread's messages, optionally pinning extra messages through `include`.
+   *
+   * When `resourceId` is supplied it scopes the paginated messages, the pinned messages,
+   * and their before/after windows, so an id from another resource returns nothing.
+   */
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
@@ -853,11 +859,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       if (perPage === 0 && include && include.length > 0) {
         const includedMessageIds = new Set<string>();
         await this.getIncludedMessagesWithContext(include, includedMessageIds);
-        const includedMessages = await this.fetchAndParseMessagesFromMultipleThreads(
+        const fetchedIncludes = await this.fetchAndParseMessagesFromMultipleThreads(
           Array.from(includedMessageIds),
           include,
           undefined,
         );
+        const includedMessages = resourceId
+          ? fetchedIncludes.filter(message => message.resourceId === resourceId)
+          : fetchedIncludes;
 
         const list = new MessageList().add(includedMessages as MastraMessageV1[], 'memory');
         return {
@@ -950,7 +959,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         const idsToFetch = Array.from(includedMessageIds).filter(id => !paginatedIds.has(id));
 
         if (idsToFetch.length > 0) {
-          includedMessages = await this.fetchAndParseMessagesFromMultipleThreads(idsToFetch, include, undefined);
+          const fetched = await this.fetchAndParseMessagesFromMultipleThreads(idsToFetch, include, undefined);
+          includedMessages = resourceId ? fetched.filter(message => message.resourceId === resourceId) : fetched;
         }
       }
 

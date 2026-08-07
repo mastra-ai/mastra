@@ -58,7 +58,7 @@ const { messages } = await memory.recall({
     name: 'include',
     type: '{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]',
     description:
-      'Array of specific message IDs to include with optional context messages. Each item has an `id` (required), optional `threadId` (defaults to main threadId), `withPreviousMessages` (number of messages before, defaults to 2 for vector search, 0 otherwise), and `withNextMessages` (number of messages after, defaults to 2 for vector search, 0 otherwise).',
+      'Array of specific message IDs to include with optional context messages. Each item has an `id` (required), optional `threadId` (defaults to main threadId), `withPreviousMessages` (number of messages before, defaults to 2 for vector search, 0 otherwise), and `withNextMessages` (number of messages after, defaults to 2 for vector search, 0 otherwise). When you pass `resourceId`, Mastra scopes the included messages and their context to that resource and skips IDs owned by another resource.',
     isOptional: true,
   },
   {

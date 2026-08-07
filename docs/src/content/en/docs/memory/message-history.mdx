@@ -316,6 +316,8 @@ const { messages } = await memory.recall({
 })
 ```
 
+When you pass `resourceId`, `include` stays inside that resource. Mastra skips message IDs owned by another resource, along with their surrounding context.
+
 Search by meaning (see [Semantic recall](/docs/memory/semantic-recall) for setup):
 
 ```typescript

@@ -847,7 +847,20 @@ export class MemoryPG extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -859,11 +872,15 @@ export class MemoryPG extends MemoryStorage {
     if (targetIds.length === 0) return null;
 
     const idPlaceholders = targetIds.map((_, i) => '$' + (i + 1)).join(', ');
+    const targetResourceCondition = resourceId ? ` AND "resourceId" = $${targetIds.length + 1}` : '';
     const targetRows = await this.#db.client.manyOrNone<{
       id: string;
       thread_id: string;
       createdAt: Date | string;
-    }>(`SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})`, targetIds);
+    }>(
+      `SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})${targetResourceCondition}`,
+      resourceId ? [...targetIds, resourceId] : targetIds,
+    );
 
     if (targetRows.length === 0) return null;
 
@@ -888,32 +905,42 @@ export class MemoryPG extends MemoryStorage {
       const p1 = '$' + paramIdx;
       const p2 = '$' + (paramIdx + 1);
       const p3 = '$' + (paramIdx + 2);
+      const prevResourceCondition = resourceId ? ` AND m."resourceId" = $${paramIdx + 3}` : '';
       unionQueries.push(`(
         SELECT ${selectColumns}
         FROM ${tableName} m
         WHERE m.thread_id = ${p1}
-          AND m."createdAt" <= ${p2}
+          AND m."createdAt" <= ${p2}${prevResourceCondition}
         ORDER BY m."createdAt" DESC, m.id DESC
         LIMIT ${p3}
       )`);
       params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
       paramIdx += 3;
+      if (resourceId) {
+        params.push(resourceId);
+        paramIdx += 1;
+      }
 
       // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
         const p4 = '$' + paramIdx;
         const p5 = '$' + (paramIdx + 1);
         const p6 = '$' + (paramIdx + 2);
+        const nextResourceCondition = resourceId ? ` AND m."resourceId" = $${paramIdx + 3}` : '';
         unionQueries.push(`(
           SELECT ${selectColumns}
           FROM ${tableName} m
           WHERE m.thread_id = ${p4}
-            AND m."createdAt" > ${p5}
+            AND m."createdAt" > ${p5}${nextResourceCondition}
           ORDER BY m."createdAt" ASC, m.id ASC
           LIMIT ${p6}
         )`);
         params.push(target.threadId, target.createdAt, withNextMessages);
         paramIdx += 3;
+        if (resourceId) {
+          params.push(resourceId);
+          paramIdx += 1;
+        }
       }
     }
 
@@ -1071,7 +1098,7 @@ export class MemoryPG extends MemoryStorage {
       // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
       // This is the semantic recall path where we only need the included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -1120,7 +1147,7 @@ export class MemoryPG extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {
@@ -1254,7 +1281,7 @@ export class MemoryPG extends MemoryStorage {
       // (vector-matched) messages are needed. Skipping the COUNT(*) avoids scanning
       // the entire thread which was a major source of latency for large threads.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return {
             messages: [],
@@ -1310,7 +1337,7 @@ export class MemoryPG extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {
