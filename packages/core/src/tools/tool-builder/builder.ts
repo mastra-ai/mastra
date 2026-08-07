@@ -31,8 +31,8 @@ import { safeStringify } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
+import { markBuilderValidatedInput } from '../builder-validation-context';
 import { ToolStream } from '../stream';
-import { markBuilderValidatedInput } from '../tool';
 import type {
   CoreTool,
   McpMetadata,

@@ -4,6 +4,7 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
+import { consumeBuilderValidatedInput } from './builder-validation-context';
 import type {
   McpMetadata,
   MCPToolProperties,
@@ -23,19 +24,6 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
  * Follows the naming convention: <org>.<product>.<category>.<className>
  */
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
-
-/** @internal Tracks contexts that already passed CoreToolBuilder compat validation. */
-const builderValidatedContexts = new WeakMap<object, true>();
-
-/** @internal Set by CoreToolBuilder after compat-layer input validation succeeds. */
-export function markBuilderValidatedInput(context: object): void {
-  builderValidatedContexts.set(context, true);
-}
-
-/** @internal */
-export function isBuilderValidatedInput(context: unknown): boolean {
-  return typeof context === 'object' && context !== null && builderValidatedContexts.has(context);
-}
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -329,7 +317,8 @@ export class Tool<
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
         const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
-        const skipInputValidation = isResuming || isBuilderValidatedInput(context);
+        const wasBuilderValidated = consumeBuilderValidatedInput(context);
+        const skipInputValidation = isResuming || wasBuilderValidated;
 
         let data: any = inputData;
         if (!skipInputValidation) {
