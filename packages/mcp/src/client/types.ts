@@ -289,6 +289,34 @@ export type BaseServerOptions = {
    * ```
    */
   roots?: Root[];
+  /**
+   * Opt-in MCP protocol version negotiation.
+   *
+   * - Omitted (default): the plain legacy (2025-era) connect sequence,
+   *   byte-identical to a client without this option.
+   * - `'auto'`: probe the server with `server/discover` at connect time and use
+   *   the stateless `2026-07-28` revision when the server supports it, with a
+   *   conservative fallback to the legacy `initialize` handshake.
+   * - `'2026-07-28'`: pin to that revision exactly. Connecting to a server that
+   *   does not offer it fails loudly with a typed error — no fallback.
+   *
+   * Note: elicitation handlers currently only fire on legacy connections; on a
+   * negotiated `2026-07-28` connection, server-side input requests use the
+   * multi-round-trip mechanism, which this client does not drive yet.
+   *
+   * @example
+   * ```typescript
+   * const mcp = new MCPClient({
+   *   servers: {
+   *     weather: {
+   *       url: new URL('https://example/mcp'),
+   *       protocolVersion: 'auto',
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  protocolVersion?: 'auto' | '2026-07-28';
 };
 
 /**

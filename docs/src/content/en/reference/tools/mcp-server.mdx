@@ -186,8 +186,46 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description:
       'A map of `ui://` URIs to app resource configurations. Each entry defines an interactive HTML UI served via the MCP Apps extension (SEP-1865). See the MCP Apps section for details.',
   },
+  {
+    name: 'protocolVersion',
+    type: "'2025-11-25' | '2026-07-28'",
+    isOptional: true,
+    description:
+      "Opt-in MCP protocol revision. Omitted (or '2025-11-25') keeps the legacy behavior exactly. Set to '2026-07-28' to serve the stateless MCP revision. See the Protocol versions section for details.",
+  },
+  {
+    name: 'cacheHints',
+    type: 'MCPServerCacheHints',
+    isOptional: true,
+    description:
+      "Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the '2026-07-28' protocol revision, keyed by operation (e.g. 'tools/list'). Only applied when `protocolVersion: '2026-07-28'` is set.",
+  },
 ]}
 />
+
+## Protocol versions
+
+By default, `MCPServer` speaks the legacy (2025-era) MCP protocol: sessionful streamable HTTP with an `initialize` handshake. Set `protocolVersion: '2026-07-28'` to serve the stateless MCP revision instead:
+
+- HTTP and serverless requests go through a dual-era handler: clients that speak `2026-07-28` are served natively (stateless, per-request envelope), and legacy clients are served through a built-in stateless fallback on the same endpoint.
+- `startStdio()` serves both eras: the opening exchange selects the era for the connection.
+- Tool list, prompt list, resource list, and resource update notifications also reach `2026-07-28` clients through `subscriptions/listen`.
+- Tool log messages honor the caller's per-request `logLevel` opt-in instead of the session-level `logging/setLevel`.
+- Configured `cacheHints` are advertised on cacheable results such as `tools/list`.
+
+```typescript
+const server = new MCPServer({
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { weatherTool },
+  protocolVersion: '2026-07-28',
+  cacheHints: {
+    'tools/list': { ttlMs: 60_000, cacheScope: 'private' },
+  },
+})
+```
+
+Omitting `protocolVersion` keeps the current behavior unchanged.
 
 ## Exposing agents as tools
 
@@ -291,6 +329,10 @@ await server.startStdio()
 
 ### `startSSE()`
 
+:::warning
+The HTTP+SSE transport is deprecated in the MCP specification. Use `startHTTP()` (streamable HTTP) instead.
+:::
+
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
 ```typescript prettier:false
@@ -362,6 +404,10 @@ Here are the details for the values needed by the `startSSE` method:
 />
 
 ### `startHonoSSE()`
+
+:::warning
+The HTTP+SSE transport is deprecated in the MCP specification. Use `startHTTP()` (streamable HTTP) instead.
+:::
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 

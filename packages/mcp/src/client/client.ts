@@ -379,6 +379,15 @@ export class InternalMastraMCPClient extends MastraBase {
       },
     };
 
+    // Opt-in protocol version negotiation. Omitted keeps the SDK default
+    // ('legacy'): the plain 2025 connect sequence, byte-identical to today.
+    // 'auto' probes with server/discover and falls back to initialize;
+    // '2026-07-28' pins that revision and fails loudly when unavailable.
+    const versionNegotiation =
+      server.protocolVersion === undefined
+        ? undefined
+        : { mode: server.protocolVersion === 'auto' ? ('auto' as const) : { pin: server.protocolVersion } };
+
     this.client = new Client(
       {
         name,
@@ -387,6 +396,7 @@ export class InternalMastraMCPClient extends MastraBase {
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
+        ...(versionNegotiation ? { versionNegotiation } : {}),
       },
     );
 
@@ -1205,6 +1215,16 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
+    if (this.serverConfig.protocolVersion !== undefined) {
+      // The elicitation/create request handler below only fires on legacy (2025-era)
+      // connections. On a negotiated 2026-07-28 connection, server-side input requests
+      // use the multi-round-trip mechanism, which this client does not drive yet.
+      this.log(
+        'warning',
+        `An elicitation handler is registered while protocolVersion is set ('${this.serverConfig.protocolVersion}'). ` +
+          'Elicitation only works on legacy connections; it will not fire on a negotiated 2026-07-28 connection.',
+      );
+    }
     if (!this.hasElicitationCapability) {
       try {
         this.client.registerCapabilities({ elicitation: { form: {} } });

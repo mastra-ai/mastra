@@ -21,10 +21,11 @@ import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { PromptSchema } from '@modelcontextprotocol/core';
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/node';
-import { Server, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { NodeStreamableHTTPServerTransport, toNodeHandler } from '@modelcontextprotocol/node';
+import type { StreamableHTTPServerTransportOptions, NodeMcpRequestHandler } from '@modelcontextprotocol/node';
+import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
 import type {
+  McpHttpHandler,
   RequestOptions,
   TextResourceContents,
   BlobResourceContents,
@@ -37,7 +38,7 @@ import type {
   LoggingLevel,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { StdioServerTransport, serveStdio } from '@modelcontextprotocol/server/stdio';
 import { SSEServerTransport } from '@modelcontextprotocol/server-legacy/sse';
 import type { Context } from 'hono';
 import type { SSEStreamingApi } from 'hono/streaming';
@@ -56,6 +57,8 @@ import type {
   ElicitationActions,
   MastraPrompt,
   AppResources,
+  MCPServerProtocolVersion,
+  MCPServerCacheHints,
 } from './types';
 
 /**
@@ -144,6 +147,18 @@ export class MCPServer extends MCPServerBase {
   private subscriptionsByInstance: WeakMap<Server, Set<string>> = new WeakMap();
   // Minimum logging level per server instance (main + per HTTP session), set via logging/setLevel
   private loggingLevels: WeakMap<Server, LoggingLevel> = new WeakMap();
+  // Protocol revision the server is pinned to. Undefined or '2025-11-25' keeps the
+  // legacy (2025) era behavior exactly; '2026-07-28' routes HTTP/serverless/stdio
+  // through the SDK's dual-era serving entries.
+  private protocolVersion?: MCPServerProtocolVersion;
+  // Cache hints advertised on cacheable 2026-07-28 results. Only applied under the flag.
+  private cacheHints?: MCPServerCacheHints;
+  // Lazily created dual-era HTTP handler (modern era native + stateless legacy fallback).
+  private modernHandler?: McpHttpHandler;
+  // Node (req, res) adapter over modernHandler.fetch.
+  private modernNodeHandler?: NodeMcpRequestHandler;
+  // Handle for the dual-era stdio serving entry (flag on); close() tears it down.
+  private stdioHandle?: { close(): Promise<void> };
 
   /**
    * Provides methods to notify clients about resource changes.
@@ -355,9 +370,49 @@ export class MCPServer extends MCPServerBase {
        * ```
        */
       jsonSchemaValidator?: jsonSchemaValidator;
+      /**
+       * Opt-in MCP protocol revision.
+       *
+       * Omitted (or `'2025-11-25'`) keeps today's behavior exactly. Set to
+       * `'2026-07-28'` to serve the stateless MCP revision: HTTP and serverless
+       * requests go through the SDK's dual-era handler (modern clients served
+       * natively, legacy clients via the built-in stateless fallback on the same
+       * endpoint), and stdio serves both eras via the `server/discover` probe.
+       *
+       * @example
+       * ```typescript
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   protocolVersion: '2026-07-28',
+       * });
+       * ```
+       */
+      protocolVersion?: MCPServerProtocolVersion;
+      /**
+       * Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the
+       * `2026-07-28` protocol revision, keyed by operation (e.g. `'tools/list'`).
+       * Only applied when `protocolVersion: '2026-07-28'` is set; legacy responses
+       * are never affected.
+       *
+       * @example
+       * ```typescript
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   protocolVersion: '2026-07-28',
+       *   cacheHints: { 'tools/list': { ttlMs: 60_000, cacheScope: 'private' } },
+       * });
+       * ```
+       */
+      cacheHints?: MCPServerCacheHints;
     },
   ) {
     super(opts);
+    this.protocolVersion = opts.protocolVersion;
+    this.cacheHints = opts.cacheHints;
 
     // Merge appResources into the resource system
     this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
@@ -403,6 +458,9 @@ export class MCPServer extends MCPServerBase {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
         ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
+        // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
+        // no cache path, but gate on the flag anyway so it is the single opt-in.
+        ...(this.isModern() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
       },
     );
 
@@ -419,11 +477,16 @@ export class MCPServer extends MCPServerBase {
     // Register all handlers on the main server instance
     this.registerHandlersOnServer(this.server);
 
+    // Only notify the 2026-07-28 subscription bus when the flag is on and the
+    // handler was actually created (no HTTP served yet means no subscribers).
+    const getModernNotifier = () => (this.isModern() ? this.modernHandler?.notify : undefined);
+
     this.resources = new ServerResourceActions({
       getSubscribedServers: (uri: string) =>
         this.getAllSdkServers().filter(server => this.subscriptionsByInstance.get(server)?.has(uri)),
       getLogger: () => this.logger,
       getSdkServers: () => this.getAllSdkServers(),
+      getModernNotifier,
     });
 
     this.prompts = new ServerPromptActions({
@@ -432,6 +495,7 @@ export class MCPServer extends MCPServerBase {
       clearDefinedPrompts: () => {
         this.definedPrompts = undefined;
       },
+      getModernNotifier,
     });
 
     this.toolActions = new ServerToolActions({
@@ -439,6 +503,7 @@ export class MCPServer extends MCPServerBase {
       getSdkServers: () => this.getAllSdkServers(),
       addTools: tools => this.addTools(tools),
       removeTools: toolIds => this.removeTools(toolIds),
+      getModernNotifier,
     });
 
     this.elicitation = {
@@ -459,6 +524,47 @@ export class MCPServer extends MCPServerBase {
    */
   private getAllSdkServers(): Server[] {
     return [this.server, ...this.httpServerInstances.values()].filter(server => server.transport !== undefined);
+  }
+
+  /**
+   * Whether the server is pinned to the `2026-07-28` protocol revision.
+   * When false (the default), all behavior is byte-identical to the legacy era.
+   */
+  private isModern(): boolean {
+    return this.protocolVersion === '2026-07-28';
+  }
+
+  /**
+   * Lazily creates the dual-era HTTP handler used when `protocolVersion: '2026-07-28'`
+   * is set: modern (per-request envelope) clients are served natively and legacy
+   * clients are served through the SDK's built-in stateless fallback, both from the
+   * same endpoint. Each request gets a fresh server instance from
+   * `createServerInstance()`, so all registered handlers apply to both eras.
+   */
+  private getModernHandler(): McpHttpHandler {
+    if (!this.modernHandler) {
+      this.modernHandler = createMcpHandler(() => this.createServerInstance(), {
+        legacy: 'stateless',
+        onerror: error => {
+          this.logger.error('MCP handler error', { error: error.toString() });
+        },
+      });
+    }
+    return this.modernHandler;
+  }
+
+  /**
+   * Node `(req, res)` adapter over the dual-era handler's web-standard `fetch`.
+   */
+  private getModernNodeHandler(): NodeMcpRequestHandler {
+    if (!this.modernNodeHandler) {
+      this.modernNodeHandler = toNodeHandler(this.getModernHandler(), {
+        onerror: error => {
+          this.logger.error('MCP Node handler adapter error', { error: error.toString() });
+        },
+      });
+    }
+    return this.modernNodeHandler;
   }
 
   /**
@@ -772,6 +878,9 @@ export class MCPServer extends MCPServerBase {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
         ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
+        // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
+        // no cache path, but gate on the flag anyway so it is the single opt-in.
+        ...(this.isModern() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
       },
     );
 
@@ -883,11 +992,18 @@ export class MCPServer extends MCPServerBase {
 
         // Session-aware log emission: sends notifications/message to the calling
         // client, honoring the minimum level it set via logging/setLevel.
+        // On the 2026-07-28 path, delivery goes through the per-request log context
+        // instead, which honors the caller's per-request `logLevel` opt-in (messages
+        // are dropped when the caller did not opt in).
         const sessionLog = async (
           level: LoggingLevel,
           message: string,
           data?: Record<string, unknown>,
         ): Promise<void> => {
+          if (this.isModern()) {
+            await extra.mcpReq.log(level, { message, ...data }, this.name);
+            return;
+          }
           if (!this.shouldSendLog(serverInstance, level)) return;
           await extra.sendNotification({
             method: 'notifications/message',
@@ -1558,6 +1674,18 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public async startStdio(): Promise<void> {
+    if (this.isModern()) {
+      // Dual-era stdio: the opening exchange selects the era (server/discover probe
+      // for modern clients, initialize handshake for legacy clients) and one fresh
+      // instance from the factory is pinned for the connection lifetime.
+      this.stdioHandle = serveStdio(() => this.createServerInstance(), {
+        onerror: error => {
+          this.logger.error('MCP stdio handler error', { error: error.toString() });
+        },
+      });
+      this.logger.info('Started MCP Server (stdio, 2026-07-28 dual-era)');
+      return;
+    }
     this.stdioTransport = new StdioServerTransport();
     try {
       await this.server.connect(this.stdioTransport);
@@ -1838,6 +1966,40 @@ export class MCPServer extends MCPServerBase {
       res.end();
       return;
     }
+
+    // 2026-07-28 revision: serve every request through the SDK's dual-era handler.
+    // Modern clients are served natively (stateless, per-request envelope); legacy
+    // clients are served by the handler's built-in stateless fallback on the same
+    // endpoint. Session/serverless options do not apply on this path.
+    if (this.isModern()) {
+      try {
+        await this.getModernNodeHandler()(req, res);
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_SERVER_HTTP_CONNECTION_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.USER,
+            text: 'Failed to handle MCP request on the 2026-07-28 protocol path',
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Error handling HTTP request (2026-07-28 path)', { error: mastraError });
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null,
+            }),
+          );
+        }
+      }
+      return;
+    }
+
     // Serverless/stateless mode: single request/response without session management
     // Triggered by either: serverless: true OR sessionIdGenerator: undefined
     const isStatelessMode =
@@ -2247,6 +2409,15 @@ export class MCPServer extends MCPServerBase {
    */
   async close() {
     try {
+      if (this.stdioHandle) {
+        await this.stdioHandle.close();
+        this.stdioHandle = undefined;
+      }
+      if (this.modernHandler) {
+        await this.modernHandler.close();
+        this.modernHandler = undefined;
+        this.modernNodeHandler = undefined;
+      }
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
         this.stdioTransport = undefined;
