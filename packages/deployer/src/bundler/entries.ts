@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { slash } from '../build/utils';
@@ -72,15 +72,32 @@ export function resolveExtraEntries(
       );
     }
 
+    // Two names that differ only by separator collapse to one output file. Assigning both
+    // would silently drop the first source, and dependency analysis would never see it.
+    if (Object.hasOwn(resolved, normalizedName)) {
+      throw invalidEntries(
+        `bundler.entries has two entries that resolve to the output name "${normalizedName}" (the second is "${name}"). Entry names must be unique once path separators are normalized.`,
+      );
+    }
+
     if (!entryPath) {
       throw invalidEntries(`bundler.entries entry "${name}" has an empty path.`);
     }
 
     const absolutePath = isAbsolute(entryPath) ? entryPath : resolve(mastraDir, entryPath);
+    const entryStats = existsSync(absolutePath) ? statSync(absolutePath) : undefined;
 
-    if (!existsSync(absolutePath)) {
+    if (!entryStats) {
       throw invalidEntries(
         `bundler.entries entry "${name}" points at "${entryPath}", which does not exist (resolved to ${absolutePath}). Paths are resolved relative to your Mastra directory (${mastraDir}).`,
+      );
+    }
+
+    // Caught here so a directory surfaces as a config error rather than as an opaque
+    // rollup bundle-stage failure once it reaches the input map.
+    if (!entryStats.isFile()) {
+      throw invalidEntries(
+        `bundler.entries entry "${name}" points at "${entryPath}", which is not a file (resolved to ${absolutePath}). Point it at the source file to bundle.`,
       );
     }
 

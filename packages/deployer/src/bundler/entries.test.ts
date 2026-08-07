@@ -99,6 +99,23 @@ describe('resolveExtraEntries', () => {
     expect(error.message).toContain(join(mastraDir, 'nope.ts'));
   });
 
+  // Both keys collapse to the same output file, so silently keeping the last one would
+  // drop a source the user asked for — and drop it from dependency analysis too.
+  it('rejects two names that collapse to the same output name once normalized', () => {
+    expect(() =>
+      resolveExtraEntries(
+        { 'workers\\voice': './voice-worker.ts', 'workers/voice': './voice-worker.ts' },
+        mastraEntryFile,
+      ),
+    ).toThrow(/resolve to the output name "workers\/voice"/);
+  });
+
+  // A directory passes existsSync but fails much later inside rollup, where the error no
+  // longer points at the config that caused it.
+  it('rejects a path that exists but is a directory', () => {
+    expect(() => resolveExtraEntries({ 'voice-worker': '.' }, mastraEntryFile)).toThrow(/is not a file/);
+  });
+
   it('rejects empty names and empty paths', () => {
     expect(() => resolveExtraEntries({ '': './voice-worker.ts' }, mastraEntryFile)).toThrow(/empty or untrimmed/);
     expect(() => resolveExtraEntries({ 'voice-worker': '' }, mastraEntryFile)).toThrow(/empty path/);
