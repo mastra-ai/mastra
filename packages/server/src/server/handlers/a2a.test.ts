@@ -1913,12 +1913,61 @@ describe('A2A Handler', () => {
         abortSignal: requestAbortController.signal,
       });
 
-      await gen.next();
+      const first = await gen.next();
       requestAbortController.abort('client disconnected');
-      await gen.next();
+      const canceled = await gen.next();
 
       expect(streamAbortSignal?.aborted).toBe(true);
       expect(streamAbortSignal?.reason).toBe('client disconnected');
+      expect(canceled.value).toMatchObject({
+        result: {
+          final: true,
+          status: { state: 'canceled' },
+        },
+      });
+      expect(await mockTaskStore.load({ agentId, taskId: (first.value?.result as { id: string }).id })).toMatchObject({
+        status: { state: 'canceled' },
+      });
+    });
+
+    it('does not mark request-driven abort errors as failed', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const requestAbortController = new AbortController();
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        throw options.abortSignal?.reason;
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+        abortSignal: requestAbortController.signal,
+      });
+
+      const first = await gen.next();
+      requestAbortController.abort(new DOMException('Client disconnected.', 'AbortError'));
+      const canceled = await gen.next();
+
+      expect(canceled.value).toMatchObject({
+        result: {
+          final: true,
+          status: { state: 'canceled' },
+        },
+      });
+      expect(await mockTaskStore.load({ agentId, taskId: (first.value?.result as { id: string }).id })).toMatchObject({
+        status: { state: 'canceled' },
+      });
     });
 
     it('aborts the active stream and does not let late chunks overwrite a canceled task', async () => {
@@ -3785,7 +3834,7 @@ describe('A2A Handler', () => {
         agentId: 'test-agent',
         requestContext: new RequestContext(),
         taskStore: mockTaskStore,
-        abortSignal: AbortSignal.abort(),
+        abortSignal: new AbortController().signal,
         id: 42,
         method: 'message/stream',
         params: {

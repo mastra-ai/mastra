@@ -1436,9 +1436,11 @@ export async function* handleMessageStream({
     let streamCanceled = false;
 
     for await (const chunk of result.fullStream) {
-      const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
-      if (latestTask?.status.state === 'canceled') {
-        currentData = latestTask;
+      if (taskAbortController.signal.aborted) {
+        const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+        if (latestTask) {
+          currentData = latestTask;
+        }
         streamCanceled = true;
         break;
       }
@@ -1486,6 +1488,35 @@ export async function* handleMessageStream({
       if (finalStructuredObject) {
         structuredData = finalStructuredObject;
       }
+    }
+
+    if (!streamCanceled && taskAbortController.signal.aborted) {
+      const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+      if (latestTask) {
+        currentData = latestTask;
+      }
+      streamCanceled = true;
+    }
+
+    if (streamCanceled && abortSignal?.aborted && currentData.status.state !== 'canceled') {
+      const previousTask = currentData;
+      currentData = applyUpdateToTask(currentData, {
+        state: 'canceled',
+        message: {
+          messageId: crypto.randomUUID(),
+          role: 'agent',
+          parts: [{ kind: 'text', text: 'Task canceled because the request was aborted.' }],
+          kind: 'message',
+        },
+      });
+      currentData = await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvedPushNotificationSender,
+        previousTask,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
     }
 
     if (!streamCanceled && suspended) {
@@ -1630,6 +1661,34 @@ export async function* handleMessageStream({
     const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
     if (latestTask?.status.state === 'canceled') {
       currentData = latestTask;
+    } else if (taskAbortController.signal.aborted) {
+      currentData = latestTask ?? currentData;
+      if (abortSignal?.aborted) {
+        const previousTask = currentData;
+        currentData = applyUpdateToTask(currentData, {
+          state: 'canceled',
+          message: {
+            messageId: crypto.randomUUID(),
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Task canceled because the request was aborted.' }],
+            kind: 'message',
+          },
+        });
+
+        try {
+          currentData = await saveTaskAndMaybeSendPushNotification({
+            taskStore,
+            pushNotificationSender: resolvedPushNotificationSender,
+            previousTask,
+            nextTask: currentData,
+            agentId,
+            logger,
+          });
+        } catch (saveError) {
+          // @ts-expect-error saveError is an unknown error
+          logger?.error(`Failed to save task ${currentData.id} after request abort:`, saveError?.message);
+        }
+      }
     } else {
       currentData = latestTask ?? currentData;
       const previousTask = currentData;

@@ -2,4 +2,4 @@
 "@mastra/server": patch
 ---
 
-Prevent late A2A stream updates from overwriting canceled tasks.
+Abort active A2A streams when tasks are canceled or streaming requests disconnect, and prevent late updates from overwriting canceled tasks.
