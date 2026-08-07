@@ -1293,8 +1293,13 @@ export class InternalMastraMCPClient extends MastraBase {
               try {
                 return await executeToolCall();
               } catch (e) {
-                // Check if this is a session-related error that requires reconnection
-                if (isReconnectableMCPError(e)) {
+                // Tool-execution errors (isError: true from the MCP server) are semantic
+                // failures, not transport issues. Don't misclassify them as reconnectable
+                // just because their text happens to contain "session", "404", etc.
+                const isToolExecutionError =
+                  e instanceof MastraError && e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED';
+
+                if (!isToolExecutionError && isReconnectableMCPError(e)) {
                   this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
                     error: e instanceof Error ? e.message : String(e),
                   });
@@ -1312,8 +1317,7 @@ export class InternalMastraMCPClient extends MastraBase {
                       reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
                       toolArgs: input,
                     });
-                    // Throw the original error if reconnection/retry fails
-                    throw e;
+                    throw reconnectError;
                   }
                 }
 

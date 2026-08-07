@@ -238,7 +238,12 @@ const createSubAgentInputSchema = () =>
       .describe(
         'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
       ),
-    maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+    maxSteps: z
+      .number()
+      .or(z.string().transform(Number))
+      .pipe(z.number().int().min(3))
+      .nullish()
+      .describe('Maximum number of execution steps for the sub-agent (integer, minimum 3)'),
     // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
     // to return a proper llm response
   });
@@ -267,7 +272,9 @@ type SubAgentToolSchemas = {
   outputSchema: StandardSchemaWithJSON<SubAgentToolOutput>;
 };
 
-type SubAgentToolInput = z.infer<ReturnType<typeof createSubAgentInputSchema>>;
+type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchema>>, 'maxSteps'> & {
+  maxSteps?: number | null;
+};
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type ModelFallbacks = {
@@ -4662,7 +4669,7 @@ export class Agent<
       const outputSchema = createSubAgentOutputSchema();
 
       this.#subAgentToolSchemas = {
-        inputSchema: toStandardSchema(inputSchema),
+        inputSchema: toStandardSchema(inputSchema) as StandardSchemaWithJSON<SubAgentToolInput>,
         outputSchema: toStandardSchema(outputSchema),
       };
     }
