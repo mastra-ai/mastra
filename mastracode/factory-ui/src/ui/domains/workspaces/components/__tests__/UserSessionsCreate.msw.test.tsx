@@ -274,13 +274,15 @@ describe('User sessions creation', () => {
     const sessions = [userSession()];
     stubFactoryWithRepository(sessions);
     let deletedSessions = 0;
+    let controllerDeletes = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () =>
         HttpResponse.json({ session: userSession({ materializedAt: '2026-07-23T00:01:00.000Z' }) }),
       ),
-      http.delete(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${sessionId}/threads/${sessionId}`, () =>
-        HttpResponse.json({ message: 'Thread not found' }, { status: 404 }),
-      ),
+      http.delete(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${sessionId}/threads/${sessionId}`, () => {
+        controllerDeletes += 1;
+        return HttpResponse.json({ message: 'Thread not found' }, { status: 404 });
+      }),
       http.delete(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () => {
         deletedSessions += 1;
         sessions.splice(0);
@@ -295,6 +297,7 @@ describe('User sessions creation', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete' }));
     await waitForMutationsIdle(client);
 
+    expect(controllerDeletes).toBe(1);
     expect(deletedSessions).toBe(1);
     expect(client.getQueryData(queryKeys.userSession(sessionId))).toBeUndefined();
     expect(await screen.findByText('Session deleted')).toBeInTheDocument();

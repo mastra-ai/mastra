@@ -140,7 +140,7 @@ export function UserSessionsSection() {
             </Button>
           </div>
         )}
-        {!sessionsQuery.isError && sessions.length === 0 && !draftSessionId && (
+        {sessionsQuery.isSuccess && sessions.length === 0 && !draftSessionId && (
           <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
             No sessions yet
           </Txt>
