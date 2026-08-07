@@ -70,7 +70,8 @@ beforeAll(async () => {
   exporter = new DatadogExporter({ mlApp: 'compliance', apiKey: 'fake-key', agentless: true });
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await exporter.shutdown();
   SpanWriter.prototype.append = origAppend;
   SpanWriter.prototype.flush = origFlush;
 });

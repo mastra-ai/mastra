@@ -1805,4 +1805,246 @@ describe('PlatformSandbox', () => {
       expect(body.id).toBe('explicit-id');
     });
   });
+
+  describe('captureCheckpoint (public, on-demand)', () => {
+    it('POSTs to /checkpoint with the recovery key and returns the captured name', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/checkpoint',
+      );
+      expect(fetchMock.mock.calls[1]![1].method).toBe('POST');
+      // The recovery key on the body must be the caller-supplied id, since
+      // the proxy hashes that to look up the on-provider checkpoint name.
+      const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+      expect(body).toEqual({ id: 'mc-session-42' });
+    });
+
+    it('returns coalesced with the same name when the proxy reports coalesced', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'coalesced' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'coalesced', checkpointName: 'mastra-checkpoint-abc123' });
+    });
+
+    it('returns no-checkpoint-name-configured when no caller id was supplied (auto-generated)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+      // No `id` in options → auto-generated random id → no meaningful recovery key.
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'skipped', reason: 'no-checkpoint-name-configured' });
+      // No POST /checkpoint was made — only the initial create.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns sandbox-not-running when the sandbox has not been started (pre-flight)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn();
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('coalesces concurrent callers onto a single in-flight POST /checkpoint', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Hold the checkpoint response open so both callers observe an
+      // in-flight request when the second one arrives.
+      let releaseCheckpoint!: (value: Response) => void;
+      const held = new Promise<Response>(resolve => {
+        releaseCheckpoint = resolve;
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockReturnValueOnce(held);
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const first = sandbox.captureCheckpoint();
+      const second = sandbox.captureCheckpoint();
+
+      releaseCheckpoint(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+
+      // Both callers observe the same successful outcome.
+      expect(firstResult).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
+      expect(secondResult).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
+      // Only one upstream POST /checkpoint was issued (plus the initial create).
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('normalizes a 410 to sandbox-not-running and clears local state so ensureSandbox provisions fresh', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const registry: SandboxAddressRegistry = {
+        set: vi.fn(),
+        get: vi.fn(),
+        delete: vi.fn(),
+      };
+      const fetchMock = vi
+        .fn()
+        // First create returns an instanceUrl so the registry gets populated.
+        .mockResolvedValueOnce(
+          json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: 'http://[::1]:8080' }),
+        )
+        // Capture attempt → 410.
+        .mockResolvedValueOnce(new Response('gone', { status: 410 }))
+        // Next start() after the destroy discovery must provision fresh
+        // (not reattach), so respond as if it's a brand-new POST /sandbox.
+        .mockResolvedValueOnce(json({ id: 'sbx_2', createdAt: '2026-06-27T00:00:00.000Z' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+      expect(result).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
+      // Sidecar address for the destroyed sandbox was evicted.
+      expect(registry.delete).toHaveBeenCalledWith('sbx_1');
+
+      // Next start() takes the fresh-provision branch (POST /sandbox),
+      // not the reattach branch (GET /sandbox/sbx_1) — proving _sandboxId
+      // was cleared.
+      await sandbox._start();
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect(fetchMock.mock.calls[2]![1].method).toBe('POST');
+    });
+
+    it('normalizes proxy-reported skipped to sandbox-not-running and clears local state', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const registry: SandboxAddressRegistry = {
+        set: vi.fn(),
+        get: vi.fn(),
+        delete: vi.fn(),
+      };
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: 'http://[::1]:8080' }),
+        )
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'skipped' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+      expect(result).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
+      expect(registry.delete).toHaveBeenCalledWith('sbx_1');
+    });
+
+    it('propagates non-410 transport failures (e.g. 500, 429) to the caller', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(new Response('quota exceeded', { status: 429 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      await expect(sandbox.captureCheckpoint()).rejects.toMatchObject({
+        name: 'PlatformApiError',
+        status: 429,
+      });
+    });
+
+    it('releases the in-flight slot after a failure so a subsequent call retries', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // First capture fails transiently.
+        .mockResolvedValueOnce(new Response('boom', { status: 500 }))
+        // Second capture succeeds — proves the coalescing slot was released.
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      await expect(sandbox.captureCheckpoint()).rejects.toMatchObject({ status: 500 });
+      const result = await sandbox.captureCheckpoint();
+      expect(result).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
+    });
+  });
 });
