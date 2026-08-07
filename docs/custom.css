@@ -1196,7 +1196,8 @@ article p {
     }
   }
 
-  li[data-contextual-sidebar='true'] > .menu__list-item-collapsible > .menu__link::after {
+  /* stylelint-disable selector-class-pattern */
+  li[data-contextual-sidebar='true'] > .menu__link::after {
     content: '';
     flex: 0 0 1.25rem;
     height: 1.25rem;
@@ -1205,6 +1206,7 @@ article p {
     transform: rotate(90deg);
     transition: transform var(--ifm-transition-fast) linear;
   }
+  /* stylelint-enable selector-class-pattern */
 
   [class*='docSidebarContainer'] {
     width: 280px !important;

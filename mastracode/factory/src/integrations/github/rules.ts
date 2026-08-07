@@ -68,6 +68,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     const changes = object(parsed.payload.changes);
     return object(changes?.title) || object(changes?.body) ? 'issueEdited' : undefined;
   }
+  if (parsed.event === 'issues' && action === 'closed') return 'issueClosed';
   if (parsed.event === 'issue_comment') {
     const issue = object(parsed.payload.issue);
     if (object(issue?.pull_request)) return undefined;
@@ -82,6 +83,24 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   }
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
   return undefined;
+}
+
+/**
+ * Canonical source keys (`github-issue:N`, `github-pr:N`) do not identify a
+ * repository, so a project linked to several repositories could bind repo A's
+ * event to repo B's same-numbered card. The card's intake-stamped URL is
+ * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
+ * cards. A card with neither signal cannot be attributed by number alone.
+ */
+function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
+  const url = item.externalSource?.url;
+  if (url) {
+    const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
+    if (match && match[1] === repositoryFullName) return true;
+  }
+  // A renamed repository leaves the old owner/name in the card URL, so a URL
+  // mismatch still defers to the stable intake-stamped repository id.
+  return item.metadata?.githubRepositoryId === repositoryId;
 }
 
 function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
@@ -220,6 +239,7 @@ export class GithubRules {
       project.orgId,
       project.factoryProjectId,
       repositoryId,
+      repositoryName,
       issueNumber,
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
@@ -274,6 +294,10 @@ export class GithubRules {
               ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
               ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
               assignees: actorLogins(issue?.assignees),
+              ...(string(issue?.state) === 'closed' || string(issue?.state) === 'open'
+                ? { state: string(issue?.state) as 'open' | 'closed' }
+                : {}),
+              ...(string(issue?.state_reason) ? { stateReason: string(issue?.state_reason) } : {}),
             },
           }
         : {}),
@@ -373,6 +397,7 @@ export class GithubRules {
     orgId: string,
     projectId: string,
     repositoryId: number,
+    repositoryFullName: string,
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
     pullRequestHeadBranch: string | undefined,
@@ -382,13 +407,20 @@ export class GithubRules {
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
       return (
-        items.find(item => item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber)) ??
-        items.find(item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'issue', issueNumber))
+        items.find(
+          item =>
+            item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) &&
+            cardBelongsToRepository(item, repositoryId, repositoryFullName),
+        ) ?? items.find(item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'issue', issueNumber))
       );
     }
     if (pullRequestNumber) {
       return (
-        items.find(item => item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber)) ??
+        items.find(
+          item =>
+            item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber) &&
+            cardBelongsToRepository(item, repositoryId, repositoryFullName),
+        ) ??
         items.find(
           item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber),
         ) ??
@@ -431,6 +463,24 @@ export type GithubPullRequestFetcher = (input: {
   number: number;
 }) => Promise<ReconcilePullRequestState | undefined>;
 
+export interface ReconcileIssueState {
+  title: string;
+  url: string;
+  state: 'open' | 'closed';
+  /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
+  stateReason?: string;
+  assignees?: string[];
+  author?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type GithubIssueFetcher = (input: {
+  installationId: number;
+  repository: string;
+  number: number;
+}) => Promise<ReconcileIssueState | undefined>;
+
 export interface ReconcileRepository {
   id: number;
   fullName: string;
@@ -446,10 +496,14 @@ export interface ReconcileSweepSummary {
   merged: number;
   /** Missed closes-without-merge replayed through the rules ingress. */
   closed: number;
-  /** PRs (or whole repositories) skipped because of an error. */
+  /** Issue-backed work cards whose live state was fetched from GitHub. */
+  issuesChecked: number;
+  /** Missed issue closes replayed through the rules ingress. */
+  issuesClosed: number;
+  /** PRs/issues (or whole repositories) skipped because of an error. */
   failed: number;
   /** Error samples with context, capped at {@link RECONCILE_ERROR_SAMPLE_LIMIT}. */
-  errors: Array<{ repository: string; pullRequestNumber?: number; error: string }>;
+  errors: Array<{ repository: string; pullRequestNumber?: number; issueNumber?: number; error: string }>;
 }
 
 export type GithubPullRequestReconciler = (repositories: ReconcileRepository[]) => Promise<ReconcileSweepSummary>;
@@ -485,6 +539,64 @@ function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileR
   if (legacy) return Number(legacy[1]) === repository.id ? Number(legacy[2]) : undefined;
   const canonical = /^github-pr:(\d+)$/.exec(externalId);
   return canonical ? Number(canonical[1]) : undefined;
+}
+
+/**
+ * Extracts the issue number a work item tracks, but only when the item
+ * belongs to the given repository. Stricter than
+ * {@link reconcilablePullRequestNumber}: a canonical key with no URL is only
+ * trusted when the intake-stamped `githubRepositoryId` confirms the
+ * repository, because the sweep initiates closes on its own.
+ */
+function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+  if (item.externalSource?.type !== 'issue') return undefined;
+  const url = item.externalSource.url;
+  if (url) {
+    const match = /^https?:\/\/[^/]+\/(.+)\/issues\/(\d+)(?:[/?#]|$)/.exec(url);
+    if (!match) return undefined;
+    // A renamed repository leaves the old owner/name in the card URL, so a
+    // URL mismatch still defers to the stable intake-stamped repository id.
+    const belongs = match[1] === repository.fullName || item.metadata?.githubRepositoryId === repository.id;
+    return belongs ? Number(match[2]) : undefined;
+  }
+  const externalId = item.externalSource.externalId;
+  const legacy = /^github:(\d+):issue:(\d+)$/.exec(externalId);
+  if (legacy) return Number(legacy[1]) === repository.id ? Number(legacy[2]) : undefined;
+  const canonical = /^github-issue:(\d+)$/.exec(externalId);
+  if (!canonical) return undefined;
+  // Canonical keys carry no repository; only the intake-stamped repository id
+  // can attribute a URL-less card, and guessing would let a multi-repo
+  // project close repo B's card because repo A's same-numbered issue closed.
+  return item.metadata?.githubRepositoryId === repository.id ? Number(canonical[1]) : undefined;
+}
+
+export function reconciledIssueClosedEvent(
+  repository: ReconcileRepository,
+  issueNumber: number,
+  state: ReconcileIssueState,
+): ParsedGithubWebhook {
+  return {
+    event: 'issues',
+    // Stable per (repository, issue): the ingress dedupe makes repeat
+    // reconcile cycles replay instead of re-committing decisions.
+    deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:closed`,
+    payload: {
+      action: 'closed',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? 'github' },
+      issue: {
+        number: issueNumber,
+        title: state.title,
+        html_url: state.url,
+        state: 'closed',
+        ...(state.stateReason ? { state_reason: state.stateReason } : {}),
+        ...(state.createdAt ? { created_at: state.createdAt } : {}),
+        ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
+        assignees: (state.assignees ?? []).map(login => ({ login })),
+      },
+    },
+  };
 }
 
 export function reconciledClosedEvent(
@@ -552,16 +664,31 @@ async function retireReconciledSubscriptions(
 export function createGithubPullRequestReconciler(
   options: GithubRulesOptions,
   fetchPullRequest: GithubPullRequestFetcher,
+  fetchIssue?: GithubIssueFetcher,
 ): GithubPullRequestReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
-    const summary: ReconcileSweepSummary = { repositories: 0, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] };
-    const recordFailure = (repository: ReconcileRepository, error: unknown, pullRequestNumber?: number) => {
+    const summary: ReconcileSweepSummary = {
+      repositories: 0,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      issuesChecked: 0,
+      issuesClosed: 0,
+      failed: 0,
+      errors: [],
+    };
+    const recordFailure = (
+      repository: ReconcileRepository,
+      error: unknown,
+      numbers?: { pullRequestNumber?: number; issueNumber?: number },
+    ) => {
       summary.failed += 1;
       if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
         summary.errors.push({
           repository: repository.fullName,
-          ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
+          ...(numbers?.pullRequestNumber === undefined ? {} : { pullRequestNumber: numbers.pullRequestNumber }),
+          ...(numbers?.issueNumber === undefined ? {} : { issueNumber: numbers.issueNumber }),
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -582,6 +709,7 @@ export function createGithubPullRequestReconciler(
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
       let cardsByNumber: Map<number, WorkItemRow[]>;
+      const issueNumbers = new Set<number>();
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
@@ -595,9 +723,15 @@ export function createGithubPullRequestReconciler(
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
+            const stage = item.stages[0];
+            if (fetchIssue) {
+              const issueNumber = reconcilableIssueNumber(item, repository);
+              // Issue cards need no metadata sync: only cards still on the
+              // board can have missed a close, so terminal stages are final.
+              if (issueNumber && stage !== 'done' && stage !== 'canceled') issueNumbers.add(issueNumber);
+            }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
-            const stage = item.stages[0];
             const metadata = item.metadata ?? {};
             const hasReconciledMetadata =
               (metadata.state === 'open' || metadata.state === 'closed') &&
@@ -650,7 +784,7 @@ export function createGithubPullRequestReconciler(
                 },
               });
             } catch (error) {
-              recordFailure(repository, error, pullRequestNumber);
+              recordFailure(repository, error, { pullRequestNumber });
             }
           }
           if (state.state !== 'closed') continue;
@@ -659,7 +793,23 @@ export function createGithubPullRequestReconciler(
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {
-          recordFailure(repository, error, pullRequestNumber);
+          recordFailure(repository, error, { pullRequestNumber });
+        }
+      }
+      if (!fetchIssue) continue;
+      for (const issueNumber of issueNumbers) {
+        try {
+          const state = await fetchIssue({
+            installationId: repository.installationId,
+            repository: repository.fullName,
+            number: issueNumber,
+          });
+          summary.issuesChecked += 1;
+          if (!state || state.state !== 'closed') continue;
+          await rules.ingest(reconciledIssueClosedEvent(repository, issueNumber, state));
+          summary.issuesClosed += 1;
+        } catch (error) {
+          recordFailure(repository, error, { issueNumber });
         }
       }
     }
@@ -696,8 +846,9 @@ export function attachGithubReconciler(
   github: GithubRulesIntegration,
   context: IntegrationContext,
   fetchPullRequest: GithubPullRequestFetcher,
+  fetchIssue?: GithubIssueFetcher,
 ): GithubPullRequestReconciler | undefined {
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
-  return createGithubPullRequestReconciler(options, fetchPullRequest);
+  return createGithubPullRequestReconciler(options, fetchPullRequest, fetchIssue);
 }
