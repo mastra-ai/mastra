@@ -177,6 +177,14 @@ const workspace = new Workspace({
             defaultValue: '2000',
           },
           {
+            name: 'writeLockTimeoutMs',
+            type: 'number',
+            description:
+              'Maximum time in milliseconds a write tool waits to acquire the per-file write lock before failing. Raise this for slow or cold-starting filesystems (e.g. remote sandboxes).',
+            isOptional: true,
+            defaultValue: '30000',
+          },
+          {
             name: 'hooks',
             type: 'WorkspaceToolHooks',
             description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',

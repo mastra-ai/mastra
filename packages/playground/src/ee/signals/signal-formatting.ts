@@ -8,6 +8,28 @@ export function traceLabel(count: number) {
   return `${count} ${count === 1 ? 'trace' : 'traces'}`;
 }
 
+export function themeLabel(count: number) {
+  return `${count} ${count === 1 ? 'theme' : 'themes'}`;
+}
+
+// Hoisted: TimelineTrack formats every tick on each render.
+const SNAPSHOT_CUTOFF_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'UTC',
+});
+
+export function formatSnapshotCutoff(cutoffAt: string) {
+  const date = new Date(cutoffAt);
+  // Fall back to the raw server value instead of letting Intl throw on Invalid Date.
+  if (Number.isNaN(date.getTime())) return cutoffAt;
+  return SNAPSHOT_CUTOFF_FORMAT.format(date);
+}
+
 export function formatSnapshotWindow(startedAt: string, endedAt: string) {
   const start = new Date(startedAt);
   const end = new Date(endedAt);

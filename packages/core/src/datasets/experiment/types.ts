@@ -2,7 +2,14 @@ import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
-import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
+import type {
+  DatasetTenancyFilters,
+  ExperimentGrouping,
+  ExperimentProvenance,
+  ExperimentStatus,
+  TargetType,
+} from '../../storage/types';
+import type { ExperimentEventObserver } from './events';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
 /**
@@ -122,6 +129,14 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /**
+   * Awaited observer for versioned, JSON-safe semantic lifecycle events.
+   * Delivery is serialized and applies run-wide backpressure. A rejected
+   * observer aborts the run and rejects `runExperiment` with a typed error.
+   * The terminal event is delivered before terminal status is persisted, so
+   * consumers must not treat it as a read-after-write signal for storage.
+   */
+  onEvent?: ExperimentEventObserver;
   /** Per-item execution timeout in milliseconds */
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
@@ -153,8 +168,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   name?: string;
   /** Experiment description */
   description?: string;
-  /** Arbitrary metadata for the experiment */
+  /** Arbitrary display metadata for the experiment */
   metadata?: Record<string, unknown>;
+  /** Caller-provided source identity for traceability. */
+  provenance?: ExperimentProvenance;
+  /** Stable dimensions for grouping related experiment executions. */
+  grouping?: ExperimentGrouping;
   /** Global request context passed to agent.generate() for all items */
   requestContext?: Record<string, unknown>;
   /** Agent version ID to record against the experiment */
