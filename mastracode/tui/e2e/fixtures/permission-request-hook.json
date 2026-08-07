@@ -1,0 +1,42 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Run the permission request hook e2e.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_permission_hook_question",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Answer the blocking permission hook prompt?"
+            }
+          },
+          {
+            "id": "call_permission_hook_access",
+            "name": "request_access",
+            "arguments": {
+              "path": "/tmp/mastracode-permission-hook-e2e",
+              "reason": "Verify the PermissionRequest hook fires while an earlier prompt blocks the queue."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_permission_hook_access",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Permission hook e2e complete."
+      }
+    }
+  ]
+}
