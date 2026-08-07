@@ -2946,6 +2946,12 @@ export class Session<TState = unknown> {
    * the gated tool is rejected and the run can finalize rather than hang.
    */
   abortRun(): void {
+    // Aborting twice while a gate is parked would tear the stream down before
+    // the deferred decline lands (the second call sees the gate already
+    // cancelled), which is the exact failure the deferral exists to avoid. Two
+    // `tool_approval_required` subscribers each calling abort() is enough.
+    if (this.run.isAbortRequested()) return;
+
     // Retract the prompts for every parked suspension. Dropping them silently
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
     // could never land, since the run they belong to is gone.
@@ -3230,7 +3236,11 @@ export class Session<TState = unknown> {
       this.runEngine.setRequestContext(requestContextInput);
       await this.thread.ensureSubscription(threadId);
 
-      if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
+      // A deferred abort (parked approval gate) leaves the AbortController
+      // armed until the decline lands, so `submittedIsRunning` stays true for a
+      // run that is already on its way out. Routing a signal to it would hand
+      // the message to a run that `completeDeferredAbort()` then terminates.
+      if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
         this.approval.respond({
           decision: 'decline',
           declineContext: {

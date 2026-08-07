@@ -156,6 +156,24 @@ describe('session.abort() during approval / suspension (#20592)', () => {
     expect((parts[0] as any).toolInvocation.state).toBe('output-denied');
   });
 
+  it('Given two subscribers that both abort a parked approval, When the run ends, Then it still aborts without an error event', async () => {
+    const { session, events } = await createHarness('abort-approval-twice');
+
+    const ended = waitForAgentEnd(session, events);
+    session.subscribe((event: AgentControllerEvent) => {
+      if (event.type === 'tool_approval_required') session.abort();
+    });
+    session.subscribe((event: AgentControllerEvent) => {
+      if (event.type === 'tool_approval_required') session.abort();
+    });
+
+    void session.sendMessage({ content: 'find dero' }).catch(() => {});
+    await ended;
+
+    expect(events.filter(e => e.type === 'error')).toEqual([]);
+    expect(events.find(e => e.type === 'agent_end')).toEqual({ type: 'agent_end', reason: 'aborted' });
+  });
+
   it('Given an approved tool parked in suspend(), When abort() is called, Then the parked suspension is retracted from the display state', async () => {
     const { session, events } = await createHarness('abort-suspension');
 
