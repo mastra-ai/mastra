@@ -30,6 +30,7 @@ import type { Agent } from '../agent';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
+import type { DurableAgentExecutionEngine } from './execution-engine';
 
 /**
  * Options for createDurableAgent factory function.
@@ -73,6 +74,9 @@ export interface CreateDurableAgentOptions<
    * Set to `0` to disable auto-cleanup. Defaults to `30_000` (30 seconds).
    */
   cleanupTimeoutMs?: number;
+
+  /** External durable execution provider. */
+  executionEngine?: DurableAgentExecutionEngine;
 }
 
 /**
@@ -120,7 +124,7 @@ export function createDurableAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateDurableAgentOptions<TAgentId, TTools, TOutput>): DurableAgent<TAgentId, TTools, TOutput> {
-  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs } = options;
+  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs, executionEngine } = options;
 
   return new DurableAgent({
     agent,
@@ -130,6 +134,7 @@ export function createDurableAgent<
     pubsub,
     maxSteps,
     cleanupTimeoutMs,
+    executionEngine,
   } as DurableAgentConfig<TAgentId, TTools, TOutput>);
 }
 

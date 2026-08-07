@@ -12,6 +12,7 @@ import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { deepMerge } from '../../utils';
+import type { Workflow } from '../../workflows';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -24,6 +25,7 @@ import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
+import type { DurableAgentEngineStatus, DurableAgentExecutionEngine } from './execution-engine';
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
@@ -38,6 +40,20 @@ import { createDurableAgenticWorkflow } from './workflows';
  */
 const CLOSE_ON_SUSPEND = Symbol('mastra.durable.closeOnSuspend');
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+
+function isTerminalExecutionStatus(status: DurableAgentEngineStatus | WorkflowRunStatus): boolean {
+  return [
+    'complete',
+    'success',
+    'failed',
+    'tripwire',
+    'errored',
+    'canceled',
+    'bailed',
+    'skipped',
+    'terminated',
+  ].includes(status);
+}
 
 /**
  * Options for DurableAgent.stream()
@@ -259,6 +275,12 @@ export interface DurableAgentConfig<
    * Set to 0 to disable auto-cleanup (manual cleanup() required).
    */
   cleanupTimeoutMs?: number;
+
+  /**
+   * External durable execution provider. Mastra continues to own agent
+   * preparation, streaming, memory, tools, approval, and cleanup.
+   */
+  executionEngine?: DurableAgentExecutionEngine;
 }
 
 /**
@@ -426,10 +448,13 @@ export class DurableAgent<
   readonly #runRegistry: ExtendedRunRegistry;
 
   /** The durable workflow for agent execution */
-  #workflow: ReturnType<typeof createDurableAgenticWorkflow> | null = null;
+  #workflow: Workflow<any, any, any, any, any, any, any> | null = null;
 
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
+
+  /** Optional external durable execution provider */
+  readonly #executionEngine?: DurableAgentExecutionEngine;
 
   /** Inner pubsub (before CachingPubSub wrapper) */
   #innerPubsub: PubSub;
@@ -459,7 +484,16 @@ export class DurableAgent<
    * Create a new DurableAgent that wraps an existing Agent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    const { agent, id: idOverride, name: nameOverride, pubsub, cache, maxSteps, cleanupTimeoutMs } = config;
+    const {
+      agent,
+      id: idOverride,
+      name: nameOverride,
+      pubsub,
+      cache,
+      maxSteps,
+      cleanupTimeoutMs,
+      executionEngine,
+    } = config;
 
     // Use provided id/name or fall back to agent.id/agent.name
     const agentId = idOverride ?? agent.id;
@@ -470,7 +504,8 @@ export class DurableAgent<
       id: agentId as TAgentId,
       name: agentName,
       // Delegate to wrapped agent's instructions
-      instructions: ({ requestContext }) => agent.getInstructions({ requestContext }),
+      instructions: ({ requestContext }: { requestContext: RequestContext }) =>
+        agent.getInstructions({ requestContext }),
       // We need to provide model to satisfy the base class, but we'll delegate to wrapped agent
       model: (agent as any).__model ?? agent.getModel(),
     });
@@ -478,6 +513,7 @@ export class DurableAgent<
     this.#wrappedAgent = agent;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
+    this.#executionEngine = executionEngine;
     this.#hasCustomPubsub = !!pubsub;
     this.#innerPubsub = pubsub ?? new EventEmitterPubSub();
     this.#cacheConfig = cache;
@@ -904,6 +940,7 @@ export class DurableAgent<
       cache: this.#cacheConfig,
       maxSteps: this.#maxSteps,
       cleanupTimeoutMs: this.#cleanupTimeoutMs,
+      executionEngine: this.#executionEngine,
     });
 
     // Preserve runtime state set after construction (mastra registration and the
@@ -964,14 +1001,26 @@ export class DurableAgent<
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
 
-    const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-    // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
-    const result = await run.start({
-      inputData: workflowInput,
-      requestContext,
-      actor: workflowInput.options?.actor,
-      ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
-    });
+    const tracingContext = createObservabilityContext({ currentSpan: entry?.agentSpan });
+    const result = this.#executionEngine
+      ? await this.#executionEngine.start({
+          workflow,
+          runId,
+          pubsub: this.pubsub,
+          requestContext,
+          actor: workflowInput.options?.actor,
+          input: workflowInput,
+          observabilityContext: tracingContext,
+        })
+      : await (async () => {
+          const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+          return run.start({
+            inputData: workflowInput,
+            requestContext,
+            actor: workflowInput.options?.actor,
+            ...tracingContext,
+          });
+        })();
     if (result?.status === 'failed') {
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
       await this.emitError(runId, error);
@@ -980,7 +1029,7 @@ export class DurableAgent<
     // persisted snapshot rows will never be resumed. Delete them so snapshot
     // storage doesn't grow one stale row per completed run. Suspended runs
     // keep their snapshots so `resume()` / `recoverActiveRuns()` can find them.
-    if (result?.status && result.status !== 'suspended') {
+    if (result?.status && isTerminalExecutionStatus(result.status)) {
       await this.deleteRunSnapshots(runId);
     }
   }
@@ -994,10 +1043,15 @@ export class DurableAgent<
    *
    * @internal
    */
-  protected createWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
-    return createDurableAgenticWorkflow({
-      maxSteps: this.#maxSteps,
-    });
+  protected createWorkflow(): Workflow<any, any, any, any, any, any, any> {
+    return (
+      this.#executionEngine?.createWorkflow({
+        maxSteps: this.#maxSteps,
+      }) ??
+      createDurableAgenticWorkflow({
+        maxSteps: this.#maxSteps,
+      })
+    );
   }
 
   /**
@@ -1259,6 +1313,16 @@ export class DurableAgent<
     const abort = (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
+      }
+      if (this.#executionEngine) {
+        void this.#executionEngine.abort({
+          workflow: this.getWorkflow(),
+          runId,
+          pubsub: this.pubsub,
+          requestContext: globalRunRegistry.get(runId)?.requestContext,
+          actor: workflowInput.options?.actor,
+          reason,
+        });
       }
     };
 
@@ -1560,7 +1624,6 @@ export class DurableAgent<
           });
         }
 
-        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
         if (this.__getGoalConfig()) {
           await beginGoalActivity({
             mastra: this.#mastra,
@@ -1572,13 +1635,30 @@ export class DurableAgent<
         }
         let result;
         try {
-          result = await run.resume({
-            resumeData,
-            label: resolvedOptions.toolCallId,
-            requestContext,
-            actor: resolvedOptions.actor,
-            ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+          const tracingContext = createObservabilityContext({
+            currentSpan: entry.resumeAgentSpan ?? entry.agentSpan,
           });
+          result = this.#executionEngine
+            ? await this.#executionEngine.resume({
+                workflow,
+                runId,
+                pubsub: this.pubsub,
+                requestContext,
+                actor: resolvedOptions.actor,
+                resumeData,
+                label: resolvedOptions.toolCallId,
+                observabilityContext: tracingContext,
+              })
+            : await (async () => {
+                const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+                return run.resume({
+                  resumeData,
+                  label: resolvedOptions.toolCallId,
+                  requestContext,
+                  actor: resolvedOptions.actor,
+                  ...tracingContext,
+                });
+              })();
         } finally {
           await stopGoalActivity({ agentId: this.id, runId });
         }
@@ -1590,7 +1670,7 @@ export class DurableAgent<
         // settles on any non-suspended terminal status the persisted rows are
         // no longer needed. A resume that re-suspends must keep them so the
         // next resume/recover can find the snapshot.
-        if (result?.status && result.status !== 'suspended') {
+        if (result?.status && isTerminalExecutionStatus(result.status)) {
           await this.deleteRunSnapshots(runId);
         }
       })
@@ -1966,15 +2046,28 @@ export class DurableAgent<
     const workflow = this.getWorkflow();
     const workflowExecution = ready.then(async () => {
       try {
-        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.restart({
-          requestContext,
-          ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
-        } as any);
+        const tracingContext = createObservabilityContext({ currentSpan: recoverAgentSpan });
+        const result = this.#executionEngine
+          ? await this.#executionEngine.recover({
+              workflow,
+              runId,
+              pubsub: this.pubsub,
+              requestContext,
+              actor: workflowInput.options?.actor,
+              input: workflowInput,
+              observabilityContext: tracingContext,
+            })
+          : await (async () => {
+              const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+              return run.restart({
+                requestContext,
+                ...tracingContext,
+              } as any);
+            })();
         // Snapshot cleanup runs for every non-suspended terminal (success or
         // failed) so storage stays bounded — mirrors the start()/resume()
         // contract.
-        if (result?.status && result.status !== 'suspended') {
+        if (result?.status && isTerminalExecutionStatus(result.status)) {
           await this.deleteRunSnapshots(runId);
         }
         if (result?.status === 'failed') {
@@ -2595,6 +2688,17 @@ export class DurableAgent<
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    const engineIsAlive = this.#executionEngine
+      ? async () => {
+          const status = await this.#executionEngine!.status({
+            workflow: this.getWorkflow(),
+            runId,
+            pubsub: this.pubsub,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+          return !isTerminalExecutionStatus(status);
+        }
+      : undefined;
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -2629,7 +2733,7 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       offset: options?.offset,
       idleTimeoutMs: options?.idleTimeoutMs,
-      isAlive: options?.isAlive,
+      isAlive: options?.isAlive ?? engineIsAlive,
       onChunk: options?.onChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
@@ -2833,6 +2937,7 @@ export class DurableAgent<
     this.#mastra = mastra;
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
+    this.#executionEngine?.registerMastra?.(mastra);
 
     // Wire mastra.pubsub as the inner pubsub if user didn't provide a custom one.
     // This must happen before CachingPubSub initialization.
