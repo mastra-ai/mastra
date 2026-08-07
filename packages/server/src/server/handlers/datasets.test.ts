@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -8,6 +9,7 @@ import {
   BATCH_INSERT_ITEMS_ROUTE,
   DELETE_DATASET_ROUTE,
   GET_DATASET_ROUTE,
+  GET_EXPERIMENT_ROUTE,
   GET_ITEM_ROUTE,
   GET_ITEM_VERSION_ROUTE,
   LIST_ALL_EXPERIMENTS_ROUTE,
@@ -31,6 +33,129 @@ describe('Datasets Handlers', () => {
     mastra = new Mastra({
       logger: false,
       storage: mockStorage,
+    });
+  });
+
+  describe('TRIGGER_EXPERIMENT_ROUTE', () => {
+    // Exact request body from issue #20539.
+    const issueReproductionBody = JSON.parse(`{
+      "targetType": "workflow",
+      "targetId": "my-workflow",
+      "scorerIds": ["my-scorer"],
+      "metadata": {
+        "model": "anthropic/claude-haiku-4-5"
+      }
+    }`);
+
+    async function triggerAndReadBack(body: unknown) {
+      const dataset = await mastra.datasets.create({ name: 'Experiment Trigger DS' });
+      await dataset.addItem({ input: { prompt: 'hello' } });
+
+      const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse(body);
+      const triggered = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        ...parsedBody,
+      } as any)) as any;
+      const experiment = await GET_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: triggered.experimentId,
+      } as any);
+
+      return { parsedBody, experiment };
+    }
+
+    it('preserves issue metadata through parsing, trigger, and readback', async () => {
+      const { parsedBody, experiment } = await triggerAndReadBack(issueReproductionBody);
+
+      expect(parsedBody.metadata).toEqual({ model: 'anthropic/claude-haiku-4-5' });
+      expect(experiment?.metadata).toEqual({ model: 'anthropic/claude-haiku-4-5' });
+    });
+
+    it('preserves optional name and description through the same path', async () => {
+      const { parsedBody, experiment } = await triggerAndReadBack({
+        ...issueReproductionBody,
+        name: 'Named experiment',
+        description: 'Experiment description',
+      });
+
+      expect(parsedBody.name).toBe('Named experiment');
+      expect(parsedBody.description).toBe('Experiment description');
+      expect(experiment?.name).toBe('Named experiment');
+      expect(experiment?.description).toBe('Experiment description');
+    });
+
+    it('rejects invalid name, description, and metadata shapes before the handler', () => {
+      const baseBody = { targetType: 'workflow', targetId: 'my-workflow' };
+
+      expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, name: 42 }).success).toBe(false);
+      expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, description: 42 }).success).toBe(false);
+      expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, metadata: [] }).success).toBe(false);
+    });
+
+    it('strips unexpected: 1 and leaves omitted experiment fields absent', () => {
+      const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+        targetType: 'workflow',
+        targetId: 'my-workflow',
+        unexpected: 1,
+      });
+
+      expect(parsedBody).not.toHaveProperty('unexpected');
+      expect(parsedBody).not.toHaveProperty('name');
+      expect(parsedBody).not.toHaveProperty('description');
+      expect(parsedBody).not.toHaveProperty('metadata');
+    });
+
+    it('preserves existing fields and coerces version through the trigger path', async () => {
+      const { parsedBody, experiment } = await triggerAndReadBack({
+        targetType: 'workflow',
+        targetId: 'my-workflow',
+        scorerIds: ['my-scorer'],
+        version: '1',
+        agentVersion: 'agent-version-1',
+        maxConcurrency: 2,
+        requestContext: { source: 'test' },
+        versions: { defaultStatus: 'published' },
+      });
+
+      expect(parsedBody).toMatchObject({
+        targetType: 'workflow',
+        targetId: 'my-workflow',
+        scorerIds: ['my-scorer'],
+        version: 1,
+        agentVersion: 'agent-version-1',
+        maxConcurrency: 2,
+        requestContext: { source: 'test' },
+        versions: { defaultStatus: 'published' },
+      });
+      expect(experiment?.datasetVersion).toBe(1);
+    });
+
+    it('converts a live RequestContext before forwarding to the dataset', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('tenantId', 'tenant-1');
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 1,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+      const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+        targetType: 'workflow',
+        targetId: 'my-workflow',
+      });
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: 'dataset-1',
+        ...parsedBody,
+        requestContext,
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
+      );
     });
   });
 
