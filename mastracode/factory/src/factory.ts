@@ -142,6 +142,8 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
   sandbox?: MastraFactorySandboxConfig;
+  /** Background Factory dispatcher configuration. */
+  dispatcher?: MastraFactoryDispatcherConfig;
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -199,6 +201,15 @@ export interface MastraFactorySandboxConfig {
    * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
    */
   maxSandboxes?: number;
+}
+
+/**
+ * Per-process cap on concurrent background Factory dispatches. Omitted means
+ * the dispatcher default; this is a local replica budget, not a global queue
+ * limit shared across deployments.
+ */
+export interface MastraFactoryDispatcherConfig {
+  maxInFlight?: number;
 }
 
 const CONTROLLER_ID = 'code';
@@ -519,8 +530,7 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     // Terminal work items release their session sandboxes back to the reuse
     // pool so the next session for the same repository/user claims a warm VM
@@ -723,6 +733,7 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                maxInFlight: this.#config.dispatcher?.maxInFlight,
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
