@@ -33,6 +33,25 @@ async function flushAsyncInit(): Promise<void> {
 
 const withoutNotificationDispatch = { notifications: { dispatch: { enabled: false } } } as const;
 
+/**
+ * Wrap every method of a store and record its name on each call. Lets a test
+ * assert that boot touched the store not at all, instead of naming the one
+ * method it happens to know about today.
+ */
+function recordStoreCalls(store: object): string[] {
+  const calls: string[] = [];
+  for (const method of Object.getOwnPropertyNames(Object.getPrototypeOf(store))) {
+    if (method === 'constructor') continue;
+    const original = (store as Record<string, unknown>)[method];
+    if (typeof original !== 'function') continue;
+    vi.spyOn(store as never, method as never).mockImplementation(((...args: unknown[]) => {
+      calls.push(method);
+      return (original as (...a: unknown[]) => unknown).apply(store, args);
+    }) as never);
+  }
+  return calls;
+}
+
 describe('Mastra — workflow scheduler integration', () => {
   it('auto-instantiates the scheduler when a workflow declares a schedule', async () => {
     const wf = createEventedWorkflow({
@@ -722,6 +741,84 @@ describe('Mastra — workflow scheduler integration', () => {
       // still in flight → "no such table". After the fix, init() is awaited
       // first, so no write ever lands on an uninitialized store.
       expect(storage.sawWriteBeforeInit).toBe(false);
+
+      await mastra.shutdown();
+    });
+  });
+
+  describe('explicit scheduler opt-out (#20550)', () => {
+    // Default notification dispatch on purpose: it is the configuration most
+    // apps run, and it drove a second boot-time read of the same store.
+    it('does not touch the schedules store on boot when scheduler.enabled is false', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const calls = recordStoreCalls(schedulesStore);
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        scheduler: { enabled: false },
+      });
+
+      await mastra.startWorkers();
+      await flushAsyncInit();
+
+      expect(calls).toEqual([]);
+      expect(mastra.scheduler).toBeUndefined();
+
+      await mastra.shutdown();
+    });
+
+    it('does not touch the schedules store on boot when workers are disabled', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const calls = recordStoreCalls(schedulesStore);
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        workers: false,
+      });
+
+      await mastra.startWorkers();
+      await flushAsyncInit();
+
+      expect(calls).toEqual([]);
+      expect(mastra.scheduler).toBeUndefined();
+
+      await mastra.shutdown();
+    });
+
+    it('still detects existing agent schedules when the scheduler is not explicitly disabled', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const listSchedules = vi.spyOn(schedulesStore, 'listSchedules');
+      // Row persisted by a previous process — the whole point of the boot probe.
+      const future = Date.now() + 3_600_000;
+      await schedulesStore.createSchedule({
+        id: 'cold-boot-agent-sched',
+        target: { type: 'agent', agentId: 'a1', prompt: 'check in' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: future,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        ownerType: 'agent',
+        ownerId: 'a1',
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { tickIntervalMs: 600_000 },
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      expect(listSchedules).toHaveBeenCalledWith({ ownerType: 'agent' });
+      expect(mastra.scheduler).toBeDefined();
 
       await mastra.shutdown();
     });
