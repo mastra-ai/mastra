@@ -14,8 +14,9 @@ import {
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
+  stripMastraCodeCustomProviderPrefix,
 } from '../settings.js';
-import type { BrowserSettings, GlobalSettings, StorageSettings } from '../settings.js';
+import type { BrowserSettings, CustomProviderSetting, GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };
@@ -538,6 +539,48 @@ describe('customProviders parsing/persistence', () => {
   it('creates custom provider ids without custom- prefix', () => {
     expect(getCustomProviderId('Acme Provider')).toBe('acme-provider');
     expect(getCustomProviderId('  !!!  ')).toBe('provider');
+  });
+
+  describe('stripMastraCodeCustomProviderPrefix', () => {
+    const customProviders: CustomProviderSetting[] = [
+      { name: 'Custom Provider', url: 'https://example.com/v1', models: ['gemma-4-31b'] },
+    ];
+
+    it('strips the mastracode/ gateway prefix for a configured custom provider', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/custom-provider/gemma-4-31b', customProviders)).toBe(
+        'custom-provider/gemma-4-31b',
+      );
+    });
+
+    it('preserves nested model name segments after stripping', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/custom-provider/nested/model-name', customProviders)).toBe(
+        'custom-provider/nested/model-name',
+      );
+    });
+
+    it('leaves legitimate mastracode gateway-routed ids unchanged', () => {
+      expect(
+        stripMastraCodeCustomProviderPrefix('mastracode/anthropic/claude-sonnet-4-20250514', customProviders),
+      ).toBe('mastracode/anthropic/claude-sonnet-4-20250514');
+    });
+
+    it('leaves ids for unrecognized providers unchanged', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/unknown-provider/model', customProviders)).toBe(
+        'mastracode/unknown-provider/model',
+      );
+    });
+
+    it('leaves ids without the mastracode/ prefix unchanged', () => {
+      expect(stripMastraCodeCustomProviderPrefix('custom-provider/gemma-4-31b', customProviders)).toBe(
+        'custom-provider/gemma-4-31b',
+      );
+    });
+
+    it('leaves ids with an empty model portion unchanged', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/custom-provider/', customProviders)).toBe(
+        'mastracode/custom-provider/',
+      );
+    });
   });
 
   it('round-trips optional api keys without forcing apiKey field', () => {

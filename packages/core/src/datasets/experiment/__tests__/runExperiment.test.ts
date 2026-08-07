@@ -1752,6 +1752,52 @@ describe('runExperiment', () => {
       expect(storedStatusAtTerminal).toBe('running');
       expect((await experimentsStorage.getExperimentById({ id: summary.experimentId }))?.status).toBe('failed');
     });
+
+    it('emits a cancelled outcome when cancellation aborts the final in-flight item', async () => {
+      // Cancellation during the last in-flight item is caught as a per-item
+      // failure, so the run resolves through the natural-completion path
+      // instead of throwing. The terminal outcome must still be `cancelled`.
+      // A single-item dataset guarantees no later item hits the pre-item
+      // abort check (which would take the thrown-AbortError path instead).
+      const singleItemDataset = await datasetsStorage.createDataset({
+        name: 'Single Item Dataset',
+        description: 'Cancellation during final in-flight item',
+      });
+      await datasetsStorage.addItem({
+        datasetId: singleItemDataset.id,
+        input: { prompt: 'Hello' },
+      });
+
+      const controller = new AbortController();
+      const abortingAgent = createMockAgent('Response');
+      abortingAgent.generate.mockImplementation(async () => {
+        controller.abort();
+        throw new DOMException('Aborted', 'AbortError');
+      });
+      const localMastra = {
+        ...mastra,
+        getAgentById: vi.fn().mockReturnValue(abortingAgent),
+      } as unknown as Mastra;
+      const events: ExperimentEvent[] = [];
+
+      const summary = await runExperiment(localMastra, {
+        datasetId: singleItemDataset.id,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        signal: controller.signal,
+        onEvent: event => {
+          events.push(event);
+        },
+      });
+
+      expect(summary.status).toBe('failed');
+      const finished = events.at(-1);
+      expect(finished).toMatchObject({
+        type: 'experiment.run.finished',
+        status: 'failed',
+        outcome: 'cancelled',
+      });
+    });
   });
 
   describe('tenancy hydration', () => {

@@ -4,17 +4,13 @@
 
 ## Development
 
-Complete the [repository setup](../README.md#setup) and [GitHub App setup](../web/README.md#configure-local-onboarding). Then run these in separate terminals:
-
-```shell
-pnpm --dir mastracode/web api
-```
+Complete the [repository setup](../README.md#setup) and [GitHub App setup](../web/README.md#configure-local-onboarding). Then start the API and the Vite dev server:
 
 ```shell
 pnpm --filter ./mastracode/factory-ui web
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. To restart one side without losing the other, run `pnpm --filter ./mastracode/factory-ui web:api` and `pnpm --filter ./mastracode/factory-ui dev` in separate terminals.
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 

@@ -838,6 +838,30 @@ export class PlatformSandbox extends MastraSandbox {
         createdAt: this._createdAt ?? new Date(),
       };
     }
+    // Skip the workspace-proxy round-trip when the address registry has an
+    // entry for this sandbox — a live entry is proof that start() saw an
+    // `instanceUrl` on the create/reattach response and that no exec since
+    // has evicted it via a transport failure. Serving `getInfo()` from
+    // local state here removes the per-poll `GET /sandbox/:id` hit that
+    // otherwise triggers a Railway GraphQL call + `sandboxExec` awk on
+    // `/proc/net/if_inet6` inside the proxy.
+    //
+    // Note: this does NOT probe the sidecar. If the sandbox has been
+    // destroyed out-of-band the next exec will fail transport, evict the
+    // registry entry, and a subsequent getInfo() will fall through to the
+    // proxy below and observe the true status.
+    if (this._addressRegistry?.get(this._sandboxId)) {
+      return {
+        id: this._sandboxId,
+        name: this.name,
+        provider: this.provider,
+        status: this.status,
+        createdAt: this._createdAt ?? new Date(),
+        metadata: {
+          sandboxId: this._sandboxId,
+        },
+      };
+    }
     const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {

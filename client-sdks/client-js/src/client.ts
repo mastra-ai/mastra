@@ -178,6 +178,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  ListExperimentsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
@@ -2064,13 +2065,16 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all experiments across all datasets
    */
-  public listExperiments(pagination?: {
-    page?: number;
-    perPage?: number;
-  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+  public listExperiments(
+    params?: ListExperimentsParams,
+  ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.experimentSetId !== undefined) searchParams.set('experimentSetId', params.experimentSetId);
+    if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
+    if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
+    if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2087,11 +2091,15 @@ export class MastraClient extends BaseResource {
    */
   public listDatasetExperiments(
     datasetId: string,
-    pagination?: { page?: number; perPage?: number },
+    params?: ListExperimentsParams,
   ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.experimentSetId !== undefined) searchParams.set('experimentSetId', params.experimentSetId);
+    if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
+    if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
+    if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }

@@ -169,16 +169,20 @@ const mockLoadSettings = vi.hoisted(() =>
   })),
 );
 
-vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: mockLoadSettings,
-  getCustomProviderId: (name: string) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, ''),
-  MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
-  MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
-}));
+vi.mock('../../onboarding/settings.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../onboarding/settings.js')>();
+  return {
+    ...actual,
+    loadSettings: mockLoadSettings,
+    getCustomProviderId: (name: string) =>
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, ''),
+    MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
+    MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
+  };
+});
 
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -620,6 +624,40 @@ describe('resolveModel', () => {
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
       });
+    });
+
+    it('normalizes legacy mastracode/-prefixed custom provider ids at resolution time (#20799)', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'acme-secret',
+          },
+        ],
+        memoryGateway: {},
+      });
+
+      // Previously-saved settings may carry the gateway-qualified catalog id.
+      const result = resolveModel('mastracode/acme/reasoner-v1') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('reasoner-v1');
+      expect(result.url).toBe('https://llm.acme.dev/v1');
+      expect(result.apiKey).toBe('acme-secret');
+    });
+
+    it('leaves mastracode/-prefixed ids alone when the segment is not a configured custom provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: {},
+      });
+
+      const result = resolveModel('mastracode/acme/reasoner-v1') as Record<string, unknown>;
+
+      // No matching custom provider: id passes through to the model router unchanged.
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('mastracode/acme/reasoner-v1');
     });
 
     it('passes controller headers to custom providers', () => {

@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ArrowUpRight,
-  CircleDot,
   EllipsisVertical,
   Link2,
   MessageSquare,
@@ -19,7 +18,14 @@ import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { setDragPayload } from '../boardDrag';
-import { externalLinkLabel, itemThreadSession, liveSessions, metadataLabels, workItemMeta } from '../boardItems';
+import {
+  externalLinkLabel,
+  itemThreadSession,
+  liveSessions,
+  metadataLabels,
+  pullRequestStatusForItem,
+  workItemMeta,
+} from '../boardItems';
 import { RUN_PHASE_LABELS, itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
@@ -30,8 +36,9 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, PullRequestStatusIcon, SOURCE_ICONS } from './BoardIcons';
+import { BoardStageIcon, SourceIcon } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
 function decisionStatusText(decision: FactoryDecisionSummary): string {
@@ -83,10 +90,6 @@ export function WorkItemCard({
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? {
-    icon: CircleDot,
-    className: 'text-icon3',
-  };
   const evaluating = evaluatingStage !== undefined;
   const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -201,9 +204,9 @@ export function WorkItemCard({
           <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
           <div className="flex min-w-0 items-center gap-1.5">
             {item.source === 'github-pr' ? (
-              <PullRequestStatusIcon item={item} />
+              <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
             ) : (
-              <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+              <SourceIcon source={item.source} />
             )}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />

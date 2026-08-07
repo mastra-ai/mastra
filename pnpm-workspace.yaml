@@ -51,6 +51,8 @@ catalog:
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
+  gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
+  read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
 
 packageExtensions:
   '@ai-sdk/provider-utils@3.0.25':
@@ -225,9 +227,9 @@ overrides:
   undici@>=7.0.0 <7.28.0: 7.28.0
   multer@<2.2.0: 2.2.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
-  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.8.0
-  '@opentelemetry/sdk-node@<0.217.0': 0.217.0
-  '@opentelemetry/exporter-prometheus@<0.217.0': 0.217.0
+  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
+  '@opentelemetry/sdk-node@<0.217.0': 0.221.0
+  '@opentelemetry/exporter-prometheus@<0.217.0': 0.221.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
   # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3

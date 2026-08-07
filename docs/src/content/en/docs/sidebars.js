@@ -16,28 +16,21 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'category',
-      label: 'Start',
-      collapsed: false,
-      collapsible: false,
-      items: [
-        {
-          type: 'doc',
-          id: 'index',
-          label: 'Get Started',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/develop',
-          label: 'Develop',
-        },
-      ],
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
+    {
+      type: 'doc',
+      id: 'getting-started/develop',
+      label: 'Develop',
     },
     {
       type: 'category',
       label: 'Build',
       collapsed: false,
       collapsible: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
@@ -268,6 +261,7 @@ const sidebars = {
       label: 'Extend',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
@@ -446,6 +440,7 @@ const sidebars = {
       label: 'Develop / Deploy',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
@@ -677,6 +672,7 @@ const sidebars = {
       label: 'Observe',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
