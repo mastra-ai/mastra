@@ -357,17 +357,13 @@ export class RailwaySandbox extends MastraSandbox {
       return { status: 'coalesced', checkpointName };
     }
 
-    const capture = this._checkpointSandbox(sandbox).finally(() => {
-      if (this._checkpointRefreshInFlight === capture) {
-        this._checkpointRefreshInFlight = null;
-      }
-    });
-    this._checkpointRefreshInFlight = capture;
+  async captureCheckpoint(): Promise<CaptureCheckpointResult> {
+    const sandbox = this._sandbox;
+    if (!sandbox || sandbox.status !== 'RUNNING') {
+      return { status: 'skipped', reason: 'sandbox-not-running' };
+    }
 
-    await capture;
-    this._scheduleCheckpointRefresh();
-
-    return { status: 'captured', checkpointName };
+    return this._captureCheckpoint(sandbox);
   }
 
   private async _checkpointSandbox(sandbox: Sandbox): Promise<void> {
@@ -619,16 +615,23 @@ export class RailwaySandbox extends MastraSandbox {
     args: string[] = [],
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
-    const status = this._sandbox?.status;
+  private _startInFlight: Promise<void> | null = null;
 
-    if (status !== 'RUNNING') {
-      if (!this._checkpointName) {
-        throw new SandboxNotReadyError(this.id);
-      }
-
+  private async _ensureRunning(): Promise<void> {
+    if (this._sandbox?.status === 'RUNNING') {
+      return;
+    }
+    if (!this._checkpointName) {
+      throw new SandboxNotReadyError(this.id);
+    }
+    this._startInFlight ??= (async () => {
       this._sandbox = null;
       await this.start();
-    }
+    })().finally(() => {
+      this._startInFlight = null;
+    });
+    await this._startInFlight;
+  }
 
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
     const timeout = options.timeout ?? this._timeout;
