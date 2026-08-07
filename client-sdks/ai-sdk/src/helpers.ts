@@ -368,6 +368,12 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           : chunk.payload.result,
         // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
       };
+    case 'tool-output-denied':
+      return {
+        type: 'tool-output-denied',
+        toolCallId: chunk.payload.toolCallId,
+        ...(chunk.payload.approval?.reason ? { reason: chunk.payload.approval.reason } : {}),
+      };
     case 'tool-error':
       return {
         type: 'tool-error',

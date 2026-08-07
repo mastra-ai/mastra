@@ -1,0 +1,6 @@
+---
+'@mastra/core': patch
+'@mastra/ai-sdk': patch
+---
+
+Enqueue a terminal `tool-output-denied` chunk when a `requireApproval` tool is declined so live AI SDK clients resolve the pending tool call instead of hanging. Persistence as `output-denied` already worked; only the stream path was missing.
