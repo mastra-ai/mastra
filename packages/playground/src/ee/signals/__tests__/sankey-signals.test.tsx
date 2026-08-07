@@ -728,12 +728,13 @@ describe('SankeySignals', () => {
       );
       renderSankeySignals();
       await screen.findByLabelText('Reorder Outcome');
+      const chartBeforeDrop = screen.getByTestId('sankey-order-transition');
 
       await reorderOutcomeAfterBehavior();
 
       expect(await screen.findByText('Reloading snapshots for new trace signal perspective…')).not.toBeNull();
       expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
-      // The headers stay where they were dropped while the current chart fades during the request.
+      // The headers stay where they were dropped while the current chart remains visible during the request.
       expect(columnHeaderLabels()).toEqual(['GOAL', 'BEHAVIOR', 'OUTCOME', 'SENTIMENT']);
       expect(screen.getByTestId('sankey-order-transition').getAttribute('aria-busy')).toBe('true');
 
@@ -741,6 +742,7 @@ describe('SankeySignals', () => {
       await waitFor(() =>
         expect(screen.getByTestId('sankey-order-transition').getAttribute('aria-busy')).toBe('false'),
       );
+      expect(screen.getByTestId('sankey-order-transition')).toBe(chartBeforeDrop);
     });
 
     it('keeps the selected snapshot ordinal when the new perspective returns opaque cursors', async () => {

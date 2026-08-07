@@ -315,14 +315,7 @@ function FlowCard({
                 )}
               </Droppable>
             </DragDropContext>
-            <div
-              key={chartColumns.map(column => column.id).join(':')}
-              aria-busy={reorderDisabled}
-              className={`motion-safe:animate-in motion-safe:fade-in motion-safe:transition-opacity motion-safe:duration-500 ${
-                reorderDisabled ? 'opacity-55' : 'opacity-100'
-              }`}
-              data-testid="sankey-order-transition"
-            >
+            <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">
               <Sankey
                 data={records}
                 columns={chartColumns}
@@ -340,6 +333,7 @@ function FlowCard({
                   onNodeClick={onNodeClick}
                   isNodeClickable={isNodeClickable}
                   hideColumnLabels
+                  geometryTransitionKey={chartColumns.map(column => column.id).join(':')}
                 />
               </Sankey>
             </div>

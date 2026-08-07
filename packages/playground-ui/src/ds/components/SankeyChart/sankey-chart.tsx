@@ -18,6 +18,7 @@ import type {
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
+import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
@@ -36,6 +37,8 @@ export type SankeyChartProps = {
   getColumnDescription?: (column: SankeyChartColumn) => string | undefined;
   /** Suppress the built-in SVG column headers when the caller renders its own header row. */
   hideColumnLabels?: boolean;
+  /** Animate fixed node and ribbon geometry when this perspective key changes. */
+  geometryTransitionKey?: string;
 };
 
 export function SankeyChart({
@@ -47,6 +50,7 @@ export function SankeyChart({
   isNodeClickable,
   getColumnDescription,
   hideColumnLabels = false,
+  geometryTransitionKey,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
@@ -54,6 +58,10 @@ export function SankeyChart({
     height,
     margin,
     usesFixedGeometry,
+  });
+  const animatedGeometry = useSankeyGeometryTransition({
+    geometry: fixedGeometry,
+    transitionKey: geometryTransitionKey,
   });
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
@@ -96,7 +104,7 @@ export function SankeyChart({
                   !hideColumnLabels && node
                     ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
                     : false;
-                const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
+                const nodeGeometry = node ? animatedGeometry?.nodes.get(node.id) : undefined;
                 const selection = node ? getSankeyChartNodeSelection(node) : undefined;
                 const clickable = Boolean(
                   onNodeClick && selection && (isNodeClickable === undefined || isNodeClickable(selection)),
@@ -129,7 +137,7 @@ export function SankeyChart({
               }}
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
-                const linkGeometry = link ? fixedGeometry?.links.get(link.id) : undefined;
+                const linkGeometry = link ? animatedGeometry?.links.get(link.id) : undefined;
                 const sourceX = linkGeometry?.sourceX ?? props.sourceX;
                 const targetX = linkGeometry?.targetX ?? props.targetX;
                 const fixedControlX = linkGeometry ? (sourceX + targetX) / 2 : undefined;
