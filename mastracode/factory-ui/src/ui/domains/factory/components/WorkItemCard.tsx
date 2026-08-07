@@ -18,7 +18,14 @@ import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { setDragPayload } from '../boardDrag';
-import { externalLinkLabel, itemThreadSession, liveSessions, metadataLabels, workItemMeta } from '../boardItems';
+import {
+  externalLinkLabel,
+  itemThreadSession,
+  liveSessions,
+  metadataLabels,
+  pullRequestStatusForItem,
+  workItemMeta,
+} from '../boardItems';
 import { RUN_PHASE_LABELS, itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
@@ -29,8 +36,9 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, PullRequestStatusIcon, SourceIcon } from './BoardIcons';
+import { BoardStageIcon, SourceIcon } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
 function decisionStatusText(decision: FactoryDecisionSummary): string {
@@ -195,7 +203,11 @@ export function WorkItemCard({
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
           <div className="flex min-w-0 items-center gap-1.5">
-            {item.source === 'github-pr' ? <PullRequestStatusIcon item={item} /> : <SourceIcon source={item.source} />}
+            {item.source === 'github-pr' ? (
+              <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
+            ) : (
+              <SourceIcon source={item.source} />
+            )}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />
             </span>

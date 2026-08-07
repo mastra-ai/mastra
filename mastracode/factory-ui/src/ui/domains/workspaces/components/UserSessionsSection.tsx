@@ -15,6 +15,7 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { UserSessionNotFoundError, deleteUserSession, getUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
 import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
@@ -29,11 +30,14 @@ export function UserSessionsSection() {
   const queryClient = useQueryClient();
   const draftSessionId = useMatch('/factories/:factoryId/user/new/:draftSessionId')?.params.draftSessionId;
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const { pinnedSessions, setPinned } = usePinnedSessions();
 
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
   const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
-  const sessions = sessionsQuery.data?.userSessions ?? [];
+  const sessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
+    (a, b) => Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)),
+  );
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
@@ -124,7 +128,9 @@ export function UserSessionsSection() {
                 url={url}
                 active={active}
                 disabled={pending}
+                pinned={pinnedSessions.has(session.sessionId)}
                 onSelect={() => void navigate(url)}
+                onPinChange={pinned => setPinned(session.sessionId, pinned)}
                 onDelete={() => setConfirmDelete(session)}
               />
             );
