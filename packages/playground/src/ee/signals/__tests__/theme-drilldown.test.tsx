@@ -1020,7 +1020,7 @@ describe('SankeySignals drill-in', () => {
   });
 
   describe('when a durable filter moves to a snapshot above the client limit', () => {
-    it('does not request paths for the large snapshot', async () => {
+    it('does not request paths or present unresolved data as filtered', async () => {
       const requestedSnapshotIds: string[] = [];
       useFlowHandlers();
       server.use(
@@ -1046,6 +1046,8 @@ describe('SankeySignals drill-in', () => {
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      fireEvent.click(screen.getByRole('button', { name: 'View details for Goal · Add transcript' }));
+      expect(await screen.findByText('Filtered to traces matching the active drill-down filters.')).not.toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       expect(
         await screen.findByText(/These filters are unavailable for snapshots with more than 2,000 traces/),
@@ -1054,6 +1056,7 @@ describe('SankeySignals drill-in', () => {
       expect(screen.getByText('Filters unavailable for this snapshot')).not.toBeNull();
       expect(screen.queryByText('Loading matching traces…')).toBeNull();
       expect(screen.queryByRole('button', { name: 'View details for Goal · Add transcript' })).toBeNull();
+      expect(screen.queryByText('Filtered to traces matching the active drill-down filters.')).toBeNull();
 
       expect(screen.queryByLabelText('Trace signal distributions')).toBeNull();
       expect(screen.queryByLabelText('Trace signal theme flow')).toBeNull();

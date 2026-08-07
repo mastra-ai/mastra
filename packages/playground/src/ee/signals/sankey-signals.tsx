@@ -517,19 +517,26 @@ export function SankeySignals({
     setNoiseSignalName(undefined);
     perspectiveMutation.mutate(mergeVisibleSignalOrder(signalNames, nextSignalNames));
   };
+  const hasResolvedDrillContext = drillInAvailable && pathsQuery.data !== undefined;
   const detailFilters =
-    viewMode === 'flow' && detailSelection
+    viewMode === 'flow' && detailSelection && hasResolvedDrillContext
       ? drillStack.filter(filter => filter.signalName !== detailSelection.signalName)
       : [];
   const detailStats =
-    viewMode === 'flow' && drillStack.length > 0 ? findSelectionStats(flow, drillStack, detailSelection) : undefined;
+    viewMode === 'flow' && drillStack.length > 0 && hasResolvedDrillContext
+      ? findSelectionStats(flow, drillStack, detailSelection)
+      : undefined;
   const noiseSelection: ThemeSelection | undefined = noiseSignalName
     ? { kind: 'noise', signalName: noiseSignalName }
     : undefined;
   const noiseFilters =
-    viewMode === 'flow' && noiseSignalName ? drillStack.filter(filter => filter.signalName !== noiseSignalName) : [];
+    viewMode === 'flow' && noiseSignalName && hasResolvedDrillContext
+      ? drillStack.filter(filter => filter.signalName !== noiseSignalName)
+      : [];
   const noiseStats =
-    viewMode === 'flow' && drillStack.length > 0 ? findSelectionStats(flow, drillStack, noiseSelection) : undefined;
+    viewMode === 'flow' && drillStack.length > 0 && hasResolvedDrillContext
+      ? findSelectionStats(flow, drillStack, noiseSelection)
+      : undefined;
   const detailFilterKey = serializeThemeFilters(detailFilters);
   const noiseFilterKey = serializeThemeFilters(noiseFilters);
 
