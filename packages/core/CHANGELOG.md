@@ -1,5 +1,135 @@
 # @mastra/core
 
+## 1.58.0-alpha.2
+
+### Minor Changes
+
+- Added `instructions.ts` as a code alternative to `instructions.md` for file-based agents. Use it when the prompt needs TypeScript, for example when it's built from shared constants or resolved per request. ([#20847](https://github.com/mastra-ai/mastra/pull/20847))
+
+  Before, a computed prompt had to move into `config.ts`, splitting it away from the agent's other instructions:
+
+  ```typescript
+  // src/mastra/agents/support/config.ts
+  import { agentConfig } from '@mastra/core/agent';
+
+  export default agentConfig({
+    model: 'openai/gpt-5.6-sol',
+    instructions: ({ requestContext }) => {
+      const tier = requestContext.get('tier') ?? 'standard';
+      return `You are a support agent. Treat this as a ${tier}-tier customer.`;
+    },
+  });
+  ```
+
+  Now it lives in its own file, next to `config.ts`:
+
+  ```typescript
+  // src/mastra/agents/support/instructions.ts
+  import { agentInstructions } from '@mastra/core/agent';
+
+  export default agentInstructions(({ requestContext }) => {
+    const tier = requestContext.get('tier') ?? 'standard';
+    return `You are a support agent. Treat this as a ${tier}-tier customer.`;
+  });
+  ```
+
+  The file default-exports a string, a system message, or a function returning one. `agentInstructions()` is an identity helper that only adds editor types.
+
+  **Precedence**
+
+  A function `config.instructions` still wins over both files, then `instructions.ts` wins over `instructions.md`, which still wins over a static `config.instructions`. Defining instructions in more than one place logs a warning naming both sources and which one wins.
+
+  One upgrade case needs a rename. If an agent directory already holds an unrelated `instructions.ts`, for example a helper that `config.ts` imports, Mastra now reads that file as the agent's instructions instead of its old source, and the build fails if the file has no default export.
+
+- Added a `requestContextKeys` option to scorer runs that controls which request-context values are recorded on the eval's span input for repeatability. ([#20808](https://github.com/mastra-ai/mastra/pull/20808))
+
+  Previously the entire request context was recorded on every scorer-run span. Because request context is an arbitrary, app-controlled bag, that could persist secrets or PII stored under any key into exported traces and datasets. Scorer runs now record **nothing** from the request context by default — you opt in per key.
+
+  **What changed**
+
+  - Default (no `requestContextKeys`): nothing from the request context is recorded.
+  - Specific keys: only those keys are recorded, with dot notation for nested values.
+  - `['*']`: the whole context is recorded (the framework-managed auth token stays redacted).
+
+  This is separate from the observability config's `requestContextKeys`, which controls live span metadata. Recording a run so it can be reproduced later and surfacing keys on every live span are different concerns, so they are controlled independently.
+
+  **Example**
+
+  ```ts
+  await scorer.run({
+    input,
+    output,
+    requestContext: { userId: 'u_123', tenant: { id: 't_1', apiKey: 'secret' } },
+    // Persist only what you need to reproduce the run — `apiKey` is never stored.
+    requestContextKeys: ['userId', 'tenant.id'],
+  });
+  ```
+
+### Patch Changes
+
+- Enqueue a `tool-output-denied` chunk when a `requireApproval` tool is declined so live AI SDK clients resolve the pending tool call instead of hanging. Persistence as `output-denied` already worked; only the stream path was missing. ([#20886](https://github.com/mastra-ai/mastra/pull/20886))
+
+  ```ts
+  for await (const part of toAISdkStream(result.fullStream, { from: 'agent' })) {
+    if (part.type === 'tool-output-denied') {
+      // Clears the pending requireApproval tool call on the client
+      console.log('denied', part.toolCallId);
+    }
+  }
+  ```
+
+- Fixed workflow `.map()` step arrays so they preserve branch results of `{}`, `0`, `false`, and empty strings instead of returning `null`. ([#20896](https://github.com/mastra-ai/mastra/pull/20896))
+
+- Stamp the run's traceId into persisted assistant message metadata so a stored message can be correlated back to its trace. ([#20928](https://github.com/mastra-ai/mastra/pull/20928))
+
+  Previously a caller holding only a `messageId` had no supported way to find the trace that produced it: message rows carry no `traceId` column and span records carry no `messageId`. The traceId now rides along in the metadata that already carried `modelId` and `provider`, on both the regular and the durable agent path.
+
+  ```typescript
+  const { messages } = await memory.recall({ threadId, perPage: false });
+  const traceId = messages.find(m => m.id === messageId)?.content.metadata?.traceId;
+  ```
+
+  This is forward-looking — messages persisted before this change have no traceId.
+
+- Fixed AgentController losing the second auto-approved tool result when sequential tool calls resume from a stale suspended snapshot (#19814) ([#19940](https://github.com/mastra-ai/mastra/pull/19940))
+
+- Pass `formatLocation` to `SkillsProcessor` when skill files are not at `${skill.path}/SKILL.md` from the model's point of view, such as when the agent's filesystem tools run against a sandbox that mounts them elsewhere. Key the override on `skill.path` so skills that share a name still render distinct locations. ([#20893](https://github.com/mastra-ai/mastra/pull/20893))
+
+  ```ts
+  new SkillsProcessor({
+    workspace,
+    formatLocation: skill => `/mnt/skills${skill.path}/SKILL.md`,
+  });
+  ```
+
+  Remapped locations remain valid skill identifiers: the processor registers each rendered location as an alias with the skills registry, so the `skill` and `skill_read` tools resolve it back to the underlying skill. The skill-tool instruction now also tells the model that `location` may not exist on its filesystem, so it reads skill files with `skill_read` instead of filesystem tools. If a custom `WorkspaceSkills` implementation does not support alias registration, the instruction falls back to directing the model to refer to skills by name.
+
+- Fixed dynamic `skills` resolvers running four times per agent request. Skills are needed in several places during one execution, and each of them called your resolver again — so a resolver that fetches over the network made four calls per request instead of one. ([#20921](https://github.com/mastra-ai/mastra/pull/20921))
+
+  ```typescript
+  const agent = new Agent({
+    name: 'support',
+    instructions: 'Help the customer.',
+    model: 'openai/gpt-5-mini',
+    skills: async ({ requestContext }) => {
+      // Called four times per generate()/stream() before this change, once now.
+      const res = await fetch(`https://internal/skills?user=${requestContext.get('userId')}`);
+      return (await res.json()).skills;
+    },
+  });
+  ```
+
+  The resolution is now shared across a request, keyed on its `RequestContext`. A new request resolves again, and a failed resolution is not cached so a retry still reaches your resolver. If you reuse a single `RequestContext` across several executions, those executions now share one resolution.
+
+- Fixed Mastra shutdown so background task resources are released before storage closes without blocking indefinitely. Retryable running tasks remain recoverable after a process restart, while local executors are aborted and durable dispatches are left for surviving workers during shutdown. ([#20194](https://github.com/mastra-ai/mastra/pull/20194))
+
+- Fixed tool calls that fail during execution staying stuck as running in agent-controller session streams. A tool error now updates the streamed message part to a terminal errored result and emits the corresponding message update, exactly like a successful tool result. The `isError` flag on persisted tool invocations is now part of the public type instead of an undeclared runtime field. ([#20805](https://github.com/mastra-ai/mastra/pull/20805))
+
+- Fixed tool execute-time input validation for Zod tools on Anthropic Claude 3.5 Haiku. The compat layer now skips string min/max checks that were removed from the model-facing JSON Schema, while preserving refinements, defaults, and other validation semantics. ([#19701](https://github.com/mastra-ai/mastra/pull/19701))
+
+- Updated dependencies [[`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/schema-compat@1.3.6-alpha.1
+
 ## 1.58.0-alpha.1
 
 ### Minor Changes

@@ -2,7 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
-import { SlackLogo } from '../../../ui/SlackLogo';
+import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
@@ -23,7 +23,7 @@ export function SlackNotConfigured() {
       <SettingsRow
         label={
           <span className="flex items-center gap-3">
-            <SlackLogo className="size-7 shrink-0 opacity-50" />
+            <SlackIcon className="size-7 shrink-0 opacity-50" />
             <span className="flex flex-col gap-0.5">
               <Txt as="span" variant="ui-md">
                 Slack
@@ -73,7 +73,7 @@ export function ConnectedAccountsSection() {
 
   const slackLabel = (
     <span className="flex items-center gap-3">
-      <SlackLogo className="size-7 shrink-0" />
+      <SlackIcon className="size-7 shrink-0" />
       <span className="flex flex-col gap-0.5">
         <Txt as="span" variant="ui-md">
           Slack

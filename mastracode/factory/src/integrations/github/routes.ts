@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -52,7 +53,10 @@ import {
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
-
+const MAX_SESSION_TITLE_LENGTH = 80;
+const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+// lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /**
  * Serialize same-session mutations within one Factory process. Factory sessions
  * normally issue these operations sequentially, so this lock is probably not
@@ -174,6 +178,16 @@ function isCanonicalGithubIssueUrl(value: string, repoFullName: string, issueNum
  */
 function isValidGitRef(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeSessionTitle(title: string): string | null {
+  // Cap code points, not UTF-16 units: an emoji straddling the cap would store a lone surrogate.
+  const capped = [...title.replace(/\s+/g, ' ').trim()].slice(0, MAX_SESSION_TITLE_LENGTH).join('');
+  return capped.trimEnd() || null;
 }
 
 /**
@@ -1306,23 +1320,86 @@ function buildProjectGitRoutes({
           ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
           : null;
         if (!project) return c.json({ error: 'Project repository not found' }, 404);
-        let body: { branch?: unknown; baseBranch?: unknown };
+        let body: unknown;
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (!isValidGitRefSandbox(body.branch)) return c.json({ error: 'Invalid branch' }, 400);
-        const baseBranch = body.baseBranch === undefined ? project.defaultBranch : body.baseBranch;
+        if (!isJsonObject(body)) return c.json({ error: 'Invalid JSON body' }, 400);
+        const requestedBaseBranch = body.baseBranch;
+        if (requestedBaseBranch !== undefined && typeof requestedBaseBranch !== 'string') {
+          return c.json({ error: 'Invalid baseBranch' }, 400);
+        }
+        const baseBranch = requestedBaseBranch ?? project.defaultBranch;
         if (!isValidGitRefSandbox(baseBranch)) return c.json({ error: 'Invalid baseBranch' }, 400);
-        const session = await github.sourceControlStorage.sessions.create({
-          sessionId: randomUUID(),
-          projectRepositoryId: project.id,
-          orgId,
-          userId,
-          branch: body.branch,
-          baseBranch,
-        });
+
+        const requestedSessionId = body.sessionId;
+        if (
+          requestedSessionId !== undefined &&
+          (typeof requestedSessionId !== 'string' || !UUID_PATTERN.test(requestedSessionId))
+        ) {
+          return c.json({ error: 'Invalid sessionId' }, 400);
+        }
+        const sessionId = requestedSessionId ?? randomUUID();
+
+        const requestedTitle = body.title;
+        if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {
+          return c.json({ error: 'Invalid title' }, 400);
+        }
+        const normalizedTitle = requestedTitle === undefined ? null : normalizeSessionTitle(requestedTitle);
+
+        const requestedBranch = body.branch;
+        let branch: string;
+        if (requestedBranch === undefined) {
+          branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
+        } else if (typeof requestedBranch === 'string' && isValidGitRefSandbox(requestedBranch)) {
+          branch = requestedBranch;
+        } else {
+          return c.json({ error: 'Invalid branch' }, 400);
+        }
+
+        if (requestedSessionId !== undefined) {
+          const existing = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
+          if (existing) {
+            if (
+              existing.projectRepositoryId !== project.id ||
+              existing.orgId !== orgId ||
+              existing.userId !== userId ||
+              existing.branch !== branch
+            ) {
+              return c.json({ error: 'Session ID conflict' }, 409);
+            }
+            return c.json({ session: existing });
+          }
+        }
+
+        const session = await github.sourceControlStorage.sessions
+          .create({
+            sessionId,
+            projectRepositoryId: project.id,
+            orgId,
+            userId,
+            branch,
+            baseBranch,
+            title: normalizedTitle,
+          })
+          .catch(async error => {
+            if (!(error instanceof UniqueViolationError) || requestedSessionId === undefined) throw error;
+            const conflict = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
+            if (!conflict) throw error;
+            return conflict;
+          });
+        if (
+          requestedSessionId !== undefined &&
+          (session.sessionId !== sessionId ||
+            session.projectRepositoryId !== project.id ||
+            session.orgId !== orgId ||
+            session.userId !== userId ||
+            session.branch !== branch)
+        ) {
+          return c.json({ error: 'Session ID conflict' }, 409);
+        }
         return c.json({ session });
       },
     }),
