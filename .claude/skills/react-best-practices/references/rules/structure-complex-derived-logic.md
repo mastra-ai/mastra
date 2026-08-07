@@ -114,55 +114,53 @@ function Sidebar({ orgId, projectId, isSettingsActive }: SidebarProps) {
 
 Nested ternaries are especially costly when they select structural data, routes, or components. Use `if` returns so each case gets a nameable line.
 
-### Multi-Line Ternary Branches
+### Ternaries That Do Work
 
-A ternary picks between two values. Once a branch grows a body — a block arrow, an IIFE, a multi-line object literal — the ternary is doing the work instead of naming it, and the condition sits pages away from the code it guards. Name each branch and keep the ternary to one line, or move the condition into the helper so the callsite has none.
+A ternary picks between two values. It has stopped picking and started computing once a branch grows a body — a block arrow, an IIFE, a multi-line object — or once its condition tests a shape that the branch then has to re-assert with `as`. Both mean the same fix: a named function with guard clauses.
 
 **Incorrect:**
 
 ```ts
-export function useWorkspaceDiff(workspacePath?: string, filePath?: string, previousFilePath?: string) {
-  const { client } = useApiConfig();
+export function buildPreview(input: unknown) {
+  const value = parseIfJson(input);
 
-  return useQuery<WorkspaceDiff>({
-    queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
-    queryFn:
-      workspacePath && filePath
-        ? () => {
-            const previousPathQuery = previousFilePath ? `&previousPath=${encodeURIComponent(previousFilePath)}` : '';
-            return client.get<WorkspaceDiff>(
-              `/web/workspace/changes/diff?workspacePath=${encodeURIComponent(workspacePath)}&path=${encodeURIComponent(filePath)}${previousPathQuery}`,
-            );
-          }
-        : skipToken,
-  });
+  const messages = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
+      ? (value as { messages: unknown[] }).messages
+      : undefined;
+
+  if (!messages) return undefined;
+  return previewFrom(messages);
 }
 ```
 
 **Correct:**
 
 ```ts
-function workspaceDiffUrl(workspacePath?: string, path?: string, previousPath?: string) {
-  if (!workspacePath || !path) return undefined;
-
-  const params = new URLSearchParams({ workspacePath, path });
-  if (previousPath) params.set('previousPath', previousPath);
-
-  return `/web/workspace/changes/diff?${params}`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
-export function useWorkspaceDiff(workspacePath?: string, filePath?: string, previousFilePath?: string) {
-  const { client } = useApiConfig();
-  const url = workspaceDiffUrl(workspacePath, filePath, previousFilePath);
+function toMessages(value: unknown): unknown[] | undefined {
+  if (Array.isArray(value)) return value;
+  if (!isRecord(value)) return undefined;
+  if (!Array.isArray(value.messages)) return undefined;
 
-  return useQuery<WorkspaceDiff>({
-    queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
-    queryFn: url ? () => client.get<WorkspaceDiff>(url) : skipToken,
-  });
+  return value.messages;
+}
+
+export function buildPreview(input: unknown) {
+  const messages = toMessages(parseIfJson(input));
+  if (!messages) return undefined;
+
+  return previewFrom(messages);
 }
 ```
 
-The builder owns which params the endpoint requires, so that rule is stated once instead of being split between a ternary condition and a template literal. The ternary stays — it is a one-line value pick, and `url` being `string | undefined` is what makes the skip branch impossible to forget. Extracting it into a `getOrSkip(client, url)` helper is the overshoot: it repeats the type argument, drags a context value through a module function, and closes the door on the `QueryFunctionContext` an abort signal or a page param would need.
+The casts were not incidental, and deleting them without moving the code would not have worked. A ternary is an expression: a `typeof` or `Array.isArray` test in its condition narrows nothing for the branch that follows, so `as` is the only way to reach the field the condition just proved was there. Guard clauses put the test and the use in the same control flow, the compiler narrows, and the casts have nothing left to do. Dense conditional expressions and `as` clusters travel together — when you see one, look for the other (`types-no-type-assertions`).
+
+Extracting is not the same as wrapping. A ternary that picks between two values on one line is fine and gains nothing from a helper; the helper would add a name, an indirection, and often a type argument, without removing any work from the callsite.
 
 ### Fallback and Operator Soup
 
@@ -279,4 +277,4 @@ The callsite receives the final value directly. The reader does not have to trac
 
 Keep helpers local to the file unless multiple domains genuinely share the same concept. The point is to name the condition or derivation and remove useless complexity, not to create a generic utility layer.
 
-Smells: very large `&&`/`||` conditions inline in JSX or render prep; nested ternaries that choose structural data; ternary branches spanning several lines or wrapping a block arrow, IIFE, or multi-line object; the same requirement encoded twice, once in a condition and once in the value it guards; `let result = ...` followed by `if (...) result = ...`; derived props passed as `propName={complexHelper({ ... })}` instead of a named local; four-line blocks mixing `? :`, `||`, `??`, `?.`, spreads, and default objects; comments explaining mutation order; review comments like "feels intense", "can we simplify this?", "could we refactor those lines into an understandable function?", or "why do we need let?"; derived arrays/objects that are later rendered or passed as props.
+Smells: very large `&&`/`||` conditions inline in JSX or render prep; nested ternaries that choose structural data; ternary branches spanning several lines or wrapping a block arrow, IIFE, or multi-line object; an `as` cast in a branch for a shape the condition just tested; the same requirement encoded twice, once in a condition and once in the value it guards; `let result = ...` followed by `if (...) result = ...`; derived props passed as `propName={complexHelper({ ... })}` instead of a named local; four-line blocks mixing `? :`, `||`, `??`, `?.`, spreads, and default objects; comments explaining mutation order; review comments like "feels intense", "can we simplify this?", "could we refactor those lines into an understandable function?", or "why do we need let?"; derived arrays/objects that are later rendered or passed as props.

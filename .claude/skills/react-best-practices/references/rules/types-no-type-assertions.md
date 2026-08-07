@@ -88,3 +88,8 @@ class MockIO implements IntersectionObserver {
 predicate whose body only checks `typeof value === 'object' && value !== null`.
 A cast in a test is not a shortcut — it is the same defect as a cast in
 production, in the one place no one looks.
+
+Casts clustered inside a ternary chain are a structure problem wearing a type
+problem's clothes: an expression cannot narrow, so the branch re-asserts what
+the condition proved. Move the chain into guard clauses and the casts go away on
+their own (`structure-complex-derived-logic`).
