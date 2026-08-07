@@ -1,4 +1,5 @@
 import type { IMastraLogger } from '../../logger';
+import { resolveAgentById } from '../../mastra/resolve-agent';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
 import { Scheduler } from '../../workflows/scheduler/scheduler';
 import type { SchedulerConfig } from '../../workflows/scheduler/types';
@@ -46,20 +47,27 @@ export class SchedulerWorker extends MastraWorker {
     // miss; we adapt that into a boolean.
     const mastra = this.mastra;
     const isTargetReady = mastra
-      ? (target: ScheduleTarget) => {
-          try {
-            if (target.type === 'workflow') {
+      ? async (target: ScheduleTarget) => {
+          if (target.type === 'workflow') {
+            try {
               mastra.getWorkflowById(target.workflowId);
               return true;
+            } catch {
+              return false;
             }
-            if (target.type === 'agent') {
-              mastra.getAgentById(target.agentId);
-              return true;
-            }
-            return false;
-          } catch {
-            return false;
           }
+          if (target.type === 'agent') {
+            // Only a *confirmed* miss (registry AND editor agree the agent is
+            // gone) counts toward deletion. A transient editor/storage failure
+            // is treated as ready: the schedule fires, and the execute path
+            // retries resolution and records a failed trigger row without
+            // deleting the schedule. Trade-off: during a sustained editor
+            // outage each due tick publishes a fire that fails at execute
+            // time — noisy, but never destroys a schedule on ambiguity.
+            const resolved = await resolveAgentById(mastra, target.agentId);
+            return resolved.status !== 'missing';
+          }
+          return false;
         }
       : undefined;
 

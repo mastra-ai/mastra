@@ -3657,10 +3657,10 @@ export class Run<
         data: { type: 'workflow-finish', payload: { runId: this.runId } },
       });
       unwatch();
-      await Promise.all(this.#observerHandlers.map(handler => handler()));
-      this.#observerHandlers = [];
 
       try {
+        await Promise.allSettled(this.#observerHandlers.map(handler => handler()));
+        this.#observerHandlers = [];
         await writer.close();
       } catch (err) {
         this.mastra?.getLogger()?.error('Error closing stream:', err);

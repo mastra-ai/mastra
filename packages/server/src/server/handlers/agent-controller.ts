@@ -222,7 +222,8 @@ const omProgressSummarySchema = z.object({
 });
 const sessionSettingsSchema = z.object({
   yolo: z.boolean(),
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']),
+  /** Session override only — absent when the session inherits a configured default. */
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   notifications: z.enum(['off', 'bell', 'system', 'both']),
   smartEditing: z.boolean(),
 });
@@ -723,6 +724,8 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       const st = session.state.get() as Record<string, unknown>;
       const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
         allowed.includes(value as T) ? (value as T) : fallback;
+      const oneOfOptional = <T extends string>(value: unknown, allowed: readonly T[]): T | undefined =>
+        allowed.includes(value as T) ? (value as T) : undefined;
       return {
         controllerId,
         resourceId,
@@ -744,7 +747,9 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         tokenUsage: ds.tokenUsage as unknown as Record<string, unknown>,
         settings: {
           yolo: st.yolo === true,
-          thinkingLevel: oneOf(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh'] as const, 'off'),
+          // No session override → omit, so clients don't mistake an inherited
+          // configured default (resolved at request time) for an explicit 'off'.
+          thinkingLevel: oneOfOptional(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const),
           notifications: oneOf(st.notifications, ['off', 'bell', 'system', 'both'] as const, 'off'),
           smartEditing: st.smartEditing !== false,
         },

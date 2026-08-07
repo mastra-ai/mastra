@@ -10,10 +10,10 @@ import type { AgentController, AgentControllerEvent, Session } from '@mastra/cor
 import type { GoalManager } from '../goal-manager.js';
 
 export type RunMode = 'build' | 'plan' | 'fast';
-export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export const VALID_MODES = ['build', 'plan', 'fast'] as const;
-export const VALID_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh'] as const;
+export const VALID_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 /**
  * Named permission modes for non-interactive runs. Maps to a built-in
