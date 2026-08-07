@@ -121,19 +121,38 @@ export function notify(state: TUIState, reason: NotificationReason, message?: st
 }
 
 /**
- * Fire the notification for an input-request event the moment it is received,
+ * Fire the user-facing notification for an event the moment it is received,
  * before the event enters the TUI's serialized dispatch queue. A pending prompt
  * blocks that queue until the user answers, so any notify call living inside a
  * queued handler is starved exactly when the user has walked away. This helper
  * runs synchronously in the controller subscription listener instead.
  *
- * Non-input-request events are a no-op. Never throws: a notification failure
- * must not break event delivery.
+ * Covers two kinds of pings: input-request events (prompts that need the
+ * user's answer, #20398) and the agent_done lifecycle ping when a run
+ * finishes (#20860). The name predates the agent_end mapping and is kept for
+ * continuity with the #20857 call sites and tests.
+ *
+ * All other events are a no-op. Never throws: a notification failure must not
+ * break event delivery.
  */
 export function notifyForInputRequest(state: TUIState, event: AgentControllerEvent): void {
   try {
     if (event.type === 'tool_approval_required') {
       notify(state, 'tool_approval', `Approve ${event.toolName}?`);
+      return;
+    }
+    if (event.type === 'agent_end') {
+      // A receipt-time agent_done means the run FINISHED, not that the TUI's
+      // rendered state has caught up — the queued handler still does the
+      // state work afterwards. Only 'complete' (or an absent reason) pings:
+      // 'aborted'/'error' mirror the queued handlers, which never notified,
+      // and 'suspended' must not ping because core emits tool_suspended
+      // (which already pings above) followed by agent_end 'suspended' — the
+      // old queued notify produced a spurious post-answer ping for it, which
+      // this mapping deliberately removes.
+      if (event.reason === 'complete' || event.reason === undefined) {
+        notify(state, 'agent_done');
+      }
       return;
     }
     if (event.type === 'tool_suspended') {
