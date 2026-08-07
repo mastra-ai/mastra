@@ -28,7 +28,7 @@ export const SOURCE_ICONS: Record<
 
 type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
-function pullRequestStatus(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
+export function pullRequestStatus(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
   if (item.metadata.merged === true) return 'merged';
   if (item.metadata.state === 'closed') return 'closed';
   if (item.metadata.state === 'open') return item.metadata.draft === true ? 'draft' : 'open';
