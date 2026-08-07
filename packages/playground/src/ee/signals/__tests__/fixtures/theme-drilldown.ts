@@ -336,7 +336,7 @@ export const singlePointThemeHistoryResponse = {
   points: [themeHistoryResponse.points[0]],
 } satisfies ThemeHistoryResponse;
 
-export const longThemeHistoryResponse = {
+export const truncatedThemeHistoryResponse = {
   ...themeHistoryResponse,
   points: [
     {
@@ -348,6 +348,31 @@ export const longThemeHistoryResponse = {
       coverage: 0.75,
     },
     ...themeHistoryResponse.points,
+  ],
+  nextCursor: 'older-history-cursor',
+} satisfies ThemeHistoryResponse;
+
+/** Newest point's pipeline trend rises while raw trace counts fall. */
+export const risingTrendFallingCountsHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [
+    {
+      snapshotId: 'opaque-snapshot-cursor',
+      startedAt: '2026-07-15T00:00:00.000Z',
+      endedAt: '2026-07-22T00:00:00.000Z',
+      state: 'continue',
+      traceCount: 1,
+      coverage: 0.25,
+      trend: { popularity: 0.6, signalScore: 0.3, strength: 'strong' },
+    },
+    {
+      snapshotId: 'older-opaque-snapshot-cursor',
+      startedAt: '2026-07-08T00:00:00.000Z',
+      endedAt: '2026-07-15T00:00:00.000Z',
+      state: 'continue',
+      traceCount: 5,
+      coverage: 0.8,
+    },
   ],
 } satisfies ThemeHistoryResponse;
 

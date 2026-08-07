@@ -70,6 +70,8 @@ export function formatSnapshotCutoff(cutoffAt: string) {
 export function formatSnapshotWindow(startedAt: string, endedAt: string) {
   const start = new Date(startedAt);
   const end = new Date(endedAt);
+  // Fall back to the raw server values instead of letting Intl throw on Invalid Date.
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return `${startedAt}–${endedAt}`;
   const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const day = new Intl.DateTimeFormat('en-US', { day: 'numeric', timeZone: 'UTC' });
   const year = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'UTC' });

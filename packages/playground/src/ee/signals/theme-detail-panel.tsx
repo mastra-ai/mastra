@@ -242,9 +242,12 @@ export function ThemeDetailPanel({
                       {historyPoints.length > 0 && (
                         <>
                           <p className="text-neutral5 mt-3 text-sm">
-                            First seen {formatSnapshotDate(historyPoints[0].startedAt)} · in{' '}
-                            {Math.min(historyPoints.length, snapshotTotal)} of {snapshotTotal} snapshots ·{' '}
-                            {themeTrendDirection(historyPoints)}
+                            {/* A nextCursor means older points exist beyond the fetched window,
+                                so the oldest loaded point is a lower bound, not the true origin. */}
+                            {historyQuery.data?.nextCursor
+                              ? `Active since at least ${formatSnapshotDate(historyPoints[0].startedAt)} · in ${historyPoints.length}+ snapshots`
+                              : `First seen ${formatSnapshotDate(historyPoints[0].startedAt)} · in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}{' '}
+                            · {themeTrendDirection(historyPoints)}
                           </p>
                           {historyPoints.length >= 2 && (
                             <TrendChart points={historyPoints} color={nodeColor(getSignalHue(signalName ?? 'goal'))} />

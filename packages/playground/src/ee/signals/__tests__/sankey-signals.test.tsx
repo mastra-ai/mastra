@@ -14,7 +14,7 @@ import {
   stabilizeThemeFlow,
   themeFlowToSankeyData,
 } from '../sankey-signals-data';
-import { formatSnapshotCutoff } from '../signal-formatting';
+import { formatSnapshotCutoff, formatSnapshotWindow } from '../signal-formatting';
 import type { ThemeFlowResponse } from '../types';
 import {
   duplicateLabelThemeFlowResponse,
@@ -149,6 +149,16 @@ describe('formatSnapshotCutoff', () => {
   describe('when the server sends an unparseable timestamp', () => {
     it('falls back to the raw value instead of throwing', () => {
       expect(formatSnapshotCutoff('not-a-timestamp')).toBe('not-a-timestamp');
+    });
+  });
+});
+
+describe('formatSnapshotWindow', () => {
+  describe('when the server sends an unparseable timestamp', () => {
+    it('falls back to the raw values instead of throwing', () => {
+      expect(formatSnapshotWindow('not-a-timestamp', '2026-07-08T00:00:00.000Z')).toBe(
+        'not-a-timestamp–2026-07-08T00:00:00.000Z',
+      );
     });
   });
 });

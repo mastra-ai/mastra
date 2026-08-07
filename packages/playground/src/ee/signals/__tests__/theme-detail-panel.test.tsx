@@ -8,11 +8,12 @@ import { ThemeDetailPanel } from '../theme-detail-panel';
 import {
   fadingThemeHistoryResponse,
   firstThemeExamplesResponse,
-  longThemeHistoryResponse,
+  risingTrendFallingCountsHistoryResponse,
   secondThemeExamplesResponse,
   singlePointThemeHistoryResponse,
   themeDetailResponse,
   themeHistoryResponse,
+  truncatedThemeHistoryResponse,
   zeroCoverageThemeDetailResponse,
 } from './fixtures/theme-drilldown';
 import { server } from '@/test/msw-server';
@@ -101,10 +102,11 @@ describe('ThemeDetailPanel', () => {
       renderPanel();
 
       expect(await screen.findByRole('heading', { name: 'Trend' })).not.toBeNull();
-      expect(screen.getByText('First seen Jul 8, 2026 · in 2 of 4 snapshots · growing')).not.toBeNull();
+      expect(screen.getByText('First seen Jul 8, 2026 · in 2 snapshots · growing')).not.toBeNull();
       expect(screen.getByTestId('trend-chart')).not.toBeNull();
-      expect(screen.getByLabelText('Jul 8, 2026 · 1 trace (50%)')).not.toBeNull();
-      expect(screen.getByLabelText('Jul 15, 2026 · 2 traces (67%)')).not.toBeNull();
+      const olderMarker = screen.getByLabelText('Jul 8, 2026 · 1 trace (50%)');
+      const newerMarker = screen.getByLabelText('Jul 15, 2026 · 2 traces (67%)');
+      expect(parseFloat(olderMarker.style.left)).toBeLessThan(parseFloat(newerMarker.style.left));
       expect(screen.queryByText(/^birth$/i)).toBeNull();
       expect(screen.queryByText(/^continue$/i)).toBeNull();
       expect(screen.queryByRole('heading', { name: 'History' })).toBeNull();
@@ -125,16 +127,25 @@ describe('ThemeDetailPanel', () => {
       usePanelHandlers({ history: fadingThemeHistoryResponse });
       renderPanel();
 
-      expect(await screen.findByText('First seen Jul 8, 2026 · in 2 of 4 snapshots · fading')).not.toBeNull();
+      expect(await screen.findByText('First seen Jul 8, 2026 · in 2 snapshots · fading')).not.toBeNull();
     });
   });
 
-  describe('when the history spans more snapshots than the selected range', () => {
-    it('never reports more snapshots than the range contains', async () => {
-      usePanelHandlers({ history: longThemeHistoryResponse });
-      renderPanel({ snapshotTotal: 2 });
+  describe('when the history window is truncated by the fetch limit', () => {
+    it('reports a lower bound instead of claiming a first-seen date', async () => {
+      usePanelHandlers({ history: truncatedThemeHistoryResponse });
+      renderPanel();
 
-      expect(await screen.findByText('First seen Jul 8, 2026 · in 2 of 2 snapshots · growing')).not.toBeNull();
+      expect(await screen.findByText('Active since at least Jul 8, 2026 · in 3+ snapshots · growing')).not.toBeNull();
+    });
+  });
+
+  describe('when the newest point carries a strong rising trend while counts fall', () => {
+    it('trusts the pipeline trend over the raw counts', async () => {
+      usePanelHandlers({ history: risingTrendFallingCountsHistoryResponse });
+      renderPanel();
+
+      expect(await screen.findByText(/· growing$/)).not.toBeNull();
     });
   });
 
@@ -143,7 +154,7 @@ describe('ThemeDetailPanel', () => {
       usePanelHandlers({ history: singlePointThemeHistoryResponse });
       renderPanel();
 
-      expect(await screen.findByText('First seen Jul 15, 2026 · in 1 of 4 snapshots · steady')).not.toBeNull();
+      expect(await screen.findByText('First seen Jul 15, 2026 · in 1 snapshot · steady')).not.toBeNull();
       expect(screen.queryByTestId('trend-chart')).toBeNull();
     });
   });
