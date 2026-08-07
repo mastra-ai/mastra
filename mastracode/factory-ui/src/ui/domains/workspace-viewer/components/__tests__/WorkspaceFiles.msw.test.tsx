@@ -1,11 +1,11 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
@@ -48,7 +48,7 @@ function renderPanel() {
     }),
   );
 
-  renderWithProviders(
+  const { client } = renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/workspaces/${WORKSPACE}/threads/thread-1`]}>
       <Routes>
         <Route
@@ -64,7 +64,7 @@ function renderPanel() {
     </MemoryRouter>,
   );
 
-  return { listRequests };
+  return { client, listRequests };
 }
 
 describe('WorkspaceFiles', () => {
@@ -72,7 +72,7 @@ describe('WorkspaceFiles', () => {
     it('leaves the card closed and off the network until the header toggle asks for it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
-      const { listRequests } = renderPanel();
+      const { client, listRequests } = renderPanel();
 
       const card = await screen.findByTestId('workspace-files-card');
       const toggle = screen.getByRole('button', { name: 'Workspace files' });
@@ -84,7 +84,8 @@ describe('WorkspaceFiles', () => {
 
       expect(card).not.toHaveAttribute('inert');
       expect(await screen.findByRole('tab', { name: 'Files' })).toBeInTheDocument();
-      await waitFor(() => expect(listRequests).toEqual([{ workspacePath: WORKSPACE, threadId: 'thread-1' }]));
+      await waitForMutationsIdle(client);
+      expect(listRequests).toEqual([{ workspacePath: WORKSPACE, threadId: 'thread-1' }]);
     });
   });
 
