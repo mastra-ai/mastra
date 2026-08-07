@@ -510,11 +510,14 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       await writeFile(
         workerSourcePath(),
         [
-          `import { formatISO } from 'date-fns';`,
+          `import { format } from 'date-fns';`,
           ``,
           `export default { kind: 'voice-worker', entryUrl: import.meta.url };`,
           ``,
-          `console.log('VOICE_WORKER_OK ' + JSON.stringify({ entryUrl: import.meta.url, stamp: formatISO(new Date(0)) }));`,
+          // Build and format from local calendar fields on both sides, so the result is the
+          // same in every timezone. `formatISO(new Date(0))` would not be: date-fns formats
+          // in local time, so the epoch renders as 1969-12-31 anywhere west of UTC.
+          `console.log('VOICE_WORKER_OK ' + JSON.stringify({ entryUrl: import.meta.url, stamp: format(new Date(2020, 0, 2), 'yyyy-MM-dd') }));`,
           ``,
         ].join('\n'),
       );
@@ -566,7 +569,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         expect(stdout).toContain('VOICE_WORKER_OK');
         const payload = JSON.parse(stdout.slice(stdout.indexOf('{')));
         expect(payload.entryUrl.endsWith('/.mastra/output/voice-worker.mjs')).toBe(true);
-        expect(payload.stamp).toContain('1970-01-01');
+        expect(payload.stamp).toBe('2020-01-02');
       },
       timeout,
     );
