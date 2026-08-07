@@ -134,7 +134,11 @@ export function useBoardRuns({
     }
   };
 
-  const startRunForItem = async (item: WorkItem, role: RunAction['role'], { openExisting }: { openExisting: boolean }) => {
+  const startRunForItem = async (
+    item: WorkItem,
+    role: RunAction['role'],
+    { openExisting }: { openExisting: boolean },
+  ) => {
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];

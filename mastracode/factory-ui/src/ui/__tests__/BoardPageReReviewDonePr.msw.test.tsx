@@ -6,14 +6,14 @@
  * the old thread. Merged PRs don't get the action: there's nothing left to
  * review.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -63,11 +63,9 @@ const donePrWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
-/**
- * Stubs the review board's data endpoints and captures run-start requests.
- * The run start never resolves, keeping the test on the board (no thread
- * navigation).
- */
+const NEW_THREAD_ID = 'thread-rereview-1';
+
+/** Stubs the review board's data endpoints and captures run-start requests. */
 function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
   const startRequests: Array<Record<string, unknown>> = [];
 
@@ -126,10 +124,40 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () =>
       HttpResponse.json({ permissions: [] }),
     ),
+    // The thread page the successful kickoff navigates to.
+    http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session: reviewSession })),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/modes`, () => HttpResponse.json({ modes: [] })),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId`, () =>
+      HttpResponse.json({ id: SESSION_ID, resourceId: SESSION_ID, state: {} }),
+    ),
+    http.put(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/state`, () =>
+      HttpResponse.json({ ok: true }),
+    ),
+    http.get(
+      `${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/stream`,
+      () =>
+        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+    ),
+    http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions`, () =>
+      HttpResponse.json({ id: SESSION_ID, resourceId: SESSION_ID }),
+    ),
+    http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/thread`, () =>
+      HttpResponse.json({ ok: true }),
+    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/threads`, () =>
+      HttpResponse.json({ threads: [{ id: NEW_THREAD_ID, resourceId: SESSION_ID, title: 'Re-review PR #42' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/threads/:threadId/messages`, () =>
+      HttpResponse.json({ messages: [] }),
+    ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
       startRequests.push((await request.json()) as Record<string, unknown>);
-      await new Promise(() => {}); // never resolves — assertions read startRequests
-      return HttpResponse.json({});
+      return HttpResponse.json({
+        prepared: { workItemId: 'item-pr-42', threadId: NEW_THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+      });
     }),
   );
 
@@ -138,19 +166,23 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
 
 function renderReviewBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
 describe('Re-review action for open PRs in Done', () => {
   it('starts a fresh review run for a Done-lane open PR whose review slot is already used', async () => {
     const { startRequests } = stubReviewBoard();
     const user = userEvent.setup();
-    renderReviewBoard();
+    const { router, client } = renderReviewBoard();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Re-review' }));
 
-    await waitFor(() => expect(startRequests).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(startRequests).toHaveLength(1);
+    expect(router.state.location.pathname).toBe(
+      `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${NEW_THREAD_ID}`,
+    );
     expect(startRequests[0]).toMatchObject({
       sessionId: SESSION_ID,
       destinationStage: 'review',
