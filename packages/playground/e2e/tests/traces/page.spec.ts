@@ -2,12 +2,12 @@ import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb, expectRouteDocsLink } from '../__utils__/route-header';
 
-test.describe('Observability traces page', () => {
+test.describe('Traces page', () => {
   test.afterEach(async () => {
     await resetStorage();
   });
 
-  test.describe('when the observability page is visited', () => {
+  test.describe('when the traces page is visited', () => {
     test('shows the page header and docs link', async ({ page }) => {
       await page.goto('/traces');
 

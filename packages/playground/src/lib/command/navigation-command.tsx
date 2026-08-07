@@ -60,7 +60,7 @@ function getRouteBadge(sectionTitle?: string) {
   return sectionTitle;
 }
 
-function getObservabilityEntityPath(entity: string) {
+function getTracesEntityPath(entity: string) {
   return `/traces?entity=${encodeURIComponent(entity)}`;
 }
 
@@ -386,7 +386,7 @@ const ObservabilityResults = ({
       {agentEntries.length > 0 && (
         <CommandGroup heading="Agent Traces">
           {agentEntries.map(([id, agent]) => {
-            const path = getObservabilityEntityPath(id);
+            const path = getTracesEntityPath(id);
 
             return (
               <CommandPaletteItem
@@ -407,7 +407,7 @@ const ObservabilityResults = ({
       {workflowEntries.length > 0 && (
         <CommandGroup heading="Workflow Traces">
           {workflowEntries.map(([id, workflow]) => {
-            const path = getObservabilityEntityPath(workflow.name);
+            const path = getTracesEntityPath(workflow.name);
 
             return (
               <CommandPaletteItem
