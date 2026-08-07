@@ -1,5 +1,29 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.2
+
+### Minor Changes
+
+- Added `LinearIcon` and `SlackIcon` to the design system icon set, so apps can render the Linear and Slack brand marks without hand-rolling their own SVG. ([#20632](https://github.com/mastra-ai/mastra/pull/20632))
+
+  ```tsx
+  import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
+  import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
+
+  <LinearIcon className="text-icon3 size-4" />;
+  <SlackIcon className="size-4" />;
+  ```
+
+  Both take the same props as the other brand icons (`SVGProps<SVGSVGElement>`) and are sized with a class rather than a `size` prop. `GithubIcon` no longer emits a duplicate element id when the same page renders it many times.
+
+### Patch Changes
+
+- Updated dependencies [[`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/client-js@1.39.0-alpha.2
+  - @mastra/core@1.58.0-alpha.2
+  - @mastra/react@1.4.2-alpha.2
+  - @mastra/memory@1.26.1-alpha.1
+
 ## 48.0.0-alpha.1
 
 ### Minor Changes

@@ -16,8 +16,10 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
   const [viewingFile, setViewingFile] = useState(false);
 
   // Toggle records the layout it was made in — crossing the threshold discards it, so a popover
-  // left open closes itself and the docked card comes back.
-  const open = toggled?.whileDocked === canDock ? toggled.open : canDock;
+  // left open closes itself instead of reopening as a docked card.
+  // TODO(COR-1075): dock open by default again once file names and metadata come from the
+  // database — today the first paint would list the pod and wake a sandbox nobody asked for.
+  const open = toggled?.whileDocked === canDock ? toggled.open : false;
   const setOpen = (next: boolean) => setToggled({ whileDocked: canDock, open: next });
 
   const claimsSpace = open && canDock && Boolean(workspacePath);

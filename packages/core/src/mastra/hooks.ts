@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
+import { isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import { EntityType } from '../observability';
 import type { MastraStorage } from '../storage';
@@ -18,6 +19,10 @@ function toScorerTargetEntityType(entityType: string): EntityType | undefined {
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
+    if (!isScorerHookForMastra(hookData, mastra)) {
+      return;
+    }
+
     const storage = mastra.getStorage();
 
     if (!storage) {

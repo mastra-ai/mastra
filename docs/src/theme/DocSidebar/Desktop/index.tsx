@@ -6,7 +6,6 @@ import Logo from '@theme/Logo'
 import clsx from 'clsx'
 import React from 'react'
 import styles from './styles.module.css'
-import VersionControl from '@site/src/components/version-control'
 import { InverseCorner } from './InverseCorner'
 
 function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
@@ -40,9 +39,6 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
       />
       {hideOnScroll && <Logo tabIndex={-1} className={styles.sidebarLogo} />}
       <Content path={path} sidebar={sidebar} />
-      <footer className="px-4 py-4">
-        <VersionControl />
-      </footer>
       {hideable && <CollapseButton onClick={onCollapse} />}
     </div>
   )

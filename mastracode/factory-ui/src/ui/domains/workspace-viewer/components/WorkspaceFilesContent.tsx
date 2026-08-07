@@ -3,7 +3,7 @@ import { useWorkspaceFiles } from '../context/useWorkspaceFiles';
 import { WorkspaceViewerPanel } from './WorkspaceViewerPanel';
 
 export function WorkspaceFilesContent() {
-  const { workspacePath, setViewingFile } = useWorkspaceFiles();
+  const { open, workspacePath, setViewingFile } = useWorkspaceFiles();
   if (!workspacePath) return null;
 
   return (
@@ -11,6 +11,7 @@ export function WorkspaceFilesContent() {
       workspacePath={workspacePath}
       renderedPaths={renderedPaths}
       onExpandedChange={setViewingFile}
+      visible={open}
     />
   );
 }
