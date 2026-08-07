@@ -1162,6 +1162,12 @@ article p {
     gap: 2rem;
   }
 
+  .menu__caret {
+    &::before {
+      background: var(--ifm-menu-link-sublist-icon) center;
+    }
+  }
+
   .menu__link {
     &:after {
       background: var(--ifm-menu-link-sublist-icon) center;
