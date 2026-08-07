@@ -81,6 +81,7 @@ import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
+import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
@@ -256,6 +257,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
+  'permission-request-hook': permissionRequestHookScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
   'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,

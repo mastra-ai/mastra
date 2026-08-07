@@ -369,12 +369,15 @@ export async function materializeRepo(options: {
         }
         // The workdir was left on a session's working branch that can't be
         // fast-forwarded (diverged from upstream, no upstream, or detached
-        // HEAD). That branch holds the session's local work — never rebase or
-        // reset it here. The checkout is still perfectly usable; leave it
-        // as-is and let the session reconcile with the remote itself.
+        // HEAD), or its configured upstream ref was deleted after merge.
+        // That checkout still holds usable work — never rebase or reset it
+        // here. Leave it as-is and let the session reconcile with the remote
+        // itself.
         reportProgress(onProgress, {
           phase: 'pulling',
-          message: 'Workspace has local changes that diverge from the remote — keeping them as-is.',
+          message: isDeletedUpstreamRef(pull)
+            ? 'Workspace could not be updated from its remote — keeping the existing checkout as-is.'
+            : 'Workspace has local changes that diverge from the remote — keeping them as-is.',
         });
       }
     }
@@ -549,14 +552,24 @@ async function scrubRemote(
  * or an older session worked directly in the shared checkout), which makes
  * git refuse the merge outright. A checkout carrying `pull.rebase` in its git
  * config refuses for the same reason but says so in rebase's words instead of
- * merge's. In all of these cases the checkout is intact and may hold real
- * work; materialization must keep it as-is rather than fail the workspace
- * open — and must never discard the local state to force the pull through.
+ * merge's. After a PR merges with branch auto-delete, the configured upstream
+ * ref may also be gone (`no such ref was fetched` / `couldn't find remote ref`);
+ * there is nothing to pull and the checkout is still intact. In all of these
+ * cases materialization must keep it as-is rather than fail the workspace open
+ * — and must never discard the local state to force the pull through.
  */
+function isDeletedUpstreamRef(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /no such ref was fetched|couldn't find remote ref/i.test(output);
+}
+
 function isBenignNonFastForward(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge|cannot pull with rebase|cannot rebase: You have unstaged changes|Your index contains uncommitted changes/i.test(
-    output,
+  return (
+    isDeletedUpstreamRef(result) ||
+    /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge|cannot pull with rebase|cannot rebase: You have unstaged changes|Your index contains uncommitted changes/i.test(
+      output,
+    )
   );
 }
 

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -35,18 +35,20 @@ afterEach(() => {
 });
 
 function renderPanel() {
+  const listedRoots: string[] = [];
   server.use(
-    http.get(LIST_URL, () =>
-      HttpResponse.json({
+    http.get(LIST_URL, ({ request }) => {
+      listedRoots.push(new URL(request.url).searchParams.get('root') ?? '');
+      return HttpResponse.json({
         workspacePath: WORKSPACE,
         root: '.artifacts',
         rootPath: `${WORKSPACE}/.artifacts`,
         entries: [],
-      }),
-    ),
+      });
+    }),
   );
 
-  return renderWithProviders(
+  renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/workspaces/${WORKSPACE}/threads/thread-1`]}>
       <Routes>
         <Route
@@ -61,24 +63,27 @@ function renderPanel() {
       </Routes>
     </MemoryRouter>,
   );
+
+  return { listedRoots };
 }
 
 describe('WorkspaceFiles', () => {
   describe('given a chat wide enough for the card beside the transcript', () => {
-    it('docks the card without interaction, and the header toggle hides it', async () => {
+    it('leaves the card closed and off the network until the header toggle asks for it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
-      renderPanel();
+      const { listedRoots } = renderPanel();
 
-      expect(await screen.findByRole('button', { name: 'Artifacts' })).toBeInTheDocument();
-      const card = screen.getByTestId('workspace-files-card');
-      expect(card).not.toHaveAttribute('inert');
-
+      const card = await screen.findByTestId('workspace-files-card');
       const toggle = screen.getByRole('button', { name: 'Workspace files' });
-      await user.click(toggle);
-
       expect(card).toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      expect(listedRoots).toEqual([]);
+
+      await user.click(toggle);
+
+      expect(card).not.toHaveAttribute('inert');
+      await waitFor(() => expect(listedRoots).toEqual(['.artifacts']));
     });
   });
 

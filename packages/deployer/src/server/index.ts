@@ -56,7 +56,13 @@ type Variables = HonoVariables & {
 type ApiRouteMiddleware = Extract<Exclude<ApiRoute['middleware'], undefined>, Function>;
 
 const DEFAULT_CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
-const DEFAULT_CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'];
+const DEFAULT_CORS_ALLOW_HEADERS = [
+  'Content-Type',
+  'Authorization',
+  'A2A-Version',
+  'x-mastra-client-type',
+  'x-mastra-dev-playground',
+];
 const DEFAULT_CORS_EXPOSE_HEADERS = ['Content-Length', 'X-Requested-With'];
 
 function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsDefault: boolean) {

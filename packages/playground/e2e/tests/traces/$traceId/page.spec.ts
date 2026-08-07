@@ -191,15 +191,7 @@ test.describe('Trace detail page', () => {
     test('keeps the timeline and span details independently scrollable within the page', async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 800 });
       await mockLongTrace(page);
-      // Warm the mocked trace query, then remount the route with the final span selected through the URL.
-      await page.goto(`/traces/${LONG_TRACE_ID}`);
-      await expect(page.getByRole('button', { name: 'tool call 60', exact: true })).toBeAttached();
-      await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Traces' }).click();
-      await expect(page).toHaveURL(/\/observability$/);
-      await page.evaluate(url => {
-        window.history.pushState(null, '', url);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }, `/traces/${LONG_TRACE_ID}?spanId=${SELECTED_SPAN_ID}`);
+      await page.goto(`/traces/${LONG_TRACE_ID}?spanId=${SELECTED_SPAN_ID}`);
       await expect(page).toHaveURL(new RegExp(`spanId=${SELECTED_SPAN_ID}`));
 
       const timelinePanel = page.locator('section').filter({

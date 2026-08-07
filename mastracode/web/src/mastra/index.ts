@@ -27,6 +27,7 @@ import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platfo
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
@@ -78,13 +79,38 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Factory dev is auth-less by default. Production can opt out explicitly;
-// otherwise MastraFactory installs its platform-backed auth provider.
+// Auth selection, ordered by how explicit the operator's intent is:
+//   1. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
+//   2. MASTRA_SHARED_API_URL — explicit platform deferral; identity rides the
+//      shared platform API (`.env.schema` names this the highest-precedence
+//      auth config), so it wins even over a configured WORKOS_* pair — but
+//      loudly, because silently ignoring sign-in config is how self-hosted
+//      logins end up 302-ing somewhere that rejects their redirect_uri.
+//   3. WORKOS_API_KEY + WORKOS_CLIENT_ID — self-managed WorkOS sign-in. The
+//      constructor reads the rest of the WORKOS_* group from env, and
+//      `init()` derives the /auth/callback redirect from the deployment's
+//      publicUrl when WORKOS_REDIRECT_URI is unset. `fetchMemberships` lets
+//      token auth resolve the user's organization so the bootstrapped
+//      personal org works without re-auth. Note MASTRA_PLATFORM_SECRET_KEY
+//      does NOT defer to the platform here: it is a compute/integration
+//      credential (sandboxes, GitHub/Linear slots), not an identity signal —
+//      platform compute plus self-managed sign-in is a supported combination.
+//   4. Nothing configured — leave undefined and MastraFactory installs its
+//      platform-backed default provider.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
+const workosConfigured = Boolean(process.env.WORKOS_API_KEY?.trim() && process.env.WORKOS_CLIENT_ID?.trim());
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {
   auth = null;
+} else if (process.env.MASTRA_SHARED_API_URL?.trim()) {
+  if (workosConfigured) {
+    console.warn(
+      '[Auth] WORKOS_API_KEY/WORKOS_CLIENT_ID are set but ignored: MASTRA_SHARED_API_URL takes precedence, so sign-in defers to the platform. Unset MASTRA_SHARED_API_URL to use self-managed WorkOS auth.',
+    );
+  }
+} else if (workosConfigured) {
+  auth = new MastraAuthWorkos({ fetchMemberships: true });
 }
 
 // Direct GitHub App fallback: when the platform-backed integration isn't in
@@ -264,6 +290,11 @@ export const factory = new MastraFactory({
     workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
     // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
+  },
+  // Per-replica cap on concurrent Factory background dispatches. Unset means
+  // the dispatcher default; invalid and non-positive values are ignored.
+  dispatcher: {
+    maxInFlight: positiveInt(process.env.MASTRACODE_DISPATCH_MAX_IN_FLIGHT),
   },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB (and
