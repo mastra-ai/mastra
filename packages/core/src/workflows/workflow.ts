@@ -3717,15 +3717,12 @@ export class Run<
       } catch {}
     });
 
-    this.#observerHandlers.push(async () => {
+    this.#observerHandlers.push(() => {
       unwatch();
-      try {
-        await writer.close();
-      } catch (err) {
+      void writer.close().catch(err => {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
+      });
+      writer.releaseLock();
     });
 
     return {

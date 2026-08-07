@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
-import type { ObservabilityExporter, TracingEvent, ExportedSpan } from '@mastra/core/observability';
+import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -13,13 +13,23 @@ import { ModelSpanTracker } from './model-tracing';
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
   events: TracingEvent[] = [];
+  metricEvents: MetricEvent[] = [];
 
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
   }
 
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.metricEvents.push(event);
+  }
+
   async shutdown(): Promise<void> {
     this.events = [];
+    this.metricEvents = [];
+  }
+
+  getMetricsByName(name: string) {
+    return this.metricEvents.filter(event => event.metric.name === name).map(event => event.metric);
   }
 
   getSpansByName(name: string): ExportedSpan[] {
@@ -2064,6 +2074,12 @@ describe('ModelSpanTracker', () => {
         });
 
         expect(span.attributes.costContext).toBeUndefined();
+        expect(testExporter.getMetricsByName('mastra_model_total_input_tokens')[0]?.costContext).toMatchObject({
+          provider: 'vercel',
+          model: 'claude-haiku-4-5',
+          estimatedCost: expect.any(Number),
+          costMetadata: { pricing_id: expect.any(String) },
+        });
       });
 
       it.each([-0.0008, 'invalid-cost', NaN, Infinity])(
