@@ -158,7 +158,7 @@ export function buildPreview(input: unknown) {
 }
 ```
 
-The casts were not incidental, and deleting them without moving the code would not have worked. A ternary is an expression: a `typeof` or `Array.isArray` test in its condition narrows nothing for the branch that follows, so `as` is the only way to reach the field the condition just proved was there. Guard clauses put the test and the use in the same control flow, the compiler narrows, and the casts have nothing left to do. Dense conditional expressions and `as` clusters travel together — when you see one, look for the other (`types-no-type-assertions`).
+The casts were not incidental, and deleting them in place would not have compiled. `typeof value === 'object'` narrows `unknown` to `object`, which has no properties, so reading `.messages` needs an assertion — and because narrowing tracks references rather than expressions, a condition written over `(value as X).messages` proves nothing for the branch, which asserts a second time. The predicate is what removes both. Ternary branches narrow like any other control flow: the conditional never forced the casts, the missing predicate did. Extraction repairs the other half, the density. This shape usually needs both repairs, so when you meet an `as` cluster inside a dense conditional, look for the missing predicate too (`types-no-type-assertions`).
 
 Extracting is not the same as wrapping. A ternary that picks between two values on one line is fine and gains nothing from a helper; the helper would add a name, an indirection, and often a type argument, without removing any work from the callsite.
 
