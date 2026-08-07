@@ -310,7 +310,7 @@ const agentStep = createStep(testAgent, {
     name: 'scorers',
     type: 'MastraScorers | (({ requestContext }) => MastraScorers | Promise<MastraScorers>)',
     description:
-      "Scorers that run automatically after the step completes successfully. Each scorer evaluates the step's own input and output, and the results are stored and attached to the step's trace. Provide a map of `{ [name]: { scorer, sampling? } }`, or a function that returns one. Scoring runs asynchronously and does not block the workflow. See [Scoring step output](#scoring-step-output).",
+      "Scorers that run automatically after the step completes successfully. Each scorer evaluates the step's own input and output, and the results are stored and attached to the step's trace. Provide a map of `{ [name]: { scorer, sampling? } }`, or a function that returns one. Scoring runs asynchronously and doesn't block the workflow. See [Scoring step output](#scoring-step-output).",
     required: false,
   },
   {
@@ -333,7 +333,7 @@ const agentStep = createStep(testAgent, {
 
 Attach `scorers` to a step to evaluate that step's output automatically, at the point it runs, instead of only scoring the workflow's final answer. This is useful for multi-step and RAG workflows, where you want to see which step degraded quality, for example whether a retrieval step returned relevant chunks before later steps reason over them.
 
-Each scorer receives the step's own `input` and `output`, runs asynchronously after the step succeeds, and stores its result against the step's trace. Use `sampling` to control how often a scorer runs.
+Each scorer receives the step's own `input` and `output`. Scoring runs asynchronously after the step succeeds, and the result is stored against the step's trace. Use `sampling` to control how often a scorer runs.
 
 The following example attaches a scorer to a retrieval step so every execution is scored:
 
