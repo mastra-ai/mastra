@@ -77,11 +77,11 @@ describe('parseFilesystemCaptureFiles', () => {
         ' M src/app.ts\0?? notes/todo.md\0R  src/renamed.ts\0src/old.ts\0C  copy.ts\0source.ts\0 D removed.ts\0DD gone.ts\0UU conflict.ts\0',
       ),
     ).toEqual([
-      { path: 'conflict.ts', filename: 'conflict.ts' },
-      { path: 'copy.ts', filename: 'copy.ts' },
-      { path: 'notes/todo.md', filename: 'todo.md' },
-      { path: 'src/app.ts', filename: 'app.ts' },
-      { path: 'src/renamed.ts', filename: 'renamed.ts' },
+      { path: 'conflict.ts' },
+      { path: 'copy.ts' },
+      { path: 'notes/todo.md' },
+      { path: 'src/app.ts' },
+      { path: 'src/renamed.ts' },
     ]);
   });
 });
@@ -111,11 +111,7 @@ describe('captureSessionFilesystem', () => {
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      files: [
-        { path: '.artifacts/hello-world.md', filename: 'hello-world.md' },
-        { path: 'new.txt', filename: 'new.txt' },
-        { path: 'src/app.ts', filename: 'app.ts' },
-      ],
+      files: [{ path: '.artifacts/hello-world.md' }, { path: 'new.txt' }, { path: 'src/app.ts' }],
     });
   });
 

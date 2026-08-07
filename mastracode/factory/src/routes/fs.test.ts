@@ -247,10 +247,10 @@ function makeFleet(
 
 function makeSessionFs({
   session = makeSession(),
-  files = [{ path: 'src/agent.ts', filename: 'agent.ts' }],
+  files = [{ path: 'src/agent.ts' }],
 }: {
   session?: SourceControlSession;
-  files?: Array<{ path: string; filename: string }>;
+  files?: Array<{ path: string }>;
 } = {}) {
   const ensureUser = vi.fn(async () => undefined);
   const listFiles = vi.fn(async () => files);
@@ -291,7 +291,7 @@ describe('persisted session workspace files routes', () => {
     expect(await response.json()).toEqual({
       workspacePath: makeSession().sessionId,
       threadId: 'thread-1',
-      files: [{ path: 'src/agent.ts', filename: 'agent.ts' }],
+      files: [{ path: 'src/agent.ts' }],
     });
     expect(ensureUser).toHaveBeenCalledTimes(1);
     expect(listFiles).toHaveBeenCalledWith({ resourceId: makeSession().sessionId, threadId: 'thread-1' });

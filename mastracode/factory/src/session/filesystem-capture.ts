@@ -36,7 +36,7 @@ export function parseFilesystemCaptureFiles(output: string): FilesystemFile[] {
     if (path.startsWith('./')) path = path.slice(2);
     if (!path || (!code.includes('U') && code.includes('D') && !moved)) continue;
 
-    files.set(path, { path, filename: path.slice(path.lastIndexOf('/') + 1) });
+    files.set(path, { path });
   }
 
   return [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path));
@@ -75,10 +75,7 @@ export async function captureSessionFilesystem(
     for (const path of artifacts.stdout.split('\0')) {
       const normalizedPath = path.replace(/^\.\//, '');
       if (normalizedPath) {
-        files.set(normalizedPath, {
-          path: normalizedPath,
-          filename: normalizedPath.slice(normalizedPath.lastIndexOf('/') + 1),
-        });
+        files.set(normalizedPath, { path: normalizedPath });
       }
     }
 

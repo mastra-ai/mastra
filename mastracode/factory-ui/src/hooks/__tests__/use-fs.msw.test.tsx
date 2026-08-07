@@ -186,7 +186,7 @@ describe('useWorkspaceFiles', () => {
           return HttpResponse.json({
             workspacePath: seenWorkspacePath,
             threadId: seenThreadId,
-            files: [{ path: 'src/agent.ts', filename: 'agent.ts' }],
+            files: [{ path: 'src/agent.ts' }],
           });
         }),
       );
@@ -196,7 +196,7 @@ describe('useWorkspaceFiles', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(seenWorkspacePath).toBe('session-1');
       expect(seenThreadId).toBe(THREAD);
-      expect(result.current.data?.files).toEqual([{ path: 'src/agent.ts', filename: 'agent.ts' }]);
+      expect(result.current.data?.files).toEqual([{ path: 'src/agent.ts' }]);
     });
   });
 });

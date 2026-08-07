@@ -95,7 +95,8 @@ export function useWorkspaceFiles(
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
-  const url = workspacePath && threadId ? `/web/workspace/files?${new URLSearchParams({ workspacePath, threadId })}` : undefined;
+  const url =
+    workspacePath && threadId ? `/web/workspace/files?${new URLSearchParams({ workspacePath, threadId })}` : undefined;
   return useQuery<WorkspaceFilesListing>({
     queryKey: queryKeys.workspaceFiles(workspacePath, threadId),
     enabled,

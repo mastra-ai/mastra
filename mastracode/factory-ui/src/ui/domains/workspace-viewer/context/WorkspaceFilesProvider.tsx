@@ -25,7 +25,9 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
   const claimsSpace = open && canDock && Boolean(workspacePath);
 
   return (
-    <WorkspaceFilesContext.Provider value={{ open, setOpen, workspacePath, threadId, viewingFile, setViewingFile, canDock }}>
+    <WorkspaceFilesContext.Provider
+      value={{ open, setOpen, workspacePath, threadId, viewingFile, setViewingFile, canDock }}
+    >
       <div
         ref={chatRef}
         className={cn(

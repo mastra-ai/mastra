@@ -20,10 +20,7 @@ function installHandlers() {
       return HttpResponse.json({
         workspacePath: url.searchParams.get('workspacePath'),
         threadId: url.searchParams.get('threadId'),
-        files: [
-          { path: 'src/agent.ts', filename: 'agent.ts' },
-          { path: 'README.md', filename: 'README.md' },
-        ],
+        files: [{ path: 'src/agent.ts' }, { path: 'README.md' }],
       });
     }),
     http.get(FILE_URL, ({ request }) => {
@@ -74,9 +71,7 @@ describe('WorkspaceViewerPanel', () => {
   describe('when no terminal file capture exists', () => {
     it('explains that the file list is captured after a run ends', async () => {
       server.use(
-        http.get(FILES_URL, () =>
-          HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [] }),
-        ),
+        http.get(FILES_URL, () => HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [] })),
       );
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);

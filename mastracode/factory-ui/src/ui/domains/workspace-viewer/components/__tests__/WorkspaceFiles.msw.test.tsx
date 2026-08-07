@@ -39,7 +39,10 @@ function renderPanel() {
   server.use(
     http.get(LIST_URL, ({ request }) => {
       const url = new URL(request.url);
-      listRequests.push({ workspacePath: url.searchParams.get('workspacePath'), threadId: url.searchParams.get('threadId') });
+      listRequests.push({
+        workspacePath: url.searchParams.get('workspacePath'),
+        threadId: url.searchParams.get('threadId'),
+      });
       return HttpResponse.json({
         workspacePath: WORKSPACE,
         threadId: 'thread-1',

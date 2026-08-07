@@ -3,7 +3,18 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { File, FileCode, FileDiff, FileJson, FileText, Folder, FolderOpen, Image, NotepadText, RefreshCw } from 'lucide-react';
+import {
+  File,
+  FileCode,
+  FileDiff,
+  FileJson,
+  FileText,
+  Folder,
+  FolderOpen,
+  Image,
+  NotepadText,
+  RefreshCw,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -45,7 +56,6 @@ interface WorkspaceTreeNode {
 
 interface WorkspaceFileEntry {
   path: string;
-  filename: string;
 }
 
 function ensureDirectory(nodes: WorkspaceTreeNode[], path: string, name: string): WorkspaceTreeNode {
@@ -65,7 +75,7 @@ function addFile(nodes: WorkspaceTreeNode[], file: WorkspaceFileEntry) {
   segments.forEach((segment, index) => {
     currentPath = currentPath ? `${currentPath}/${segment}` : segment;
     if (index === segments.length - 1) {
-      siblings.push({ path: file.path, name: file.filename, type: 'file', children: [] });
+      siblings.push({ path: file.path, name: segment, type: 'file', children: [] });
       return;
     }
     siblings = ensureDirectory(siblings, currentPath, segment).children;

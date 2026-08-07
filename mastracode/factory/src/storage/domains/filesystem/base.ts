@@ -1,11 +1,10 @@
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema } from '@mastra/core/storage';
 
-const FILES = 'filesystem_files';
+const SNAPSHOTS = 'filesystem_snapshots';
 
 export interface FilesystemFile {
   path: string;
-  filename: string;
 }
 
 export interface ReplaceFilesystemFilesInput {
@@ -16,29 +15,29 @@ export interface ReplaceFilesystemFilesInput {
 
 export const FILESYSTEM_SCHEMAS: CollectionSchema[] = [
   {
-    name: FILES,
+    name: SNAPSHOTS,
     columns: {
       id: { type: 'uuid-pk' },
       resource_id: { type: 'text' },
       thread_id: { type: 'text' },
-      path: { type: 'text' },
-      filename: { type: 'text' },
+      files: { type: 'json' },
+      captured_at: { type: 'timestamp' },
     },
     uniqueIndexes: [
       {
-        name: 'filesystem_files_resource_thread_path_unique',
-        columns: ['resource_id', 'thread_id', 'path'],
+        name: 'filesystem_snapshots_resource_thread_unique',
+        columns: ['resource_id', 'thread_id'],
       },
     ],
   },
 ];
 
-interface FilesystemFileDbRow extends Record<string, unknown> {
+interface FilesystemSnapshotDbRow extends Record<string, unknown> {
   id: string;
   resource_id: string;
   thread_id: string;
-  path: string;
-  filename: string;
+  files: FilesystemFile[];
+  captured_at: Date;
 }
 
 function assertIdentifier(value: string, label: string): void {
@@ -65,17 +64,9 @@ function validateFiles(files: FilesystemFile[]): void {
 
   for (const file of files) {
     assertRelativePath(file.path);
-    if (!file.filename.trim()) throw new Error('[FilesystemStorage] filename must not be empty.');
-    if (file.filename !== file.path.slice(file.path.lastIndexOf('/') + 1)) {
-      throw new Error('[FilesystemStorage] filename must match the leaf of path.');
-    }
     if (paths.has(file.path)) throw new Error(`[FilesystemStorage] duplicate file path: ${file.path}`);
     paths.add(file.path);
   }
-}
-
-function toFilesystemFile(row: FilesystemFileDbRow): FilesystemFile {
-  return { path: row.path, filename: row.filename };
 }
 
 export class FilesystemStorage extends FactoryStorageDomain {
@@ -88,37 +79,32 @@ export class FilesystemStorage extends FactoryStorageDomain {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.ops.deleteMany(FILES, {});
+    await this.ops.deleteMany(SNAPSHOTS, {});
   }
 
   async replaceFiles(input: ReplaceFilesystemFilesInput): Promise<void> {
     assertScope(input);
     validateFiles(input.files);
 
-    await this.storage.withTransaction(async ops => {
-      await ops.deleteMany(FILES, { resource_id: input.resourceId, thread_id: input.threadId });
-      for (const file of input.files) {
-        await ops.insertOne<FilesystemFileDbRow>(FILES, {
-          resource_id: input.resourceId,
-          thread_id: input.threadId,
-          path: file.path,
-          filename: file.filename,
-        });
-      }
+    await this.ops.upsertOne<FilesystemSnapshotDbRow>(SNAPSHOTS, ['resource_id', 'thread_id'], {
+      resource_id: input.resourceId,
+      thread_id: input.threadId,
+      files: input.files.toSorted((a, b) => a.path.localeCompare(b.path)),
+      captured_at: new Date(),
     });
   }
 
   async listFiles(args: { resourceId: string; threadId: string }): Promise<FilesystemFile[]> {
     assertScope(args);
-    const files = await this.ops.findMany<FilesystemFileDbRow>(FILES, {
+    const snapshot = await this.ops.findOne<FilesystemSnapshotDbRow>(SNAPSHOTS, {
       resource_id: args.resourceId,
       thread_id: args.threadId,
     });
-    return files.map(toFilesystemFile).toSorted((a, b) => a.path.localeCompare(b.path));
+    return snapshot?.files ?? [];
   }
 
   async deleteFiles(args: { resourceId: string; threadId: string }): Promise<number> {
     assertScope(args);
-    return this.ops.deleteMany(FILES, { resource_id: args.resourceId, thread_id: args.threadId });
+    return this.ops.deleteMany(SNAPSHOTS, { resource_id: args.resourceId, thread_id: args.threadId });
   }
 }

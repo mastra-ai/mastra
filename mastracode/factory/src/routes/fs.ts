@@ -80,7 +80,7 @@ export interface WorkspaceFilesListing {
   workspacePath: string;
   /** The agent thread whose terminal file list was captured. */
   threadId: string;
-  files: Array<{ path: string; filename: string }>;
+  files: Array<{ path: string }>;
 }
 
 export type WorkspaceChangeStatus =
