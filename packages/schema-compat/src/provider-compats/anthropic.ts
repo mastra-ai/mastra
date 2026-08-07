@@ -19,7 +19,7 @@ import { standardSchemaToJSONSchema, toStandardSchema } from '../standard-schema
 import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.types';
 import type { ModelInformation } from '../types';
 import { isZodType } from '../utils';
-import { isIntersection, isNull, isNullable, isOptional } from '../zodTypes';
+import { isIntersection, isNull } from '../zodTypes';
 
 export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -199,174 +199,239 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
    * Preserves object-level refinements and wrapper semantics unlike full-tree processZodType.
    */
   #stripHaikuStringLengthConstraints(value: ZodType): ZodType {
+    const schemas = new WeakMap<object, ZodType>();
     if ('_zod' in value) {
-      return this.#stripHaikuStringLengthConstraintsV4(value);
+      return this.#stripHaikuStringLengthConstraintsV4(value, schemas);
     }
 
-    return this.#stripHaikuStringLengthConstraintsV3(value);
+    return this.#stripHaikuStringLengthConstraintsV3(value, schemas);
   }
 
-  #stripHaikuStringLengthConstraintsV4(value: ZodType): ZodType {
+  #stripHaikuStringLengthConstraintsV4(value: ZodType, schemas: WeakMap<object, ZodType>): ZodType {
+    const cached = schemas.get(value as object);
+    if (cached) {
+      return cached;
+    }
+
     const schema = value as any;
+    const def = schema._zod.def;
+    const strip = (child: ZodType) => this.#stripHaikuStringLengthConstraintsV4(child, schemas);
+    let nextDef = def;
 
-    if (this.isString(value)) {
-      return this.defaultZodStringHandler(value, ['max', 'min']);
-    }
-
-    if (isOptional(z)(value)) {
-      const innerType = schema._zod.def.innerType as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV4(innerType);
-      return stripped === innerType ? value : stripped.optional();
-    }
-
-    if (isNullable(z)(value)) {
-      const innerType = schema._zod.def.innerType as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV4(innerType);
-      return stripped === innerType ? value : stripped.nullable();
-    }
-
-    if (schema.constructor.name === 'ZodDefault') {
-      const innerType = schema._zod.def.innerType as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV4(innerType);
-      if (stripped === innerType) {
-        return value;
+    const replace = (key: string) => {
+      const current = def[key] as ZodType | undefined;
+      if (!current) {
+        return;
       }
-      return stripped.default(schema._zod.def.defaultValue);
-    }
+      const stripped = strip(current);
+      if (stripped !== current) {
+        nextDef = { ...nextDef, [key]: stripped };
+      }
+    };
 
-    if (this.isArr(value)) {
-      const element = schema._zod.def.element as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV4(element);
-      return stripped === element ? value : z.array(stripped as any);
-    }
-
-    if (this.isUnion(value)) {
-      const options = schema._zod.def.options as ZodType[];
-      let changed = false;
-      const strippedOptions = options.map(option => {
-        const stripped = this.#stripHaikuStringLengthConstraintsV4(option);
-        if (stripped !== option) {
-          changed = true;
+    switch (def.type) {
+      case 'string': {
+        const checks = (def.checks ?? []).filter(
+          (check: any) => check._zod.def.check !== 'min_length' && check._zod.def.check !== 'max_length',
+        );
+        if (checks.length !== (def.checks?.length ?? 0)) {
+          nextDef = { ...def, checks };
         }
-        return stripped;
-      });
-      return changed ? z.union(strippedOptions as any) : value;
-    }
-
-    if (this.isObj(value)) {
-      const shape = schema.shape as Record<string, ZodType>;
-      let changed = false;
-      const nextShape: Record<string, ZodType> = {};
-
-      for (const key in shape) {
-        const stripped = this.#stripHaikuStringLengthConstraintsV4(shape[key]!);
-        nextShape[key] = stripped;
-        if (stripped !== shape[key]) {
-          changed = true;
+        break;
+      }
+      case 'object': {
+        const shape = def.shape as Record<string, ZodType>;
+        const nextShape = Object.fromEntries(Object.entries(shape).map(([key, child]) => [key, strip(child)]));
+        if (Object.keys(shape).some(key => nextShape[key] !== shape[key])) {
+          nextDef = { ...nextDef, shape: nextShape };
         }
+        replace('catchall');
+        break;
       }
-
-      if (!changed) {
-        return value;
-      }
-
-      let nextObject = z.object(nextShape as any);
-      for (const check of schema._zod.def.checks ?? []) {
-        nextObject = nextObject.check(check);
-      }
-      return nextObject;
-    }
-
-    return value;
-  }
-
-  #stripHaikuStringLengthConstraintsV3(value: ZodType): ZodType {
-    const schema = value as any;
-    const typeName = schema._def?.typeName;
-
-    if (typeName === 'ZodString' && this.isString(value)) {
-      return this.defaultZodStringHandler(value, ['max', 'min']);
-    }
-
-    if (typeName === 'ZodOptional') {
-      const innerType = schema._def.innerType as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
-      return stripped === innerType ? value : stripped.optional();
-    }
-
-    if (typeName === 'ZodNullable') {
-      const innerType = schema._def.innerType as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
-      return stripped === innerType ? value : stripped.nullable();
-    }
-
-    if (typeName === 'ZodDefault') {
-      const innerType = schema._def.innerType as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
-      if (stripped === innerType) {
-        return value;
-      }
-      return stripped.default(schema._def.defaultValue());
-    }
-
-    if (typeName === 'ZodArray') {
-      const element = schema._def.type as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV3(element);
-      return stripped === element ? value : z.array(stripped as any);
-    }
-
-    if (typeName === 'ZodUnion') {
-      const options = schema._def.options as ZodType[];
-      let changed = false;
-      const strippedOptions = options.map(option => {
-        const stripped = this.#stripHaikuStringLengthConstraintsV3(option);
-        if (stripped !== option) {
-          changed = true;
+      case 'array':
+        replace('element');
+        break;
+      case 'union': {
+        const options = def.options as ZodType[];
+        const nextOptions = options.map(strip);
+        if (nextOptions.some((option, index) => option !== options[index])) {
+          nextDef = { ...nextDef, options: nextOptions };
         }
-        return stripped;
-      });
-      return changed ? z.union(strippedOptions as any) : value;
-    }
-
-    if (typeName === 'ZodObject' && this.isObj(value)) {
-      const shape = schema.shape as Record<string, ZodType>;
-      let changed = false;
-      const nextShape: Record<string, ZodType> = {};
-
-      for (const key in shape) {
-        const stripped = this.#stripHaikuStringLengthConstraintsV3(shape[key]!);
-        nextShape[key] = stripped;
-        if (stripped !== shape[key]) {
-          changed = true;
+        break;
+      }
+      case 'intersection':
+        replace('left');
+        replace('right');
+        break;
+      case 'tuple': {
+        const items = def.items as ZodType[];
+        const nextItems = items.map(strip);
+        if (nextItems.some((item, index) => item !== items[index])) {
+          nextDef = { ...nextDef, items: nextItems };
         }
+        replace('rest');
+        break;
       }
-
-      return changed ? z.object(nextShape as any) : value;
+      case 'record':
+      case 'map':
+        replace('keyType');
+        replace('valueType');
+        break;
+      case 'set':
+        replace('valueType');
+        break;
+      case 'optional':
+      case 'nullable':
+      case 'default':
+      case 'prefault':
+      case 'nonoptional':
+      case 'success':
+      case 'catch':
+      case 'readonly':
+        replace('innerType');
+        break;
+      case 'pipe':
+        replace('in');
+        replace('out');
+        break;
+      case 'promise':
+        replace('innerType');
+        break;
+      case 'lazy': {
+        nextDef = { ...def, getter: () => strip(def.getter()) };
+        break;
+      }
     }
 
-    if (typeName === 'ZodEffects') {
-      const innerType = schema._def.schema as ZodType;
-      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
-      if (stripped === innerType) {
-        return value;
-      }
-
-      const effect = schema._def.effect;
-      if (effect.type === 'refinement') {
-        return (stripped as any).refine(effect.refinement, {
-          message: effect.message,
-          path: effect.path,
-        });
-      }
-
-      if (effect.type === 'transform') {
-        return (stripped as any).transform(effect.transform);
-      }
-
+    if (nextDef === def) {
+      schemas.set(value as object, value);
       return value;
     }
 
-    return value;
+    let stripped = schema.clone(nextDef) as ZodType;
+    const metadata = schema.meta();
+    if (metadata) {
+      stripped = (stripped as any).meta(metadata);
+    }
+    schemas.set(value as object, stripped);
+    return stripped;
+  }
+
+  #stripHaikuStringLengthConstraintsV3(value: ZodType, schemas: WeakMap<object, ZodType>): ZodType {
+    const cached = schemas.get(value as object);
+    if (cached) {
+      return cached;
+    }
+
+    const schema = value as any;
+    const def = schema._def;
+    const strip = (child: ZodType) => this.#stripHaikuStringLengthConstraintsV3(child, schemas);
+    let nextDef = def;
+
+    const replace = (key: string) => {
+      const current = def[key] as ZodType | undefined;
+      if (!current) {
+        return;
+      }
+      const stripped = strip(current);
+      if (stripped !== current) {
+        nextDef = { ...nextDef, [key]: stripped };
+      }
+    };
+
+    switch (def.typeName) {
+      case 'ZodString': {
+        const checks = (def.checks ?? []).filter((check: any) => check.kind !== 'min' && check.kind !== 'max');
+        if (checks.length !== (def.checks?.length ?? 0)) {
+          nextDef = { ...def, checks };
+        }
+        break;
+      }
+      case 'ZodObject': {
+        const shape = def.shape() as Record<string, ZodType>;
+        const nextShape = Object.fromEntries(Object.entries(shape).map(([key, child]) => [key, strip(child)]));
+        if (Object.keys(shape).some(key => nextShape[key] !== shape[key])) {
+          nextDef = { ...nextDef, shape: () => nextShape };
+        }
+        replace('catchall');
+        break;
+      }
+      case 'ZodArray':
+      case 'ZodPromise':
+      case 'ZodBranded':
+        replace('type');
+        break;
+      case 'ZodUnion': {
+        const options = def.options as ZodType[];
+        const nextOptions = options.map(strip);
+        if (nextOptions.some((option, index) => option !== options[index])) {
+          nextDef = { ...nextDef, options: nextOptions };
+        }
+        break;
+      }
+      case 'ZodDiscriminatedUnion': {
+        const options = def.options as ZodType[];
+        const nextOptions = options.map(strip);
+        if (nextOptions.some((option, index) => option !== options[index])) {
+          const optionsMap = new Map(def.optionsMap as Map<unknown, ZodType>);
+          for (const [key, option] of optionsMap) {
+            const index = options.indexOf(option);
+            if (index !== -1) {
+              optionsMap.set(key, nextOptions[index]!);
+            }
+          }
+          nextDef = { ...nextDef, options: nextOptions, optionsMap };
+        }
+        break;
+      }
+      case 'ZodIntersection':
+        replace('left');
+        replace('right');
+        break;
+      case 'ZodTuple': {
+        const items = def.items as ZodType[];
+        const nextItems = items.map(strip);
+        if (nextItems.some((item, index) => item !== items[index])) {
+          nextDef = { ...nextDef, items: nextItems };
+        }
+        replace('rest');
+        break;
+      }
+      case 'ZodRecord':
+      case 'ZodMap':
+        replace('keyType');
+        replace('valueType');
+        break;
+      case 'ZodSet':
+        replace('valueType');
+        break;
+      case 'ZodOptional':
+      case 'ZodNullable':
+      case 'ZodDefault':
+      case 'ZodCatch':
+      case 'ZodReadonly':
+        replace('innerType');
+        break;
+      case 'ZodEffects':
+        replace('schema');
+        break;
+      case 'ZodPipeline':
+        replace('in');
+        replace('out');
+        break;
+      case 'ZodLazy':
+        nextDef = { ...def, getter: () => strip(def.getter()) };
+        break;
+    }
+
+    if (nextDef === def) {
+      schemas.set(value as object, value);
+      return value;
+    }
+
+    const stripped = new schema.constructor(nextDef) as ZodType;
+    schemas.set(value as object, stripped);
+    return stripped;
   }
 
   #resolveSchemaForValue(schema: Record<string, unknown>, value: unknown): Record<string, unknown> {

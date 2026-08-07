@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z as zV3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import { standardSchemaToJSONSchema } from '../standard-schema/standard-schema';
 import type { ModelInformation } from '../types';
@@ -124,6 +125,101 @@ describe('AnthropicSchemaCompatLayer', () => {
 
       const invalidResult = await compatSchema['~standard'].validate({ start: 10, end: 1 });
       expect('issues' in invalidResult).toBe(true);
+    });
+
+    it('keeps Zod v3 validation synchronous when the compat package uses Zod v4', () => {
+      const schema = zV3
+        .object({
+          email: zV3.string().email().min(100),
+        })
+        .refine(value => value.email !== 'blocked@example.com');
+      const compatSchema = new AnthropicSchemaCompatLayer(haikuModelInfo).processToCompatSchema(schema);
+
+      const validResult = compatSchema['~standard'].validate({ email: 'hello@example.com' });
+      expect(validResult).not.toBeInstanceOf(Promise);
+      expect(validResult).toEqual({ value: { email: 'hello@example.com' } });
+
+      const invalidFormatResult = compatSchema['~standard'].validate({ email: 'invalid' });
+      expect(invalidFormatResult).not.toBeInstanceOf(Promise);
+      expect(invalidFormatResult).toHaveProperty('issues');
+
+      const invalidRefineResult = compatSchema['~standard'].validate({ email: 'blocked@example.com' });
+      expect(invalidRefineResult).not.toBeInstanceOf(Promise);
+      expect(invalidRefineResult).toHaveProperty('issues');
+    });
+
+    it('preserves string formats while relaxing only min/max', async () => {
+      const schema = z.object({
+        email: z.string().email().min(100),
+        id: z.string().uuid().max(1),
+      });
+      const compatSchema = new AnthropicSchemaCompatLayer(haikuModelInfo).processToCompatSchema(schema);
+
+      const validResult = await compatSchema['~standard'].validate({
+        email: 'hello@example.com',
+        id: '123e4567-e89b-12d3-a456-426614174000',
+      });
+      expect(validResult).toEqual({
+        value: {
+          email: 'hello@example.com',
+          id: '123e4567-e89b-12d3-a456-426614174000',
+        },
+      });
+
+      const invalidResult = await compatSchema['~standard'].validate({ email: 'not-an-email', id: 'not-a-uuid' });
+      expect('issues' in invalidResult).toBe(true);
+    });
+
+    it('preserves strict and catchall object policies', async () => {
+      const strictSchema = z.strictObject({ message: z.string().min(100) });
+      const catchallSchema = z.object({ message: z.string().min(100) }).catchall(z.number());
+      const layer = new AnthropicSchemaCompatLayer(haikuModelInfo);
+
+      const strictResult = await layer.processToCompatSchema(strictSchema)['~standard'].validate({
+        message: 'short',
+        extra: true,
+      });
+      expect('issues' in strictResult).toBe(true);
+
+      const validCatchallResult = await layer.processToCompatSchema(catchallSchema)['~standard'].validate({
+        message: 'short',
+        extra: 1,
+      });
+      expect(validCatchallResult).toEqual({ value: { message: 'short', extra: 1 } });
+
+      const invalidCatchallResult = await layer.processToCompatSchema(catchallSchema)['~standard'].validate({
+        message: 'short',
+        extra: 'invalid',
+      });
+      expect('issues' in invalidCatchallResult).toBe(true);
+    });
+
+    it('preserves nested tuple, record, lazy, and transform behavior', async () => {
+      let transformCalls = 0;
+      const nestedValue = z.lazy(() =>
+        z.object({
+          entries: z.record(
+            z.string(),
+            z.tuple([
+              z.string().email().min(100),
+              z
+                .string()
+                .min(100)
+                .transform(value => {
+                  transformCalls++;
+                  return value.toUpperCase();
+                }),
+            ]),
+          ),
+        }),
+      );
+      const compatSchema = new AnthropicSchemaCompatLayer(haikuModelInfo).processToCompatSchema(nestedValue);
+
+      const result = await compatSchema['~standard'].validate({
+        entries: { item: ['hello@example.com', 'short'] },
+      });
+      expect(result).toEqual({ value: { entries: { item: ['hello@example.com', 'SHORT'] } } });
+      expect(transformCalls).toBe(1);
     });
   });
 });
