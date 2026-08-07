@@ -83,6 +83,7 @@ import { WorkspaceInstructionsProcessor } from '../processors/processors/workspa
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
+import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
@@ -131,8 +132,13 @@ import type {
   NetworkOptions,
   DelegationConfig,
   DelegationStartContext,
+  DelegationStartResult,
   DelegationCompleteContext,
 } from './agent.types';
+// Value import of durable constants is safe: constants.ts is a leaf module
+// with no imports, so it cannot create the runtime cycle `agent →
+// agent/durable → agent`.
+import { DurableStepIds } from './durable/constants';
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
 import type {
@@ -524,6 +530,13 @@ export class Agent<
   public name: string;
   public source?: DefinitionSource;
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+  /**
+   * Schedules declared by a file-based agent's `schedules/` directory, attached
+   * by `assembleAgentFromFsEntry`. Mastra reads these at boot and syncs them
+   * into schedule storage. Empty for code-defined agents, which register
+   * schedules through `mastra.schedules.create(...)` instead.
+   */
+  #declaredSchedules: DeclaredAgentSchedule[] = [];
   readonly #description?: string;
   readonly #metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
@@ -2504,6 +2517,25 @@ export class Agent<
   }
 
   /**
+   * Attach the schedules declared under `agents/<id>/schedules/`. Called by
+   * `assembleAgentFromFsEntry` during file-based agent assembly.
+   *
+   * @internal — not part of the public agent API.
+   */
+  public __setDeclaredSchedules(schedules: DeclaredAgentSchedule[]): void {
+    this.#declaredSchedules = schedules;
+  }
+
+  /**
+   * Returns the schedules declared by this agent's `schedules/` directory, in
+   * stable (path-sorted) order. Mastra syncs these into schedule storage at
+   * boot; see `registerDeclarativeSchedules`.
+   */
+  public getDeclaredSchedules(): DeclaredAgentSchedule[] {
+    return this.#declaredSchedules;
+  }
+
+  /**
    * Returns the tracing policy configured at agent construction time.
    *
    * Exposed so out-of-process consumers (e.g. the durable agent runner) can
@@ -3521,6 +3553,21 @@ export class Agent<
   getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
+  }
+
+  /**
+   * Restrict UI messages to those that belong to the given thread. Memory can
+   * load messages from other threads of the same resource into the message list
+   * (resource-scoped recall); those must not influence the generated title.
+   */
+  filterUiMessagesByThread<T extends { id: string }>(messageList: MessageList, threadId: string, uiMessages: T[]): T[] {
+    const threadMessageIds = new Set(
+      messageList.get.all
+        .db()
+        .filter(m => !m.threadId || m.threadId === threadId)
+        .map(m => m.id),
+    );
+    return uiMessages.filter(m => threadMessageIds.has(m.id));
   }
 
   async genTitle(
@@ -4670,6 +4717,16 @@ export class Agent<
             // Each iteration typically produces an assistant message
             const derivedIteration = Math.max(1, sanitizedMessages.filter(m => m.role === 'assistant').length);
 
+            // The sub-agent run gets its own RequestContext map derived from the
+            // parent's entries, excluding run-scoped identity keys. This isolates
+            // set/delete operations across the delegation boundary and matches the
+            // durable engine's snapshot/rehydrate behavior.
+            const subAgentRequestContext: RequestContext = new RequestContext<unknown>(
+              [...requestContext.entries()].filter(
+                ([key]) => key !== 'MastraMemory' && key !== MASTRA_THREAD_ID_KEY && key !== MASTRA_RESOURCE_ID_KEY,
+              ) as Iterable<readonly [string, unknown]>,
+            );
+
             // Build delegation start context
             const delegationStartContext: DelegationStartContext = {
               primitiveId: agent.id,
@@ -4689,6 +4746,7 @@ export class Agent<
               parentAgentName: this.name,
               toolCallId,
               messages: sanitizedMessages,
+              requestContext: subAgentRequestContext,
             };
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
@@ -4711,31 +4769,25 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify.default(this.id)}-${agentName}`;
 
-            // Save the parent agent's MastraMemory before the sub-agent runs.
-            // The sub-agent's prepare-memory-step will overwrite this key with
-            // its own thread/resource identity. We restore it after the sub-agent
-            // returns so the parent's processors (OM, working memory, etc.) still
-            // see the correct context on subsequent steps.
-            const savedMastraMemory = requestContext.get('MastraMemory');
-
-            // Save and clear reserved thread/resource keys so they don't override the
-            // sub-agent's isolated memory config. These keys take precedence over the
-            // memory option in generate/stream, so leaving them would cause the
-            // sub-agent to write to the parent's thread instead of its own.
-            const savedThreadIdKey = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-            const savedResourceIdKey = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-            if (savedThreadIdKey !== undefined) {
-              requestContext.delete(MASTRA_THREAD_ID_KEY);
-            }
-            if (savedResourceIdKey !== undefined) {
-              requestContext.delete(MASTRA_RESOURCE_ID_KEY);
+            // Call onDelegationStart before resolving the sub-agent's runtime
+            // config so mutations of the delegated run's context in the hook
+            // are visible to version, model, and default-options resolution
+            // below. Rejection handling happens after resolution because the
+            // rejection path needs the resolved model version and memory config.
+            let startResult: DelegationStartResult | void | undefined;
+            if (delegation?.onDelegationStart) {
+              try {
+                startResult = await delegation.onDelegationStart(delegationStartContext);
+              } catch (hookError) {
+                this.logger.error('onDelegationStart hook error', { agent: this.name, error: hookError });
+                // Continue with original values on hook error
+              }
             }
 
-            // Resolve versioned sub-agent if a version override exists on requestContext.
-            // This must happen before onDelegationStart so the rejection branch can
-            // use the correct model version and memory config from the resolved agent.
+            // Resolve versioned sub-agent if a version override exists on the
+            // delegated run's requestContext (inherited from the parent).
             let resolvedAgent = agent;
-            const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+            const versionOverrides = subAgentRequestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
             const agentVersionSelector =
               versionOverrides?.agents?.[agent.id] ??
               (versionOverrides?.defaultStatus ? { status: versionOverrides.defaultStatus } : undefined);
@@ -4755,15 +4807,16 @@ export class Agent<
 
             // Recompute derived values from the resolved agent (may differ from
             // code-defined agent if a stored version changed the model or defaults)
-            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
+            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext: subAgentRequestContext }))
+              .specificationVersion;
             const resolvedDefaultOptions =
               'getDefaultOptions' in resolvedAgent
-                ? await (resolvedAgent as Agent).getDefaultOptions({ requestContext })
+                ? await (resolvedAgent as Agent).getDefaultOptions({ requestContext: subAgentRequestContext })
                 : {};
             const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
 
             // Propagate parent memory to the resolved agent if it doesn't have its own.
-            // This must happen before onDelegationStart so the rejection path can
+            // This must happen before rejection handling so the rejection path can
             // save messages via resolvedAgent.getMemory().
             if (
               (methodType === 'generate' ||
@@ -4777,7 +4830,6 @@ export class Agent<
               }
             }
 
-            // Call onDelegationStart hook if provided
             let effectivePrompt = inputData.prompt;
             let effectiveInstructions = inputData.instructions;
             let effectiveMaxSteps = inputData.maxSteps;
@@ -4799,120 +4851,106 @@ export class Agent<
               });
               effectiveMaxSteps = subAgentMaxStepsCap;
             }
-            if (delegation?.onDelegationStart) {
-              try {
-                const startResult = await delegation.onDelegationStart(delegationStartContext);
-                if (startResult) {
-                  // Check if delegation should be rejected
-                  if (startResult.proceed === false) {
-                    const rejectionMessage =
-                      startResult.rejectionReason || 'Delegation rejected by onDelegationStart hook';
-                    this.logger.debug('Delegation rejected', {
-                      agent: this.name,
-                      targetAgent: agentName,
-                      reason: rejectionMessage,
+            // Process the onDelegationStart result captured above (rejection
+            // handling needs the resolved model version and memory config)
+            if (startResult) {
+              // Check if delegation should be rejected
+              if (startResult.proceed === false) {
+                const rejectionMessage = startResult.rejectionReason || 'Delegation rejected by onDelegationStart hook';
+                this.logger.debug('Delegation rejected', {
+                  agent: this.name,
+                  targetAgent: agentName,
+                  reason: rejectionMessage,
+                });
+
+                if (
+                  (methodType === 'stream' || methodType === 'streamLegacy') &&
+                  supportedLanguageModelSpecifications.includes(resolvedModelVersion)
+                ) {
+                  await context.writer?.write({
+                    type: 'text-delta',
+                    payload: {
+                      id: randomUUID(),
+                      text: `[Delegation Rejected] ${rejectionMessage}`,
+                    },
+                    runId,
+                    from: ChunkFrom.AGENT,
+                  });
+                }
+
+                // Save rejection messages to sub-agent's memory so the UI can display them
+                const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
+                if (memory) {
+                  try {
+                    // Create user message with the original prompt
+                    const userMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'user',
+                      type: 'text',
+                      createdAt: new Date(),
+                      threadId: subAgentThreadId,
+                      resourceId: subAgentResourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'text',
+                            text: effectivePrompt,
+                          },
+                        ],
+                      },
+                    };
+
+                    // Create assistant message with the rejection
+                    const assistantMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'assistant',
+                      type: 'text',
+                      createdAt: new Date(new Date().getTime() + 1),
+                      threadId: subAgentThreadId,
+                      resourceId: subAgentResourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'text',
+                            text: `[Delegation Rejected] ${rejectionMessage}`,
+                          },
+                        ],
+                      },
+                    };
+
+                    await memory.createThread({
+                      resourceId: subAgentResourceId,
+                      threadId: subAgentThreadId,
                     });
 
-                    if (
-                      (methodType === 'stream' || methodType === 'streamLegacy') &&
-                      supportedLanguageModelSpecifications.includes(resolvedModelVersion)
-                    ) {
-                      await context.writer?.write({
-                        type: 'text-delta',
-                        payload: {
-                          id: randomUUID(),
-                          text: `[Delegation Rejected] ${rejectionMessage}`,
-                        },
-                        runId,
-                        from: ChunkFrom.AGENT,
-                      });
-                    }
-
-                    // Save rejection messages to sub-agent's memory so the UI can display them
-                    const memory = await resolvedAgent.getMemory({ requestContext });
-                    if (memory) {
-                      try {
-                        // Create user message with the original prompt
-                        const userMessage: MastraDBMessage = {
-                          id: this.#mastra?.generateId() || randomUUID(),
-                          role: 'user',
-                          type: 'text',
-                          createdAt: new Date(),
-                          threadId: subAgentThreadId,
-                          resourceId: subAgentResourceId,
-                          content: {
-                            format: 2,
-                            parts: [
-                              {
-                                type: 'text',
-                                text: effectivePrompt,
-                              },
-                            ],
-                          },
-                        };
-
-                        // Create assistant message with the rejection
-                        const assistantMessage: MastraDBMessage = {
-                          id: this.#mastra?.generateId() || randomUUID(),
-                          role: 'assistant',
-                          type: 'text',
-                          createdAt: new Date(new Date().getTime() + 1),
-                          threadId: subAgentThreadId,
-                          resourceId: subAgentResourceId,
-                          content: {
-                            format: 2,
-                            parts: [
-                              {
-                                type: 'text',
-                                text: `[Delegation Rejected] ${rejectionMessage}`,
-                              },
-                            ],
-                          },
-                        };
-
-                        await memory.createThread({
-                          resourceId: subAgentResourceId,
-                          threadId: subAgentThreadId,
-                        });
-
-                        await memory.saveMessages({
-                          messages: [userMessage, assistantMessage],
-                        });
-                      } catch (memoryError) {
-                        this.logger.error('Failed to save rejection to sub-agent memory', {
-                          agent: this.name,
-                          error: memoryError,
-                        });
-                      }
-                    }
-
-                    if (savedThreadIdKey !== undefined) {
-                      requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
-                    }
-                    if (savedResourceIdKey !== undefined) {
-                      requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
-                    }
-
-                    return {
-                      text: `[Delegation Rejected] ${rejectionMessage}`,
-                      subAgentThreadId,
-                      subAgentResourceId,
-                    };
-                  }
-                  // Apply modifications
-                  if (startResult.modifiedPrompt !== undefined) {
-                    effectivePrompt = startResult.modifiedPrompt;
-                  }
-                  if (startResult.modifiedInstructions !== undefined) {
-                    effectiveInstructions = startResult.modifiedInstructions;
-                  }
-                  if (startResult.modifiedMaxSteps !== undefined) {
-                    effectiveMaxSteps = startResult.modifiedMaxSteps;
+                    await memory.saveMessages({
+                      messages: [userMessage, assistantMessage],
+                    });
+                  } catch (memoryError) {
+                    this.logger.error('Failed to save rejection to sub-agent memory', {
+                      agent: this.name,
+                      error: memoryError,
+                    });
                   }
                 }
-              } catch (hookError) {
-                this.logger.error('onDelegationStart hook error', { agent: this.name, error: hookError });
-                // Continue with original values on hook error
+
+                return {
+                  text: `[Delegation Rejected] ${rejectionMessage}`,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                };
+              }
+              // Apply modifications
+              if (startResult.modifiedPrompt !== undefined) {
+                effectivePrompt = startResult.modifiedPrompt;
+              }
+              if (startResult.modifiedInstructions !== undefined) {
+                effectiveInstructions = startResult.modifiedInstructions;
+              }
+              if (startResult.modifiedMaxSteps !== undefined) {
+                effectiveMaxSteps = startResult.modifiedMaxSteps;
               }
             }
 
@@ -4926,7 +4964,9 @@ export class Agent<
 
             // Append LLM-provided instructions to the sub-agent's own instructions
             if (effectiveInstructions) {
-              const agentOwnInstructions = await resolvedAgent.getInstructions({ requestContext });
+              const agentOwnInstructions = await resolvedAgent.getInstructions({
+                requestContext: subAgentRequestContext,
+              });
               if (agentOwnInstructions) {
                 const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
@@ -5003,7 +5043,10 @@ export class Agent<
               const subAgentUserMessage: MastraDBMessage = {
                 id: this.#mastra?.generateId() || randomUUID(),
                 role: 'user',
-                createdAt: new Date(),
+                // New runs let MessageList stamp this after it adds forwarded context.
+                // Resume runs do not add the prompt again, but still need a timestamp
+                // for the explicit transcript save below.
+                ...(resumeData ? { createdAt: new Date() } : {}),
                 threadId: subAgentThreadId,
                 resourceId: subAgentResourceId,
                 content: {
@@ -5015,7 +5058,7 @@ export class Agent<
                     },
                   ],
                 },
-              };
+              } as MastraDBMessage;
 
               // The sub-agent run receives only the delegation prompt as input; supervisor
               // history is forwarded separately via the `context` option so it reaches the
@@ -5039,7 +5082,7 @@ export class Agent<
                 const generateResult = resumeData
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
-                      requestContext,
+                      requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -5050,7 +5093,7 @@ export class Agent<
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
-                      requestContext,
+                      requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -5072,7 +5115,7 @@ export class Agent<
                 fullSubAgentMessages = [subAgentUserMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await resolvedAgent.getMemory({ requestContext });
+                const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (memory) {
                   try {
                     await memory.createThread({
@@ -5092,12 +5135,6 @@ export class Agent<
                 }
 
                 if (generateResult.finishReason === 'suspended') {
-                  if (savedThreadIdKey !== undefined) {
-                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
-                  }
-                  if (savedResourceIdKey !== undefined) {
-                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
-                  }
                   return suspend?.(generateResult.suspendPayload, {
                     resumeSchema: generateResult.resumeSchema,
                     runId: generateResult.runId,
@@ -5120,7 +5157,7 @@ export class Agent<
                   throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement generateLegacy`);
                 }
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
-                  requestContext,
+                  requestContext: subAgentRequestContext,
                   actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
@@ -5137,7 +5174,7 @@ export class Agent<
                 const streamResult = resumeData
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
-                      requestContext,
+                      requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -5148,7 +5185,7 @@ export class Agent<
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
-                      requestContext,
+                      requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -5203,7 +5240,7 @@ export class Agent<
                 fullSubAgentMessages = [subAgentUserMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const streamMemory = await resolvedAgent.getMemory({ requestContext });
+                const streamMemory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (streamMemory) {
                   try {
                     await streamMemory.createThread({
@@ -5223,12 +5260,6 @@ export class Agent<
                 }
 
                 if (requireToolApproval || suspendedPayload || resumeSchema) {
-                  if (savedThreadIdKey !== undefined) {
-                    requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
-                  }
-                  if (savedResourceIdKey !== undefined) {
-                    requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
-                  }
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
@@ -5253,7 +5284,7 @@ export class Agent<
                   throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement streamLegacy`);
                 }
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
-                  requestContext,
+                  requestContext: subAgentRequestContext,
                   actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                   ...subAgentAbortOptions,
@@ -5350,17 +5381,6 @@ export class Agent<
                   this.logger.error('onDelegationComplete hook error', { agent: this.name, error: hookError });
                 }
               }
-              // Restore the parent agent's MastraMemory after sub-agent execution
-              if (savedMastraMemory !== undefined) {
-                requestContext.set('MastraMemory', savedMastraMemory);
-              }
-              if (savedThreadIdKey !== undefined) {
-                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
-              }
-              if (savedResourceIdKey !== undefined) {
-                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
-              }
-
               return result;
             } catch (err) {
               let bailed = false;
@@ -5431,18 +5451,6 @@ export class Agent<
                     error: hookError,
                   });
                 }
-              }
-
-              // Restore even on error so the parent's retry/fallback logic
-              // sees the correct memory context
-              if (savedMastraMemory !== undefined) {
-                requestContext.set('MastraMemory', savedMastraMemory);
-              }
-              if (savedThreadIdKey !== undefined) {
-                requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
-              }
-              if (savedResourceIdKey !== undefined) {
-                requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
               }
 
               const mastraError = new MastraError(
@@ -6379,6 +6387,15 @@ export class Agent<
       }
     }
 
+    // Durable agentic-loop snapshots don't embed `__streamState` in suspend
+    // payloads; their thread/resource info lives on the serialized workflow
+    // input's message-list state instead.
+    const durableMemoryInfo = (existingSnapshot?.context as Record<string, any> | undefined)?.input?.messageListState
+      ?.memoryInfo;
+    if (durableMemoryInfo && typeof durableMemoryInfo === 'object') {
+      return durableMemoryInfo as AgentSnapshotMemoryInfo;
+    }
+
     return undefined;
   }
 
@@ -6388,6 +6405,13 @@ export class Agent<
       if (step && step.status === 'suspended' && step.suspendPayload?.__agentId) {
         return step.suspendPayload.__agentId;
       }
+    }
+
+    // Durable agentic-loop snapshots persist the owning agent id on the
+    // serialized workflow input instead of in suspend payloads.
+    const durableAgentId = (existingSnapshot?.context as Record<string, any> | undefined)?.input?.agentId;
+    if (typeof durableAgentId === 'string') {
+      return durableAgentId;
     }
 
     return undefined;
@@ -7123,38 +7147,41 @@ export class Agent<
         );
 
         const uiMessages = messageList.get.all.ui();
-        const messages = messageList.get.all.core();
         const requiredMessages = minMessages ?? 1;
 
-        if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
-          const userMessage = this.getMostRecentUserMessage(uiMessages);
+        if (shouldGenerate && !thread.title) {
+          const threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages);
 
-          if (userMessage) {
-            void this.genTitle(
-              userMessage,
-              requestContext,
-              observabilityContext,
-              titleModel,
-              titleInstructions,
-              uiMessages,
-            )
-              .then(async title => {
-                if (title) {
-                  await memory.createThread({
-                    threadId: thread.id,
-                    resourceId,
-                    memoryConfig,
-                    title,
-                    metadata: thread.metadata,
-                  });
-                  if (typeof onTitleGenerated === 'function') {
-                    await onTitleGenerated(title);
+          if (threadUiMessages.length >= requiredMessages) {
+            const userMessage = this.getMostRecentUserMessage(threadUiMessages);
+
+            if (userMessage) {
+              void this.genTitle(
+                userMessage,
+                requestContext,
+                observabilityContext,
+                titleModel,
+                titleInstructions,
+                threadUiMessages,
+              )
+                .then(async title => {
+                  if (title) {
+                    await memory.createThread({
+                      threadId: thread.id,
+                      resourceId,
+                      memoryConfig,
+                      title,
+                      metadata: thread.metadata,
+                    });
+                    if (typeof onTitleGenerated === 'function') {
+                      await onTitleGenerated(title);
+                    }
                   }
-                }
-              })
-              .catch(error => {
-                this.logger.error('Error persisting generated title:', error);
-              });
+                })
+                .catch(error => {
+                  this.logger.error('Error persisting generated title:', error);
+                });
+            }
           }
         }
       } catch (e) {
@@ -7640,13 +7667,19 @@ export class Agent<
 
     // threadId/resourceId live inside the snapshot state rather than in storage
     // columns, so fetch all matching rows and filter/paginate here to keep
-    // `total` accurate.
-    const { runs } = await workflowsStore.listWorkflowRuns({
-      workflowName: 'agentic-loop',
-      status: 'suspended',
-      fromDate,
-      toDate,
-    });
+    // `total` accurate. Durable agents persist their agentic loop under a
+    // separate workflow name, so query both — otherwise suspended durable runs
+    // are never discoverable.
+    const runs: Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'] = [];
+    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
+      const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
+        workflowName,
+        status: 'suspended',
+        fromDate,
+        toDate,
+      });
+      runs.push(...workflowRuns);
+    }
 
     const matchedRuns: AgentRun[] = [];
     for (const run of runs) {
@@ -8702,7 +8735,9 @@ export class Agent<
    * ```
    */
   async approveToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
@@ -8933,7 +8968,9 @@ export class Agent<
    * ```
    */
   async declineToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
@@ -8963,7 +9000,9 @@ export class Agent<
    * ```
    */
   async approveToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: true }, options);
@@ -8986,7 +9025,9 @@ export class Agent<
    * ```
    */
   async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: false }, options);

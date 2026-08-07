@@ -8,6 +8,7 @@ import { PropertyFilterCreator } from '@mastra/playground-ui/components/Property
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/traces-layout';
@@ -18,22 +19,26 @@ import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-
 import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
+import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
+import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import {
   buildTraceListFilters,
   createTracePropertyFilterFields,
   neutralizeFilterTokens,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
+import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { isBranchesNotSupportedError } from '@mastra/playground-ui/utils/errors';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useScorers } from '@/domains/scores';
@@ -196,6 +201,32 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   } = useTraces({ filters: traceFilters, listMode: url.listMode });
 
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+  const traceColumns = useTraceColumnPreferences();
+  const observabilityCapabilities = useObservabilityStorageCapabilities();
+  const usageDisabledReason =
+    url.listMode === 'branches'
+      ? 'Token and cost totals are only available for full traces.'
+      : observabilityCapabilities.isLoading
+        ? 'Checking whether this storage supports usage data.'
+        : !observabilityCapabilities.supportsMetrics
+          ? 'This observability store does not support token and cost metrics.'
+          : undefined;
+  const usageColumnsUnavailable =
+    url.listMode === 'branches' || (!observabilityCapabilities.isLoading && !observabilityCapabilities.supportsMetrics);
+  const displayedColumnPreferences = usageColumnsUnavailable
+    ? {
+        ...traceColumns.preferences,
+        visibleColumns: traceColumns.preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)),
+      }
+    : traceColumns.preferences;
+  const traceUsage = useTraceUsage({
+    traceIds: traces.map(trace => trace.traceId),
+    enabled:
+      !usageColumnsUnavailable &&
+      !observabilityCapabilities.isLoading &&
+      hasTraceUsageColumn(displayedColumnPreferences),
+    autoRefetch: autoRefetchTraces,
+  });
 
   // Storage providers that don't implement `listBranches` throw a known MastraError. When that
   // surfaces in branches mode, treat the provider as branches-incapable for the rest of the
@@ -289,9 +320,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <div className="h-form-default ml-auto flex items-center gap-2">
+      <div className="min-h-form-default ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+        <TraceColumnsMenu
+          preferences={traceColumns.preferences}
+          usageDisabledReason={usageDisabledReason}
+          onToggleColumn={traceColumns.toggleColumn}
+          onAddMetadataColumn={traceColumns.addMetadataColumn}
+          onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
+          onReset={traceColumns.resetColumns}
+        />
         {!branchesUnsupported && (
-          <>
+          <div className="flex items-center gap-2">
             <Switch
               id="show-subtraces"
               checked={url.listMode === 'branches'}
@@ -299,7 +338,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               disabled={isTracesLoading}
             />
             <Label htmlFor="show-subtraces">Show subtraces</Label>
-          </>
+          </div>
         )}
         <Button
           variant="ghost"
@@ -310,7 +349,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           tooltip={autoRefetchTraces ? 'Auto-refetch ON' : 'Auto-refetch OFF'}
         >
           {autoRefetchTraces ? (
-            <RefreshCw className={`h-4 w-4 ${isRefetchingTraces ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${isRefetchingTraces ? 'motion-safe:animate-spin' : ''}`} />
           ) : (
             <CircleSlash2 className="h-4 w-4" />
           )}
@@ -413,6 +452,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             featuredSpanId={url.listMode === 'branches' ? url.anchorSpanIdParam : null}
             isBranchesMode={url.listMode === 'branches'}
             recentlyAddedKeys={recentlyAddedTraceKeys}
+            columnPreferences={displayedColumnPreferences}
+            usageByTraceId={traceUsage.data}
             onTraceClick={trace => {
               const isBranches = url.listMode === 'branches';
               const isSameRow = isBranches

@@ -27,6 +27,7 @@ async function testContent(content: string): Promise<{ blocked: boolean; error?:
   try {
     await generateText({
       model: google('gemini-2.5-flash'),
+      allowSystemInMessages: false,
       messages: [
         { role: 'user', content },
         { role: 'assistant', content: 'I understand.' },
