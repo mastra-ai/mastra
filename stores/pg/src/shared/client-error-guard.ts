@@ -59,11 +59,16 @@ export function attachClientErrorHandler(client: PoolClient, logger?: ClientErro
   }
 
   const onError = (err: unknown) => {
-    const meta = { err: err instanceof Error ? err.message : String(err) };
-    if (logger?.warn) {
-      logger.warn(CHECKED_OUT_CLIENT_ERROR_MESSAGE, meta);
-    } else {
-      console.warn(CHECKED_OUT_CLIENT_ERROR_MESSAGE, meta);
+    try {
+      const meta = { err: err instanceof Error ? err.message : String(err) };
+      if (logger?.warn) {
+        logger.warn(CHECKED_OUT_CLIENT_ERROR_MESSAGE, meta);
+      } else {
+        console.warn(CHECKED_OUT_CLIENT_ERROR_MESSAGE, meta);
+      }
+    } catch {
+      // An error handler must never rethrow, even if logging or error
+      // stringification fails, or the original client error could still crash.
     }
   };
 

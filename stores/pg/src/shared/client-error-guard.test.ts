@@ -72,6 +72,29 @@ describe('attachClientErrorHandler', () => {
     expect(warn.mock.calls[0]![1]).toMatchObject({ err: 'boom' });
   });
 
+  it('swallows logger failures', () => {
+    const client = makeFakeClient();
+    attachClientErrorHandler(client, {
+      warn: () => {
+        throw new Error('logger failed');
+      },
+    });
+
+    expect(() => client.emit('error', new Error('backend died'))).not.toThrow();
+  });
+
+  it('swallows error stringification failures', () => {
+    const client = makeFakeClient();
+    const unprintableError = {
+      toString: () => {
+        throw new Error('stringification failed');
+      },
+    };
+    attachClientErrorHandler(client);
+
+    expect(() => client.emit('error', unprintableError)).not.toThrow();
+  });
+
   it('no-ops for clients without a removable event listener', () => {
     // Some call sites (and test doubles) lack `on` or `removeListener`; the
     // guard must not attach a listener it cannot subsequently detach.
