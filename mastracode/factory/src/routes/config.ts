@@ -1072,8 +1072,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       // `models.modeThinkingDefaults`. These are what request-time resolution
       // falls back to when a session carries no explicit override — including
       // automated (rule-driven) Factory runs nobody opens interactively. In
-      // tenant mode, writes are restricted to organization admins because the
-      // values apply deployment-wide.
+      // tenant mode, writes are disabled because the settings file is shared
+      // deployment-wide rather than scoped to an organization.
 
       registerApiRoute('/web/config/thinking', {
         method: 'GET',
@@ -1099,16 +1099,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c => {
           if (auth.enabled()) {
-            await auth.ensureUser(loose(c));
-            const tenant = auth.tenant(loose(c));
-            if (!tenant) return c.json({ error: 'Not signed in' }, 401);
-            if (!(await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)))) {
-              return c.json({ error: 'Only organization admins can change thinking defaults' }, 403);
-            }
+            return c.json({ error: 'Deployment thinking defaults can only be changed in local mode' }, 403);
           }
           let body: { globalDefault?: unknown; modeDefaults?: unknown };
           try {
-            body = await c.req.json();
+            const parsed: unknown = await c.req.json();
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              return c.json({ error: 'Request body must be a JSON object' }, 400);
+            }
+            body = parsed as { globalDefault?: unknown; modeDefaults?: unknown };
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
@@ -1128,7 +1127,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (!body.modeDefaults || typeof body.modeDefaults !== 'object' || Array.isArray(body.modeDefaults)) {
               return c.json({ error: 'modeDefaults must be an object of mode → level (or null to clear)' }, 400);
             }
+            const knownModes = new Set(controller.listModes?.().map(mode => mode.id) ?? []);
             for (const [mode, level] of Object.entries(body.modeDefaults as Record<string, unknown>)) {
+              if (!knownModes.has(mode)) {
+                return c.json({ error: `Unknown mode "${mode}"` }, 400);
+              }
               if (level === null) {
                 modePatch[mode] = null;
               } else if (isThinkingLevelSetting(level)) {

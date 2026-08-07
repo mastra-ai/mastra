@@ -1158,22 +1158,25 @@ describe('thinking defaults routes', () => {
     expect(await cleared.json()).toEqual({ ok: true, globalDefault: 'off', modeDefaults: { build: 'high' } });
   });
 
-  it('rejects invalid levels and empty bodies', async () => {
+  it('rejects invalid levels, unknown modes, and non-object bodies', async () => {
     const app = buildApp(null, { authEnabled: false });
     expect((await putThinking(app, {})).status).toBe(400);
+    expect((await putThinking(app, null)).status).toBe(400);
+    expect((await putThinking(app, [])).status).toBe(400);
     expect((await putThinking(app, { globalDefault: 'ultra' })).status).toBe(400);
     expect((await putThinking(app, { modeDefaults: { build: 'ultra' } })).status).toBe(400);
+    expect((await putThinking(app, { modeDefaults: { plna: 'high' } })).status).toBe(400);
     expect((await putThinking(app, { modeDefaults: ['high'] })).status).toBe(400);
   });
 
-  it('requires an org admin to write in tenant mode', async () => {
+  it('rejects deployment-scoped writes in tenant mode', async () => {
     const nonAdmin = buildApp(userA, { isOrganizationAdmin: async () => false });
     expect((await putThinking(nonAdmin, { globalDefault: 'high' })).status).toBe(403);
 
     const signedOut = buildApp(null);
-    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(401);
+    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(403);
 
     const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
-    expect((await putThinking(admin, { globalDefault: 'high' })).status).toBe(200);
+    expect((await putThinking(admin, { globalDefault: 'high' })).status).toBe(403);
   });
 });

@@ -156,6 +156,13 @@ const ANTHROPIC_EFFORT: Record<ActiveThinkingLevel, 'low' | 'medium' | 'high' | 
   max: 'max',
 };
 
+const ANTHROPIC_XHIGH_EFFORT_RE = /claude-(?:opus-4-[78]|opus-5|sonnet-5|fable-5)/;
+
+function getAnthropicEffort(modelId: string, level: ActiveThinkingLevel) {
+  if (level === 'xhigh' && !ANTHROPIC_XHIGH_EFFORT_RE.test(modelId)) return 'high';
+  return ANTHROPIC_EFFORT[level];
+}
+
 // Extended-thinking budgets for models that predate adaptive thinking/effort.
 // Budgets count toward max_tokens, so they stay well below the smallest
 // output ceiling of the budget-era models (32k on Opus 4.0/4.1).
@@ -220,7 +227,7 @@ export function createAnthropicThinkingMiddleware(
         anthropic: {
           ...anthropicOptions,
           ...(capability === 'adaptive'
-            ? { thinking: { type: 'adaptive', display: 'summarized' }, effort: ANTHROPIC_EFFORT[level] }
+            ? { thinking: { type: 'adaptive', display: 'summarized' }, effort: getAnthropicEffort(modelId, level) }
             : { thinking: { type: 'enabled', budgetTokens: ANTHROPIC_THINKING_BUDGET_TOKENS[level] } }),
         },
       } as typeof params.providerOptions;

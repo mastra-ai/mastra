@@ -41,8 +41,14 @@ describe('createAnthropicThinkingMiddleware', () => {
     });
   });
 
-  it('treats unknown Claude models as adaptive-capable', async () => {
-    const middleware = createAnthropicThinkingMiddleware('claude-nova-7', 'xhigh');
+  it('clamps xhigh to high on adaptive models that do not support xhigh effort', async () => {
+    const middleware = createAnthropicThinkingMiddleware('claude-sonnet-4-6', 'xhigh');
+    const result = await transform(middleware!, {});
+    expect(result.providerOptions?.anthropic).toMatchObject({ effort: 'high' });
+  });
+
+  it('preserves xhigh on models that support it', async () => {
+    const middleware = createAnthropicThinkingMiddleware('claude-fable-5', 'xhigh');
     const result = await transform(middleware!, {});
     expect(result.providerOptions?.anthropic).toMatchObject({ effort: 'xhigh' });
   });
