@@ -75,6 +75,27 @@ describe('readWithKeepalive', () => {
     expect(reads).toEqual([{ type: 'chunk', value: 'a' }]);
   });
 
+  it.each([
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('treats %s as disabled rather than as an immediate interval', async (_label, keepaliveMs) => {
+    let controller!: ReadableStreamDefaultController<string>;
+    const source = new ReadableStream<string>({
+      start(c) {
+        controller = c;
+      },
+    });
+
+    const reads = await collect(source, keepaliveMs, async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+      controller.enqueue('a');
+      controller.close();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(reads).toEqual([{ type: 'chunk', value: 'a' }]);
+  });
+
   it('propagates source errors', async () => {
     const source = new ReadableStream<string>({
       start(controller) {

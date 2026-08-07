@@ -25,7 +25,7 @@ type ReadResult<T> = Awaited<ReturnType<ReadableStreamDefaultReader<T>['read']>>
  * A pending read is never dropped: it carries over to the next iteration, so a chunk
  * that arrives while a keepalive is emitted is still delivered in order.
  *
- * @param keepaliveMs Idle interval between keepalives. Values <= 0 disable them.
+ * @param keepaliveMs Idle interval between keepalives. Values <= 0 and non-finite values disable them.
  */
 export async function* readWithKeepalive<T>(
   reader: ReadableStreamDefaultReader<T>,
@@ -40,7 +40,7 @@ export async function* readWithKeepalive<T>(
       void pending.catch(() => {});
     }
 
-    if (keepaliveMs <= 0) {
+    if (!(keepaliveMs > 0) || !Number.isFinite(keepaliveMs)) {
       const result = await pending;
       pending = undefined;
       if (result.done) return;

@@ -65,6 +65,9 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
   const resumeStreamRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const timeTravelStreamRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const isMountedRef = useRef(true);
+  // Bumped whenever an operation starts or streams are reset, so a stream consumer that is
+  // waiting to reconnect can tell it has been superseded and stop writing stale state.
+  const operationRef = useRef(0);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -140,6 +143,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
       stream: ReadableStream<StreamVNextChunkType>,
       readerRef: StreamReaderRef,
       received: number,
+      operation: number,
     ): Promise<ConsumeStreamResult> => {
       const reader = stream.getReader();
       readerRef.current = reader;
@@ -147,14 +151,14 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       try {
         while (true) {
-          if (!isMountedRef.current) break;
+          if (!isMountedRef.current || operationRef.current !== operation) break;
 
           const { done, value } = await reader.read();
           if (done) break;
           received++;
 
-          // Only update state if component is still mounted
-          if (!isMountedRef.current) break;
+          // Only update state if the component is still mounted and this operation is current
+          if (!isMountedRef.current || operationRef.current !== operation) break;
 
           setStreamResult(prev => mapWorkflowStreamChunkToWatchResult(prev, value));
 
@@ -162,7 +166,11 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
             setIsStreaming(true);
           }
 
-          if (value.type === 'workflow-step-suspended') {
+          if (
+            value.type === 'workflow-step-suspended' ||
+            value.type === 'workflow-canceled' ||
+            value.type === 'workflow-paused'
+          ) {
             finished = true;
             setIsStreaming(false);
           }
@@ -203,11 +211,13 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
       reconnect,
       readerRef,
       errorMessage,
+      operation,
     }: {
       stream: ReadableStream<StreamVNextChunkType>;
       reconnect: (offset: number) => Promise<ReadableStream<StreamVNextChunkType>>;
       readerRef: StreamReaderRef;
       errorMessage: string;
+      operation: number;
     }) => {
       let currentStream: ReadableStream<StreamVNextChunkType> | undefined = stream;
       let received = 0;
@@ -215,11 +225,11 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       for (let attempt = 0; attempt <= MAX_RECONNECT_ATTEMPTS; attempt++) {
         if (currentStream) {
-          const result = await consumeStream(currentStream, readerRef, received);
+          const result = await consumeStream(currentStream, readerRef, received, operation);
           received = result.received;
           lastError = result.error;
 
-          if (result.finished || !isMountedRef.current) {
+          if (result.finished || !isMountedRef.current || operationRef.current !== operation) {
             if (result.error) {
               handleStreamError(result.error, errorMessage);
             }
@@ -230,7 +240,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
         if (attempt === MAX_RECONNECT_ATTEMPTS) break;
 
         await delay(RECONNECT_BASE_DELAY_MS * 2 ** attempt);
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || operationRef.current !== operation) return;
 
         try {
           currentStream = await reconnect(received);
@@ -261,6 +271,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       if (!isMountedRef.current) return;
 
+      const operation = ++operationRef.current;
       setIsStreaming(true);
       setStreamResult({ input: inputData } as WorkflowStreamResult);
       const workflow = client.getWorkflow(workflowId);
@@ -284,6 +295,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
           reconnect: offset => run.observe({ offset }),
           readerRef,
           errorMessage: 'Error streaming workflow',
+          operation,
         });
       } finally {
         if (isMountedRef.current) {
@@ -302,6 +314,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       if (!isMountedRef.current) return;
 
+      const operation = ++operationRef.current;
       setIsStreaming(true);
 
       setStreamResult((storeRunResult || {}) as WorkflowStreamResult);
@@ -323,6 +336,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
           reconnect: offset => run.observe({ offset }),
           readerRef: observerRef,
           errorMessage: 'Error observing workflow',
+          operation,
         });
       } finally {
         if (isMountedRef.current) {
@@ -341,6 +355,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       if (!isMountedRef.current) return;
 
+      const operation = ++operationRef.current;
       setIsStreaming(true);
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
@@ -362,6 +377,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
           reconnect: offset => run.observe({ offset }),
           readerRef: resumeStreamRef,
           errorMessage: 'Error resuming workflow stream',
+          operation,
         });
       } finally {
         if (isMountedRef.current) {
@@ -380,6 +396,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       if (!isMountedRef.current) return;
 
+      const operation = ++operationRef.current;
       setIsStreaming(true);
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
@@ -400,6 +417,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
           reconnect: offset => run.observe({ offset }),
           readerRef: timeTravelStreamRef,
           errorMessage: 'Error time traveling workflow stream',
+          operation,
         });
       } finally {
         if (isMountedRef.current) {
@@ -410,6 +428,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
   );
 
   const closeStreamsAndReset = useCallback(() => {
+    operationRef.current++;
     setIsStreaming(false);
     setStreamResult({} as WorkflowStreamResult);
     if (readerRef.current) {

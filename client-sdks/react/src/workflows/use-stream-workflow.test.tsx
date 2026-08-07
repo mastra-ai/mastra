@@ -131,6 +131,52 @@ describe('useStreamWorkflow reconnection', () => {
     expect(result.current.streamResult.status).toBe('success');
   });
 
+  it('does not reconnect a canceled run', async () => {
+    streamMock.mockResolvedValue(
+      streamOf([stepStart('step-1'), { type: 'workflow-canceled', runId: 'run-1', payload: { runId: 'run-1' } }]),
+    );
+
+    const { result } = renderHook(() => useStreamWorkflow({}), { wrapper });
+
+    await act(async () => {
+      await result.current.streamWorkflow.mutateAsync({
+        workflowId: 'wf',
+        runId: 'run-1',
+        inputData: {},
+        requestContext: {},
+      });
+    });
+
+    expect(observeMock).not.toHaveBeenCalled();
+    expect(result.current.streamResult.status).toBe('canceled');
+  });
+
+  it('does not reconnect a stream that was closed and reset', async () => {
+    vi.useFakeTimers();
+    streamMock.mockResolvedValue(streamOf([stepStart('step-1')]));
+    observeMock.mockResolvedValue(streamOf([workflowFinish()]));
+
+    const { result } = renderHook(() => useStreamWorkflow({}), { wrapper });
+
+    let pending: Promise<unknown> | undefined;
+    await act(async () => {
+      pending = result.current.streamWorkflow.mutateAsync({
+        workflowId: 'wf',
+        runId: 'run-1',
+        inputData: {},
+        requestContext: {},
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      result.current.closeStreamsAndReset();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await pending;
+    });
+
+    expect(observeMock).not.toHaveBeenCalled();
+    expect(result.current.streamResult.status).toBeUndefined();
+    vi.useRealTimers();
+  });
+
   it('reports an error once reconnection attempts are exhausted', async () => {
     vi.useFakeTimers();
     const onError = vi.fn();
