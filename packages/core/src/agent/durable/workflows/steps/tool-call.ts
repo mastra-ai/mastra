@@ -691,13 +691,47 @@ export function createDurableToolCallStep() {
           // Return the approval decision (not a `result` string) so it persists as
           // `state: 'output-denied'` with `approval`. The denial reason carries the
           // existing string so downstream consumers/UI keep the same message.
+          // Also emit a terminal `tool-output-denied` chunk so live stream subscribers
+          // resolve the pending tool call (issue #20880) — persistence alone is not enough.
+          const approval = {
+            id: toolCallId,
+            approved: false as const,
+            reason: 'Tool call was not approved by the user',
+          };
+          if (pubsub) {
+            try {
+              const deniedChunk = await applyToolPayloadTransformToChunk(
+                {
+                  type: 'tool-output-denied' as const,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: { toolCallId, toolName, args, approval },
+                },
+                {
+                  policy: registryEntry?.toolPayloadTransform,
+                  tools: registryEntry?.tools,
+                  logger: logger as any,
+                },
+              );
+              const processed = await processChunkThroughOutputProcessors(
+                deniedChunk as ChunkType,
+                registryEntry,
+                pubsub,
+                runId,
+                initData.agentId,
+                logger,
+                messageList,
+              );
+              if (processed) {
+                await emitChunkEvent(pubsub, runId, processed);
+              }
+            } catch (emitError) {
+              logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
+            }
+          }
           return {
             ...typedInput,
-            approval: {
-              id: toolCallId,
-              approved: false,
-              reason: 'Tool call was not approved by the user',
-            },
+            approval,
           };
         }
       }

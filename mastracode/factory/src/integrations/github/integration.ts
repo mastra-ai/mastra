@@ -51,7 +51,7 @@ import { runGithubIssueTriage } from './issue-triage.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { buildGithubRoutes } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
-import type { ReconcilePullRequestState } from './rules.js';
+import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -1110,7 +1110,12 @@ export class GithubIntegration implements FactoryIntegration {
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
-    const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
+    const reconcile = attachGithubReconciler(
+      this,
+      ctx,
+      input => this.fetchPullRequestState(input),
+      input => this.fetchIssueState(input),
+    );
     if (!reconcile) return [];
     const intervalMs = Number(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
     return [
@@ -1150,6 +1155,43 @@ export class GithubIntegration implements FactoryIntegration {
         baseBranch: pullRequest.baseBranch,
         ...(pullRequest.author ? { author: pullRequest.author } : {}),
         ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Reads live issue state for the reconciler. Returns undefined when the
+   * issue cannot be resolved (missing, is actually a PR, API error) so a
+   * sweep never fabricates a close.
+   */
+  async fetchIssueState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcileIssueState | undefined> {
+    const parts = splitRepoFullName(input.repository);
+    if (!parts) return undefined;
+    try {
+      const octokit = this.getInstallationOctokit(input.installationId);
+      const { data: issue } = await octokit.issues.get({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: input.number,
+      });
+      if (issue.pull_request) return undefined;
+      return {
+        title: issue.title,
+        url: issue.html_url,
+        state: issue.state === 'closed' ? 'closed' : 'open',
+        ...(issue.state_reason ? { stateReason: issue.state_reason } : {}),
+        assignees: (issue.assignees ?? [])
+          .map(user => user.login)
+          .filter((login): login is string => Boolean(login)),
+        ...(issue.user?.login ? { author: issue.user.login } : {}),
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
       };
     } catch {
       return undefined;

@@ -1,4 +1,9 @@
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type {
+  ActiveSubagentState,
+  ActiveToolState,
+  MastraDBMessage,
+  MastraMessagePart,
+} from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -100,15 +105,25 @@ export type KnownAgentControllerEvent =
     }
   // Usage tracking.
   | { type: 'usage_update'; usage: unknown }
-  // Canonical display-state snapshot, emitted after every other event. Carries
-  // the status-line figures (OM progress + cumulative token usage). Maps/Dates
-  // in the full display state don't survive JSON, so only plain fields are typed.
+  // Canonical display-state snapshot, emitted after every other event. The
+  // server converts the display state's Maps to plain records for the wire;
+  // servers predating that conversion send `{}` for those fields.
   | {
       type: 'display_state_changed';
       displayState: {
         isRunning?: boolean;
         omProgress?: AgentControllerOMProgress;
         tokenUsage?: Record<string, unknown>;
+        /** Active tool executions keyed by toolCallId. */
+        activeTools?: Record<string, ActiveToolState>;
+        toolInputBuffers?: Record<string, { text: string; toolName: string }>;
+        pendingSuspensions?: Record<
+          string,
+          { toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown; resumeSchema?: string }
+        >;
+        activeSubagents?: Record<string, ActiveSubagentState>;
+        /** `firstModified` is an ISO string on the wire. */
+        modifiedFiles?: Record<string, { operations: string[]; firstModified: string }>;
         [key: string]: unknown;
       };
     }
