@@ -67,6 +67,8 @@ export interface WorkspaceSkillsImplConfig {
   searchEngine?: SkillSearchEngine;
   /** Validate skills on load (default: true) */
   validateOnLoad?: boolean;
+  /** Assert that the owning workspace can still serve skill operations. */
+  assertAvailable?: () => void;
   /**
    * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
    * Enables detection of in-place file edits (e.g., fixing validation errors).
@@ -84,6 +86,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #skillsResolver: SkillsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
+  readonly #assertAvailable?: () => void;
   readonly #checkSkillFileMtime: boolean;
 
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
@@ -112,6 +115,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
+    this.#assertAvailable = config.assertAvailable;
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
   }
 
@@ -269,6 +273,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   async refresh(): Promise<void> {
+    this.#assertAvailable?.();
+
     // Remove only skill entries from the shared search engine (not workspace content)
     for (const candidates of this.#skills.values()) {
       for (const skill of candidates) {
@@ -560,6 +566,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Uses a promise to prevent concurrent discovery.
    */
   async #ensureInitialized(): Promise<void> {
+    this.#assertAvailable?.();
+
     if (this.#initialized) {
       return;
     }

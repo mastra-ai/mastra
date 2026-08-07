@@ -21,6 +21,7 @@ import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import { resolveFactoryDefaultModelId } from '../../session/factory-session.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -36,7 +37,7 @@ import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
-import { cleanReleasedSandbox } from './sandbox-release.js';
+import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
   computeWorktreePath,
@@ -129,24 +130,6 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
-}
-
-/**
- * Resolve the Factory project's default model for a triage run. Best-effort:
- * a missing project or an uninitialized storage domain simply means "no
- * default", never a failed run.
- */
-async function resolveFactoryDefaultModelId(
-  projects: FactoryProjectsStorage | undefined,
-  factoryProjectId: string | undefined,
-): Promise<string | undefined> {
-  if (!projects || !factoryProjectId) return undefined;
-  try {
-    const project = await projects.getById({ id: factoryProjectId });
-    return project?.defaultModelId ?? undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
@@ -307,11 +290,14 @@ function polledIssueEvent(
     title: string;
     url: string;
     author: string | null;
+    assignee: string | null;
+    assignees?: string[];
     labels: string[];
     createdAt: string;
   },
 ): ParsedGithubWebhook {
   const repositoryId = Number(project.repository.externalId);
+  const assigneeLogins = issue.assignees ?? (issue.assignee ? [issue.assignee] : []);
   return {
     event: 'issues',
     deliveryId: `poll:${repositoryId}:issue:${issue.number}:${issue.createdAt}`,
@@ -325,6 +311,7 @@ function polledIssueEvent(
         title: issue.title,
         html_url: issue.url,
         created_at: issue.createdAt,
+        assignees: assigneeLogins.map(login => ({ login })),
         labels: issue.labels.map(name => ({ name })),
       },
     },
@@ -338,6 +325,8 @@ function polledPullRequestEvent(
     title: string;
     url: string;
     author: string | null;
+    assignees: string[];
+    requestedReviewers: string[];
     headBranch: string;
     baseBranch: string;
     createdAt: string;
@@ -359,6 +348,8 @@ function polledPullRequestEvent(
         created_at: pullRequest.createdAt,
         state: 'open',
         merged: false,
+        assignees: pullRequest.assignees.map(login => ({ login })),
+        requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
         head: { ref: pullRequest.headBranch },
         base: { ref: pullRequest.baseBranch },
       },
@@ -792,6 +783,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             title: issue.title,
             url: issue.url,
             author: issue.author,
+            assignee: issue.assignee,
+            assignees: issue.assignees,
             labels: issue.labels,
             comments: issue.commentCount ?? 0,
             createdAt: issue.createdAt,
@@ -907,6 +900,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             title: pr.title,
             url: pr.url,
             author: pr.author,
+            assignees: pr.assignees ?? [],
+            requestedReviewers: pr.requestedReviewers ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
             createdAt: pr.createdAt,
@@ -1354,50 +1349,22 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        if (session.sandboxId && fleet.provider !== 'local' && session.sandboxWorkdir) {
-          // Keep the remote VM alive: return it to the reuse pool so the next
-          // session for this repository link and user claims it (repo already
-          // cloned) instead of provisioning a fresh sandbox. Scrub the
-          // session's work off the VM first so it doesn't idle with stale
-          // branches or dirty state.
-          await cleanReleasedSandbox({
-            fleet,
-            sourceControl: github.sourceControlStorage,
-            orgId: session.orgId,
-            projectRepositoryId: session.projectRepositoryId,
-            sandboxId: session.sandboxId,
-            sandboxWorkdir: session.sandboxWorkdir,
-          });
-          await github.sourceControlStorage.sandboxPool.release({
-            orgId: session.orgId,
-            projectRepositoryId: session.projectRepositoryId,
-            userId: session.userId,
-            sandboxId: session.sandboxId,
-            sandboxWorkdir: session.sandboxWorkdir,
-          });
-        } else if (session.sandboxId) {
-          let sandbox: MaterializationSandbox | undefined;
-          try {
-            sandbox = await fleet.reattachSandbox(session.sandboxId);
-          } catch {
-            // The provider may already have reclaimed the sandbox.
-          }
-          await fleet.teardownSandbox(
-            {
-              sandboxId: session.sandboxId,
-              setSandboxId: async () => {},
-              clear: async () => {
-                await github.sourceControlStorage.sessions.setSandbox({
-                  id: session.id,
-                  sandboxId: null,
-                  sandboxWorkdir: session.sandboxWorkdir ?? '',
-                });
-              },
-            },
-            sandbox,
-          );
-        }
+        // Answer as soon as the workspace is actually gone. Reclaiming its
+        // sandbox wakes the VM and scrubs the checkout, which takes minutes on
+        // a large repository — the caller must not sit through that for a
+        // workspace that has already been removed.
         await github.sourceControlStorage.sessions.delete(session.id);
+        void reclaimDeletedSessionSandbox({
+          fleet,
+          sourceControl: github.sourceControlStorage,
+          session,
+        }).catch((error: unknown) => {
+          console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+            sessionId: session.sessionId,
+            sandboxId: session.sandboxId,
+            error,
+          });
+        });
         return c.json({ removed: true });
       },
     }),

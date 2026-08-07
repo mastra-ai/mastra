@@ -1,8 +1,15 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
-import type { MastraScorer } from '../../evals/base';
+import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
-import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
+import type {
+  DatasetTenancyFilters,
+  ExperimentGrouping,
+  ExperimentProvenance,
+  ExperimentStatus,
+  TargetType,
+} from '../../storage/types';
+import type { ExperimentEventObserver } from './events';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
 /**
@@ -59,6 +66,29 @@ export interface DataItem<I = unknown, E = unknown> {
 }
 
 /**
+ * Per-domain persistence selection for a single experiment run.
+ *
+ * - `default` — write through the `Mastra` instance's configured storage (current behavior).
+ * - `none` — perform no writes for that domain for this run. Execution, scoring, and the
+ *   returned {@link ExperimentSummary} are unaffected; only the storage writes are skipped.
+ *
+ * The two domains are independent: selecting `none` for one does not change the other.
+ *
+ * This policy governs *experiment bookkeeping* only. It does not disable unrelated
+ * application storage the target itself may use — agent memory, vectors, working memory,
+ * observability traces, or arbitrary code the target runs. It is not a sandbox.
+ */
+export interface ExperimentPersistencePolicy {
+  /**
+   * Experiment records, progress updates, and per-item results
+   * (`mastra_experiments` / `mastra_experiment_results`). Default: `default`.
+   */
+  experiments?: 'default' | 'none';
+  /** Scores emitted by experiment scorers. Default: `default`. */
+  scores?: 'default' | 'none';
+}
+
+/**
  * Internal configuration for running a dataset experiment.
  * Not publicly exported — users interact via Dataset.startExperiment().
  * All new fields are optional — existing internal callers are unaffected.
@@ -99,10 +129,37 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /**
+   * Awaited observer for versioned, JSON-safe semantic lifecycle events.
+   * Delivery is serialized and applies run-wide backpressure. A rejected
+   * observer aborts the run and rejects `runExperiment` with a typed error.
+   * The terminal event is delivered before terminal status is persisted, so
+   * consumers must not treat it as a read-after-write signal for storage.
+   */
+  onEvent?: ExperimentEventObserver;
   /** Per-item execution timeout in milliseconds */
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
+  /**
+   * Per-run, per-domain persistence policy. Omitted or partially specified fields
+   * default to `default`, so omitting this preserves existing behavior exactly.
+   *
+   * Selecting `none` lets a caller own persistence itself — for example a run
+   * executing inside a sandbox whose results are recorded by the host rather than
+   * through the bundled `Mastra` instance's storage.
+   *
+   * @example
+   * ```ts
+   * await runExperiment(mastra, {
+   *   data: items,
+   *   targetType: 'agent',
+   *   targetId: 'my-agent',
+   *   persistence: { experiments: 'none', scores: 'none' },
+   * });
+   * ```
+   */
+  persistence?: ExperimentPersistencePolicy;
   /** Default handling for agent tool calls not declared in an item's `toolMocks` (default: `allow`). */
   unmockedToolPolicy?: UnmockedToolPolicy;
   /** Pre-created experiment ID (for async trigger — skips experiment creation). */
@@ -111,8 +168,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   name?: string;
   /** Experiment description */
   description?: string;
-  /** Arbitrary metadata for the experiment */
+  /** Arbitrary display metadata for the experiment */
   metadata?: Record<string, unknown>;
+  /** Caller-provided source identity for traceability. */
+  provenance?: ExperimentProvenance;
+  /** Stable dimensions for grouping related experiment executions. */
+  grouping?: ExperimentGrouping;
   /** Global request context passed to agent.generate() for all items */
   requestContext?: Record<string, unknown>;
   /** Agent version ID to record against the experiment */
@@ -186,12 +247,16 @@ export interface ScorerResult {
   scorerId: string;
   /** Display name of the scorer */
   scorerName: string;
-  /** Computed score (null if scorer failed) */
+  /** Computed score, or null when no score was produced */
   score: number | null;
-  /** Reason/explanation for the score */
+  /** Reason/explanation for the score, or null when no reason was produced */
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /** Scorer stage that failed, when the scorer exposes stage context */
+  failedStep?: ScorerStepName;
+  /** Scorer stages that completed before the failure */
+  completedSteps?: ScorerStepName[];
   /**
    * Scope this score targets. Mirrors the canonical `ScorerTargetScope`
    * taxonomy from observability so consumers can differentiate span-level

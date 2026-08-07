@@ -9,6 +9,7 @@ import {
   loadSettings,
   resolveThreadActiveModelPackId,
   saveSettings,
+  stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
@@ -93,7 +94,8 @@ async function selectModel(
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-        resolve(model.id);
+        const { customProviders } = loadSettings();
+        resolve(stripMastraCodeCustomProviderPrefix(model.id, customProviders));
       },
       onCancel: () => {
         ctx.state.ui.hideOverlay();

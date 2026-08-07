@@ -2281,7 +2281,7 @@ describe('Tracing', () => {
       span.end();
     });
 
-    it('should use the span-safe representation of requestContext values', () => {
+    it('should preserve nested requestContext values by walking them through deepClean', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
@@ -2300,10 +2300,13 @@ describe('Tracing', () => {
         requestContext,
       });
 
+      // Plain objects are handed to deepClean and walked (nested data stays
+      // visible in the trace); functions and other non-plain types are
+      // collapsed by serializeForSpan rather than walked.
       expect(span.requestContext).toEqual({
         userId: 'user-123',
         callback: '[function]',
-        nested: '[object]',
+        nested: { data: 'value' },
       });
 
       span.end();

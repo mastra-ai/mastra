@@ -146,6 +146,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       model,
       abortSignal,
       abort,
+      messageId,
       rotateResponseMessageId,
     } = args;
     const state = _state ?? ({} as Record<string, unknown>);
@@ -201,15 +202,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
         });
-        const systemMessages =
-          ctx.hasObservations && ctx.omRecord
-            ? await this.engine.buildContextSystemMessages({
-                threadId,
-                resourceId,
-                record: ctx.omRecord,
-                unobservedContextBlocks: ctx.otherThreadsContext,
-              })
-            : undefined;
+        // Pass the record through even without observations — resource-scoped
+        // retrieval still injects recall guidance so the actor can browse and
+        // search other threads.
+        const systemMessages = ctx.omRecord
+          ? await this.engine.buildContextSystemMessages({
+              threadId,
+              resourceId,
+              record: ctx.omRecord,
+              unobservedContextBlocks: ctx.otherThreadsContext,
+            })
+          : undefined;
 
         injectObservationContextMessages({
           messageList,
@@ -275,6 +278,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
+      this.turn.responseMessageId = messageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
