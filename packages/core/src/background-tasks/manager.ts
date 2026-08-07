@@ -1014,7 +1014,13 @@ export class BackgroundTaskManager {
       return true;
     }
 
-    await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount: deliveryAttempt - 1 });
+    // A broker redelivery only counts against the retry budget when a previous
+    // delivery actually started execution (the task was marked `running`, e.g.
+    // the worker crashed mid-run). A dispatch declined cleanly during shutdown
+    // leaves the task `pending`, so the worker that picks up the redelivery
+    // still gets the full retry budget.
+    const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
+    await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount });
     if (this.shuttingDown) return false;
 
     // Publish running lifecycle event (fan-out, for stream consumers)

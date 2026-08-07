@@ -281,6 +281,87 @@ describe('BackgroundTaskManager lifecycle', () => {
     await pubsub.close();
   });
 
+  it('does not consume a retry when a redelivered dispatch was declined before starting', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    // A previous worker declined the dispatch during shutdown before marking
+    // the task running, so the redelivered event (deliveryAttempt: 2) finds
+    // the task still pending. The retry budget must stay intact.
+    const pendingTask = makeRunningTask({ status: 'pending', startedAt: undefined });
+    const updateTask = vi.fn(async () => {});
+    const workflowRun = { start: vi.fn(async () => ({ status: 'success' })) };
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => pendingTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => workflowRun,
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 0 }));
+    expect(ack).toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('still counts a crashed attempt when a redelivered dispatch finds the task running', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    const crashedTask = makeRunningTask();
+    const updateTask = vi.fn(async () => {});
+    const workflowRun = { start: vi.fn(async () => ({ status: 'success' })) };
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => crashedTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => workflowRun,
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 1 }));
+    expect(ack).toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
   it('rejects AbortController registration after shutdown starts', async () => {
     const manager = new BackgroundTaskManager({ enabled: true });
     const controller = new AbortController();
