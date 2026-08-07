@@ -27,17 +27,33 @@
  */
 
 /**
- * Default keys to strip from objects during deep cleaning.
- * These are typically internal/sensitive fields that shouldn't be traced.
+ * Default keys to strip during deep cleaning: none.
+ *
+ * `deepClean` used to remove a hardcoded key set (`steps`, `providerMetadata`,
+ * `execute`, `validate`, …) from every object at every depth. Those are common
+ * domain words, so a user's `recipe.steps` or `plan.validate` was silently
+ * deleted from the recorded span input with no marker — the trace claimed the
+ * caller never sent the field. User payloads must round-trip into traces intact,
+ * so the default now strips nothing. Framework-produced LLM/model spans still
+ * strip their own verbose result artifacts via `FRAMEWORK_PAYLOAD_KEYS_TO_STRIP`
+ * (applied by `base.ts` for those span types only).
  */
-export const DEFAULT_KEYS_TO_STRIP = new Set([
-  'logger',
-  'experimental_providerMetadata',
-  'providerMetadata',
+export const DEFAULT_KEYS_TO_STRIP = new Set<string>();
+
+/**
+ * Keys stripped only from framework-produced LLM/model span payloads.
+ *
+ * These are AI-SDK result artifacts — the full per-step history (`steps`) and
+ * verbose provider metadata — that bloat traces without adding signal the
+ * curated span fields don't already carry. They only ever appear on
+ * framework-authored model/agent spans, so `base.ts` applies this set to those
+ * span types and nowhere else. On user-authored payloads (tool args/results,
+ * workflow step input/output) the same words are ordinary data and are kept.
+ */
+export const FRAMEWORK_PAYLOAD_KEYS_TO_STRIP = new Set<string>([
   'steps',
-  'tracingContext',
-  'execute', // Tool execute functions
-  'validate', // Schema validate functions
+  'providerMetadata',
+  'experimental_providerMetadata',
 ]);
 
 export interface DeepCleanOptions {
