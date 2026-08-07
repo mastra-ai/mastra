@@ -28,6 +28,8 @@ export interface ChatSessionContextApi {
    * of binding to a fresh random-id thread the route can never find.
    */
   sessionThreadId?: string;
+  /** Workspace needs sandbox provision + clone before the controller can connect. */
+  workspacePending?: boolean;
   factorySessionState?: FactorySessionState;
   baseUrl: string;
   /**

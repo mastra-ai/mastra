@@ -128,6 +128,13 @@ export const mastra = new Mastra({
     isOptional: true,
     defaultValue: 'false',
   },
+  {
+    name: 'heartbeatMs',
+    type: 'number',
+    description:
+      'Interval in milliseconds for SSE heartbeats that keep connections active through infrastructure with idle timeouts.',
+    isOptional: true,
+  },
 ]}
 />
 

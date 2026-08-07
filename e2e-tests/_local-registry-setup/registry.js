@@ -1,6 +1,6 @@
 import { fork, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,11 +14,25 @@ if (typeof require === 'undefined') {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+export function resolveVerdaccioPathFrom(requireFrom) {
+  const manifestPath = requireFrom.resolve('verdaccio/package.json');
+  const manifest = requireFrom(manifestPath);
+  const binPath = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.verdaccio;
+  if (!binPath) {
+    throw new Error(`Verdaccio package at ${manifestPath} does not declare a verdaccio binary`);
+  }
+  return resolve(dirname(manifestPath), binPath);
+}
+
 function resolveVerdaccioPath() {
   try {
-    return require.resolve('verdaccio/bin/verdaccio');
-  } catch {
-    return createRequire(join(process.cwd(), 'package.json')).resolve('verdaccio/bin/verdaccio');
+    return resolveVerdaccioPathFrom(require);
+  } catch (primaryError) {
+    try {
+      return resolveVerdaccioPathFrom(createRequire(join(process.cwd(), 'package.json')));
+    } catch (fallbackError) {
+      throw new AggregateError([primaryError, fallbackError], 'Unable to resolve the Verdaccio binary');
+    }
   }
 }
 
@@ -52,6 +66,11 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
   const registry = await runRegistry(verdaccioPath, ['-c', configPath, '-l', `${port}`], {
     cwd: location,
   });
+
+  if (process.env.MASTRA_E2E_REGISTRY_PID_FILE) {
+    await mkdir(dirname(process.env.MASTRA_E2E_REGISTRY_PID_FILE), { recursive: true });
+    await writeFile(process.env.MASTRA_E2E_REGISTRY_PID_FILE, `${registry.pid}\n`);
+  }
 
   // Set a dummy auth token for npm/pnpm (required by npm even if registry doesn't validate it)
   execSync(`npm config set //localhost:${port}/:_authToken dummy-token`);
@@ -95,6 +114,17 @@ export async function stopRegistry(registry) {
       resolve();
     }
   });
+
+  const pidFile = process.env.MASTRA_E2E_REGISTRY_PID_FILE;
+  if (pidFile) {
+    try {
+      if ((await readFile(pidFile, 'utf8')).trim() === String(registry.pid)) {
+        await unlink(pidFile);
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
 }
 
 export async function startPublishedRegistry({

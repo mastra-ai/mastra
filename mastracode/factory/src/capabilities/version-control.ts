@@ -31,6 +31,8 @@ export interface PullRequest {
   title: string;
   url: string;
   author: string | null;
+  assignees?: string[];
+  requestedReviewers?: string[];
   body: string | null;
   state: PullRequestState;
   draft: boolean;
