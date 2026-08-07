@@ -184,6 +184,12 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function normalizeSessionTitle(title: string): string | null {
+  // Cap code points, not UTF-16 units: an emoji straddling the cap would store a lone surrogate.
+  const capped = [...title.replace(/\s+/g, ' ').trim()].slice(0, MAX_SESSION_TITLE_LENGTH).join('');
+  return capped.trimEnd() || null;
+}
+
 /**
  * Resolve the org-scoped tenant for a GitHub request. GitHub project features
  * are org-owned, so they require both a signed-in user and a WorkOS
@@ -1341,8 +1347,7 @@ function buildProjectGitRoutes({
         if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {
           return c.json({ error: 'Invalid title' }, 400);
         }
-        const normalizedTitle =
-          requestedTitle?.replace(/\s+/g, ' ').trim().slice(0, MAX_SESSION_TITLE_LENGTH).trimEnd() || null;
+        const normalizedTitle = requestedTitle === undefined ? null : normalizeSessionTitle(requestedTitle);
 
         const requestedBranch = body.branch;
         let branch: string;
