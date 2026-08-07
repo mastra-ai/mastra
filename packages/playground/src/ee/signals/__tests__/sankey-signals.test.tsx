@@ -622,6 +622,15 @@ describe('SankeySignals', () => {
         'end',
       ]);
     });
+
+    it('places every drag handle to the right of its signal label', async () => {
+      renderSankeySignals();
+
+      const handles = await Promise.all(
+        ['Goal', 'Sentiment', 'Behavior', 'Outcome'].map(label => screen.findByLabelText(`Reorder ${label}`)),
+      );
+      expect(handles.map(handle => getComputedStyle(handle).left)).toEqual(['100%', '100%', '100%', '100%']);
+    });
   });
 
   describe('when a signal column header is reordered', () => {

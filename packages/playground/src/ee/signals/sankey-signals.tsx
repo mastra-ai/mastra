@@ -335,9 +335,8 @@ function FlowCard({
                                   {...dragProvided.dragHandleProps}
                                   aria-disabled={reorderDisabled}
                                   aria-label={`Reorder ${label}`}
-                                  className={`text-neutral3 hover:text-neutral5 absolute top-1/2 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50 ${
-                                    headerAnchor === 'end' ? 'right-full mr-0.5' : 'left-full ml-0.5'
-                                  }`}
+                                  className="text-neutral3 hover:text-neutral5 absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                                  style={{ left: '100%' }}
                                   title={`Drag to reorder the ${label} column`}
                                 >
                                   <GripVertical aria-hidden="true" className="size-3.5" />
