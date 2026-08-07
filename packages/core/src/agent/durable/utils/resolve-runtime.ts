@@ -255,6 +255,10 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     logger?.debug?.(`[DurableAgent:${agentId}] No tools resolved for run ${runId}`);
   }
 
+  // Build this before the registry write-back. On a remote worker that
+  // write-back is what makes finish-time persistence available to later steps.
+  const saveQueueManager = makeSaveQueueManager(memory, mastra);
+
   // Write the rebuilt state back into the per-process registry so sibling
   // durable steps in THIS process (e.g. the tool-call step that runs after the
   // LLM step on the same worker) reuse it instead of rebuilding per call. Only
@@ -270,6 +274,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       modelList,
       workspace,
       memory,
+      saveQueueManager,
       inputProcessors,
       llmRequestInputProcessors,
       outputProcessors,
@@ -283,10 +288,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     }
   }
 
-  // 3. Get or create SaveQueueManager
-  const saveQueueManager = makeSaveQueueManager(memory, mastra);
-
-  // 4. Reconstruct _internal for compatibility with existing code
+  // 3. Reconstruct _internal for compatibility with existing code
   const _internal = resolveInternalState({
     state: input.state,
     memory,
