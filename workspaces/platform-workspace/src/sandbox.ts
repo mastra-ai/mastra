@@ -510,11 +510,93 @@ export class PlatformSandbox extends MastraSandbox {
     this._addressRegistry.set(json.id, json.instanceUrl);
   }
 
+  /**
+   * Stop the sandbox while **preserving its recovery checkpoint**.
+   *
+   * Semantic parity with `@mastra/railway` `RailwaySandbox.stop()`: the VM
+   * is released but the on-provider checkpoint survives, so a subsequent
+   * `start()` on a sandbox constructed with the same `id` can restore from
+   * it. Any in-flight capture is awaited first so the preserved checkpoint
+   * reflects the latest disk state we asked for.
+   *
+   * Corresponds to `DELETE /v1/projects/:pid/sandbox/:sandboxId` on
+   * workspace-proxy, which by contract does not touch the checkpoint. Use
+   * {@link destroy} when you want the checkpoint released too.
+   */
   async stop(): Promise<void> {
-    await this.destroy();
+    // Await any in-flight capture so the preserved checkpoint reflects the
+    // latest capture the caller triggered. Never rethrow — a failing capture
+    // must not block teardown; the proxy's safety-net refresh timer is a
+    // fallback for the checkpoint state.
+    if (this._captureInFlight) {
+      await this._captureInFlight.catch(error => {
+        this.logger.warn(`stop(): failed to flush in-flight capture before teardown:`, error);
+      });
+    }
+    await this._teardownSandbox();
   }
 
+  /**
+   * Destroy the sandbox **and release its recovery checkpoint**.
+   *
+   * Semantic parity with `@mastra/railway` `RailwaySandbox.destroy()`:
+   * cancels any in-flight capture (the checkpoint is about to be deleted
+   * — no reason to burn a capture on state we're releasing), asks the
+   * proxy to delete the checkpoint, then releases the VM. Both remote
+   * operations are best-effort logged failures — a stray checkpoint or a
+   * transient proxy error must not leave the caller with a half-torn-down
+   * sandbox they can't safely retry.
+   *
+   * Requires the caller to have constructed with a recovery `id` (there is
+   * no checkpoint to delete otherwise); callers without one skip the
+   * checkpoint DELETE and behave identically to {@link stop}.
+   */
   async destroy(): Promise<void> {
+    if (!this._sandboxId) return;
+    const destroyedSandboxId = this._sandboxId;
+
+    // Drop the in-flight capture promise — we're about to delete the
+    // checkpoint, so completing an in-flight capture is at best a wasted
+    // round-trip and at worst races with the delete. Callers get whatever
+    // resolution the pending capture already had; we don't rethrow.
+    this._captureInFlight = null;
+
+    if (this._hasRecoveryKey) {
+      // Body mirrors the POST /checkpoint shape (`{ id }`) so the proxy
+      // can hash the same recovery key into the same checkpoint name.
+      // Best-effort: a proxy 404/410 means the checkpoint is already
+      // absent (idle GC, prior delete) and we can proceed with the VM
+      // teardown; other failures are surfaced in logs but do not abort
+      // — the VM DELETE below is the operation the caller most needs.
+      try {
+        await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}/checkpoint`, {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: this.id }),
+        });
+      } catch (error) {
+        if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) {
+          this.logger.debug(`destroy(): checkpoint already absent upstream (status=${error.status})`);
+        } else {
+          this.logger.warn(`destroy(): failed to delete checkpoint upstream:`, error);
+        }
+      }
+    }
+
+    await this._teardownSandbox();
+  }
+
+  /**
+   * Release the remote sandbox VM and clear the local state pointing at it.
+   *
+   * Shared body of {@link stop} and {@link destroy} — both funnel through
+   * here after they've dealt with the checkpoint (preserve vs release).
+   * The VM DELETE is safe to issue in either mode: the proxy's DELETE
+   * route does not touch the checkpoint on its own, so `stop()` correctly
+   * leaves the checkpoint intact and `destroy()` has already removed it
+   * before this call.
+   */
+  private async _teardownSandbox(): Promise<void> {
     if (!this._sandboxId) return;
     const destroyedSandboxId = this._sandboxId;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
