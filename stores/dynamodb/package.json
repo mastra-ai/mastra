@@ -38,8 +38,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1058.0",
-    "@aws-sdk/lib-dynamodb": "^3.1058.0",
+    "@aws-sdk/client-dynamodb": "^3.1095.0",
+    "@aws-sdk/lib-dynamodb": "^3.1095.0",
     "electrodb": "^3.9.1"
   },
   "peerDependencies": {

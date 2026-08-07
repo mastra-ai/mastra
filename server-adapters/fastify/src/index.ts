@@ -212,7 +212,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     const cancelReader = (reason: string) => {
       if (readerCanceled) return;
       readerCanceled = true;
-      void reader.cancel(reason);
+      void reader.cancel(reason).catch(() => {});
     };
     const cancelReaderOnResponseClose = () => cancelReader('request aborted');
     const cancelReaderOnRequestClose = () => {
@@ -399,7 +399,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         const cancelReader = (reason: string) => {
           if (readerCanceled) return;
           readerCanceled = true;
-          void reader.cancel(reason);
+          void reader.cancel(reason).catch(() => {});
         };
 
         const cancelReaderOnResponseClose = () => cancelReader('request aborted');

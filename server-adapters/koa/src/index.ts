@@ -565,7 +565,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     const reader = readableStream.getReader();
 
     ctx.res.on('close', () => {
-      void reader.cancel('request aborted');
+      void reader.cancel('request aborted').catch(() => {});
     });
 
     try {
@@ -740,7 +740,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error');
+          void reader.cancel('response write error').catch(() => {});
         };
         ctx.res.once('error', onResError);
 

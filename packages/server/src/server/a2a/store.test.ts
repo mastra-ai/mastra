@@ -29,6 +29,27 @@ describe('InMemoryTaskStore', () => {
     });
   });
 
+  it('rejects a save when the expected version is stale', async () => {
+    const store = new InMemoryTaskStore();
+    const task = createTask();
+
+    await store.save({ agentId: 'agent-1', data: task });
+    await store.save({
+      agentId: 'agent-1',
+      data: createTask({ id: 'task-1', status: { state: 'completed' } }),
+      expectedVersion: 1,
+    });
+
+    await expect(
+      store.save({
+        agentId: 'agent-1',
+        data: createTask({ id: 'task-1', status: { state: 'failed' } }),
+        expectedVersion: 1,
+      }),
+    ).rejects.toMatchObject({ name: 'TaskStoreVersionConflictError' });
+    expect((await store.load({ agentId: 'agent-1', taskId: 'task-1' }))?.status.state).toBe('completed');
+  });
+
   it('waitForNextUpdate resolves immediately when a newer version already exists', async () => {
     const store = new InMemoryTaskStore();
     const task = createTask();
