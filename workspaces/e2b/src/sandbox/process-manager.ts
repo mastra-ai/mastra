@@ -62,10 +62,16 @@ class E2BProcessHandle extends ProcessHandle {
         result?: { exitCode: number; error?: string; stdout: string; stderr: string };
       };
       const exitCode = errorObj.result?.exitCode ?? errorObj.exitCode ?? this.exitCode ?? 1;
-      // Prefer the retained buffers so maxRetainedBytes still applies. Fall back
-      // to error-attached output when E2B did not invoke the stream callbacks.
-      const stdout = this.stdout || errorObj.result?.stdout || errorObj.stdout || '';
-      const stderr = this.stderr || errorObj.result?.stderr || errorObj.stderr || '';
+
+      // If E2B skipped the stream callbacks, retain and dispatch its attached
+      // output through the normal path so maxRetainedBytes still applies.
+      const attachedStdout = errorObj.result?.stdout || errorObj.stdout;
+      const attachedStderr = errorObj.result?.stderr || errorObj.stderr;
+      if (!this.stdout && !this.stdoutTruncated && attachedStdout) this.emitStdout(attachedStdout);
+      if (!this.stderr && !this.stderrTruncated && attachedStderr) this.emitStderr(attachedStderr);
+
+      const stdout = this.stdout;
+      const stderr = this.stderr;
       const terminalError =
         errorObj.result?.error || errorObj.error || (error instanceof Error ? error.message : String(error));
       const errorDetail = terminalError && !stderr.includes(terminalError) ? `Error: ${terminalError}` : '';

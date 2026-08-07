@@ -2320,6 +2320,41 @@ describe('E2BSandbox Internal Methods', () => {
       expect(result.stderr).toContain('command not found');
     });
 
+    it('applies retention limits to output attached to an E2B error', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      const onStdout = vi.fn();
+      const onStderr = vi.fn();
+      const e2bError = Object.assign(new Error('Command failed'), {
+        result: { exitCode: 1, stdout: 'abcdef', stderr: 'warning' },
+      });
+      mockSandbox.commands.run.mockImplementationOnce((_cmd: string, opts?: any) => {
+        const handle = createMockCommandHandle({ exitCode: 0, stdout: '', stderr: '' }, opts);
+        handle.wait.mockRejectedValue(e2bError);
+        return Promise.resolve(handle);
+      });
+
+      const result = await sandbox.executeCommand('failing-command', [], {
+        maxRetainedBytes: 4,
+        onStdout,
+        onStderr,
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        exitCode: 1,
+        stdout: 'cdef',
+        stderr: 'ning\nError: Command failed',
+        stdoutTruncated: true,
+        stderrTruncated: true,
+      });
+      expect(onStdout).toHaveBeenCalledOnce();
+      expect(onStdout).toHaveBeenCalledWith('abcdef');
+      expect(onStderr).toHaveBeenCalledOnce();
+      expect(onStderr).toHaveBeenCalledWith('warning');
+    });
+
     it('does not duplicate streamed output and preserves the terminal error', async () => {
       const sandbox = new E2BSandbox();
       await sandbox._start();
