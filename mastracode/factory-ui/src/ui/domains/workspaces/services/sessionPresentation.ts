@@ -29,3 +29,8 @@ export function getUserSessionLabel(session: FactoryUserSession): string {
   if (isAutomaticUserSessionBranch(session)) return 'New session';
   return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
 }
+
+/** An automatic branch is the session's own UUID — it tells a reader nothing the label doesn't. */
+export function getUserSessionTooltip(session: FactoryUserSession): string {
+  return isAutomaticUserSessionBranch(session) ? getUserSessionLabel(session) : session.branch;
+}

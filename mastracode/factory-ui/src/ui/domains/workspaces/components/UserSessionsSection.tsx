@@ -17,7 +17,7 @@ import { createAgentControllerClient, requireAgentControllerSession } from '../.
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { UserSessionNotFoundError, deleteUserSession, getUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
-import { getUserSessionLabel, isAutomaticUserSessionBranch } from '../services/sessionPresentation';
+import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 
 export function UserSessionsSection() {
@@ -56,6 +56,8 @@ export function UserSessionsSection() {
         if (!(error instanceof UserSessionNotFoundError)) throw error;
         storedSession = null;
       }
+      // A thread only exists once the workspace materialized; asking the controller
+      // for one before that would provision a sandbox just to delete nothing.
       if (storedSession?.materializedAt) {
         const chatSession = controllerSession(session.sessionId);
         try {
@@ -126,9 +128,7 @@ export function UserSessionsSection() {
               <SessionNavRow
                 key={session.sessionId}
                 name={name}
-                title={
-                  session.title?.trim() || (isAutomaticUserSessionBranch(session) ? 'New session' : session.branch)
-                }
+                title={getUserSessionTooltip(session)}
                 url={url}
                 active={active}
                 disabled={pending}

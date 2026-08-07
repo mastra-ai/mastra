@@ -264,7 +264,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text.trim() && images.length === 0) return;
+    if (!text && images.length === 0) return;
     updateDraft('');
     void handleInput(text).catch(error => {
       clearPending();
