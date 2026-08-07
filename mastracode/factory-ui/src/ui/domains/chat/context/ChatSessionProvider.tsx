@@ -68,11 +68,7 @@ export function ChatSessionConfigProvider({
   // factory-level session address — which is the factory project id, the same
   // value /ensure returns — so resource-scoped surfaces (behavior settings, tool
   // permissions) stay functional without provisioning a sandbox.
-  const resourceId = isUserDraft
-    ? draftSessionId
-    : userScoped
-      ? threadId
-      : (storedSession?.sessionId ?? sessionId ?? factory?.id);
+  const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
   // A `?resourceId=` query param overrides the resolved factory resource so the
   // whole chat session (transcript, messages, connection, thread switch) binds
@@ -97,11 +93,9 @@ export function ChatSessionConfigProvider({
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one we keep the original ordering and
   // wait for the workspace so resource reads follow materialization.
-  const resourceEnabled = isUserDraft
-    ? false
-    : userScoped || !inSession
-      ? Boolean(resourceId)
-      : Boolean(resourceOverride) || ensureQuery.isSuccess;
+  const resourceAddressable =
+    userScoped || !inSession ? Boolean(resourceId) : Boolean(resourceOverride) || ensureQuery.isSuccess;
+  const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,

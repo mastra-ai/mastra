@@ -562,7 +562,8 @@ describe('Composer while a session prepares its workspace', () => {
     session.finishWorkspace();
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(screen.getAllByText(/Sandbox is gone/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Sandbox is gone/)).toHaveLength(1));
+    await waitForMutationsIdle(client);
     expect(screen.getAllByText(/Sandbox is gone/)).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
   });

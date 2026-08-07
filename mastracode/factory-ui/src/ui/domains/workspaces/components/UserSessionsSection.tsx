@@ -27,7 +27,7 @@ export function UserSessionsSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const draftMatch = useMatch('/factories/:factoryId/user/new/:draftSessionId');
+  const draftSessionId = useMatch('/factories/:factoryId/user/new/:draftSessionId')?.params.draftSessionId;
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
 
   const repository = factoryQuery.data?.repositories[0];
@@ -110,15 +110,7 @@ export function UserSessionsSection() {
 
       <div className="flex flex-col gap-1">
         <MainSidebar.NavList>
-          {draftMatch?.params.draftSessionId && (
-            <SessionNavRow
-              name="New session"
-              url={location.pathname}
-              active
-              disabled={false}
-              onSelect={() => undefined}
-            />
-          )}
+          {draftSessionId && <SessionNavRow name="New session" url={location.pathname} active />}
           {sessions.map(session => {
             const name = getUserSessionLabel(session);
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
@@ -138,22 +130,20 @@ export function UserSessionsSection() {
             );
           })}
         </MainSidebar.NavList>
-        {sessionsQuery.isError ? (
+        {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
-            <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
+            <Txt as="p" variant="ui-xs" className="text-error m-0">
               Couldn’t load sessions
             </Txt>
             <Button variant="ghost" size="xs" onClick={() => void sessionsQuery.refetch()}>
               Retry
             </Button>
           </div>
-        ) : (
-          sessions.length === 0 &&
-          !draftMatch?.params.draftSessionId && (
-            <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
-              No sessions yet
-            </Txt>
-          )
+        )}
+        {!sessionsQuery.isError && sessions.length === 0 && !draftSessionId && (
+          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
+            No sessions yet
+          </Txt>
         )}
       </div>
 

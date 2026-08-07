@@ -32,14 +32,14 @@ export function SessionNavRow({
   title?: string;
   url: string;
   active: boolean;
-  disabled: boolean;
+  disabled?: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
   /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
   status?: 'running' | 'attention';
   preview?: SessionPreviewDetails;
-  onSelect: () => void;
+  onSelect?: () => void;
   onDelete?: () => void;
 }) {
   const button = (

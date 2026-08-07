@@ -113,7 +113,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spotlightRef = useComposerSpotlight(!busy);
   const modeSwitchPendingRef = useRef(false);
-  const creatingDraftSessionRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
@@ -210,14 +209,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const createSessionFromDraft = async (text: string) => {
-    if (creatingDraftSessionRef.current) return;
     if (!draftSessionId || !factoryId || !factorySessionState?.projectRepositoryId) {
       updateDraft(text);
       pushNotice('Could not create the session. Reload the page and try again.', 'error');
       return;
     }
 
-    creatingDraftSessionRef.current = true;
     setCreatingDraftSession(true);
     try {
       const session = await createUserSession(baseUrl, factorySessionState.projectRepositoryId, {
@@ -235,7 +232,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       const message = error instanceof Error ? error.message : 'Session creation failed';
       pushNotice(`Could not create the session: ${message}. Try again.`, 'error');
     } finally {
-      creatingDraftSessionRef.current = false;
       setCreatingDraftSession(false);
     }
   };
