@@ -5,17 +5,26 @@ const CHANGE_EVENT = 'mastracode:pinned-sessions-change';
 
 let cachedValue: string | null = null;
 let cachedSessions = new Set<string>();
+let storageUnavailable = false;
 
 function readPinnedSessions(): Set<string> {
-  try {
-    const value = localStorage.getItem(STORAGE_KEY);
-    if (value === cachedValue) return cachedSessions;
+  if (storageUnavailable) return cachedSessions;
 
-    cachedValue = value;
+  let value: string | null;
+  try {
+    value = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    storageUnavailable = true;
+    return cachedSessions;
+  }
+
+  if (value === cachedValue) return cachedSessions;
+
+  cachedValue = value;
+  try {
     const parsed: unknown = value ? JSON.parse(value) : [];
     cachedSessions = new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
   } catch {
-    cachedValue = null;
     cachedSessions = new Set();
   }
   return cachedSessions;
@@ -35,8 +44,9 @@ function savePinnedSessions(sessions: Set<string>) {
   cachedSessions = sessions;
   try {
     localStorage.setItem(STORAGE_KEY, cachedValue);
+    storageUnavailable = false;
   } catch {
-    // Pinning remains available for the current page when storage is unavailable.
+    storageUnavailable = true;
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
