@@ -303,11 +303,12 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
   // Presence is the key being set, not the value being defined: codegen emits
   // `instructions` only when the file exists, so a module that default-exports
   // `undefined` has to read as a broken file rather than as no file at all.
+  // Own key only: an inherited one never came from a discovered file.
   const instructions = resolveInstructions(
     name,
     config.instructions,
     instructionsModule,
-    'instructions' in entry,
+    Object.hasOwn(entry, 'instructions'),
     instructionsMd,
     onWarn,
   );

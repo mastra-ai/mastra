@@ -274,6 +274,19 @@ describe('assembleAgentFromFsEntry', () => {
       });
       expect(await agent.getInstructions()).toBe('from md');
     });
+
+    // Presence means a file was discovered for this agent, so it has to be an
+    // own key. An inherited one would let a prototype speak for the directory.
+    it('ignores an inherited instructions property', async () => {
+      const entry = Object.create({ instructions: 'from prototype' }) as FsAgentEntry;
+      Object.assign(entry, {
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'from md',
+      });
+
+      expect(await assembleAgentFromFsEntry(entry).getInstructions()).toBe('from md');
+    });
   });
 
   // The dynamic config wins over either file, so ignoring the markdown silently
