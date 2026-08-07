@@ -118,12 +118,13 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  // Scroll the selected span into view within the timeline
+  // Scroll the selected span into view within the timeline, which only exists
+  // once the trace has loaded.
   useEffect(() => {
-    if (!selectedSpanId || !contentRef.current) return;
+    if (isLoading || !selectedSpanId || !contentRef.current) return;
     const el = contentRef.current.querySelector(`[data-span-id="${selectedSpanId}"]`);
     el?.scrollIntoView({ block: 'nearest' });
-  }, [selectedSpanId]);
+  }, [selectedSpanId, isLoading]);
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? [], anchorSpanId), [spans, anchorSpanId]);
 

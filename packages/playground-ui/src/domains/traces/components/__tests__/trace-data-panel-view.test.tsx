@@ -13,7 +13,14 @@ const baseProps: TraceDataPanelViewProps = {
   placement: 'traces-list',
 };
 
-afterEach(() => cleanup());
+// jsdom has no layout, so it ships no scrollIntoView.
+const scrollIntoView = vi.fn();
+Element.prototype.scrollIntoView = scrollIntoView;
+
+afterEach(() => {
+  cleanup();
+  scrollIntoView.mockClear();
+});
 
 describe('TraceDataPanelView — Add tool mocks to item', () => {
   it('fires onAddTraceMocksToItem with the traceId when the button is clicked', () => {
@@ -54,6 +61,13 @@ describe('TraceDataPanelView — span selected from the URL', () => {
       );
 
       expect(onSpanSelect).toHaveBeenCalledWith('root');
+    });
+
+    it('scrolls the requested span into view once the timeline renders', () => {
+      const { rerender } = render(<TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="root" />);
+      rerender(<TraceDataPanelView {...baseProps} spans={rootSpanFixture} isLoading={false} initialSpanId="root" />);
+
+      expect(scrollIntoView).toHaveBeenCalled();
     });
   });
 
