@@ -5,17 +5,11 @@ import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSnapshot } from './types';
 
-export type TimelineMarkerKind = 'selected' | 'compare-a' | 'compare-b';
+export type TimelineMarkerKind = 'selected' | 'compare-point';
 
 const MARKER_TICK_CLASSES: Record<TimelineMarkerKind, string> = {
   selected: 'bg-accent1 border-accent1',
-  'compare-a': 'bg-amber-400 border-amber-400',
-  'compare-b': 'bg-blue-400 border-blue-400',
-};
-
-const MARKER_BADGES: Partial<Record<TimelineMarkerKind, string>> = {
-  'compare-a': 'A',
-  'compare-b': 'B',
+  'compare-point': 'bg-green-400 border-green-400',
 };
 
 /**
@@ -28,11 +22,14 @@ export function TimelineTrack({
   snapshots,
   totalCount,
   markers,
+  grabbedIndex,
   onTickSelect,
 }: {
   snapshots: ThemeSnapshot[];
   totalCount: number;
   markers: ReadonlyMap<number, TimelineMarkerKind>;
+  /** Landmark index of a grabbed compare point — the next tick click moves it. */
+  grabbedIndex?: number;
   onTickSelect: (index: number) => void;
 }) {
   const positions = timelineTickPositions(snapshots);
@@ -43,29 +40,21 @@ export function TimelineTrack({
       <div aria-hidden="true" className="bg-border1 absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full" />
       {snapshots.map((snapshot, index) => {
         const marker = markers.get(index);
-        const badge = marker ? MARKER_BADGES[marker] : undefined;
+        const grabbed = marker === 'compare-point' && index === grabbedIndex;
         return (
           <button
             key={snapshot.snapshotId}
             aria-current={marker === 'selected' ? 'true' : undefined}
             aria-label={snapshotTickLabel(snapshot, totalCount)}
+            aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-colors ${
               marker ? MARKER_TICK_CLASSES[marker] : 'bg-surface4 border-surface2 hover:bg-accent1/60'
-            }`}
+            } ${grabbed ? 'ring-2 ring-green-300/70' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}
             type="button"
-          >
-            {badge ? (
-              <span
-                aria-hidden="true"
-                className="text-neutral6 absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[10px] font-bold"
-              >
-                {badge}
-              </span>
-            ) : null}
-          </button>
+          />
         );
       })}
       {snapshots.map((snapshot, index) =>
