@@ -325,20 +325,23 @@ describe('RailwaySandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
-    it('refreshes the checkpoint shortly before the sandbox idle timeout', async () => {
+    it('refreshes the checkpoint the safety-net margin before the sandbox idle timeout', async () => {
       vi.useFakeTimers();
       mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
 
       const sandbox = new RailwaySandbox({
         token: 'tok',
         checkpointName: 'mastracode-repo-abc123',
-        idleTimeoutMinutes: 1,
+        // Idle timeout comfortably larger than the 3-minute refresh margin so
+        // the refresh fires at (idle - margin) rather than the 1-second floor.
+        idleTimeoutMinutes: 5,
         template: t => t.run('npm i -g pnpm'),
       });
       await sandbox._start();
       expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(50_000);
+      // 5min idle - 3min margin = 2min.
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
 
       expect(mockDeleteCheckpoint).not.toHaveBeenCalled();
       expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(2);
@@ -357,10 +360,119 @@ describe('RailwaySandbox', () => {
       await sandbox._start();
       expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(30 * 60_000 - 10_000);
+      // 30min default Railway idle - 3min margin = 27min.
+      await vi.advanceTimersByTimeAsync(30 * 60_000 - 180_000);
 
       expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(2);
       expect(mockSandbox.checkpoint).toHaveBeenLastCalledWith('mastracode-repo-abc123');
+    });
+
+    describe('captureCheckpoint (public, on-demand)', () => {
+      it('captures the checkpoint synchronously and returns "captured"', async () => {
+        mockCheckpoints.mockResolvedValueOnce([
+          { id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' },
+        ]);
+        const sandbox = new RailwaySandbox({ token: 'tok', checkpointName: 'mastracode-repo-abc123' });
+        await sandbox._start();
+
+        // Restore path — no capture at start.
+        expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
+
+        const outcome = await sandbox.captureCheckpoint();
+
+        expect(outcome).toBe('captured');
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+        expect(mockSandbox.checkpoint).toHaveBeenCalledWith('mastracode-repo-abc123');
+      });
+
+      it('returns "skipped" when no checkpointName is configured', async () => {
+        const sandbox = new RailwaySandbox({ token: 'tok' });
+        await sandbox._start();
+
+        const outcome = await sandbox.captureCheckpoint();
+
+        expect(outcome).toBe('skipped');
+        expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
+      });
+
+      it('returns "skipped" when the sandbox has not been started', async () => {
+        const sandbox = new RailwaySandbox({ token: 'tok', checkpointName: 'mastracode-repo-abc123' });
+
+        const outcome = await sandbox.captureCheckpoint();
+
+        expect(outcome).toBe('skipped');
+        expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
+      });
+
+      it('coalesces with an in-flight timer-driven refresh (single upstream capture)', async () => {
+        vi.useFakeTimers();
+        mockCheckpoints.mockResolvedValueOnce([
+          { id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' },
+        ]);
+
+        // Hold the checkpoint call open so the timer's refresh is in-flight
+        // when captureCheckpoint() arrives.
+        let releaseCheckpoint!: () => void;
+        const held = new Promise<{ id: string; key: string; environmentId: string }>(resolve => {
+          releaseCheckpoint = () =>
+            resolve({ id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' });
+        });
+        mockSandbox.checkpoint.mockImplementationOnce(() => held);
+
+        const sandbox = new RailwaySandbox({
+          token: 'tok',
+          checkpointName: 'mastracode-repo-abc123',
+          idleTimeoutMinutes: 5,
+        });
+        await sandbox._start();
+
+        // Advance to fire the timer-driven refresh; checkpoint call is now
+        // hanging on `held`.
+        await vi.advanceTimersByTimeAsync(2 * 60_000);
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+
+        // Concurrent on-demand capture joins the in-flight refresh.
+        const outcomePromise = sandbox.captureCheckpoint();
+
+        releaseCheckpoint();
+        const outcome = await outcomePromise;
+
+        expect(outcome).toBe('coalesced');
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
+      });
+
+      it('reschedules the safety-net timer relative to the on-demand capture', async () => {
+        vi.useFakeTimers();
+        mockCheckpoints.mockResolvedValueOnce([
+          { id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' },
+        ]);
+        const sandbox = new RailwaySandbox({
+          token: 'tok',
+          checkpointName: 'mastracode-repo-abc123',
+          idleTimeoutMinutes: 5,
+        });
+        await sandbox._start();
+        expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
+
+        // Halfway to the safety-net fire, capture on demand.
+        await vi.advanceTimersByTimeAsync(60_000);
+        await sandbox.captureCheckpoint();
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+
+        // The old safety-net timer at t=120_000 should have been cancelled,
+        // and a fresh one scheduled 2min out from now. Advance 119s — the
+        // old timer's deadline arrives, no fire should occur.
+        await vi.advanceTimersByTimeAsync(119_000);
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+
+        // 2min after capture, the fresh safety-net timer fires.
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(2);
+
+        vi.useRealTimers();
+      });
     });
   });
 

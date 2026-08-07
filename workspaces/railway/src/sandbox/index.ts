@@ -23,6 +23,17 @@ import type { SandboxNetworkIsolation, SandboxTemplate } from 'railway';
 import { shellQuote } from '../utils/shell-quote';
 import { LOG_PREFIX, RailwayProcessManager } from './process-manager';
 
+/**
+ * Safety margin subtracted from the sandbox's idle timeout when scheduling the
+ * pre-reap checkpoint refresh. Sized to comfortably exceed Cloud Run cold-start
+ * / recycle windows so a scale event during the refresh doesn't cause the timer
+ * to lose the race with Railway's idle destroy. If a caller reduces the idle
+ * timeout below this margin, the refresh falls back to the 1-second floor and
+ * fires almost immediately after start — surfacing the misconfiguration rather
+ * than silently skipping the refresh.
+ */
+const CHECKPOINT_REFRESH_MARGIN_MS = 180_000;
+
 // =============================================================================
 // Railway Sandbox Options
 // =============================================================================
@@ -399,7 +410,7 @@ export class RailwaySandbox extends MastraSandbox {
       clearTimeout(this._checkpointRefreshTimer);
     }
 
-    const delayMs = Math.max(1_000, idleTimeoutMinutes * 60_000 - 10_000);
+    const delayMs = Math.max(1_000, idleTimeoutMinutes * 60_000 - CHECKPOINT_REFRESH_MARGIN_MS);
     this._checkpointRefreshTimer = setTimeout(() => {
       this._checkpointRefreshTimer = null;
       const sandbox = this._sandbox;
@@ -438,6 +449,54 @@ export class RailwaySandbox extends MastraSandbox {
     if (this._sandbox) {
       await this._checkpointSandbox(this._sandbox);
     }
+  }
+
+  /**
+   * Capture the sandbox's checkpoint on demand, outside the idle-timer schedule.
+   *
+   * Intended for callers (e.g. a factory-side scheduler) that want to refresh
+   * the recovery checkpoint at semantic moments — turn end, session-idle,
+   * pre-teardown — rather than only just before Railway's idle destroy.
+   *
+   * Coalesces with any in-flight timer-driven refresh: concurrent callers join
+   * the same underlying `Sandbox.checkpoint` call and receive `'coalesced'`.
+   * Returns `'skipped'` when there's nothing to capture (no `checkpointName`
+   * configured or the sandbox isn't running yet). On success, restarts the
+   * idle-timer countdown so the next timer-driven refresh is scheduled from
+   * this capture.
+   *
+   * Never captures without a `checkpointName` and never mutates status — safe
+   * to invoke concurrently with `executeCommand`, `restart`, or `stop`.
+   */
+  async captureCheckpoint(): Promise<'captured' | 'skipped' | 'coalesced'> {
+    if (!this._checkpointName) {
+      return 'skipped';
+    }
+
+    const sandbox = this._sandbox;
+    if (!sandbox) {
+      return 'skipped';
+    }
+
+    if (this._checkpointRefreshInFlight) {
+      await this._checkpointRefreshInFlight;
+      return 'coalesced';
+    }
+
+    const capture = this._checkpointSandbox(sandbox).finally(() => {
+      if (this._checkpointRefreshInFlight === capture) {
+        this._checkpointRefreshInFlight = null;
+      }
+    });
+    this._checkpointRefreshInFlight = capture;
+
+    await capture;
+
+    // Reset the idle-refresh countdown so the safety-net timer is scheduled
+    // relative to this capture, not the previous one.
+    this._scheduleCheckpointRefresh();
+
+    return 'captured';
   }
 
   private isCheckpointUnavailableError(error: unknown): boolean {

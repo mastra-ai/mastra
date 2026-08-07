@@ -896,7 +896,9 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart({ ...params, requestContext });
+      void _run.restart({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to restart workflow run in background', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
