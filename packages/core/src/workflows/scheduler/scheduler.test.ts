@@ -467,6 +467,146 @@ describe('Scheduler', () => {
     await scheduler.stop();
   });
 
+  describe('stale-build fencing (#19169)', () => {
+    const makeDueSchedule = (store: InMemorySchedulesStorage, definitionHash?: string) => {
+      const past = Date.now() - 5_000;
+      return store
+        .createSchedule({
+          id: 'sched-fence',
+          target: { type: 'workflow', workflowId: 'wf-fenced', definitionHash },
+          cron: '0 0 1 1 *',
+          status: 'active',
+          nextFireAt: past,
+          createdAt: past,
+          updatedAt: past,
+        })
+        .then(() => past);
+    };
+
+    it('does not claim the fire when isTargetCurrent reports a stale local definition', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 60_000, isTargetCurrent: () => false },
+      });
+
+      const past = await makeDueSchedule(store, 'aaaaaaaaaaaaaaaa');
+      const casSpy = vi.spyOn(store, 'updateScheduleNextFire');
+
+      await scheduler.start();
+      await scheduler.tick();
+
+      // No publish, no CAS attempt, nextFireAt untouched so a current
+      // instance can still claim this fire, and the row is NOT deleted
+      // (unlike the missing-target grace window).
+      expect(events).toHaveLength(0);
+      expect(casSpy).not.toHaveBeenCalled();
+      const row = await store.getSchedule('sched-fence');
+      expect(row).not.toBeNull();
+      expect(row?.nextFireAt).toBe(past);
+
+      await scheduler.stop();
+    });
+
+    it('claims the fire once the local definition matches again', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      let current = false;
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 60_000, isTargetCurrent: () => current },
+      });
+
+      const past = await makeDueSchedule(store, 'aaaaaaaaaaaaaaaa');
+
+      await scheduler.start();
+      expect(events).toHaveLength(0);
+
+      // Simulates the row being left for an instance running the current
+      // build — here the same instance "becomes" current (e.g. reconcile
+      // rewrote the row hash to match).
+      current = true;
+      await scheduler.tick();
+      expect(events).toHaveLength(1);
+      const row = await store.getSchedule('sched-fence');
+      expect(row?.nextFireAt).toBeGreaterThan(past);
+
+      await scheduler.stop();
+    });
+
+    it('fails open when the isTargetCurrent predicate throws', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: {
+          tickIntervalMs: 60_000,
+          isTargetCurrent: () => {
+            throw new Error('predicate boom');
+          },
+        },
+      });
+
+      await makeDueSchedule(store, 'aaaaaaaaaaaaaaaa');
+
+      await scheduler.start();
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
+    it('fires normally when no isTargetCurrent predicate is configured', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 60_000 },
+      });
+
+      await makeDueSchedule(store, 'aaaaaaaaaaaaaaaa');
+
+      await scheduler.start();
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
+    it('runs the fence after target-readiness so a missing target still uses the grace window', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const isTargetCurrent = vi.fn(() => true);
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: {
+          tickIntervalMs: 60_000,
+          isTargetReady: () => false,
+          isTargetCurrent,
+          missesBeforeDelete: 3,
+        },
+      });
+
+      await makeDueSchedule(store, 'aaaaaaaaaaaaaaaa');
+
+      await scheduler.start();
+      expect(events).toHaveLength(0);
+      // Readiness failed first — the fence is never consulted.
+      expect(isTargetCurrent).not.toHaveBeenCalled();
+
+      await scheduler.stop();
+    });
+  });
+
   it('applies defaults when config values are explicitly undefined', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
