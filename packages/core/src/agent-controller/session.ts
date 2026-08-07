@@ -74,6 +74,15 @@ function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value
 
 /** Persisted thread-setting key for the currently-selected mode. */
 const MODE_ID_KEY = 'currentModeId';
+
+/**
+ * Session-state keys that are transparently persisted to thread metadata on
+ * every state update and restored by `Session.loadMetadata()`. These are user
+ * preferences that must survive a host restart (sessions themselves are
+ * in-memory only). Keys listed here must also be reserved in
+ * {@link isReservedThreadMetadataKey}.
+ */
+const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
@@ -94,6 +103,8 @@ function isReservedThreadMetadataKey(key: string): boolean {
     key === 'observationThreshold' ||
     key === 'reflectionThreshold' ||
     key === 'tokenUsage' ||
+    key === 'thinkingLevel' ||
+    key === 'notifications' ||
     key.startsWith('modeModelId_')
   );
 }
@@ -873,6 +884,24 @@ export class SessionThread {
 
       if (Object.keys(updates).length > 0) {
         await session.state.set(updates as Record<string, unknown>);
+      }
+
+      // Restore restart-surviving preferences (thinking level, notifications).
+      // Applied separately so an invalid persisted value fails schema
+      // validation without discarding the mode/model/OM restoration above.
+      const preferenceUpdates: Record<string, unknown> = {};
+      for (const key of PERSISTED_STATE_KEYS) {
+        const value = meta?.[key];
+        if (value !== undefined) {
+          preferenceUpdates[key] = value;
+        }
+      }
+      if (Object.keys(preferenceUpdates).length > 0) {
+        try {
+          await session.state.set(preferenceUpdates);
+        } catch {
+          // Persisted preference no longer valid for the current state schema.
+        }
       }
 
       if (!hasObservationThreshold) {
@@ -1918,14 +1947,20 @@ class SessionState<TState = unknown> {
   #updateQueue: Promise<void> = Promise.resolve();
   readonly #schema: StandardSchemaWithJSON | undefined;
   readonly #bus: SessionBus;
+  readonly #persistSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
 
-  constructor({ initialState, stateSchema }: SessionStateOptions<TState>, bus: SessionBus) {
+  constructor(
+    { initialState, stateSchema }: SessionStateOptions<TState>,
+    bus: SessionBus,
+    persistSetting?: (args: { key: string; value: unknown }) => Promise<void>,
+  ) {
     this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.#state = {
       ...this.getSchemaDefaults(),
       ...(initialState as Record<string, unknown> | undefined),
     } as TState;
     this.#bus = bus;
+    this.#persistSetting = persistSetting;
   }
 
   get(): Readonly<TState> {
@@ -1972,6 +2007,21 @@ class SessionState<TState = unknown> {
     }
 
     this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
+
+    // Mirror restart-surviving preferences into thread metadata so they can be
+    // restored by `Session.loadMetadata()` after the host process restarts.
+    // Persistence failures never fail the in-memory state update.
+    if (this.#persistSetting) {
+      const state = this.#state as Record<string, unknown>;
+      for (const key of PERSISTED_STATE_KEYS) {
+        if (!changedKeys.includes(key)) continue;
+        try {
+          await this.#persistSetting({ key, value: state[key] });
+        } catch {
+          // Storage unavailable or write failed — keep the in-memory update.
+        }
+      }
+    }
   }
 
   set(updates: Partial<TState>): Promise<void> {
@@ -2692,7 +2742,9 @@ export class Session<TState = unknown> {
       clearFollowUps: () => this.followUps.clear(),
     });
     this.#bus.setDisplayState(this.displayState);
-    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus, args =>
+      this.thread.setSetting(args),
+    );
 
     if (!workspace || !(workspace instanceof Workspace)) {
       throw new Error(`A session requires a valid workspace instance.`);
