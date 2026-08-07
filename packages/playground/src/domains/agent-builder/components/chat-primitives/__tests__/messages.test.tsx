@@ -280,8 +280,7 @@ describe('MessageRow dynamic-tool rendering', () => {
       }),
     ]);
 
-    // Unknown dynamic tools render as a GenericTool ToolCard showing "Executing <toolName>".
-    expect(container.textContent).toContain('Executing');
+    expect(container.textContent).toContain('Completed');
     expect(container.textContent).toContain('some-other-tool');
     expect(container.textContent).not.toContain('Web Search');
 

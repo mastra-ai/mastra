@@ -37,7 +37,7 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
 // would otherwise replace them with __vite-browser-external (no named exports).
 // Node-only npm packages imported by @mastra/core server-only code (e.g. sandbox).
 // These are never called in the browser — stub them alongside Node builtins.
-const nodeOnlyPackages = new Set(['execa']);
+const nodeOnlyPackages = new Set(['execa', '@ast-grep/napi']);
 
 const stubNodeBuiltinsPlugin: Plugin = {
   name: 'stub-node-builtins',

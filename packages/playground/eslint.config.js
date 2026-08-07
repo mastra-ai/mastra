@@ -223,17 +223,24 @@ export default [
     },
   },
   {
-    // Playwright E2E specs: enforce the BDD structure described in the
-    // e2e-tests-studio skill (every test()/it() nested in a describe('when …')).
-    // These files are not part of the type-aware tsconfig program, so disable
-    // the TypeScript project service here and only run the syntactic BDD rule.
-    files: ['e2e/{tests,studio-base-tests}/**/*.spec.{js,jsx,ts,tsx}'],
+    // Playwright E2E specs and their adjacent typed fixtures are not part of
+    // the type-aware tsconfig program, so lint them without the project service.
+    files: ['e2e/{tests,studio-base-tests}/**/*.{js,jsx,ts,tsx}'],
     languageOptions: {
       parserOptions: {
         projectService: false,
         project: false,
       },
     },
+    rules: {
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+    },
+  },
+  {
+    // Playwright E2E specs: enforce the BDD structure described in the
+    // e2e-tests-studio skill (every test()/it() nested in a describe('when …')).
+    files: ['e2e/{tests,studio-base-tests}/**/*.spec.{js,jsx,ts,tsx}'],
     plugins: {
       'e2e-bdd': e2eBddPlugin,
     },

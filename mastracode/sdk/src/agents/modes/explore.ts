@@ -39,7 +39,10 @@ End with a structured summary:
 . **Key Files**: Most relevant files with line numbers
 . **Details**: Additional context if needed
 
-Keep your summary under 300 words.`,
+Keep your summary under 300 words.
+
+## Workflows
+- You can use \`list-workflows\` and \`get-workflow\` to inspect saved workflows. You cannot create, run, or delete in this mode.`,
 
   availableTools: [...EXPLORE_MODE_AVAILABLE_TOOLS],
 };

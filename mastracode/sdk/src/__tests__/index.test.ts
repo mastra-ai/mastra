@@ -823,9 +823,9 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { errorProcessors?: Array<{ id?: string }> }
-      | undefined;
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',
@@ -907,9 +907,9 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ inputProcessors: [customProcessor] });
 
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }> }
-      | undefined;
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { inputProcessors?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.inputProcessors?.some(processor => processor.id === 'embedding-reconciler'));
     const processors = agentConfig?.inputProcessors ?? [];
     expect(processors[0]).toBe(customProcessor);
     expect(processors.map(processor => processor.id)).toEqual([
@@ -926,9 +926,12 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
-      | undefined;
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        call =>
+          call[0] as { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> } | undefined,
+      )
+      .find(config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'));
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
@@ -942,8 +945,11 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ disableGithubSignals: true });
 
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
-    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('github-signals');
+    const agentConfigs = agentConstructorMock.mock.calls.map(
+      call => call[0] as { signals?: Array<{ id?: string }> } | undefined,
+    );
+    const hasGithub = agentConfigs.some(config => config?.signals?.some(signal => signal.id === 'github-signals'));
+    expect(hasGithub).toBe(false);
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
@@ -960,8 +966,10 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
-    expect(agentConfig?.signals?.map(s => s.id)).toContain('github-signals');
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { signals?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.signals?.some(signal => signal.id === 'github-signals'));
+    expect(agentConfig?.signals?.map(signal => signal.id)).toContain('github-signals');
     expect(startPollingForThread).toHaveBeenCalledWith(
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },

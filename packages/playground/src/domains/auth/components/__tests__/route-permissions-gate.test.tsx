@@ -56,6 +56,7 @@ const allPatterns: PermissionPatternsResponse = {
     'mcp:read',
     'processors:read',
     'stored-prompt-blocks:read',
+    'stored-workflows:read',
     'workspaces:read',
     '*',
   ],
