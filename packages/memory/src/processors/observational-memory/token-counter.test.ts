@@ -1379,11 +1379,15 @@ describe('TokenCounter', () => {
       const message = createToolInvocationMessage('approval-requested');
       counter.countMessage(message);
       const keysAfterRequest = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
+      // Watch the second pass only, so a re-estimate of the call signature is visible.
+      const countString = vi.spyOn(counter, 'countString');
 
       message.content.parts[0].toolInvocation.state = 'approval-responded';
       counter.countMessage(message);
       const keysAfterResponse = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
 
+      expect(countString).not.toHaveBeenCalledWith(TOOL_NAME);
+      expect(countString).not.toHaveBeenCalledWith(JSON.stringify(TOOL_ARGS));
       expect(keysAfterRequest.length).toBeGreaterThan(0);
       expect(keysAfterResponse).toEqual(keysAfterRequest);
     });
