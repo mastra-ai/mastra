@@ -69,6 +69,9 @@ export class ObservationTurn {
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
+  /** The active assistant response message ID for this step. Updated by the processor before prepare(). */
+  responseMessageId?: string;
+
   /** Processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks: ObservationTurnHooks;
 

@@ -236,6 +236,95 @@ describe('SkillsProcessor', () => {
       );
     });
 
+    it('should render default location as skill path + SKILL.md', async () => {
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      expect(mockMessageList.addSystem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('<location>/skills/code-review/SKILL.md</location>'),
+        }),
+      );
+    });
+
+    it('should render location via formatLocation override', async () => {
+      const remappedProcessor = new SkillsProcessor({
+        workspace: mockWorkspace,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      expect(mockMessageList.addSystem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('<location>/mnt/bundle/code-review/SKILL.md</location>'),
+        }),
+      );
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).not.toContain('/skills/code-review/SKILL.md');
+    });
+
+    it('should instruct that the default location identifies a skill and files are read via skill_read', async () => {
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('The location field identifies a skill for the `skill` and `skill_read` tools');
+      expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
+      expect(contents).toContain('use the exact location (shown in the location field)');
+    });
+
+    it('should register remapped locations as aliases and keep the location a skill identifier', async () => {
+      const registerLocationAlias = vi.fn();
+      const aliasSkills: WorkspaceSkills = { ...createMockWorkspaceSkills(), registerLocationAlias };
+      const remappedProcessor = new SkillsProcessor({
+        skills: aliasSkills,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      // Every rendered location is registered so tools can resolve it back to the skill.
+      expect(registerLocationAlias).toHaveBeenCalledWith('/mnt/bundle/code-review/SKILL.md', '/skills/code-review');
+      expect(registerLocationAlias).toHaveBeenCalledWith('/mnt/bundle/testing/SKILL.md', '/skills/testing');
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('The location field identifies a skill for the `skill` and `skill_read` tools');
+      expect(contents).not.toContain('refer to skills by name and read skill files');
+    });
+
+    it('should fall back to by-name guidance when the skills registry cannot register aliases', async () => {
+      // createMockWorkspaceSkills() does not implement registerLocationAlias,
+      // so remapped locations cannot round-trip through get()/has().
+      const remappedProcessor = new SkillsProcessor({
+        workspace: mockWorkspace,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).not.toContain('The location field identifies a skill');
+      expect(contents).not.toContain('use the exact location (shown in the location field)');
+      expect(contents).toContain('refer to skills by name');
+      expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
+    });
+
     it('should not inject skills when none are configured', async () => {
       const emptyMockSkills = {
         ...createMockWorkspaceSkills(),

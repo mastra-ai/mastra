@@ -83,6 +83,13 @@ beforeEach(async c => {
           if (obj.thoughtSignature === 'skip_thought_signature_validator') {
             delete obj.thoughtSignature;
           }
+          // Provider upgrades can represent this permissive schema differently.
+          // Its shape does not affect the suspension behavior under test.
+          if (obj.description === 'The resumeData object created from the resumeSchema of suspended tool') {
+            for (const key of Object.keys(obj)) {
+              if (key !== 'description') delete obj[key];
+            }
+          }
           for (const [key, child] of Object.entries(obj)) {
             if (
               (key === 'functionCall' || key === 'functionResponse') &&
