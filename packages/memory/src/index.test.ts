@@ -2754,6 +2754,36 @@ describe('Memory', () => {
       });
     });
 
+    it('should wait for an earlier cleanup that a later delete overlaps', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages']);
+      let releaseFirstDelete: () => void = () => {};
+      const firstDeleteStarted = new Promise<void>(resolveStarted => {
+        memory.mockVector.deleteVectors.mockImplementationOnce(
+          () =>
+            new Promise<void>(resolveDelete => {
+              releaseFirstDelete = resolveDelete;
+              resolveStarted();
+            }),
+        );
+      });
+
+      await memory.deleteThread('thread-slow');
+      await firstDeleteStarted;
+      await memory.deleteMessages(['msg-fast']);
+
+      let flushed = false;
+      const flush = memory.flushVectorCleanup().then(() => {
+        flushed = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(flushed).toBe(false);
+
+      releaseFirstDelete();
+      await flush;
+
+      expect(memory.deletedIndexNames()).toEqual(['memory_messages', 'memory_messages']);
+    });
+
     it('should not throw when no vector store is configured', async () => {
       const memory = new Memory({ storage: new InMemoryStore() });
 

@@ -276,10 +276,18 @@ export class Memory extends MastraMemory {
   private _mastraInstance: Mastra | undefined;
 
   /**
-   * The vector cleanup that deleteThread or deleteMessages started in the background.
+   * Every vector cleanup that deleteThread or deleteMessages started in the background.
    * Callers do not wait for the cleanup, so this handle is the only join point.
    */
   private pendingVectorCleanup: Promise<void> = Promise.resolve();
+
+  /**
+   * Adds a background vector cleanup to the join handle.
+   * The handle keeps the earlier cleanups, so it settles only after all of them end.
+   */
+  private trackVectorCleanup(cleanup: Promise<void>): void {
+    this.pendingVectorCleanup = Promise.allSettled([this.pendingVectorCleanup, cleanup]).then(() => undefined);
+  }
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */
   get omEngine(): Promise<ObservationalMemory | null> {
@@ -743,7 +751,7 @@ export class Memory extends MastraMemory {
       await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
     }
     if (this.vector) {
-      this.pendingVectorCleanup = this.deleteThreadVectors(threadId);
+      this.trackVectorCleanup(this.deleteThreadVectors(threadId));
     }
   }
 
@@ -2594,7 +2602,7 @@ Notes:
 
       await memoryStore.deleteMessages(messageIds);
       if (this.vector) {
-        this.pendingVectorCleanup = this.deleteMessageVectors(messageIds);
+        this.trackVectorCleanup(this.deleteMessageVectors(messageIds));
       }
 
       span?.end({ output: { success: true }, attributes: { messageCount: messageIds.length } });
