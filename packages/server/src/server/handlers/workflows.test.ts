@@ -624,6 +624,44 @@ describe('vNext Workflow Handlers', () => {
       expect(result).toEqual({ message: 'Workflow run started' });
     });
 
+    it('should not leave an unhandled rejection when run.start() rejects', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-reject',
+      });
+      await run.start({ inputData: {} });
+
+      const createRunSpy = vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue({
+        start: vi.fn().mockRejectedValue(new Error('invalid workflow input')),
+      } as any);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        const result = await START_WORKFLOW_RUN_ROUTE.handler({
+          mastra: mockMastra,
+          workflowId: 'test-workflow',
+          runId: 'test-run-reject',
+          inputData: { bad: true },
+          tracingOptions,
+        } as any);
+
+        expect(result).toEqual({ message: 'Workflow run started' });
+
+        // Let the rejected promise settle; .catch on the route must swallow it.
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        createRunSpy.mockRestore();
+      }
+    });
+
     it('should preserve resourceId when starting workflow run after server restart', async () => {
       const resourceId = 'user-start-test';
 

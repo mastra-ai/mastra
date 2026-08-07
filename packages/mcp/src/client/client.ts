@@ -8,13 +8,15 @@ import { createTool } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import {
+  Client,
+  SdkHttpError,
+  SSEClientTransport,
+  StreamableHTTPClientTransport,
+  DEFAULT_REQUEST_TIMEOUT_MSEC,
+} from '@modelcontextprotocol/client';
 import type {
+  Transport,
   EmptyResult,
   GetPromptResult,
   ListPromptsResult,
@@ -23,25 +25,8 @@ import type {
   LoggingLevel,
   ReadResourceResult,
   ClientCapabilities,
-} from '@modelcontextprotocol/sdk/types.js';
-import {
-  CallToolResultSchema,
-  ListResourcesResultSchema,
-  ReadResourceResultSchema,
-  ResourceListChangedNotificationSchema,
-  ResourceUpdatedNotificationSchema,
-  ListResourceTemplatesResultSchema,
-  ListPromptsResultSchema,
-  GetPromptResultSchema,
-  PromptListChangedNotificationSchema,
-  ToolListChangedNotificationSchema,
-  ElicitRequestSchema,
-  ProgressNotificationSchema,
-  ListRootsRequestSchema,
-  LoggingMessageNotificationSchema,
-  EmptyResultSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-
+} from '@modelcontextprotocol/client';
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
@@ -60,6 +45,12 @@ import type {
   Root,
   RequireToolApproval,
 } from './types';
+import {
+  assertHostAllowed,
+  fetchFollowingAllowedRedirects,
+  isUrlPolicyError,
+  wrapFetchWithHostPolicy,
+} from './url-policy';
 
 // Re-export types for convenience
 export type {
@@ -346,7 +337,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private setupLogging(): void {
     if (this.enableServerLogs) {
-      this.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification: any) => {
+      this.client.setNotificationHandler('notifications/message', (notification: any) => {
         const { level, ...params } = notification.params;
         this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
       });
@@ -361,7 +352,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   private setupRootsHandler(): void {
     this.log('debug', 'Setting up roots/list request handler');
-    this.client.setRequestHandler(ListRootsRequestSchema, async () => {
+    this.client.setRequestHandler('roots/list', async () => {
       this.log('debug', `Responding to roots/list request with ${this._roots.length} roots`);
       return { roots: this._roots };
     });
@@ -414,13 +405,30 @@ export class InternalMastraMCPClient extends MastraBase {
     await this.client.notification({ method: 'notifications/roots/list_changed' });
   }
 
+  private buildStdioEnv(): Record<string, string> {
+    const configured = this.serverConfig.env || {};
+    if (this.serverConfig.inheritDefaultEnv === false) {
+      // The SDK's StdioClientTransport unconditionally spreads getDefaultEnvironment()
+      // under the env we pass it, so an empty base alone cannot suppress the curated
+      // defaults. Explicitly override each curated key with undefined — Node's spawn
+      // drops env entries whose value is undefined — so only configured entries reach
+      // the subprocess.
+      const suppressed: Record<string, string | undefined> = {};
+      for (const key of Object.keys(getDefaultEnvironment())) {
+        suppressed[key] = undefined;
+      }
+      return { ...suppressed, ...configured } as Record<string, string>;
+    }
+    return { ...getDefaultEnvironment(), ...configured };
+  }
+
   private async connectStdio(command: string) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
     try {
       this.transport = new StdioClientTransport({
         command,
         args: this.serverConfig.args,
-        env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
+        env: this.buildStdioEnv(),
         stderr: this.serverConfig.stderr,
         cwd: this.serverConfig.cwd,
       });
@@ -433,14 +441,37 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } =
+      this.serverConfig;
+
+    // Fail fast with a clear error before any transport is constructed.
+    if (allowedHosts !== undefined) {
+      assertHostAllowed(url, allowedHosts);
+    }
 
     // Wrap fetch so request-scoped metadata still flows through normal MCP POSTs, while
     // the long-lived Streamable HTTP event stream does not inherit the active Datadog span.
+    // When allowedHosts is set, the same wrapper enforces the host policy: on the default
+    // path via manual redirect following (hops blocked before being sent), and on the
+    // custom-fetch path via a pre-request check plus post-hoc response validation.
+    const policyUserFetch =
+      userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
       const requestContext = this.operationContextStore.getStore() ?? null;
-      const executeFetch = () =>
-        userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
+      const executeFetch = (): Promise<Response> => {
+        if (allowedHosts === undefined) {
+          return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
+        }
+        if (policyUserFetch) {
+          return policyUserFetch(requestUrl, init, requestContext);
+        }
+        return fetchFollowingAllowedRedirects(
+          (u: string | URL, i?: RequestInit) => globalThis.fetch(u, i),
+          requestUrl,
+          init,
+          allowedHosts,
+        );
+      };
 
       return shouldDetachPersistentTransportRequest(init) ? runOutsideDatadogTraceScope(executeFetch) : executeFetch();
     };
@@ -478,9 +509,20 @@ export class InternalMastraMCPClient extends MastraBase {
           throw error;
         }
 
-        // @modelcontextprotocol/sdk 1.24.0+ throws StreamableHTTPError with 'code' property
-        // Older @modelcontextprotocol/sdk: fallback to SSE (legacy behavior)
-        const status = error?.code;
+        // A policy violation is final: retrying the blocked host over SSE cannot
+        // succeed, and falling through would bury the policy error under a generic
+        // "could not connect" message.
+        if (isUrlPolicyError(error)) {
+          throw error;
+        }
+
+        // The Streamable HTTP transport reports non-OK responses as SdkHttpError, which
+        // carries the HTTP status on `status` (`code` is a string SdkErrorCode, not a
+        // status). Servers that only speak the deprecated HTTP+SSE transport answer the
+        // initial POST with 400/404/405, which is the signal to retry over SSE; any other
+        // status is a real failure. Non-HTTP failures (network, timeout) keep the legacy
+        // behavior of attempting the SSE fallback.
+        const status = error instanceof SdkHttpError ? error.status : undefined;
         if (status !== undefined && !SSE_FALLBACK_STATUS_CODES.includes(status)) {
           throw error;
         }
@@ -498,8 +540,17 @@ export class InternalMastraMCPClient extends MastraBase {
       // Fallback to SSE transport
       // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
       // Only supply our span-detaching fetch when the caller hasn't provided one, so an explicit
-      // eventSourceInit.fetch is preserved rather than overwritten.
-      const sseEventSourceInit = { ...eventSourceInit, fetch: eventSourceInit?.fetch ?? fetch };
+      // eventSourceInit.fetch is preserved rather than overwritten. When allowedHosts is set, a
+      // caller-supplied eventSourceInit.fetch is wrapped with the same policy check + post-hoc
+      // redirect validation as the custom-fetch path — otherwise it would bypass the policy.
+      const callerSseFetch = eventSourceInit?.fetch;
+      const sseEventSourceInit = {
+        ...eventSourceInit,
+        fetch:
+          callerSseFetch && allowedHosts !== undefined
+            ? wrapFetchWithHostPolicy(callerSseFetch, allowedHosts)
+            : (callerSseFetch ?? fetch),
+      };
 
       const sseTransport = new SSEClientTransport(url, {
         requestInit,
@@ -514,6 +565,10 @@ export class InternalMastraMCPClient extends MastraBase {
       } catch (sseError) {
         if (authProvider && sseError instanceof UnauthorizedError) {
           this.markNeedsAuth(sseTransport);
+          throw sseError;
+        }
+        // Surface policy violations directly instead of the generic connect error.
+        if (isUrlPolicyError(sseError)) {
           throw sseError;
         }
         this.log(
@@ -941,37 +996,52 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
-    return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/read', params: { uri } }, ReadResourceResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/read', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async subscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, EmptyResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/subscribe', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async unsubscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, EmptyResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/unsubscribe', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
-    return await this.client.request({ method: 'resources/templates/list' }, ListResourceTemplatesResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/templates/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   /**
@@ -979,9 +1049,12 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async listPrompts(): Promise<ListPromptsResult> {
     this.log('debug', `Requesting prompts from MCP server`);
-    return await this.client.request({ method: 'prompts/list' }, ListPromptsResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'prompts/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   /**
@@ -993,7 +1066,6 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
       { method: 'prompts/get', params: { name, arguments: args } },
-      GetPromptResultSchema,
       { timeout: this.timeout },
     );
   }
@@ -1004,7 +1076,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   setPromptListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting prompt list changed notification handler');
-    this.client.setNotificationHandler(PromptListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/prompts/list_changed', () => {
       handler();
     });
   }
@@ -1015,21 +1087,21 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   setToolListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting tool list changed notification handler');
-    this.client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/tools/list_changed', () => {
       handler();
     });
   }
 
   setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
     this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification: any) => {
+    this.client.setNotificationHandler('notifications/resources/updated', (notification: any) => {
       handler(notification.params);
     });
   }
 
   setResourceListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting resource list changed notification handler');
-    this.client.setNotificationHandler(ResourceListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/resources/list_changed', () => {
       handler();
     });
   }
@@ -1048,7 +1120,7 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     }
 
-    this.client.setRequestHandler(ElicitRequestSchema, async request => {
+    this.client.setRequestHandler('elicitation/create', async request => {
       this.log('debug', `Received elicitation request: ${request.params.message}`);
       return handler(request.params);
     });
@@ -1056,7 +1128,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setProgressNotificationHandler(handler: ProgressHandler): void {
     this.log('debug', 'Setting progress notification handler');
-    this.client.setNotificationHandler(ProgressNotificationSchema, notification => {
+    this.client.setNotificationHandler('notifications/progress', notification => {
       handler(notification.params);
     });
   }
@@ -1068,7 +1140,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Wraps the output schema with a validator that always succeeds. The MCP SDK validates
+   * Wraps the output schema with a validator that always succeeds. The MCP client validates
    * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
    */
   private convertOutputSchema(
@@ -1181,7 +1253,6 @@ export class InternalMastraMCPClient extends MastraBase {
                     arguments: input,
                     ...(combinedMeta ? { _meta: combinedMeta } : {}),
                   },
-                  CallToolResultSchema,
                   {
                     timeout: this.timeout,
                     signal: context?.abortSignal,

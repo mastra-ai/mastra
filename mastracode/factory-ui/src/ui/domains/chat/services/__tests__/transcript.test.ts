@@ -411,6 +411,33 @@ describe('transcript reducer message entries', () => {
       },
     ]);
   });
+
+  it('stamps isError on the mirrored part when tool_end reports a failure', () => {
+    // Without the flag the terminal-state render precedence would read the
+    // failed tool as a bare successful `result`.
+    const started = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: {} },
+    });
+    const ended = transcriptReducer(started, {
+      type: 'event',
+      event: { type: 'tool_end', toolCallId: 'tool-1', result: 'exploded', isError: true },
+    });
+
+    expect(messageParts(ended.entries[0])).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tool-1',
+          toolName: 'view',
+          args: {},
+          result: 'exploded',
+          isError: true,
+        },
+      },
+    ]);
+  });
 });
 
 describe('transcript reducer mergeWindow', () => {
@@ -548,6 +575,235 @@ describe('transcript reducer mergeWindow', () => {
 
     expect(next.entries[0]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
     expect(messageParts(next.entries[0])).toEqual([{ type: 'text', text: 'partial' }]);
+  });
+
+  it('replaces a tool part stuck at call with the terminal copy from the window', () => {
+    // A dropped stream can swallow tool_end; the refetched window carries the
+    // persisted result and must heal the stuck part.
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'execute_command', args: {} },
+          },
+        ]),
+      ],
+    });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'execute_command',
+              args: {},
+              result: 'ok',
+            },
+          },
+        ]),
+      ],
+    });
+
+    expect(messageParts(next.entries[0])).toMatchObject([{ toolInvocation: { state: 'result', result: 'ok' } }]);
+  });
+
+  it('heals a stuck tool part without touching live-streamed text', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: 'streamed text' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+          },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: 'persisted prefix' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'done' },
+          },
+        ]),
+      ],
+    });
+
+    expect(messageParts(next.entries[0])).toEqual([
+      { type: 'text', text: 'streamed text' },
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ state: 'result', result: 'done' }),
+      }),
+    ]);
+  });
+
+  it('never regresses a terminal tool part to an older call state from the window', () => {
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+      ],
+    });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+          },
+        ]),
+      ],
+    });
+
+    expect(next).toBe(onScreen);
+  });
+
+  it.each(['output-error', 'output-denied'] as const)(
+    'replaces a tool part stuck at call with a terminal %s copy from the window',
+    state => {
+      const onScreen = createInitialTranscript({
+        messages: [
+          dbMessage('assistant-1', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+            },
+          ]),
+        ],
+      });
+
+      const next = transcriptReducer(onScreen, {
+        type: 'mergeWindow',
+        messages: [
+          dbMessage('assistant-1', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state, toolCallId: 'tool-1', toolName: 'view', args: {}, errorText: 'nope' },
+            },
+          ]),
+        ],
+      });
+
+      expect(messageParts(next.entries[0])).toMatchObject([{ toolInvocation: { state, errorText: 'nope' } }]);
+    },
+  );
+
+  it('adopts trailing parts the gap swallowed when the run ended before reconnect', () => {
+    // The stream died mid-turn: the live entry holds a cut-off text and a tool
+    // stuck at call. The run finished during the gap, so the refetched window
+    // is the only carrier of the extended text, the result and the final text.
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('live-1', 'assistant', [
+          { type: 'text', text: 'working' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+          },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('persisted-1', 'assistant', [
+          { type: 'text', text: 'working on it' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'final answer' },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0])).toEqual([
+      { type: 'text', text: 'working on it' },
+      expect.objectContaining({ toolInvocation: expect.objectContaining({ state: 'result', result: 'ok' }) }),
+      { type: 'text', text: 'final answer' },
+    ]);
+  });
+
+  it('returns the same state when the window matches the on-screen turn exactly', () => {
+    // Routine revalidation must stay a referential no-op or every refetch
+    // rerenders the whole transcript.
+    const parts: MastraMessagePart[] = [
+      { type: 'text', text: 'done' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+      },
+    ];
+    const onScreen = createInitialTranscript({ messages: [dbMessage('assistant-1', 'assistant', parts)] });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [dbMessage('assistant-1', 'assistant', parts)],
+    });
+
+    expect(next).toBe(onScreen);
+  });
+
+  it('does not duplicate a turn the window carries under its persisted id', () => {
+    // A streamed turn keeps its display id; the persisted copy arrives under a
+    // different id but shares the toolCallId. Merge must heal in place, not
+    // append a second copy of the turn.
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('live-1', 'assistant', [
+          { type: 'text', text: 'working on it' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+          },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('persisted-1', 'assistant', [
+          { type: 'text', text: 'working on it' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0])).toMatchObject([
+      { type: 'text' },
+      { toolInvocation: { state: 'result', result: 'ok' } },
+    ]);
   });
 });
 

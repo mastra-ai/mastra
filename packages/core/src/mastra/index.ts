@@ -6442,6 +6442,19 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    // The scorer hook lives on a process-global emitter. Release it before any
+    // awaited teardown so even a later cleanup failure cannot retain this
+    // Mastra instance and its full component graph.
+    this.__unregisterHooks();
+
+    // The shared BackgroundTaskWorker deliberately delegates manager ownership
+    // to Mastra. Stop the manager while workers, pubsub, and storage are still
+    // available so it can abort active tasks, preserve retry recovery, and
+    // remove its subscriptions.
+    if (this.#backgroundTaskManager) {
+      await this.#backgroundTaskManager.shutdown();
+    }
+
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
 

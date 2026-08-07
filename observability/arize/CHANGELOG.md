@@ -1,5 +1,22 @@
 # @mastra/arize
 
+## 1.3.7-alpha.3
+
+### Patch Changes
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`@arizeai/openinference-genai@0.3.0` ↗︎](https://www.npmjs.com/package/@arizeai/openinference-genai/v/0.3.0) (from `0.2.0`, in `dependencies`)
+
+- dependencies updates: ([#19784](https://github.com/mastra-ai/mastra/pull/19784))
+  - Updated dependency [`@opentelemetry/core@^2.10.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/core/v/2.10.0) (from `^2.7.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-proto@^0.221.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-proto/v/0.221.0) (from `^0.218.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/resources@^2.10.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/resources/v/2.10.0) (from `^2.7.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/sdk-trace-base@^2.10.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/sdk-trace-base/v/2.10.0) (from `^2.7.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/semantic-conventions@^1.43.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/semantic-conventions/v/1.43.0) (from `^1.41.1`, in `dependencies`)
+- Updated dependencies [[`e7109ee`](https://github.com/mastra-ai/mastra/commit/e7109ee6f731bacc79c885906f3c7dca8d8f013a), [`470f286`](https://github.com/mastra-ai/mastra/commit/470f286e98c9ad95f4c42087e411c0af363a4a2c), [`772c0c8`](https://github.com/mastra-ai/mastra/commit/772c0c897cec383258de2e6178147f8014767c7b), [`578bf2e`](https://github.com/mastra-ai/mastra/commit/578bf2e6a88e9d5b8bf502204e15a95dfbb679ae), [`06b2d87`](https://github.com/mastra-ai/mastra/commit/06b2d87e63bcdd0ed59215c6789692b9b12de376), [`ac01d63`](https://github.com/mastra-ai/mastra/commit/ac01d6355974aec73fdb8781449ed12bac582094), [`a810a05`](https://github.com/mastra-ai/mastra/commit/a810a058f62ad407cfc1701e0be36ae91145d7cf), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`6104347`](https://github.com/mastra-ai/mastra/commit/61043473ba6bfd0a25156824e853e13165562e6c), [`aa4cc23`](https://github.com/mastra-ai/mastra/commit/aa4cc23e5511a3caea3e57b813a7945d678c4991), [`45bfb88`](https://github.com/mastra-ai/mastra/commit/45bfb88fd52f1dd3be20e2a38905777c96499c90), [`e3b9307`](https://github.com/mastra-ai/mastra/commit/e3b9307098daefbfae2a52ae2ef51bc9fc701190), [`d6834c5`](https://github.com/mastra-ai/mastra/commit/d6834c5a7866b16734d23900163c2414ed70d791), [`c52d346`](https://github.com/mastra-ai/mastra/commit/c52d3462ec831a5d95926ecd3d3373f5928ad2e5), [`0023e79`](https://github.com/mastra-ai/mastra/commit/0023e7919431078280abd11c89d1edeae35fcc69), [`c2ad51e`](https://github.com/mastra-ai/mastra/commit/c2ad51e2467f901eecba8c9f4a45e22a50bd7c18), [`3dc97ea`](https://github.com/mastra-ai/mastra/commit/3dc97ea415fad353b48a13095fad1835933cc12a), [`3d01cd3`](https://github.com/mastra-ai/mastra/commit/3d01cd387321b6f9c5cac31d487c84bf51b19c78), [`7bf3086`](https://github.com/mastra-ai/mastra/commit/7bf308663f0115ca74ad20554ade740f06640859), [`a8dd139`](https://github.com/mastra-ai/mastra/commit/a8dd1391a9fe9a6632c25809ef236980afa9a020), [`e5786be`](https://github.com/mastra-ai/mastra/commit/e5786be02bb903073082bd9d6da880ebaacc343f), [`2093fbd`](https://github.com/mastra-ai/mastra/commit/2093fbd53bb744bae19ec89f6d73db9a66fbe8a7), [`e7a5da4`](https://github.com/mastra-ai/mastra/commit/e7a5da4ef8e4dd452d2f232961b4e682a85ffe43), [`7b4393d`](https://github.com/mastra-ai/mastra/commit/7b4393d557411fdcf07b0e30e5acaf7cc85154ae)]:
+  - @mastra/core@1.58.0-alpha.1
+  - @mastra/otel-exporter@1.3.7-alpha.3
+
 ## 1.3.8
 
 ### Patch Changes

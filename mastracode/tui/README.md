@@ -98,7 +98,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/cost`             | Show token usage and estimated costs                                        |
 | `/review`           | Review a GitHub pull request                                                |
 | `/hooks`            | Show/reload configured hooks                                                |
-| `/mcp`              | Show/reload MCP server connections                                          |
+| `/mcp`              | Show/reload MCP server connections, disable or enable servers               |
 | `/sandbox`          | Manage allowed paths (add/remove dirs)                                      |
 | `/permissions`      | View/manage tool approval permissions                                       |
 | `/plugins`          | Install and manage trusted Mastra Code plugins                              |

@@ -53,6 +53,14 @@ function boolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+function actorLogins(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(actor => {
+    const login = string(object(actor)?.login);
+    return login ? [login] : [];
+  });
+}
+
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
@@ -202,6 +210,12 @@ export class GithubRules {
           ).find(subscription => subscription.orgId === project.orgId)?.data,
         )
       : null;
+    // A review re-request targets the PR's own Review card, not the Work item
+    // that provenance would bind the event to — and the sender is whoever
+    // clicked re-request, so a Factory-authored PR must not brand a human
+    // requester as factory-authored.
+    const reviewRequested = event === 'pullRequestReviewRequested';
+    const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
     const relatedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,
@@ -209,13 +223,13 @@ export class GithubRules {
       issueNumber,
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
-      provenance,
+      reviewRequested ? null : provenance,
     );
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
       login,
-      factoryAuthored: provenance !== null || login === `${this.options.github.slug}[bot]`,
+      factoryAuthored: (!reviewRequested && provenance !== null) || login === `${this.options.github.slug}[bot]`,
     });
     if (
       actor.type === 'github' &&
@@ -259,6 +273,7 @@ export class GithubRules {
               url: string(issue?.html_url)!,
               ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
               ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
+              assignees: actorLogins(issue?.assignees),
             },
           }
         : {}),
@@ -286,9 +301,20 @@ export class GithubRules {
               url: string(pullRequest?.html_url)!,
               ...(string(pullRequest?.created_at) ? { createdAt: string(pullRequest?.created_at) } : {}),
               state: string(pullRequest?.state) === 'closed' ? ('closed' as const) : ('open' as const),
+              draft: boolean(pullRequest?.draft) ?? false,
               merged: boolean(pullRequest?.merged) ?? false,
+              assignees: actorLogins(pullRequest?.assignees),
+              requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
               headBranch: string(object(pullRequest?.head)?.ref) ?? '',
               baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
+            },
+          }
+        : {}),
+      ...(reviewRequested && requestedReviewer
+        ? {
+            reviewRequest: {
+              reviewer: requestedReviewer,
+              factoryReviewer: requestedReviewer === `${this.options.github.slug}[bot]`,
             },
           }
         : {}),
@@ -388,9 +414,13 @@ export interface ReconcilePullRequestState {
   title: string;
   url: string;
   state: 'open' | 'closed';
+  draft: boolean;
   merged: boolean;
+  assignees?: string[];
+  requestedReviewers?: string[];
   headBranch: string;
   baseBranch: string;
+  author?: string;
   createdAt?: string;
   mergedBy?: string;
 }
@@ -425,6 +455,14 @@ export interface ReconcileSweepSummary {
 export type GithubPullRequestReconciler = (repositories: ReconcileRepository[]) => Promise<ReconcileSweepSummary>;
 
 const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
+
+function sameStrings(left: unknown, right: string[] | undefined): boolean {
+  if (right === undefined) return true;
+  if (!Array.isArray(left)) return false;
+  const leftValues = new Set(left.flatMap(value => (typeof value === 'string' ? [value] : [])));
+  const rightValues = new Set(right);
+  return leftValues.size === rightValues.size && [...leftValues].every(value => rightValues.has(value));
+}
 
 /**
  * Extracts the PR number a work item tracks, but only when the item belongs
@@ -470,7 +508,10 @@ export function reconciledClosedEvent(
         html_url: state.url,
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         state: 'closed',
+        draft: state.draft,
         merged: state.merged,
+        assignees: (state.assignees ?? []).map(login => ({ login })),
+        requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
         head: { ref: state.headBranch },
         base: { ref: state.baseBranch },
       },
@@ -540,31 +581,42 @@ export function createGithubPullRequestReconciler(
     for (const repository of scoped) {
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
-      let numbers: Set<number>;
+      let cardsByNumber: Map<number, WorkItemRow[]>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
           repositoryExternalId: String(repository.id),
         });
         if (projects.length === 0) continue;
-        numbers = new Set<number>();
+        cardsByNumber = new Map<number, WorkItemRow[]>();
         for (const project of projects) {
           const items = await options.storage.list({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
-            const stage = item.stages[0];
-            if (stage === 'done' || stage === 'canceled') continue;
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
-            if (pullRequestNumber) numbers.add(pullRequestNumber);
+            if (!pullRequestNumber) continue;
+            const stage = item.stages[0];
+            const metadata = item.metadata ?? {};
+            const hasReconciledMetadata =
+              (metadata.state === 'open' || metadata.state === 'closed') &&
+              typeof metadata.draft === 'boolean' &&
+              typeof metadata.merged === 'boolean' &&
+              typeof metadata.author === 'string' &&
+              Array.isArray(metadata.assignees) &&
+              Array.isArray(metadata.requestedReviewers);
+            if ((stage === 'done' || stage === 'canceled') && hasReconciledMetadata) continue;
+            const cards = cardsByNumber.get(pullRequestNumber) ?? [];
+            cards.push(item);
+            cardsByNumber.set(pullRequestNumber, cards);
           }
         }
       } catch (error) {
         recordFailure(repository, error);
         continue;
       }
-      for (const pullRequestNumber of numbers) {
+      for (const [pullRequestNumber, cards] of cardsByNumber) {
         try {
           const state = await fetchPullRequest({
             installationId: repository.installationId,
@@ -572,7 +624,36 @@ export function createGithubPullRequestReconciler(
             number: pullRequestNumber,
           });
           summary.checked += 1;
-          if (!state || state.state !== 'closed') continue;
+          if (!state) continue;
+          for (const card of cards) {
+            const metadata = card.metadata ?? {};
+            const statusChanged =
+              metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
+            const authorChanged = state.author !== undefined && metadata.author !== state.author;
+            const assigneesChanged = !sameStrings(metadata.assignees, state.assignees);
+            const reviewersChanged = !sameStrings(metadata.requestedReviewers, state.requestedReviewers);
+            if (!statusChanged && !authorChanged && !assigneesChanged && !reviewersChanged) continue;
+            try {
+              await options.storage.update({
+                orgId: card.orgId,
+                id: card.id,
+                userId: 'factory-rule-dispatcher',
+                patch: {
+                  metadata: {
+                    state: state.state,
+                    draft: state.draft,
+                    merged: state.merged,
+                    ...(state.author ? { author: state.author } : {}),
+                    ...(state.assignees ? { assignees: state.assignees } : {}),
+                    ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
+                  },
+                },
+              });
+            } catch (error) {
+              recordFailure(repository, error, pullRequestNumber);
+            }
+          }
+          if (state.state !== 'closed') continue;
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;
