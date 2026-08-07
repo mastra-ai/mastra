@@ -32,3 +32,37 @@ describe('TraceDataPanelView — Add tool mocks to item', () => {
     expect(screen.queryByRole('button', { name: /add tool mocks to item/i })).toBeNull();
   });
 });
+
+describe('TraceDataPanelView — span selected from the URL', () => {
+  describe('when the trace is still loading', () => {
+    it('keeps the requested span instead of clearing it', () => {
+      const onSpanSelect = vi.fn();
+      const { rerender } = render(
+        <TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="root" onSpanSelect={onSpanSelect} />,
+      );
+
+      expect(onSpanSelect).not.toHaveBeenCalled();
+
+      rerender(
+        <TraceDataPanelView
+          {...baseProps}
+          spans={rootSpanFixture}
+          isLoading={false}
+          initialSpanId="root"
+          onSpanSelect={onSpanSelect}
+        />,
+      );
+
+      expect(onSpanSelect).toHaveBeenCalledWith('root');
+    });
+  });
+
+  describe('when the loaded trace has no such span', () => {
+    it('clears the selection', () => {
+      const onSpanSelect = vi.fn();
+      render(<TraceDataPanelView {...baseProps} initialSpanId="span-does-not-exist" onSpanSelect={onSpanSelect} />);
+
+      expect(onSpanSelect).toHaveBeenCalledWith(undefined);
+    });
+  });
+});

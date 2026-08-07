@@ -103,8 +103,9 @@ export function TraceDataPanelView({
       return;
     }
     // Span requested: wait for trace data before deciding so an in-flight
-    // fetch doesn't wipe a URL-provided selection.
-    if (!spans) return;
+    // fetch doesn't wipe a URL-provided selection. Callers that default their
+    // spans to `[]` while loading only say so through `isLoading`.
+    if (isLoading || !spans) return;
 
     const found = spans.find(s => s.spanId === initialSpanId);
     if (found) {
@@ -115,7 +116,7 @@ export function TraceDataPanelView({
       onSpanSelect?.(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSpanId, spans]);
+  }, [initialSpanId, spans, isLoading]);
 
   // Scroll the selected span into view within the timeline
   useEffect(() => {
