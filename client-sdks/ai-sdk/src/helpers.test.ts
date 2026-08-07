@@ -301,3 +301,53 @@ describe('tool-output-denied chunk conversion (issue #20880)', () => {
     });
   });
 });
+
+describe('finish reason on UI message chunks (issue #20562)', () => {
+  const mastraFinishChunk = (reason: string) =>
+    ({
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: {
+        stepResult: { reason },
+        output: { usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } },
+      },
+    }) as any;
+
+  it('keeps the v6 finish reason on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('content-filter') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'content-filter' });
+  });
+
+  it('reports the Mastra-only tripwire reason as other on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('tripwire') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'other' });
+  });
+
+  it('keeps the v5 finish reason on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv5({ chunk: mastraFinishChunk('length') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        messageMetadataValue: { custom: true },
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'length', messageMetadata: { custom: true } });
+  });
+});
