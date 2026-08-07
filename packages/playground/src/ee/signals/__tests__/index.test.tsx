@@ -564,8 +564,7 @@ describe('Trace Intelligence page', () => {
   });
 
   describe('when switching between eligible agents', () => {
-    it("loads the selected agent's latest snapshot", async () => {
-      let billingFlowSnapshotId: string | null = null;
+    it("loads the selected agent's first snapshot", async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiEligibleThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -578,11 +577,10 @@ describe('Trace Intelligence page', () => {
           HttpResponse.json(billingThemeSnapshotsResponse),
         ),
         http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-flow`, ({ request }) => {
-          billingFlowSnapshotId = new URL(request.url).searchParams.get('snapshotId');
-          return HttpResponse.json({
-            ...themeFlowResponse,
-            snapshot: billingThemeSnapshotsResponse.snapshots[1],
-          });
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = billingThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json({ ...themeFlowResponse, snapshot });
         }),
       );
       renderSignalsPageWithShell();
@@ -593,8 +591,7 @@ describe('Trace Intelligence page', () => {
       fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
       fireEvent.click(billingAgent, { detail: 1 });
 
-      expect(await screen.findByText('Snapshot 2/2 · Jul 8–15, 2026 · 30 traces')).not.toBeNull();
-      expect(billingFlowSnapshotId).toBe('billing-snapshot-2');
+      expect(await screen.findByText('Snapshot 1/2 · Jul 1–8, 2026 · 20 traces')).not.toBeNull();
     });
   });
 

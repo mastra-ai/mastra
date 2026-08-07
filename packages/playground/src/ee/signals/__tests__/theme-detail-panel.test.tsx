@@ -73,6 +73,7 @@ describe('ThemeDetailPanel', () => {
       renderPanel();
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
+      expect(screen.queryByText(/^theme$/i)).toBeNull();
       fireEvent.focus(screen.getByRole('button', { name: 'goal' }));
 
       expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');

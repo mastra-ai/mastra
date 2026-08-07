@@ -390,7 +390,7 @@ describe('SankeySignals lifelines mode', () => {
 
       const lifelines = screen.getByRole('region', { name: 'Theme lifelines' });
       const summary = within(lifelines).getByTestId('snapshot-summary');
-      expect(summary.textContent).toContain('· 50 traces · 9 themes');
+      expect(summary.textContent).toContain('· 50 traces · 10 themes');
     });
 
     it('returns to the flow chart when the user switches back', async () => {

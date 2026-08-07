@@ -540,6 +540,8 @@ describe('SankeySignals drill-in', () => {
         }),
       );
       renderSignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await waitFor(() =>
         expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces at this point ·'),
@@ -710,6 +712,8 @@ describe('SankeySignals drill-in', () => {
         }),
       );
       renderSignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await waitFor(() =>
         expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces at this point ·'),
@@ -748,6 +752,8 @@ describe('SankeySignals drill-in', () => {
         }),
       );
       renderSignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await waitFor(() =>
         expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces at this point ·'),

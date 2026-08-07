@@ -158,7 +158,6 @@ export function ThemeDetailPanel({
                 <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
                 <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
               </Tooltip>
-              <span aria-hidden="true"> theme</span>
             </span>
           )}
           <DrawerTitle>{title}</DrawerTitle>

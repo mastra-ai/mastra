@@ -2,7 +2,6 @@ import type { DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable, useMouseSensor, useTouchSensor } from '@hello-pangea/dnd';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
-import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import type {
   SankeyChartColumn,
@@ -72,20 +71,20 @@ const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
 
 const EXPLAINER_SIGNAL_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
 
-/** "What is this?" popover for first-time viewers: signals → themes → snapshots. */
+/** Info tooltip for first-time viewers: signals → themes → snapshots. */
 function TraceIntelligenceExplainer() {
   return (
-    <Popover>
-      <PopoverTrigger
-        className="text-neutral3 hover:text-neutral6 flex cursor-pointer items-center gap-1 text-xs transition-colors"
+    <Tooltip>
+      <TooltipTrigger
+        aria-label="What is trace intelligence?"
+        className="text-neutral3 hover:text-neutral6 flex cursor-help items-center transition-colors"
         type="button"
       >
         <Icon size="sm">
           <Info />
         </Icon>
-        What is this?
-      </PopoverTrigger>
-      <PopoverContent align="start" aria-label="What is trace intelligence?" className="max-w-sm space-y-3 p-4 text-xs">
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm space-y-3 p-4 text-xs">
         <p className="text-neutral5">
           Every trace from this agent is analyzed for four signals, and traces with similar signals are clustered into
           named themes.
@@ -104,10 +103,10 @@ function TraceIntelligenceExplainer() {
           ))}
         </ul>
         <p className="text-neutral4">
-          Snapshots capture the themes at points in time, so the views above show how they appear, grow, and fade.
+          Snapshots capture the themes at points in time, so the views show how they appear, grow, and fade.
         </p>
-      </PopoverContent>
-    </Popover>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -184,8 +183,8 @@ function ThemeFilterBanner({
 function GutterLabel({ children, className }: { children: React.ReactNode; className: string }) {
   return (
     <span
-      className={`text-neutral3 absolute left-1/2 -translate-x-1/2 font-mono text-[9px] tracking-widest ${className}`}
-      style={{ writingMode: 'sideways-lr' }}
+      className={`text-neutral3 absolute left-1/2 -translate-x-1/2 rotate-180 font-mono text-[10px] tracking-[0.18em] ${className}`}
+      style={{ writingMode: 'vertical-rl' }}
     >
       {children}
     </span>
@@ -243,9 +242,9 @@ function FlowCard({
     >
       <CardContent className="px-0 py-2 sm:py-3">
         <div className="flex">
-          <div className="relative w-6 shrink-0">
-            <GutterLabel className="top-1">SIGNALS</GutterLabel>
-            <GutterLabel className="top-1/2 -translate-y-1/2">THEMES</GutterLabel>
+          <div className="border-border1 relative w-9 shrink-0 border-r">
+            <GutterLabel className="top-2">SIGNALS</GutterLabel>
+            <GutterLabel className="top-1/2 mt-4 -translate-y-1/2">THEMES</GutterLabel>
           </div>
           <div className="min-w-0 flex-1">
             <DragDropContext enableDefaultSensors={false} sensors={DRAG_SENSORS} onDragEnd={handleDragEnd}>
@@ -255,17 +254,11 @@ function FlowCard({
                     {...provided.droppableProps}
                     ref={provided.innerRef}
                     aria-label="Trace signal column headers"
-                    className="flex px-8 pb-1"
+                    className="flex items-center justify-between px-8 pb-1"
                     role="group"
                   >
                     {headerSignalNames.map((signalName, index) => {
                       const label = formatSignalName(signalName);
-                      const justify =
-                        index === 0
-                          ? 'justify-start'
-                          : index === headerSignalNames.length - 1
-                            ? 'justify-end'
-                            : 'justify-center';
                       return (
                         <Draggable
                           key={signalName}
@@ -277,7 +270,7 @@ function FlowCard({
                             <div
                               ref={dragProvided.innerRef}
                               {...dragProvided.draggableProps}
-                              className={`flex min-w-0 flex-1 basis-0 items-center gap-0.5 ${justify}`}
+                              className="flex shrink-0 items-center gap-0.5"
                               style={dragProvided.draggableProps.style}
                             >
                               <Tooltip>
@@ -360,7 +353,7 @@ export function SankeySignals({
   const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
-  const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
+  const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
   const snapshot = snapshots[selectedSnapshotIndex];
   const totalSnapshots = snapshotsQuery.data?.totalSnapshots ?? snapshot?.total ?? 0;
   const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);

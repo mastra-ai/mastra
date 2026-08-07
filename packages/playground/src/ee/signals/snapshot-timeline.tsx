@@ -9,7 +9,7 @@ export type TimelineMarkerKind = 'selected' | 'compare-point';
 
 const MARKER_TICK_CLASSES: Record<TimelineMarkerKind, string> = {
   selected: 'bg-accent1 border-accent1',
-  'compare-point': 'bg-green-400 border-green-400',
+  'compare-point': 'bg-accent1 border-accent1',
 };
 
 /**
@@ -49,7 +49,7 @@ export function TimelineTrack({
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-colors ${
               marker ? MARKER_TICK_CLASSES[marker] : 'bg-surface4 border-surface2 hover:bg-accent1/60'
-            } ${grabbed ? 'ring-2 ring-green-300/70' : ''}`}
+            } ${grabbed ? 'ring-accent1/70 ring-2' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}
@@ -93,14 +93,14 @@ export function SnapshotTimeline({
   if (!snapshot) return null;
 
   const totalCount = totalSnapshots ?? snapshot.total;
+  const selectedDate = snapshot.cutoffAt
+    ? formatSnapshotCutoff(snapshot.cutoffAt)
+    : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt);
   const statusParts = [
     `Snapshot ${snapshot.ordinal}/${totalCount}`,
     ...(snapshot.cutoffAt
-      ? [
-          `as of ${formatSnapshotCutoff(snapshot.cutoffAt)}`,
-          `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`,
-        ]
-      : [formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)]),
+      ? [`as of ${selectedDate}`, `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
+      : [selectedDate]),
     traceLabel(snapshot.traceCount),
   ];
 
@@ -114,7 +114,8 @@ export function SnapshotTimeline({
             markers={new Map<number, TimelineMarkerKind>([[selectedIndex, 'selected']])}
             onTickSelect={onSnapshotChange}
           />
-          <div className="flex justify-center">
+          <div className="mx-2 flex flex-col items-start gap-2">
+            <p className="text-neutral4 font-mono text-xs tabular-nums">{selectedDate}</p>
             <Button
               aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
               onClick={() => onPlayingChange(!isPlaying)}
