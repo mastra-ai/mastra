@@ -543,7 +543,8 @@
                     "content": "Mock V2 generate response",
                     "metadata": {
                       "modelId": "mock-model-id",
-                      "provider": "mock-provider"
+                      "provider": "mock-provider",
+                      "traceId": "<trace-1>"
                     }
                   },
                   "createdAt": "<date>"

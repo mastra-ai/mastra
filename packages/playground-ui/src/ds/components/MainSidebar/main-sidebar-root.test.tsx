@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebar } from './main-sidebar';
-import { MainSidebarProvider } from './main-sidebar-context';
+import { MainSidebarProvider } from './main-sidebar-provider';
 
 const mockMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {
@@ -98,6 +98,54 @@ describe('MainSidebar resize handle gesture', () => {
 
     fireEvent(window, pointerEvent('pointerup', { pointerId: 1 }));
     expect(scope.getAttribute('data-sidebar-gesture')).toBeNull();
+  });
+});
+
+describe('MainSidebar keyboard behavior', () => {
+  it('leaves Command+B available to the browser by default', () => {
+    mockMatchMedia(false);
+    render(
+      <MainSidebarProvider>
+        <MainSidebar>
+          <MainSidebar.Nav />
+        </MainSidebar>
+      </MainSidebarProvider>,
+    );
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'KeyB',
+      key: 'b',
+      metaKey: true,
+    });
+
+    fireEvent(window, event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-state')).toBe('default');
+  });
+
+  it('toggles the sidebar when a consumer explicitly opts in', () => {
+    mockMatchMedia(false);
+    render(
+      <MainSidebarProvider disableKeyboardShortcut={false}>
+        <MainSidebar>
+          <MainSidebar.Nav />
+        </MainSidebar>
+      </MainSidebarProvider>,
+    );
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'KeyB',
+      key: 'b',
+      metaKey: true,
+    });
+
+    fireEvent(window, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-state')).toBe('collapsed');
   });
 });
 

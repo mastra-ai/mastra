@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CircleDot, ExternalLink, Link2 } from 'lucide-react';
+import { Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
@@ -11,6 +11,7 @@ import { useWorkspaceFiles } from '../../workspace-viewer/context/useWorkspaceFi
 import { relatedWorkItems, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
+import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
@@ -122,7 +123,6 @@ function WorkItemActions({
   const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
-  const ExternalItemIcon = item.source === 'github-issue' ? CircleDot : ExternalLink;
 
   const openSession = (session: WorkItemSessionRef) => {
     void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
@@ -140,7 +140,7 @@ function WorkItemActions({
           rel="noreferrer"
           aria-label={`Open ${externalItemLabel}`}
         >
-          <ExternalItemIcon size={13} aria-hidden />
+          <SourceIcon source={item.source} className="size-3.5" />
           {externalItemLabel}
         </Button>
       ) : null}
