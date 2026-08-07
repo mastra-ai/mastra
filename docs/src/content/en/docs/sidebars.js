@@ -16,22 +16,14 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'category',
-      label: 'Start',
-      collapsed: false,
-      collapsible: false,
-      items: [
-        {
-          type: 'doc',
-          id: 'index',
-          label: 'Get Started',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/develop',
-          label: 'Develop',
-        },
-      ],
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
+    {
+      type: 'doc',
+      id: 'getting-started/develop',
+      label: 'Develop',
     },
     {
       type: 'category',
