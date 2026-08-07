@@ -572,6 +572,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'FAILED'),
@@ -586,13 +590,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -775,7 +773,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
-      throw new MastraError(
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
+      const mastraError = new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
@@ -789,6 +791,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         },
         error,
       );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      throw mastraError;
     }
   }
 
