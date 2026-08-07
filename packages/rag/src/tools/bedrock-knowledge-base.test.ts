@@ -1,102 +1,152 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { RequestContext } from '@mastra/core/request-context';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockSend = vi.fn();
+const commandInputs: unknown[] = [];
 
 vi.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
-  BedrockAgentRuntimeClient: class MockClient {
+  BedrockAgentRuntimeClient: class {
     send = mockSend;
   },
-  RetrieveCommand: class MockRetrieveCommand {
-    constructor(public input: any) {}
+  RetrieveCommand: class {
+    constructor(input: unknown) {
+      commandInputs.push(input);
+    }
   },
-  AgenticRetrieveStreamCommand: class MockAgenticCommand {
-    constructor(public input: any) {}
+  AgenticRetrieveStreamCommand: class {
+    constructor(input: unknown) {
+      commandInputs.push(input);
+    }
   },
-}));
-
-vi.mock('@mastra/core/tools', () => ({
-  createTool: (config: any) => ({
-    id: config.id,
-    description: config.description,
-    inputSchema: config.inputSchema,
-    outputSchema: config.outputSchema,
-    execute: async (input: any) => config.execute(input),
-  }),
 }));
 
 import { createBedrockKBTool } from './bedrock-knowledge-base';
 
+type BedrockKBTool = ReturnType<typeof createBedrockKBTool>;
+type BedrockKBToolContext = Parameters<NonNullable<BedrockKBTool['execute']>>[1];
+
+function executeTool(tool: BedrockKBTool, queryText: string, requestContext = new RequestContext()) {
+  return tool.execute!({ queryText }, { requestContext } as BedrockKBToolContext);
+}
+
 describe('createBedrockKBTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSend.mockResolvedValue({ retrievalResults: [] });
+    commandInputs.length = 0;
   });
 
-  it('creates a tool with id and description', () => {
-    const tool = createBedrockKBTool({ knowledgeBaseId: 'TEST123456', useAgenticRetrieval: false });
-    expect(tool.id).toBe('bedrock_knowledge_base_TEST123456');
-    expect(tool.description).toContain('Bedrock Knowledge Base');
-    expect(tool.execute).toBeInstanceOf(Function);
+  it('creates a Mastra tool with the expected contract', () => {
+    const tool = createBedrockKBTool({ knowledgeBaseId: 'kb-123', useAgenticRetrieval: false });
+
+    expect(tool.id).toBe('bedrock_knowledge_base_kb-123');
+    expect(tool.description).toContain('Amazon Bedrock Knowledge Base');
+    expect(tool.inputSchema).toBeDefined();
+    expect(tool.outputSchema).toBeDefined();
   });
 
-  it('executes managed retrieval with correct config', async () => {
+  it('returns managed retrieval results with source and score', async () => {
     mockSend.mockResolvedValue({
       retrievalResults: [
-        { content: { text: 'result' }, location: { s3Location: { uri: 's3://b/d' } }, score: 0.8, metadata: {} },
+        {
+          content: { text: 'Managed result' },
+          location: { type: 'S3', s3Location: { uri: 's3://bucket/doc.txt' } },
+          score: 0.92,
+          metadata: { category: 'docs' },
+        },
       ],
     });
 
-    const tool = createBedrockKBTool({ knowledgeBaseId: 'TEST123456', useAgenticRetrieval: false });
-    const output = await tool.execute({ context: {}, queryText: 'query' } as any);
+    const tool = createBedrockKBTool({ knowledgeBaseId: 'kb-123', useAgenticRetrieval: false });
+    const output = await executeTool(tool, 'What is RAG?');
 
-    expect(output.results).toHaveLength(1);
-    expect(output.results[0].content).toBe('result');
-    expect(output.results[0].source).toBe('s3://b/d');
-    expect(output.results[0].score).toBe(0.8);
+    expect(output).toEqual({
+      results: [
+        {
+          content: 'Managed result',
+          source: 's3://bucket/doc.txt',
+          score: 0.92,
+          metadata: { category: 'docs' },
+        },
+      ],
+    });
   });
 
-  it('executes agentic retrieval with stream processing', async () => {
-    const mockStream = (async function* () {
-      yield { result: { results: [
-        { content: { text: 'agentic result' }, location: { s3Location: { uri: 's3://b/a' } }, score: 0.95, metadata: {} },
-      ] } };
-    })();
+  it('maps the actual agentic result shape without inventing a score or location', async () => {
+    async function* stream() {
+      yield {
+        result: {
+          results: [
+            {
+              content: { text: 'Agentic result' },
+              metadata: { _source_uri: 's3://bucket/agentic.txt', category: 'docs' },
+              sourceRetriever: { identifier: 'kb-123' },
+            },
+          ],
+        },
+      };
+    }
 
-    mockSend.mockResolvedValue({ stream: mockStream });
+    mockSend.mockResolvedValue({ stream: stream() });
 
-    const tool = createBedrockKBTool({ knowledgeBaseId: 'TEST123456', useAgenticRetrieval: true });
-    const output = await tool.execute({ context: {}, queryText: 'complex query' } as any);
+    const tool = createBedrockKBTool({ knowledgeBaseId: 'kb-123' });
+    const output = await executeTool(tool, 'Compare the documents');
 
-    expect(output.results).toHaveLength(1);
-    expect(output.results[0].content).toBe('agentic result');
-    expect(output.results[0].source).toBe('s3://b/a');
-    expect(output.results[0].score).toBe(0.95);
+    expect(output).toEqual({
+      results: [
+        {
+          content: 'Agentic result',
+          source: 's3://bucket/agentic.txt',
+          metadata: { _source_uri: 's3://bucket/agentic.txt', category: 'docs' },
+        },
+      ],
+    });
   });
 
-  it('falls back to managed retrieval when agentic fails', async () => {
-    // First call (agentic) throws, second call (managed) succeeds
-    mockSend
-      .mockRejectedValueOnce(new Error('Agentic not available'))
-      .mockResolvedValueOnce({
-        retrievalResults: [
-          { content: { text: 'fallback' }, location: {}, score: 0.6, metadata: {} },
-        ],
-      });
+  it('falls back to managed retrieval when agentic retrieval fails', async () => {
+    mockSend.mockRejectedValueOnce(new Error('Agentic retrieval unavailable')).mockResolvedValueOnce({
+      retrievalResults: [{ content: { text: 'Fallback result' }, metadata: {} }],
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const tool = createBedrockKBTool({ knowledgeBaseId: 'TEST123456', useAgenticRetrieval: true });
-    const output = await tool.execute({ context: {}, queryText: 'test' } as any);
+    const tool = createBedrockKBTool({ knowledgeBaseId: 'kb-123' });
+    const output = await executeTool(tool, 'Find a result');
 
-    expect(output.results).toHaveLength(1);
-    expect(output.results[0].content).toBe('fallback');
     expect(mockSend).toHaveBeenCalledTimes(2);
+    expect(output).toEqual({
+      results: [{ content: 'Fallback result', source: undefined, score: undefined, metadata: {} }],
+    });
   });
 
-  it('returns empty results when no documents match', async () => {
+  it('returns an empty result list when Bedrock finds no matches', async () => {
     mockSend.mockResolvedValue({ retrievalResults: [] });
 
-    const tool = createBedrockKBTool({ knowledgeBaseId: 'TEST123456', useAgenticRetrieval: false });
-    const output = await tool.execute({ context: {}, queryText: 'no match' } as any);
+    const tool = createBedrockKBTool({ knowledgeBaseId: 'kb-123', useAgenticRetrieval: false });
 
-    expect(output.results).toHaveLength(0);
+    await expect(executeTool(tool, 'No matches')).resolves.toEqual({ results: [] });
+  });
+
+  it('forwards the request context userId to managed retrieval', async () => {
+    mockSend.mockResolvedValue({ retrievalResults: [] });
+    const requestContext = new RequestContext();
+    requestContext.set('userId', 'user-123');
+    const tool = createBedrockKBTool({
+      knowledgeBaseId: 'kb-123',
+      useAgenticRetrieval: false,
+      userId: 'default-user',
+    });
+
+    await executeTool(tool, 'Private documents', requestContext);
+
+    expect(commandInputs[0]).toEqual(expect.objectContaining({ userContext: { userId: 'user-123' } }));
+  });
+
+  it('uses the configured userId when the request context does not provide one', async () => {
+    async function* stream() {}
+    mockSend.mockResolvedValue({ stream: stream() });
+    const tool = createBedrockKBTool({ knowledgeBaseId: 'kb-123', userId: 'default-user' });
+
+    await executeTool(tool, 'Private documents');
+
+    expect(commandInputs[0]).toEqual(expect.objectContaining({ userContext: { userId: 'default-user' } }));
   });
 });

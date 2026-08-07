@@ -12,5 +12,5 @@ const tool = createBedrockKBTool({
   region: 'us-west-2',
 });
 
-const results = await tool.execute('What is RAG?');
+const results = await tool.execute({ queryText: 'What is RAG?' });
 ```

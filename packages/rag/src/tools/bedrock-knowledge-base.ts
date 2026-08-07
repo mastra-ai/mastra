@@ -1,9 +1,10 @@
-import { createTool } from '@mastra/core/tools';
 import {
+  AgenticRetrieveStreamCommand,
   BedrockAgentRuntimeClient,
   RetrieveCommand,
-  AgenticRetrieveStreamCommand,
+  type RetrievalResultLocation,
 } from '@aws-sdk/client-bedrock-agent-runtime';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export interface BedrockKBToolOptions {
@@ -15,27 +16,33 @@ export interface BedrockKBToolOptions {
   numberOfResults?: number;
   /** Use AgenticRetrieveStream for complex queries with query decomposition and managed reranking. Falls back to plain Retrieve on failure. Defaults to true. */
   useAgenticRetrieval?: boolean;
+  /** Default AWS user ID for access-controlled retrieval. A userId in the tool request context takes precedence. */
+  userId?: string;
 }
 
 export interface BedrockKBResult {
   content: string;
-  source: string;
-  score: number;
+  source?: string;
+  score?: number;
   metadata: Record<string, unknown>;
 }
 
-function getSourceUri(result: Record<string, unknown>): string {
-  if (result == null) return '';
-  const location = (result.location ?? {}) as Record<string, any>;
-  if (location.s3Location) return location.s3Location.uri ?? '';
-  if (location.webLocation) return location.webLocation.url ?? '';
-  if (location.confluenceLocation) return location.confluenceLocation.url ?? '';
-  if (location.salesforceLocation) return location.salesforceLocation.url ?? '';
-  if (location.sharePointLocation) return location.sharePointLocation.url ?? '';
-  if (location.customDocumentLocation) return location.customDocumentLocation.id ?? '';
-  // Fallback for agentic results
-  const metadata = (result.metadata ?? {}) as Record<string, unknown>;
-  return (metadata._source_uri as string) ?? '';
+function getSourceUri(location?: RetrievalResultLocation): string | undefined {
+  if (location?.s3Location) return location.s3Location.uri;
+  if (location?.webLocation) return location.webLocation.url;
+  if (location?.confluenceLocation) return location.confluenceLocation.url;
+  if (location?.salesforceLocation) return location.salesforceLocation.url;
+  if (location?.sharePointLocation) return location.sharePointLocation.url;
+  if (location?.customDocumentLocation) return location.customDocumentLocation.id;
+  return undefined;
+}
+
+function getMetadataSource(metadata: Record<string, unknown>): string | undefined {
+  return typeof metadata._source_uri === 'string' ? metadata._source_uri : undefined;
+}
+
+function getUserContext(userId: unknown): { userId: string } | undefined {
+  return typeof userId === 'string' && userId.length > 0 ? { userId } : undefined;
 }
 
 const inputSchema = z.object({
@@ -46,8 +53,8 @@ const outputSchema = z.object({
   results: z.array(
     z.object({
       content: z.string(),
-      source: z.string(),
-      score: z.number(),
+      source: z.string().optional(),
+      score: z.number().optional(),
       metadata: z.record(z.string(), z.unknown()),
     }),
   ),
@@ -59,33 +66,30 @@ export function createBedrockKBTool(options: BedrockKBToolOptions) {
     region = process.env.AWS_REGION ?? 'us-east-1',
     numberOfResults = 5,
     useAgenticRetrieval = process.env.USE_AGENTIC_RETRIEVAL !== 'false',
+    userId: defaultUserId,
   } = options;
 
   const client = new BedrockAgentRuntimeClient({ region, customUserAgent: [['mastra', 'bedrock-kb']] });
 
-  async function managedRetrieve(query: string): Promise<BedrockKBResult[]> {
+  async function managedRetrieve(query: string, userId?: string): Promise<BedrockKBResult[]> {
     const command = new RetrieveCommand({
       knowledgeBaseId,
       retrievalQuery: { text: query },
       retrievalConfiguration: { managedSearchConfiguration: { numberOfResults } },
+      userContext: getUserContext(userId),
     });
 
     const response = await client.send(command);
-    const results: BedrockKBResult[] = [];
 
-    for (const result of response.retrievalResults ?? []) {
-      results.push({
-        content: result.content?.text ?? '',
-        source: getSourceUri(result as unknown as Record<string, unknown>),
-        score: result.score ?? 0,
-        metadata: (result.metadata as Record<string, unknown>) ?? {},
-      });
-    }
-
-    return results;
+    return (response.retrievalResults ?? []).map(result => ({
+      content: result.content?.text ?? '',
+      source: getSourceUri(result.location),
+      score: result.score,
+      metadata: result.metadata ?? {},
+    }));
   }
 
-  async function agenticRetrieve(query: string): Promise<BedrockKBResult[]> {
+  async function agenticRetrieve(query: string, userId?: string): Promise<BedrockKBResult[]> {
     try {
       const command = new AgenticRetrieveStreamCommand({
         messages: [{ content: { text: query }, role: 'user' }],
@@ -103,21 +107,21 @@ export function createBedrockKBTool(options: BedrockKBToolOptions) {
           foundationModelType: 'MANAGED',
           rerankingModelType: 'MANAGED',
         },
-      } as any);
+        userContext: getUserContext(userId),
+      });
 
       const response = await client.send(command);
       const results: BedrockKBResult[] = [];
-      const stream = (response as any).stream;
 
-      if (stream) {
-        for await (const event of stream) {
-          if ('result' in event && event.result?.results) {
+      if (response.stream) {
+        for await (const event of response.stream) {
+          if (event.result?.results) {
             for (const result of event.result.results) {
+              const metadata = result.metadata ?? {};
               results.push({
                 content: result.content?.text ?? '',
-                source: getSourceUri(result as Record<string, unknown>),
-                score: result.score ?? 0,
-                metadata: (result.metadata as Record<string, unknown>) ?? {},
+                source: getMetadataSource(metadata),
+                metadata,
               });
             }
           }
@@ -127,24 +131,22 @@ export function createBedrockKBTool(options: BedrockKBToolOptions) {
       return results;
     } catch (error) {
       console.warn('Agentic retrieval failed, falling back to managed retrieve:', error);
-      return managedRetrieve(query);
+      return managedRetrieve(query, userId);
     }
   }
 
   return createTool({
     id: `bedrock_knowledge_base_${knowledgeBaseId}`,
-    description: 'Retrieves relevant documents from an Amazon Bedrock Knowledge Base. Use this to answer questions that require specific knowledge or context.',
+    description:
+      'Retrieves relevant documents from an Amazon Bedrock Knowledge Base. Use this to answer questions that require specific knowledge or context.',
     inputSchema,
     outputSchema,
-    execute: async (inputData: { queryText: string }) => {
+    execute: async (inputData, context) => {
       const query = inputData.queryText;
-      let results: BedrockKBResult[];
-
-      if (useAgenticRetrieval) {
-        results = await agenticRetrieve(query);
-      } else {
-        results = await managedRetrieve(query);
-      }
+      const userId = context?.requestContext?.get('userId') ?? defaultUserId;
+      const results = useAgenticRetrieval
+        ? await agenticRetrieve(query, typeof userId === 'string' ? userId : undefined)
+        : await managedRetrieve(query, typeof userId === 'string' ? userId : undefined);
 
       return { results };
     },

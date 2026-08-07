@@ -208,7 +208,7 @@ const kbTool = createBedrockKBTool({
   region: 'us-west-2',
 });
 
-const results = await kbTool.execute('What are our policies?');
+const results = await kbTool.execute({ queryText: 'What are our policies?' });
 ```
 
 #### Key Features
