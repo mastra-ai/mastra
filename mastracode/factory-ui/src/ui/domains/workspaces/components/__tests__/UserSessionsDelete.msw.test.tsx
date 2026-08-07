@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -41,6 +41,7 @@ describe('User sessions deletion', () => {
   it('deletes the selected session and removes it from the sidebar', async () => {
     let sessions = [session];
     const deletedSessions: string[] = [];
+    const threadRequests: string[] = [];
 
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
@@ -74,6 +75,13 @@ describe('User sessions deletion', () => {
       }),
     );
 
+    const recordThreadRequest = ({ request }: { request: Request }) => {
+      const { pathname } = new URL(request.url);
+      if (pathname.includes('/threads')) threadRequests.push(`${request.method} ${pathname}`);
+    };
+    server.events.on('request:start', recordThreadRequest);
+    onTestFinished(() => server.events.removeListener('request:start', recordThreadRequest));
+
     const user = userEvent.setup();
     const { client } = renderSection();
 
@@ -83,6 +91,7 @@ describe('User sessions deletion', () => {
 
     await waitForMutationsIdle(client);
     expect(deletedSessions).toEqual([sessionId]);
+    expect(threadRequests).toEqual([]);
     expect(screen.queryByRole('button', { name: 'my-feature' })).not.toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
   });
