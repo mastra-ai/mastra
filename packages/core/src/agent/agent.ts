@@ -5235,27 +5235,27 @@ export class Agent<
                     if (chunk.type.startsWith('data-')) {
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
-                      if (chunk.type === 'data-tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'data-tool-call-suspended') {
-                        suspendedPayload = chunk.data.suspendPayload;
-                        resumeSchema = chunk.data.resumeSchema;
-                      }
                     } else {
                       await context.writer.write(chunk);
-                      if (chunk.type === 'tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'tool-call-suspended') {
-                        suspendedPayload = chunk.payload.suspendPayload;
-                        resumeSchema = chunk.payload.resumeSchema;
-                      }
                     }
+                  }
+
+                  if (chunk.type === 'data-tool-call-approval') {
+                    requireToolApproval = (chunk as any).data ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: (chunk as any).data ?? {},
+                    };
+                  } else if (chunk.type === 'data-tool-call-suspended') {
+                    suspendedPayload = chunk.data.suspendPayload;
+                    resumeSchema = chunk.data.resumeSchema;
+                  } else if (chunk.type === 'tool-call-approval') {
+                    requireToolApproval = chunk.payload ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: chunk.payload ?? {},
+                    };
+                  } else if (chunk.type === 'tool-call-suspended') {
+                    suspendedPayload = chunk.payload.suspendPayload;
+                    resumeSchema = chunk.payload.resumeSchema;
                   }
                 }
 
@@ -6203,6 +6203,7 @@ export class Agent<
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
+          mastra: this.#mastra ?? this.#ephemeralMastra,
           scorerId: scorerObject.scorer.id,
           scorerObject: scorerObject,
           runId,

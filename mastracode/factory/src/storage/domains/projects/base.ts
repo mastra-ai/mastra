@@ -119,6 +119,15 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     return rows.map(toFactoryProject);
   }
 
+  async listAll(): Promise<FactoryProject[]> {
+    const rows = await this.#db.findMany<FactoryProjectDbRow>(
+      'factory_projects',
+      {},
+      { orderBy: [['updated_at', 'desc']] },
+    );
+    return rows.map(toFactoryProject);
+  }
+
   async get({ orgId, id }: { orgId: string; id: string }): Promise<FactoryProject | null> {
     const row = await this.#db.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
     return row ? toFactoryProject(row) : null;

@@ -51,6 +51,8 @@ type AddToolMetadataOptions = {
   toolCallId: string;
   toolName: string;
   args: unknown;
+  parentToolName?: string;
+  parentArgs?: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
   metadata?: Record<string, unknown>;
@@ -154,6 +156,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         toolCallId,
         toolName,
         args,
+        parentToolName,
+        parentArgs,
         suspendPayload,
         resumeSchema,
         type,
@@ -186,6 +190,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           toolCallId,
           toolName,
           args: transformedArgs,
+          ...(parentToolName ? { parentToolName, parentArgs } : {}),
           type,
           // Store the OUTER (resumable) runId so clients can resume after page refresh or
           // server restart via `resumeStream({ runId, toolCallId })`. For delegated sub-agent /
@@ -267,7 +272,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (entries[toolCallId]) return toolCallId;
           const byCallId = Object.keys(entries).find(key => entries[key]?.toolCallId === toolCallId);
           if (byCallId) return byCallId;
-          const byName = Object.keys(entries).find(key => entries[key]?.toolName === toolName);
+          const byName = Object.keys(entries).find(
+            key => entries[key]?.parentToolName === toolName || entries[key]?.toolName === toolName,
+          );
           if (byName) return byName;
           return entries[toolName] ? toolName : undefined;
         };
@@ -685,6 +692,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
+              const innerApproval =
+                typeof options.requireToolApproval === 'object' && options.requireToolApproval
+                  ? options.requireToolApproval
+                  : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
+                    ? suspendPayload.requireToolApproval
+                    : null;
+
+              const approvalToolName = innerApproval?.toolName ?? inputData.toolName;
+              const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : inputData.args;
+
               await stopGoalActivity({
                 agentId,
                 runId,
@@ -697,8 +714,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   from: ChunkFrom.AGENT,
                   payload: {
                     toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
                     resumeSchema: JSON.stringify(
                       standardSchemaToJSONSchema(
                         toStandardSchema(
@@ -725,8 +742,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // Add approval metadata to message before persisting
               addToolMetadata({
                 toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args: inputData.args,
+                toolName: approvalToolName,
+                args: approvalArgs,
+                ...(approvalToolName !== inputData.toolName || approvalArgs !== inputData.args
+                  ? { parentToolName: inputData.toolName, parentArgs: inputData.args }
+                  : {}),
                 type: 'approval',
                 suspendedToolRunId: options.runId,
                 resumeSchema: JSON.stringify(
@@ -752,8 +772,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   requireToolApproval: {
                     toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
                   },
                   __streamState: streamState.serialize(),
                   __agentId: agentId,

@@ -58,7 +58,12 @@ export interface MastraCodeState {
   cavemanObservations: boolean;
   observeAttachments: 'auto' | boolean;
   omScope?: 'thread' | 'resource';
-  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  /**
+   * Session-level reasoning-effort override. When unset, the effective level is
+   * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
+   * falling back to `preferences.thinkingLevel`).
+   */
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   yolo: boolean;
   permissionRules: {
     categories: Record<string, PermissionPolicy>;
@@ -140,8 +145,10 @@ export const stateSchema = z.object({
   observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
-  // Thinking level for model reasoning effort
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).default('off'),
+  // Thinking level for model reasoning effort. Optional: absent means "no
+  // session override" — the effective level is resolved from settings
+  // (per-mode defaults, then the global preference) at request time.
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies

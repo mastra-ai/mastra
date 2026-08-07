@@ -47,6 +47,7 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { buildGithubRoutes } from './routes.js';
@@ -1110,19 +1111,17 @@ export class GithubIntegration implements FactoryIntegration {
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
-    const reconcile = attachGithubReconciler(
-      this,
-      ctx,
-      input => this.fetchPullRequestState(input),
-      input => this.fetchIssueState(input),
-    );
+    const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
     if (!reconcile) return [];
+    const issues = attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input));
     const intervalMs = Number(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    const interval = Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {};
     return [
       new GithubReconcileWorker({
         reconcile,
+        ...(issues ? { reconcileIssues: issues } : {}),
         sourceControl: ctx.storage.sourceControl,
-        ...(Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {}),
+        ...interval,
       }),
     ];
   }
@@ -1151,6 +1150,7 @@ export class GithubIntegration implements FactoryIntegration {
         merged: pullRequest.merged,
         assignees: pullRequest.assignees ?? [],
         requestedReviewers: pullRequest.requestedReviewers ?? [],
+        labels: pullRequest.labels ?? [],
         headBranch: pullRequest.headBranch,
         baseBranch: pullRequest.baseBranch,
         ...(pullRequest.author ? { author: pullRequest.author } : {}),
@@ -1189,6 +1189,9 @@ export class GithubIntegration implements FactoryIntegration {
         assignees: (issue.assignees ?? [])
           .map(user => user.login)
           .filter((login): login is string => Boolean(login)),
+        labels: (issue.labels ?? [])
+          .map(label => (typeof label === 'string' ? label : label.name))
+          .filter((name): name is string => Boolean(name)),
         ...(issue.user?.login ? { author: issue.user.login } : {}),
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,
@@ -1231,6 +1234,7 @@ interface GithubPullRequestData {
   user: { login?: string } | null;
   assignees?: Array<{ login?: string }> | null;
   requested_reviewers?: Array<{ login?: string }> | null;
+  labels?: Array<{ name?: string } | string> | null;
   body?: string | null;
   state: string;
   draft?: boolean | null;
@@ -1278,6 +1282,9 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     author: pr.user?.login ?? null,
     assignees: (pr.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
     requestedReviewers: (pr.requested_reviewers ?? []).flatMap(reviewer => (reviewer.login ? [reviewer.login] : [])),
+    labels: (pr.labels ?? []).flatMap(label =>
+      typeof label === 'string' ? [label] : label.name ? [label.name] : [],
+    ),
     body: pr.body?.trim() ? pr.body : null,
     state: pr.state === 'closed' ? 'closed' : 'open',
     draft: pr.draft ?? false,
