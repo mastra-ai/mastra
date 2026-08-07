@@ -12,6 +12,7 @@ export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
   'issueEdited',
+  'issueClosed',
   'issueCommentCreated',
   'issueCommentEdited',
   'issueCommentDeleted',
@@ -108,6 +109,9 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     createdAt?: string;
     updatedAt?: string;
     assignees?: string[];
+    state?: 'open' | 'closed';
+    /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
+    stateReason?: string;
   };
   issueChange?: { title: boolean; body: boolean };
   issueComment?: {
