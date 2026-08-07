@@ -59,6 +59,7 @@ export const queryKeys = {
   /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
+  thinkingConfig: () => ['thinking-config'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>

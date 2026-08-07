@@ -213,6 +213,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     orgId: 'org-1',
     userId: 'user-1',
     branch: 'main',
+    title: null,
     baseBranch: 'main',
     sandboxId: 'sbx-1',
     sandboxWorkdir: WORKDIR,
