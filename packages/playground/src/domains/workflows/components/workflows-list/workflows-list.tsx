@@ -39,7 +39,7 @@ function TreeConnector({ guides, isLastChild }: { guides: boolean[]; isLastChild
       ))}
       <span className="relative w-6">
         <span className={cn('absolute left-0 top-0 border-l border-border1', isLastChild ? 'h-1/2' : 'h-full')} />
-        <span className="absolute left-0 top-1/2 w-3.5 border-b border-border1" />
+        <span className="border-border1 absolute top-1/2 left-0 w-3.5 border-b" />
       </span>
     </span>
   );
@@ -71,7 +71,7 @@ function TreeToggleCell({
           type="button"
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} nested workflows of ${workflowName}`}
-          className="relative grid size-5 shrink-0 place-items-center text-neutral4 hover:text-neutral2 before:absolute before:-inset-1.5 before:content-['']"
+          className="text-neutral4 hover:text-neutral2 relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']"
           onClick={onToggle}
         >
           <ChevronRightIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />
@@ -152,14 +152,14 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
           return (
             <EntityList.RowWrapper key={`workflow-${row.pathKey}`}>
               <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={toggle} />
-              <div className="col-start-2 col-span-5 grid grid-cols-subgrid gap-8 px-5">
+              <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-8 px-5">
                 <EntityList.NameCell>
                   <span className="flex items-center gap-1.5">
                     <TreeConnector guides={row.guides} isLastChild={row.isLastChild} />
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
                     <span
                       title="Nested workflow not registered standalone"
-                      className="shrink-0 text-ui-smd text-neutral4"
+                      className="text-ui-smd text-neutral4 shrink-0"
                     >
                       inline
                     </span>
@@ -198,7 +198,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
                   {hasNested ? (
                     <span
                       title={`Nested workflows: ${nestedIds.join(', ')}`}
-                      className="inline-flex shrink-0 items-center gap-1 text-ui-smd text-neutral4"
+                      className="text-ui-smd text-neutral4 inline-flex shrink-0 items-center gap-1"
                     >
                       <WorkflowIcon aria-hidden className="size-3.5" />
                       {nestedIds.length}
@@ -210,10 +210,10 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
               <EntityList.TextCell className="text-center">
                 {runningCount > 0 ? (
                   <span
-                    className="inline-flex items-center gap-1.5 text-positive1"
+                    className="text-positive1 inline-flex items-center gap-1.5"
                     aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
                   >
-                    <span aria-hidden className="size-2 rounded-full bg-positive1 motion-safe:animate-pulse" />
+                    <span aria-hidden className="bg-positive1 size-2 rounded-full motion-safe:animate-pulse" />
                     {runningCount}
                   </span>
                 ) : (
@@ -223,7 +223,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
               <EntityList.TextCell className="text-center">
                 {suspendedCount > 0 ? (
                   <span
-                    className="inline-flex items-center gap-1.5 text-warning1"
+                    className="text-warning1 inline-flex items-center gap-1.5"
                     aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
                   >
                     <PauseIcon aria-hidden className="size-3.5" />
