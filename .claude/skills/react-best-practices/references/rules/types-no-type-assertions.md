@@ -90,8 +90,9 @@ A cast in a test is not a shortcut — it is the same defect as a cast in
 production, in the one place no one looks.
 
 Casts clustered inside a conditional usually mean a missing predicate.
-`typeof value === 'object'` narrows `unknown` to `object`, which has no
-properties, so every read needs an assertion; and because narrowing tracks
+`typeof value === 'object'` narrows `unknown` to `object | null`, and a non-null
+check only leaves `object` — a type with no properties — so every read still
+needs an assertion; and because narrowing tracks
 references rather than expressions, a condition written over `(value as X).y`
 leaves the branch to assert again. Write the predicate — `isRecord`, or one that
 proves the fields used — and the cluster disappears. If the conditional is dense
