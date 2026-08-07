@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed the internal notification dispatcher workflow leaving a dead workflow snapshot row behind on every run. Apps using deferred notifications accumulated one row per minute in mastra_workflow_snapshot indefinitely. Fixes #20254
+Fixed deferred notifications accumulating dead workflow records forever. The internal dispatcher runs on a schedule (every minute by default) and left a completed snapshot row behind on every run, so `mastra_workflow_snapshot` grew unboundedly — tens of thousands of rows that were never read again. These runs no longer persist snapshots. Fixes #20254

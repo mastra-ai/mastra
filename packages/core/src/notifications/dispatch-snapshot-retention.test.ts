@@ -55,4 +55,29 @@ describe('notification dispatcher snapshot retention (#20254)', () => {
     // row per tick, indefinitely.
     expect(await countDispatcherSnapshots(storage)).toBe(0);
   }, 30_000);
+
+  it('leaves no snapshot row behind after a failed dispatcher run', async () => {
+    const storage = new InMemoryStore();
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        pubsub: new EventEmitterPubSub(),
+      }),
+    );
+    await mastra.startWorkers();
+
+    const workflow = mastra.getWorkflow(NOTIFICATION_DISPATCH_WORKFLOW_ID as never) as ReturnType<
+      typeof createNotificationDispatchWorkflow
+    >;
+
+    // An unparseable `now` makes the dispatch step throw, failing the run.
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { now: 'not-a-date', limit: 10 } });
+    expect(result.status).toBe('failed');
+
+    // A failed tick is no more resumable than a successful one, so it must not
+    // leave a row behind either.
+    expect(await countDispatcherSnapshots(storage)).toBe(0);
+  }, 30_000);
 });
