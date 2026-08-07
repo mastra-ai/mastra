@@ -92,6 +92,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
   #skills: Map<string, InternalSkill[]> = new Map();
 
+  /** Map of remapped location -> skill path, registered by SkillsProcessor formatLocation overrides */
+  #locationAliases: Map<string, string> = new Map();
+
   /** Whether skills have been discovered */
   #initialized = false;
 
@@ -146,8 +149,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async get(name: string): Promise<Skill | null> {
     await this.#ensureInitialized();
-    // Try name-based lookup first, then fall back to path-based (escape hatch)
-    const skill = (await this.#resolveByName(name)) ?? this.#resolveByPath(name);
+    // Try name-based lookup first, then fall back to path-based (escape hatch),
+    // then to registered location aliases (formatLocation overrides)
+    const skill = (await this.#resolveByName(name)) ?? this.#resolveByPath(name) ?? this.#resolveByAlias(name);
     if (!skill) return null;
 
     // Return without internal indexableContent field
@@ -157,7 +161,24 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async has(name: string): Promise<boolean> {
     await this.#ensureInitialized();
-    return ((await this.#resolveByName(name)) ?? this.#resolveByPath(name)) !== null;
+    return ((await this.#resolveByName(name)) ?? this.#resolveByPath(name) ?? this.#resolveByAlias(name)) !== null;
+  }
+
+  /**
+   * Register an alternate location string that resolves to the skill at `skillPath`.
+   * Called by SkillsProcessor when a `formatLocation` override remaps the advertised
+   * location, so the `skill` and `skill_read` tools can resolve the remapped
+   * location back to the underlying skill.
+   *
+   * Both the exact location and its `/SKILL.md`-stripped form are registered so
+   * lookups succeed whether or not the model preserves the suffix.
+   */
+  registerLocationAlias(location: string, skillPath: string): void {
+    this.#locationAliases.set(location, skillPath);
+    const normalized = location.replace(/\/SKILL\.md$/, '');
+    if (normalized !== location) {
+      this.#locationAliases.set(normalized, skillPath);
+    }
   }
 
   // ===========================================================================
@@ -187,6 +208,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (match) return match;
     }
     return null;
+  }
+
+  /**
+   * Resolve a skill via a registered location alias (formatLocation override).
+   * Tried last so canonical names and paths always win over aliases.
+   */
+  #resolveByAlias(location: string): InternalSkill | null {
+    const target =
+      this.#locationAliases.get(location) ?? this.#locationAliases.get(location.replace(/\/SKILL\.md$/, ''));
+    if (!target) return null;
+    return this.#resolveByPath(target);
   }
 
   async #getCanonicalSkillPath(skillPath: string): Promise<string> {
