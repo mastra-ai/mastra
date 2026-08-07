@@ -269,4 +269,35 @@ describe('User sessions creation', () => {
     expect(await screen.findByText(/Delete failed/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'session-1' })).toBeInTheDocument();
   });
+
+  it('deletes a materialized session whose controller thread is already gone', async () => {
+    const sessions = [userSession()];
+    stubFactoryWithRepository(sessions);
+    let deletedSessions = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () =>
+        HttpResponse.json({ session: userSession({ materializedAt: '2026-07-23T00:01:00.000Z' }) }),
+      ),
+      http.delete(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${sessionId}/threads/${sessionId}`, () =>
+        HttpResponse.json({ message: 'Thread not found' }, { status: 404 }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () => {
+        deletedSessions += 1;
+        sessions.splice(0);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Session actions for session-1' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete' }));
+    await waitForMutationsIdle(client);
+
+    expect(deletedSessions).toBe(1);
+    expect(client.getQueryData(queryKeys.userSession(sessionId))).toBeUndefined();
+    expect(await screen.findByText('Session deleted')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'session-1' })).not.toBeInTheDocument();
+  });
 });
