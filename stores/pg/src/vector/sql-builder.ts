@@ -48,7 +48,7 @@ const createBasicOperator = (symbol: string) => {
   return (key: string, paramIndex: number) => {
     const textExtract = getTextExtractExpr(key);
     return {
-      sql: `CASE 
+      sql: `CASE
         WHEN $${paramIndex}::text IS NULL THEN ${textExtract} IS ${symbol === '=' ? '' : 'NOT'} NULL
         ELSE ${textExtract} ${symbol} $${paramIndex}::text
       END`,
@@ -192,7 +192,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   $all: (key, paramIndex) => {
     const jsonExtract = getJsonExtractExpr(key);
     return {
-      sql: `CASE WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false 
+      sql: `CASE WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false
             ELSE (${jsonExtract})::jsonb ?& $${paramIndex}::text[] END`,
       needsValue: true,
     };
@@ -205,7 +205,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
         CASE
           WHEN jsonb_typeof(${jsonExtract}) = 'array' THEN
             EXISTS (
-              SELECT 1 
+              SELECT 1
               FROM jsonb_array_elements(${jsonExtract}) as elem
               WHERE ${sql}
             )
@@ -283,7 +283,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     return {
       sql: `(
       CASE
-        WHEN jsonb_typeof(${jsonExtract}) = 'array' THEN 
+        WHEN jsonb_typeof(${jsonExtract}) = 'array' THEN
           jsonb_array_length(${jsonExtract}) = $${paramIndex}
         ELSE FALSE
       END
