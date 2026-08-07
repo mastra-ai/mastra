@@ -72,8 +72,13 @@ function getGatewayCostContext({ stepProviderMetadata }: Pick<EndGenerationOptio
     costs.push(cost);
   }
 
+  const estimatedCost = costs.reduce((total, cost) => total + cost, 0);
+  if (!Number.isFinite(estimatedCost)) {
+    return undefined;
+  }
+
   return {
-    estimatedCost: costs.reduce((total, cost) => total + cost, 0),
+    estimatedCost,
     costUnit: 'USD',
     costMetadata: {
       source: 'provider_reported',

@@ -2056,6 +2056,16 @@ describe('ModelSpanTracker', () => {
         expect(span.attributes.costContext?.estimatedCost).toBe(0);
       });
 
+      it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: Number.MAX_VALUE } }, { gateway: { cost: Number.MAX_VALUE } }],
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+      });
+
       it.each([-0.0008, 'invalid-cost', NaN, Infinity])(
         'falls back to pricing estimates when any Gateway step has invalid reported cost %p',
         cost => {
@@ -2103,7 +2113,7 @@ describe('ModelSpanTracker', () => {
             },
           },
           usage: { inputTokens: 15, outputTokens: 4 },
-          providerMetadata: { gateway: { cost: '0.9999' } },
+          stepProviderMetadata: [{ gateway: { cost: '0.9999' } }],
         });
 
         expect(span.attributes.costContext).toEqual({

@@ -69,9 +69,9 @@ The detailed breakdown metrics (everything except `total_input` and `total_outpu
 
 ### When cost context is attached
 
-Cost context is attached to token metrics when the provider reports a valid total cost for every completed model step or when the embedded pricing registry has a matching entry for the provider and model. Mastra includes the registry and covers common providers and models. If neither source is available, token metrics are still emitted without cost fields.
+Cost context is attached to token metrics when the provider reports a valid cost for every completed model step or when the embedded pricing registry has a matching entry for the provider and model. Mastra sums the per-step provider costs into one query total. If any completed step lacks a valid reported cost, Mastra uses the pricing registry instead of reporting a partial total. If neither source is available, token metrics are still emitted without cost fields.
 
-Provider-reported totals use `costMetadata.source: 'provider_reported'`, `costMetadata.scope: 'query_total'`, and `costMetadata.reportedStepCount` to identify the source, scope, and number of completed steps included in the total.
+A caller-supplied `costContext` takes precedence over provider-reported costs and pricing registry estimates. Provider-reported totals use `costMetadata.source: 'provider_reported'`, `costMetadata.scope: 'query_total'`, and `costMetadata.reportedStepCount` to identify the source, scope, and number of completed steps included in the total.
 
 ### What cost fields may be included
 
