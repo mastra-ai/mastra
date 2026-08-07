@@ -29,7 +29,12 @@ describe('TripwireNotice', () => {
   });
 
   describe('when tripwire metadata is provided', () => {
-    const tripwire = { retry: false, processorId: 'moderation', metadata: { category: 'violence' } };
+    const tripwire = {
+      reason: 'blocked for safety',
+      retry: false,
+      processorId: 'moderation',
+      metadata: { category: 'violence' },
+    };
 
     it('keeps the details collapsed until requested', () => {
       render(<TripwireNotice reason="blocked for safety" tripwire={tripwire} />);
@@ -51,7 +56,7 @@ describe('TripwireNotice', () => {
 
   describe('when retry is allowed', () => {
     it('reports the retry as allowed', () => {
-      render(<TripwireNotice reason="blocked for safety" tripwire={{ retry: true }} />);
+      render(<TripwireNotice reason="blocked for safety" tripwire={{ reason: 'blocked for safety', retry: true }} />);
 
       fireEvent.click(screen.getByRole('button', { name: 'Details' }));
 
