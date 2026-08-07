@@ -8848,10 +8848,35 @@ export class Agent<
       });
     }
 
-    const resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
+    const pubsub = this.getPubSub();
+    const hasLocalRun = agentThreadStreamRuntime.hasThreadRun(runId, pubsub);
+    let resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
       { threadId, resourceId, runId, toolCallId },
-      this.getPubSub(),
+      pubsub,
     );
+
+    if (!resumableRun && !hasLocalRun) {
+      // The thread runtime only tracks runs seen by this process. Recover the
+      // explicitly targeted run from snapshot storage after a restart or when
+      // the resume request reaches another server instance.
+      let suspendedRuns: AgentRun[] = [];
+      try {
+        ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
+      } catch (error) {
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          throw error;
+        }
+      }
+
+      const storedRun = suspendedRuns.find(
+        run =>
+          run.runId === runId && (!toolCallId || run.toolCalls.some(toolCall => toolCall.toolCallId === toolCallId)),
+      );
+      if (storedRun) {
+        resumableRun = { runId, toolCallId };
+      }
+    }
+
     if (!resumableRun) {
       throw new MastraError({
         id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
@@ -8926,9 +8951,8 @@ export class Agent<
 
     let runId = this.getActiveThreadRunId({ threadId, resourceId });
     // Tracks whether runId was recovered from storage (not the in-memory active-run
-    // map). Storage-discovered runs are not present in the in-memory thread runtime,
-    // so they must resume directly via resumeStream() rather than through
-    // sendStreamResume(), whose getResumableThreadRun() guard is in-memory only.
+    // map). This path resumes directly because the snapshot has already been
+    // discovered here, avoiding a second storage lookup in sendStreamResume().
     let resolvedFromStorage = false;
 
     if (!runId) {
@@ -9011,10 +9035,8 @@ export class Agent<
     };
 
     if (resolvedFromStorage) {
-      // The run was recovered from storage and is not tracked by the in-memory
-      // thread runtime, so sendStreamResume()'s getResumableThreadRun() guard would
-      // reject it. Resume directly from the persisted snapshot, mirroring the
-      // explicit-runId approveToolCall()/declineToolCall() entry points.
+      // Resume directly from the persisted snapshot, mirroring the explicit-runId
+      // approveToolCall()/declineToolCall() entry points.
       // @ts-expect-error - resumeStream overloads don't narrow cleanly here; matches
       // the same pattern used by approveToolCall()/declineToolCall() above.
       await this.resumeStream(resumeData, {
