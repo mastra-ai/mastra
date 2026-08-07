@@ -58,6 +58,7 @@ export type ScenarioName =
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
+  | 'permission-request-hook'
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
   | 'persistent-goal-reload'
