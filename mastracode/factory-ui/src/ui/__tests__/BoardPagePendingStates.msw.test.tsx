@@ -409,7 +409,7 @@ describe('Board card pending states', () => {
     // once the button goes disabled: the handler itself has to refuse it, since
     // the disabled attribute alone wouldn't stop a programmatic re-dispatch.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
-    const { router } = renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
     await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
@@ -423,15 +423,10 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
     await waitFor(() => expect(runStarts).toHaveLength(1));
 
-    // Both clicks would unblock on the same gate release, so a duplicate start
-    // is already in flight by the time the first one navigates. Waiting on that
-    // navigation is deterministic, unlike a fixed sleep that a slower duplicate
-    // can outrun.
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe(
-        `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
-      ),
-    );
+    // Both clicks unblock on the same gate release, so a duplicate start would
+    // already be in flight here. Draining to a settled cache is deterministic,
+    // unlike a fixed sleep that a slower duplicate can outrun.
+    await waitForMutationsIdle(client);
     expect(runStarts).toHaveLength(1);
   });
 
