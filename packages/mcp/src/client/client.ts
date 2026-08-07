@@ -136,12 +136,36 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 
+type ScalarMcpContentReservation = {
+  output?: unknown;
+  content?: unknown;
+  ready: boolean;
+};
+
+function reserveScalarMcpContent(queue: ScalarMcpContentReservation[]): ScalarMcpContentReservation {
+  const reservation = { ready: false };
+  queue.push(reservation);
+  return reservation;
+}
+
+function removeScalarMcpContentReservation(
+  queue: ScalarMcpContentReservation[],
+  reservation: ScalarMcpContentReservation,
+): void {
+  const index = queue.indexOf(reservation);
+  if (index !== -1) {
+    queue.splice(index, 1);
+  }
+}
+
 function attachMcpCallToolContent(
   structuredContent: unknown,
   content: unknown,
-  scalarMcpContentQueue: unknown[],
+  scalarMcpContentQueue: ScalarMcpContentReservation[],
+  reservation: ScalarMcpContentReservation,
 ): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
+    removeScalarMcpContentReservation(scalarMcpContentQueue, reservation);
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
       value: content,
       enumerable: false,
@@ -150,11 +174,13 @@ function attachMcpCallToolContent(
     return structuredContent;
   }
 
-  scalarMcpContentQueue.push(content);
+  reservation.output = structuredContent;
+  reservation.content = content;
+  reservation.ready = true;
   return structuredContent;
 }
 
-function getMcpCallToolContent(output: unknown, scalarMcpContentQueue: unknown[]): unknown {
+function getMcpCallToolContent(output: unknown, scalarMcpContentQueue: ScalarMcpContentReservation[]): unknown {
   if (output !== null && typeof output === 'object') {
     const attached = (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
     if (attached !== undefined) {
@@ -162,15 +188,16 @@ function getMcpCallToolContent(output: unknown, scalarMcpContentQueue: unknown[]
     }
   }
 
-  if (scalarMcpContentQueue.length > 0) {
-    return scalarMcpContentQueue.shift();
+  const index = scalarMcpContentQueue.findIndex(entry => entry.ready && Object.is(entry.output, output));
+  if (index !== -1) {
+    return scalarMcpContentQueue.splice(index, 1)[0]?.content;
   }
 
   return undefined;
 }
 
 function createStructuredToolToModelOutput(
-  scalarMcpContentQueue: unknown[],
+  scalarMcpContentQueue: ScalarMcpContentReservation[],
 ): (output: unknown) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
   return output => {
     const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output, scalarMcpContentQueue));
@@ -1269,7 +1296,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
-        const scalarMcpContentQueue: unknown[] = [];
+        const scalarMcpContentQueue: ScalarMcpContentReservation[] = [];
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1300,6 +1327,7 @@ export class InternalMastraMCPClient extends MastraBase {
             },
           ) => {
             const operationContext = context?.requestContext ?? null;
+            const scalarMcpContentReservation = reserveScalarMcpContent(scalarMcpContentQueue);
 
             return this.operationContextStore.run(operationContext, async () => {
               const executeToolCall = async () => {
@@ -1344,9 +1372,15 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
-                  return attachMcpCallToolContent(res.structuredContent, res.content, scalarMcpContentQueue);
+                  return attachMcpCallToolContent(
+                    res.structuredContent,
+                    res.content,
+                    scalarMcpContentQueue,
+                    scalarMcpContentReservation,
+                  );
                 }
 
+                removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                 return res;
               };
 
@@ -1379,6 +1413,7 @@ export class InternalMastraMCPClient extends MastraBase {
                       reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
                       toolArgs: input,
                     });
+                    removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                     throw reconnectError;
                   }
                 }
@@ -1388,6 +1423,7 @@ export class InternalMastraMCPClient extends MastraBase {
                   error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
                   toolArgs: input,
                 });
+                removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                 throw e;
               }
             });
