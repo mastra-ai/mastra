@@ -82,6 +82,9 @@ describe('handleSandboxAccessRequest', () => {
       path: '/tmp/project',
       reason: 'Read workspace files',
     });
+    // #20398: the notification now fires at event receipt in the subscription
+    // listener, not inside the queued handler.
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 });
 
@@ -100,6 +103,10 @@ describe('handleAskQuestion goal mode', () => {
 
     state.activeInlineQuestion!.handleInput('\r');
     await promise;
+
+    // #20398: the notification now fires at event receipt in the subscription
+    // listener, not inside the queued handler.
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 
   it('resolves a multi_select prompt with an array of every toggled option label', async () => {
@@ -250,6 +257,9 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.activeInlinePlanApproval).toBe(streamedComponent);
     expect(state.ui.setFocus).toHaveBeenCalledWith(streamedComponent);
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
+    // #20398: the notification now fires at event receipt in the subscription
+    // listener, not inside the queued handler.
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 
   it('approves the plan without sending a handoff signal', async () => {

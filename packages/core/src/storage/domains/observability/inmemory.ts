@@ -92,7 +92,6 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
-  ListTracesLightResponse,
   ListTracesResponse,
   SpanRecord,
   UpdateSpanArgs,
@@ -738,30 +737,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       spans: toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore },
       ...this.pageDeltaCursor(this.getMaxTraceCursorId(filters) ?? this.getMaxTraceStreamCursorId()),
-    };
-  }
-
-  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
-    const { paged, total, page, perPage, hasMore } = this.getMatchingRootSpans(args);
-
-    return {
-      spans: paged.map(span => ({
-        traceId: span.traceId,
-        spanId: span.spanId,
-        parentSpanId: span.parentSpanId,
-        name: span.name,
-        spanType: span.spanType,
-        isEvent: span.isEvent,
-        startedAt: span.startedAt,
-        endedAt: span.endedAt,
-        error: span.error,
-        entityType: span.entityType,
-        entityId: span.entityId,
-        entityName: span.entityName,
-        createdAt: span.createdAt,
-        updatedAt: span.updatedAt,
-      })),
-      pagination: { total, page, perPage, hasMore },
     };
   }
 

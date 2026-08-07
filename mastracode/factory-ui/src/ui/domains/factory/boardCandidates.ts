@@ -66,7 +66,7 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     branch: `factory/issue-${issue.number}`,
     threadTitle: needsApproval ? `Triage #${issue.number}: ${issue.title}` : `Issue #${issue.number}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(needsApproval ? approvalBase : investigateBase, instructions),
-    metadata: { number: issue.number, author: issue.author, labels },
+    metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
     issue,
   };
 }
@@ -87,7 +87,14 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     branch: `factory/pr-${pr.number}`,
     threadTitle: `PR #${pr.number}: ${pr.title}`,
     customPrompt: instructions => guidedPrompt(`Review ${ref}. ${checkout}`, instructions),
-    metadata: { number: pr.number, author: pr.author, headBranch: pr.headBranch, baseBranch: pr.baseBranch },
+    metadata: {
+      number: pr.number,
+      author: pr.author,
+      assignees: pr.assignees ?? [],
+      requestedReviewers: pr.requestedReviewers ?? [],
+      headBranch: pr.headBranch,
+      baseBranch: pr.baseBranch,
+    },
   };
 }
 
@@ -106,7 +113,12 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     branch: `factory/linear-${issue.identifier.toLowerCase()}`,
     threadTitle: `${issue.identifier}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(`Investigate ${ref}. ${LINEAR_FETCH_HINT}`, instructions),
-    metadata: { identifier: issue.identifier, state: issue.state, assignee: issue.assignee },
+    metadata: {
+      identifier: issue.identifier,
+      state: issue.state,
+      assignee: issue.assignee,
+      creator: issue.creator ?? null,
+    },
   };
 }
 

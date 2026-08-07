@@ -4563,3 +4563,143 @@ describe('Delegation maxSteps cap', () => {
     expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(12);
   });
 });
+
+describe('Delegation request context derivation', () => {
+  it('exposes a delegated-run context on onDelegationStart with inherited entries and without reserved keys', async () => {
+    const subAgent = makeSubAgent('ctx-agent', 'done');
+    let hookContext: RequestContext | undefined;
+    let hookHadMastraMemory: boolean | undefined;
+    let hookHadThreadId: boolean | undefined;
+    let hookHadResourceId: boolean | undefined;
+
+    const supervisor = new Agent({
+      id: 'ctx-supervisor',
+      name: 'ctx-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('ctxAgent', 'do work'),
+      agents: { ctxAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    const parentContext = new RequestContext();
+    parentContext.set('tenantId', 'acme');
+    parentContext.set(MASTRA_THREAD_ID_KEY, 'parent-thread');
+    parentContext.set(MASTRA_RESOURCE_ID_KEY, 'parent-resource');
+
+    await supervisor.generate('go', {
+      maxSteps: 3,
+      requestContext: parentContext,
+      memory: { resource: 'parent-resource', thread: 'parent-thread' },
+      delegation: {
+        onDelegationStart: context => {
+          hookContext = context.requestContext;
+          hookHadMastraMemory = hookContext.has('MastraMemory');
+          hookHadThreadId = hookContext.has(MASTRA_THREAD_ID_KEY);
+          hookHadResourceId = hookContext.has(MASTRA_RESOURCE_ID_KEY);
+          return { proceed: true };
+        },
+      },
+    });
+
+    expect(hookContext).toBeDefined();
+    expect(hookContext!.get('tenantId')).toBe('acme');
+    expect(hookHadMastraMemory).toBe(false);
+    expect(hookHadThreadId).toBe(false);
+    expect(hookHadResourceId).toBe(false);
+    expect(hookContext).not.toBe(parentContext);
+  });
+
+  it('applies hook context mutations to the delegated run (dynamic instructions and tool execute)', async () => {
+    let instructionsSawSpecialty: unknown;
+    let toolSawSpecialty: unknown;
+
+    const contextTool = createTool({
+      id: 'context-tool',
+      description: 'Reads the specialty from request context',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        toolSawSpecialty = context?.requestContext?.get('specialty');
+        return { ok: true };
+      },
+    });
+
+    const specialistAgent = new Agent({
+      id: 'specialist-agent',
+      name: 'specialist-agent',
+      description: 'Adapts to the configured specialty',
+      instructions: ({ requestContext }) => {
+        instructionsSawSpecialty = requestContext.get('specialty');
+        return 'You are a helpful sub-agent.';
+      },
+      tools: { contextTool },
+      model: makeSubAgentModelWithTool('contextTool', {}),
+    });
+
+    const supervisor = new Agent({
+      id: 'hook-mutation-supervisor',
+      name: 'hook-mutation-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('specialistAgent', 'do specialized work'),
+      agents: { specialistAgent },
+      memory: new MockMemory(),
+    });
+
+    const parentContext = new RequestContext();
+    parentContext.set('tenantId', 'acme');
+
+    await supervisor.generate('go', {
+      maxSteps: 5,
+      requestContext: parentContext,
+      delegation: {
+        onDelegationStart: context => {
+          context.requestContext.set('specialty', context.primitiveId);
+        },
+      },
+    });
+
+    expect(instructionsSawSpecialty).toBe('specialist-agent');
+    expect(toolSawSpecialty).toBe('specialist-agent');
+    expect(parentContext.has('specialty')).toBe(false);
+  });
+
+  it('does not leak sub-agent context mutations into the parent context', async () => {
+    const writerTool = createTool({
+      id: 'writer-tool',
+      description: 'Writes a value into the request context',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        context?.requestContext?.set('subAgentWrote', true);
+        return { ok: true };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'writer-agent',
+      name: 'writer-agent',
+      description: 'Writes into request context',
+      instructions: 'Call the writer tool.',
+      tools: { writerTool },
+      model: makeSubAgentModelWithTool('writerTool', {}),
+    });
+
+    const supervisor = new Agent({
+      id: 'leak-supervisor',
+      name: 'leak-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('writerAgent', 'write something'),
+      agents: { writerAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    const parentContext = new RequestContext();
+    parentContext.set('tenantId', 'acme');
+
+    await supervisor.generate('go', {
+      maxSteps: 3,
+      requestContext: parentContext,
+    });
+
+    expect(parentContext.has('subAgentWrote')).toBe(false);
+    expect(parentContext.get('tenantId')).toBe('acme');
+  });
+});

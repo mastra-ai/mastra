@@ -58,8 +58,8 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'localNotice', text, level });
   };
 
-  const prependOlder = (messages: MastraDBMessage[]) => {
-    dispatch({ type: 'prependOlder', messages });
+  const mergeWindow = (messages: MastraDBMessage[]) => {
+    dispatch({ type: 'mergeWindow', messages });
   };
 
   return {
@@ -71,6 +71,6 @@ export function useAgentControllerTranscript({
     resolvePrompt,
     clearPending,
     pushNotice,
-    prependOlder,
+    mergeWindow,
   };
 }

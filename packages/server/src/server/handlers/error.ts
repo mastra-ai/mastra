@@ -38,6 +38,12 @@ function isModelNotAllowedError(error: unknown): error is ModelNotAllowedErrorLi
   return error instanceof Error && (error as { code?: unknown }).code === MODEL_NOT_ALLOWED_CODE;
 }
 
+const WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE = 'WORKFLOW_SCHEMA_VALIDATION_FAILED';
+
+function isWorkflowSchemaValidationError(error: unknown): error is Error {
+  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
+}
+
 /**
  * Structural check for ZodError instances.
  *
@@ -95,6 +101,14 @@ export function handleError(error: unknown, defaultMessage: string): never {
     throw new HTTPException(422, {
       res,
       message: error.message,
+      cause: error,
+    });
+  }
+
+  if (isWorkflowSchemaValidationError(error)) {
+    throw new HTTPException(400, {
+      message: error.message,
+      stack: error.stack,
       cause: error,
     });
   }

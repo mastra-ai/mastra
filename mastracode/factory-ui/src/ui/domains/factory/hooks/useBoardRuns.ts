@@ -26,7 +26,7 @@ export function useBoardRuns({
   refetchItems,
 }: {
   factoryProjectId: string;
-  projectRepositoryId: string;
+  projectRepositoryId: string | undefined;
   workItems: readonly WorkItem[];
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
@@ -95,7 +95,7 @@ export function useBoardRuns({
         return;
       }
       const spec = itemSessionSpec(refreshed.item);
-      start.mutate({
+      await start.mutateAsync({
         branch: spec.branch,
         threadTitle: spec.threadTitle,
         workItem: {
@@ -132,7 +132,7 @@ export function useBoardRuns({
     const spec = itemRunSpec(refreshed.item);
     const action = spec?.actions.find(candidate => candidate.role === role);
     if (!spec || !action) return;
-    start.mutate({
+    await start.mutateAsync({
       branch: spec.branch,
       threadTitle: spec.threadTitle,
       threadTags: action.threadTags,
@@ -149,24 +149,30 @@ export function useBoardRuns({
     });
   };
 
-  const startCandidateRun = (candidate: BoardCandidate, action: RunAction, prompt?: string) => {
-    start.mutate({
-      branch: candidate.branch,
-      threadTitle: candidate.threadTitle,
-      threadTags: action.threadTags,
-      invocation: prompt === undefined ? action.invocation : { type: 'prompt', prompt: candidate.customPrompt(prompt) },
-      workItem: {
-        role: action.role,
-        stages: [action.stage],
-        source: candidate.source,
-        sourceKey: candidate.sourceKey,
-        parentWorkItemId:
-          candidate.source === 'github-pr' ? inferredParentWorkItemId(candidate.metadata, workItems) : undefined,
-        title: candidate.title,
-        url: candidate.url,
-        metadata: candidate.metadata,
-      },
-    });
+  const startCandidateRun = async (candidate: BoardCandidate, action: RunAction, prompt?: string) => {
+    if (!beginPreparingItem(candidate.sourceKey, 'Starting run…')) return;
+    try {
+      await start.mutateAsync({
+        branch: candidate.branch,
+        threadTitle: candidate.threadTitle,
+        threadTags: action.threadTags,
+        invocation:
+          prompt === undefined ? action.invocation : { type: 'prompt', prompt: candidate.customPrompt(prompt) },
+        workItem: {
+          role: action.role,
+          stages: [action.stage],
+          source: candidate.source,
+          sourceKey: candidate.sourceKey,
+          parentWorkItemId:
+            candidate.source === 'github-pr' ? inferredParentWorkItemId(candidate.metadata, workItems) : undefined,
+          title: candidate.title,
+          url: candidate.url,
+          metadata: candidate.metadata,
+        },
+      });
+    } finally {
+      clearPreparingItem(candidate.sourceKey);
+    }
   };
 
   const pendingByItem = new Map<string, Map<string, FactoryRunPhase | undefined>>();
@@ -188,6 +194,7 @@ export function useBoardRuns({
     pendingRolesFor: (itemId: string): PendingRoles => pendingByItem.get(itemId) ?? EMPTY_PENDING_ROLES,
     preparingFor: (itemId: string): string | undefined => preparingItems[itemId],
     pendingRolesForSource: (sourceKey: string): PendingRoles => pendingBySource.get(sourceKey) ?? EMPTY_PENDING_ROLES,
+    preparingForSource: (sourceKey: string): string | undefined => preparingItems[sourceKey],
     openOrCreateSession,
     openOrStartRun,
     startCandidateRun,
