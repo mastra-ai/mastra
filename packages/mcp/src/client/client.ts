@@ -150,8 +150,9 @@ function reserveScalarMcpContent(queue: ScalarMcpContentReservation[]): ScalarMc
 
 function removeScalarMcpContentReservation(
   queue: ScalarMcpContentReservation[],
-  reservation: ScalarMcpContentReservation,
+  reservation: ScalarMcpContentReservation | undefined,
 ): void {
+  if (!reservation) return;
   const index = queue.indexOf(reservation);
   if (index !== -1) {
     queue.splice(index, 1);
@@ -162,7 +163,7 @@ function attachMcpCallToolContent(
   structuredContent: unknown,
   content: unknown,
   scalarMcpContentQueue: ScalarMcpContentReservation[],
-  reservation: ScalarMcpContentReservation,
+  reservation: ScalarMcpContentReservation | undefined,
 ): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
     removeScalarMcpContentReservation(scalarMcpContentQueue, reservation);
@@ -174,9 +175,11 @@ function attachMcpCallToolContent(
     return structuredContent;
   }
 
-  reservation.output = structuredContent;
-  reservation.content = content;
-  reservation.ready = true;
+  if (reservation) {
+    reservation.output = structuredContent;
+    reservation.content = content;
+    reservation.ready = true;
+  }
   return structuredContent;
 }
 
@@ -1327,7 +1330,9 @@ export class InternalMastraMCPClient extends MastraBase {
             },
           ) => {
             const operationContext = context?.requestContext ?? null;
-            const scalarMcpContentReservation = reserveScalarMcpContent(scalarMcpContentQueue);
+            const scalarMcpContentReservation = tool.outputSchema
+              ? reserveScalarMcpContent(scalarMcpContentQueue)
+              : undefined;
 
             return this.operationContextStore.run(operationContext, async () => {
               const executeToolCall = async () => {
