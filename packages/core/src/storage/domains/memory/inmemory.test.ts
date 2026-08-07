@@ -99,4 +99,33 @@ describe('InMemoryMemory listMessages include resource scope', () => {
 
     expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', 'a4']);
   });
+
+  it('does not return messages owned by another resource from listMessagesByResourceId', async () => {
+    const result = await store.listMessagesByResourceId({
+      resourceId: 'resource-b',
+      include: [{ id: 'a2', withPreviousMessages: 2, withNextMessages: 2 }],
+    });
+
+    expect(result.messages.map(message => message.id)).toEqual(['b1']);
+  });
+
+  it('does not return another resource from listMessagesByResourceId on the fast path', async () => {
+    const result = await store.listMessagesByResourceId({
+      resourceId: 'resource-b',
+      perPage: 0,
+      include: [{ id: 'a2', withPreviousMessages: 2, withNextMessages: 2 }],
+    });
+
+    expect(result.messages).toEqual([]);
+  });
+
+  it('returns the include context window from listMessagesByResourceId', async () => {
+    const result = await store.listMessagesByResourceId({
+      resourceId: 'resource-a',
+      perPage: 0,
+      include: [{ id: 'a2', withPreviousMessages: 1, withNextMessages: 1 }],
+    });
+
+    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3']);
+  });
 });

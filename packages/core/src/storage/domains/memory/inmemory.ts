@@ -194,36 +194,10 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     // Step 2: Add included messages with context (if any), excluding duplicates
-    if (include && include.length > 0) {
-      for (const includeItem of include) {
-        const targetMessage = this.db.messages.get(includeItem.id);
-        // The target thread is discovered from the message itself so cross-thread
-        // includes work, but the resource scope of the query is always honoured.
-        if (!targetMessage) continue;
-        if (optionalResourceId && targetMessage.resourceId !== optionalResourceId) continue;
-
-        // The target message and its neighbours, scoped to the target's own thread
-        // and to the requested resource when one was given.
-        const contextWindow = Array.from(this.db.messages.values())
-          .filter(
-            msg =>
-              msg.thread_id === targetMessage.thread_id &&
-              (!optionalResourceId || msg.resourceId === optionalResourceId),
-          )
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-        const targetIndex = contextWindow.findIndex(msg => msg.id === includeItem.id);
-        if (targetIndex === -1) continue;
-
-        const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages ?? 0));
-        const endIndex = targetIndex + (includeItem.withNextMessages ?? 0) + 1;
-
-        for (const message of contextWindow.slice(startIndex, endIndex)) {
-          if (messageIds.has(message.id)) continue;
-          messages.push(this.parseStoredMessage(message));
-          messageIds.add(message.id);
-        }
-      }
+    for (const message of this.resolveIncludedMessages({ include, resourceId: optionalResourceId })) {
+      if (messageIds.has(message.id)) continue;
+      messages.push(this.parseStoredMessage(message));
+      messageIds.add(message.id);
     }
 
     // Sort all messages (paginated + included) for final output
@@ -266,8 +240,52 @@ export class InMemoryMemory extends MemoryStorage {
     };
   }
 
+  /**
+   * Resolves `include` entries to their target message plus the requested context window.
+   * The thread is discovered from the target message itself so cross-thread includes work,
+   * but the resource scope of the query is always honoured: when a `resourceId` is given,
+   * neither the target nor its neighbours may belong to another resource.
+   */
+  private resolveIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }): StorageMessageType[] {
+    if (!include || include.length === 0) return [];
+
+    const resolved: StorageMessageType[] = [];
+    const resolvedIds = new Set<string>();
+
+    for (const includeItem of include) {
+      const targetMessage = this.db.messages.get(includeItem.id);
+      if (!targetMessage) continue;
+      if (resourceId && targetMessage.resourceId !== resourceId) continue;
+
+      const contextWindow = Array.from(this.db.messages.values())
+        .filter(msg => msg.thread_id === targetMessage.thread_id && (!resourceId || msg.resourceId === resourceId))
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      const targetIndex = contextWindow.findIndex(msg => msg.id === includeItem.id);
+      if (targetIndex === -1) continue;
+
+      const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages ?? 0));
+      const endIndex = targetIndex + (includeItem.withNextMessages ?? 0) + 1;
+
+      for (const message of contextWindow.slice(startIndex, endIndex)) {
+        if (resolvedIds.has(message.id)) continue;
+        resolved.push(message);
+        resolvedIds.add(message.id);
+      }
+    }
+
+    return resolved;
+  }
+
   async listMessagesByResourceId({
     resourceId,
+    include,
     filter,
     perPage: perPageInput,
     page = 0,
@@ -318,15 +336,37 @@ export class InMemoryMemory extends MemoryStorage {
     // Apply pagination
     const paginatedMessages = messages.slice(offset, offset + perPage);
 
+    const hasMore = offset + paginatedMessages.length < total;
+
+    // Add included messages with context, excluding duplicates. The include lookup is
+    // scoped to this resource, so it can never pull in another resource's messages.
+    const paginatedIds = new Set(paginatedMessages.map(m => m.id));
+    const includedMessages = this.resolveIncludedMessages({ include, resourceId }).filter(
+      message => !paginatedIds.has(message.id),
+    );
+
     const list = new MessageList().add(
-      paginatedMessages.map(m => this.parseStoredMessage(m)),
+      [...paginatedMessages, ...includedMessages].map(m => this.parseStoredMessage(m)),
       'memory',
     );
 
-    const hasMore = offset + paginatedMessages.length < total;
+    // Sort all messages (paginated + included) for final output
+    const finalMessages = list.get.all.db();
+    finalMessages.sort((a: any, b: any) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
 
     return {
-      messages: list.get.all.db(),
+      messages: finalMessages,
       total,
       page,
       perPage: perPageForResponse,

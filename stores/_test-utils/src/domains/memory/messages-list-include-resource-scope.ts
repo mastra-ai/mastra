@@ -129,5 +129,34 @@ export function createMessagesListIncludeResourceScopeTest({
 
       expect(result.messages.map(message => message.id)).toEqual([a1.id, a2.id, a3.id, a4.id]);
     });
+
+    it('does not return messages owned by another resource from listMessagesByResourceId', async () => {
+      const result = await getMemoryStorage().listMessagesByResourceId({
+        resourceId: threadB1.resourceId,
+        include: [{ id: a2.id, withPreviousMessages: 2, withNextMessages: 2 }],
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual([b1.id]);
+    });
+
+    it('does not return another resource from listMessagesByResourceId on the fast path', async () => {
+      const result = await getMemoryStorage().listMessagesByResourceId({
+        resourceId: threadB1.resourceId,
+        perPage: 0,
+        include: [{ id: a2.id, withPreviousMessages: 2, withNextMessages: 2 }],
+      });
+
+      expect(result.messages).toEqual([]);
+    });
+
+    it('returns the include context window from listMessagesByResourceId', async () => {
+      const result = await getMemoryStorage().listMessagesByResourceId({
+        resourceId: threadA1.resourceId,
+        perPage: 0,
+        include: [{ id: a2.id, withPreviousMessages: 1, withNextMessages: 1 }],
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual([a1.id, a2.id, a3.id]);
+    });
   });
 }
