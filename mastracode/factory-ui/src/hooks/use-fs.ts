@@ -28,11 +28,9 @@ function workspaceRenderedListingUrl(workspacePath: string | undefined, root: st
   return `/web/workspace/rendered/list?${new URLSearchParams({ workspacePath, root })}`;
 }
 
-function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined, threadId?: string) {
-  if (!workspacePath || !path) return undefined;
-  const params = new URLSearchParams({ workspacePath, path });
-  if (threadId) params.set('threadId', threadId);
-  return `/web/workspace/file?${params}`;
+function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined, threadId: string | undefined) {
+  if (!workspacePath || !path || !threadId) return undefined;
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
 }
 
 function workspaceChangesUrl(workspacePath: string | undefined) {

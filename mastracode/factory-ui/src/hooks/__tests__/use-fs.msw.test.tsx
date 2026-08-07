@@ -202,7 +202,10 @@ describe('useWorkspaceFiles', () => {
 });
 
 describe('useWorkspaceFile', () => {
-  it('does not fetch when disabled', () => {
+  it.each([
+    ['disabled', THREAD, { enabled: false }],
+    ['without a thread ID', undefined, undefined],
+  ])('does not fetch when %s', (_reason, threadId, options) => {
     let called = false;
     server.use(
       http.get(WORKSPACE_FILE_URL, () => {
@@ -220,7 +223,7 @@ describe('useWorkspaceFile', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useWorkspaceFile('/home/user/project', '.artifacts/file.md', THREAD, { enabled: false }),
+      useWorkspaceFile('/home/user/project', '.artifacts/file.md', threadId, options),
     );
 
     expect(result.current.fetchStatus).toBe('idle');
