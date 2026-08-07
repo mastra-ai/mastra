@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
-import { buildThemeLifelines, lifelineConnectors } from '../theme-lifelines-data';
+import { buildThemeLifelines, lifelineConnectors, lifelineSegments } from '../theme-lifelines-data';
 import {
   earlierThemeFlowResponse,
   fourStageThemeFlowResponse,
@@ -99,6 +99,22 @@ describe('buildThemeLifelines', () => {
       const resolve = rows.find(row => row.label === 'Resolve support request');
 
       expect(resolve?.points[0]?.themeId).toBe('theme-goal-support');
+    });
+  });
+});
+
+describe('lifelineSegments', () => {
+  describe('when a theme is present at consecutive landmarks with a gap', () => {
+    it('groups consecutive points into runs and drops single-point runs', () => {
+      const points = [
+        { snapshotIndex: 0, share: 0.5, traceCount: 5 },
+        { snapshotIndex: 1, share: 0.4, traceCount: 4 },
+        { snapshotIndex: 3, share: 0.6, traceCount: 6 },
+      ];
+
+      const segments = lifelineSegments(points);
+
+      expect(segments.map(segment => segment.map(point => point.snapshotIndex))).toEqual([[0, 1]]);
     });
   });
 });
@@ -306,6 +322,49 @@ describe('SankeySignals lifelines mode', () => {
       fireEvent.click(within(row).getAllByRole('button', { name: /^Resolve support request ·/ })[0]!);
 
       expect(await screen.findByRole('dialog', { name: 'Resolve support request' })).not.toBeNull();
+    });
+
+    it('fills the area under a theme row that spans consecutive landmarks', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
+      const persistentRow = await within(goalSection).findByRole('listitem', {
+        name: 'Resolve support request: present in 5 of 5 landmarks',
+      });
+      // 5 consecutive presence points → one continuous filled area.
+      expect(persistentRow.querySelectorAll('polygon')).toHaveLength(1);
+      // Present at consecutive landmarks 1–2 → one short filled area.
+      const legacyRow = within(goalSection).getByRole('listitem', {
+        name: 'Legacy support request: present in 2 of 5 landmarks',
+      });
+      expect(legacyRow.querySelectorAll('polygon')).toHaveLength(1);
+    });
+
+    it('shows the point tooltip immediately on hover', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
+      const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
+      const row = await within(goalSection).findByRole('listitem', {
+        name: 'Resolve support request: present in 5 of 5 landmarks',
+      });
+      const point = within(row).getAllByRole('button', { name: /^Resolve support request ·/ })[0]!;
+
+      fireEvent.mouseEnter(point);
+
+      // Real timers, no advancement: the tooltip must appear without a hover delay.
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip.textContent).toContain('Resolve support request');
+      expect(tooltip.textContent).toContain('traces');
+
+      fireEvent.mouseLeave(point);
+      expect(screen.queryByRole('tooltip')).toBeNull();
     });
 
     it('draws a connecting line between adjacent landmarks within a theme row', async () => {
