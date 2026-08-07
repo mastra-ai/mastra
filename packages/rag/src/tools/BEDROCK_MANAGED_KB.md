@@ -1,9 +1,11 @@
 # Bedrock Managed Knowledge Base Support
 
 ## Overview
+
 Adds a Mastra RAG tool that queries Amazon Bedrock Knowledge Bases for managed retrieval within Mastra agents.
 
 ## Usage
+
 ```typescript
 import { Agent } from '@mastra/core';
 import { createBedrockKBTool } from '@mastra/rag';
@@ -22,14 +24,15 @@ const agent = new Agent({
 
 ## Configuration
 
-| Variable | Description | Default |
-|---|---|---|
-| AWS_REGION | AWS region for the KB | us-east-1 |
-| AWS_ACCESS_KEY_ID | AWS access key | None |
-| AWS_SECRET_ACCESS_KEY | AWS secret key | None |
-| USE_AGENTIC_RETRIEVAL | Enable agentic retrieval | true |
+| Variable              | Description              | Default   |
+| --------------------- | ------------------------ | --------- |
+| AWS_REGION            | AWS region for the KB    | us-east-1 |
+| AWS_ACCESS_KEY_ID     | AWS access key           | None      |
+| AWS_SECRET_ACCESS_KEY | AWS secret key           | None      |
+| USE_AGENTIC_RETRIEVAL | Enable agentic retrieval | true      |
 
 ## Features
+
 - Managed search (no vector store needed)
 - Agentic retrieval with query decomposition + reranking
 - Automatic fallback to plain Retrieve if agentic fails
@@ -37,23 +40,23 @@ const agent = new Agent({
 - Compatible with Mastra tool interface
 
 ## SDK Requirements
+
 - @aws-sdk/client-bedrock-agent-runtime >= 3.1000 (AgenticRetrieveStreamCommand requires ~3.1000+)
 - @mastra/core >= 0.1
 - @mastra/rag >= 0.1
 
 ## Required IAM Permissions
+
 ```json
 {
   "Effect": "Allow",
-  "Action": [
-    "bedrock:Retrieve",
-    "bedrock:AgenticRetrieveStream"
-  ],
+  "Action": ["bedrock:Retrieve", "bedrock:AgenticRetrieveStream"],
   "Resource": "arn:aws:bedrock:<region>:<account-id>:knowledge-base/<kb-id>"
 }
 ```
 
 ## References
+
 - [Build a Managed Knowledge Base](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-build-managed.html)
 - [Retrieve API](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-retrieve.html)
 - [Agentic Retrieval](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-agentic.html)
