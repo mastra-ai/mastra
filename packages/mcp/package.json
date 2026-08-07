@@ -26,7 +26,7 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
-    "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts ./src/client/oauth.test.ts ./src/client/oauth-callback-server.test.ts ./src/client/oauth-flow.test.ts",
+    "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts ./src/client/oauth.test.ts ./src/client/oauth-callback-server.test.ts ./src/client/oauth-flow.test.ts ./src/client/url-policy.test.ts ./src/client/stdio-env.test.ts",
     "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
@@ -46,7 +46,7 @@
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.14",
+    "@hono/node-server": "^2.0.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
