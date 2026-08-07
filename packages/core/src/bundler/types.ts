@@ -40,7 +40,8 @@ export type BundlerConfig = {
    * inside it — a LiveKit voice worker, for example.
    *
    * Entry names may contain `/` to nest the output, but cannot be `index`
-   * (the server bundle) or start with `tools/` (tool bundles).
+   * (the server bundle), `tools` (the tool aggregator), or start with `tools/`
+   * (tool bundles).
    *
    * @example
    * ```typescript

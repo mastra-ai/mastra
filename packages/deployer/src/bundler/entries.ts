@@ -5,7 +5,13 @@ import { slash } from '../build/utils';
 
 /** Reserved by the server bundle (`index.mjs`). */
 const SERVER_ENTRY_NAME = 'index';
-/** Reserved by tool bundles (`tools/<uuid>.mjs`). */
+/**
+ * Reserved by the tool aggregator, which `_bundle` writes to `tools.mjs` with `writeFile`
+ * *after* rollup finishes. Rollup deduplicates colliding chunk names, but that write
+ * happens outside its control, so an entry named `tools` is silently overwritten.
+ */
+const TOOLS_ENTRY_NAME = 'tools';
+/** Reserved by tool bundles (`tools/<uuid>.mjs`), which the aggregator collects by prefix. */
 const TOOLS_ENTRY_PREFIX = 'tools/';
 
 function invalidEntries(text: string): MastraError {
@@ -43,19 +49,23 @@ export function resolveExtraEntries(
       throw invalidEntries(`bundler.entries has an empty or untrimmed entry name: ${JSON.stringify(name)}`);
     }
 
-    if (name === SERVER_ENTRY_NAME) {
+    // Normalize before every reserved-name check. A backslash form like `tools\worker`
+    // would otherwise pass validation and then be normalized into `tools/worker`, which
+    // the tool aggregator absorbs by prefix.
+    const normalizedName = slash(name);
+
+    if (normalizedName === SERVER_ENTRY_NAME) {
       throw invalidEntries(
         `bundler.entries cannot use the name "${SERVER_ENTRY_NAME}" — it is reserved for the Mastra server bundle.`,
       );
     }
 
-    if (name.startsWith(TOOLS_ENTRY_PREFIX)) {
+    if (normalizedName === TOOLS_ENTRY_NAME || normalizedName.startsWith(TOOLS_ENTRY_PREFIX)) {
       throw invalidEntries(
-        `bundler.entries cannot use the name "${name}" — names starting with "${TOOLS_ENTRY_PREFIX}" are reserved for tool bundles.`,
+        `bundler.entries cannot use the name "${name}" — "${TOOLS_ENTRY_NAME}" and names starting with "${TOOLS_ENTRY_PREFIX}" are reserved for tool bundles.`,
       );
     }
 
-    const normalizedName = slash(name);
     if (isAbsolute(name) || normalizedName.startsWith('/') || normalizedName.split('/').includes('..')) {
       throw invalidEntries(
         `bundler.entries name "${name}" must be a relative name without ".." segments — it becomes a file inside the build output.`,

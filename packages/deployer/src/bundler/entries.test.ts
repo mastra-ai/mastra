@@ -58,6 +58,23 @@ describe('resolveExtraEntries', () => {
     );
   });
 
+  // `_bundle` writes the tool aggregator to `tools.mjs` with writeFile after rollup has
+  // finished, so an entry named `tools` is silently overwritten and the configured
+  // process never ships. Rollup's chunk-name deduplication does not cover that write.
+  it('rejects the bare name "tools", which the tool aggregator would overwrite', () => {
+    expect(() => resolveExtraEntries({ tools: './voice-worker.ts' }, mastraEntryFile)).toThrow(
+      /reserved for tool bundles/,
+    );
+  });
+
+  // Reserved-name checks run on the slash-normalized name, so a backslash form cannot
+  // sneak past and then normalize into a name the tool aggregator collects by prefix.
+  it('rejects a backslash-separated tools name that would normalize into the reserved prefix', () => {
+    expect(() => resolveExtraEntries({ 'tools\\worker': './voice-worker.ts' }, mastraEntryFile)).toThrow(
+      /reserved for tool bundles/,
+    );
+  });
+
   it('rejects names that would escape the output directory', () => {
     expect(() => resolveExtraEntries({ '../escape': './voice-worker.ts' }, mastraEntryFile)).toThrow(
       /without "\.\." segments/,
