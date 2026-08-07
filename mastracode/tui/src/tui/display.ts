@@ -157,3 +157,47 @@ export function notifyForInputRequest(state: TUIState, event: AgentControllerEve
     process.stderr.write(`[notify error] ${msg}\n`);
   }
 }
+
+/**
+ * Dispatch PermissionRequest hooks for a permission-prompt event the moment it
+ * is received, before the event enters the TUI's serialized dispatch queue.
+ * A pending prompt blocks that queue until the user answers, so a hook
+ * dispatched from inside a queued handler is starved exactly when its external
+ * integration needs to hear about the new prompt (#20861). This helper runs
+ * synchronously in the controller subscription listener instead — the sibling
+ * of notifyForInputRequest for hook dispatch rather than user pings.
+ *
+ * runId semantics (accepted, not handled): HookManager.runPermissionRequest
+ * silently bails when no run id is set, and setRunId/clearRunId both run
+ * inside the QUEUED agent_start/agent_end handling. Two cross-run microtask
+ * edges therefore exist at receipt time: a permission event arriving before
+ * its run's queued agent_start has been processed (hook silently skipped),
+ * and a stale run id left over from the previous run (no constructible
+ * trigger found — a new run cannot start while a prompt blocks the queue).
+ * In the real starvation scenario the blocking run's id IS set, because its
+ * agent_end cannot have been processed while its prompt blocks the queue.
+ *
+ * Never throws: a hook failure must not break event delivery.
+ */
+export function runPermissionHooksForEvent(state: TUIState, event: AgentControllerEvent): void {
+  try {
+    const hookMgr = state.hookManager;
+    if (!hookMgr) return;
+    if (event.type === 'tool_approval_required') {
+      hookMgr.runPermissionRequest('tool_approval', event.toolCallId, event.toolName, event.args).catch(() => {});
+      return;
+    }
+    if (event.type === 'tool_suspended') {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      // Sandbox check first, mirroring the dispatch routing order.
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
+      } else if (event.toolName === 'submit_plan') {
+        hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[permission hook error] ${msg}\n`);
+  }
+}
