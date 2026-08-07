@@ -2316,4 +2316,182 @@ describe('PlatformSandbox', () => {
       expect(result).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
     });
   });
+
+  describe('start() coalescing (concurrent-call de-duplication)', () => {
+    // These tests pin down that concurrent start() callers coalesce onto a
+    // single in-flight attempt instead of racing to POST /sandbox N times.
+    // Mirrors OSS @mastra/railway RailwaySandbox._startInFlight after
+    // mastra#20739. Without this guard, a fleet that fires N concurrent
+    // starts against a fresh instance would burn N proxy provisions and
+    // leave (N-1) stray sandboxes behind.
+
+    it('coalesces two concurrent fresh-provision callers onto a single POST /sandbox', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Hold the create response open so the second caller enters start()
+      // while the first is mid-round-trip. Without coalescing, the second
+      // caller would race past the null check and issue its own POST.
+      let releaseCreate!: (value: Response) => void;
+      const held = new Promise<Response>(resolve => {
+        releaseCreate = resolve;
+      });
+      const fetchMock = vi.fn().mockReturnValueOnce(held);
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const first = sandbox._start();
+      const second = sandbox._start();
+
+      releaseCreate(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      await Promise.all([first, second]);
+
+      // Exactly one upstream call. Two would prove the coalescing guard is
+      // missing — the second caller slipped through the null check while
+      // the first was awaiting the network.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect(fetchMock.mock.calls[0]![1].method).toBe('POST');
+    });
+
+    it('coalesces concurrent reattach callers onto a single GET /sandbox/:id', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      let releaseReattach!: (value: Response) => void;
+      const held = new Promise<Response>(resolve => {
+        releaseReattach = resolve;
+      });
+      const fetchMock = vi.fn().mockReturnValueOnce(held);
+
+      // sandboxId set from construction → start() takes the reattach GET path.
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_existing',
+        fetch: fetchMock,
+      });
+
+      const first = sandbox._start();
+      const second = sandbox._start();
+
+      releaseReattach(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z' }));
+      await Promise.all([first, second]);
+
+      // One GET, not two. Reattach is on the same coalescing path as fresh
+      // provision — the whole start() body runs under one in-flight guard.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
+      // Reattach uses default method (GET), not POST.
+      expect(fetchMock.mock.calls[0]![1]?.method).toBeUndefined();
+    });
+
+    it('propagates a failed shared start to every joined caller', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      let releaseCreate!: (value: Response) => void;
+      const held = new Promise<Response>(resolve => {
+        releaseCreate = resolve;
+      });
+      // Non-transient error (404) so the retry loop does not paper over it.
+      const fetchMock = vi.fn().mockReturnValueOnce(held);
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const first = sandbox._start();
+      const second = sandbox._start();
+
+      releaseCreate(json({ error: { message: 'Environment not found', type: 'not_found' } }, { status: 404 }));
+
+      // Both callers observe the same failure — joiner does not receive a
+      // swallowed error, and the failure is not silently converted to a
+      // resolved promise for one of them.
+      await expect(first).rejects.toThrow('not_found');
+      await expect(second).rejects.toThrow('not_found');
+      // Still exactly one upstream call.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the in-flight slot on failure so a subsequent start() retries fresh', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        // First start() → non-transient failure. If the coalescing slot
+        // leaks the rejected promise, the second start() below joins it
+        // and rethrows without making a fresh network call.
+        .mockResolvedValueOnce(
+          json({ error: { message: 'Environment not found', type: 'not_found' } }, { status: 404 }),
+        )
+        // Second start() → succeeds. Only reached if the slot was
+        // cleared by the finally() in start().
+        .mockResolvedValueOnce(json({ id: 'sbx_retry', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      await expect(sandbox._start()).rejects.toThrow('not_found');
+      await sandbox._start();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears the in-flight slot on success so a second concurrent batch does not reuse the settled promise', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // First batch: two concurrent starts share one POST /sandbox.
+      // Second batch (after the first settles): the sandbox instance is
+      // reused for a fresh coalescing round — the parent MastraSandbox
+      // `_start()` idempotency check normally short-circuits on
+      // `status === 'running'`, so we drive `start()` directly to observe
+      // the wrapper's own behavior in isolation.
+      let releaseFirst!: (value: Response) => void;
+      const firstHeld = new Promise<Response>(resolve => {
+        releaseFirst = resolve;
+      });
+      let releaseSecond!: (value: Response) => void;
+      const secondHeld = new Promise<Response>(resolve => {
+        releaseSecond = resolve;
+      });
+      const fetchMock = vi
+        .fn()
+        .mockReturnValueOnce(firstHeld)
+        // Reattach GET after the first start settles + sandboxId is set.
+        .mockReturnValueOnce(secondHeld);
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      // First coalescing batch: two callers → one POST.
+      const firstA = sandbox.start();
+      const firstB = sandbox.start();
+      releaseFirst(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      await Promise.all([firstA, firstB]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Second coalescing batch: two more callers on the same instance.
+      // If the slot leaked the settled first-batch promise, both would
+      // resolve immediately without a network call (fetch mock stays at
+      // 1). What we want is the slot cleared, so this batch takes the
+      // reattach GET path and coalesces onto that single call.
+      const secondA = sandbox.start();
+      const secondB = sandbox.start();
+      releaseSecond(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      await Promise.all([secondA, secondB]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+  });
 });
