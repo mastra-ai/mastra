@@ -86,6 +86,46 @@ describe('PlatformClient', () => {
     expect(resolvePlatformOptions({}).accessToken).toBe('platform_access_token');
   });
 
+  it('defaults the proxy URL to workspaces.mastra.ai', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.mastra.ai');
+  });
+
+  it('routes to the US regional replica when MASTRA_PLATFORM_REGION is us', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.us.mastra.ai');
+  });
+
+  it('routes to the EU regional replica when MASTRA_PLATFORM_REGION is EU (case-insensitive, trimmed)', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', '  EU  ');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.eu.mastra.ai');
+  });
+
+  it('falls back to the global default for unknown MASTRA_PLATFORM_REGION values', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'apac');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.mastra.ai');
+  });
+
+  it('prefers an explicit MASTRA_WORKSPACE_PROXY_URL over MASTRA_PLATFORM_REGION', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://staging.workspaces.example.com/');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://staging.workspaces.example.com');
+  });
+
   it('does not use MASTRA_PLATFORM_SECRET_KEY as an access token fallback', () => {
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
