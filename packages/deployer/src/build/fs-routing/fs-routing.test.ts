@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile, readFile, symlink, access } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MAX_FS_SUBAGENT_DEPTH } from '@mastra/core/agent';
+import { assertValidScheduleDefinition } from '@mastra/core/schedules';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateFsAgentsModule } from './codegen';
 import { discoverFsAgents, discoverFsSingleton, discoverFsWorkflows } from './discover';
@@ -30,6 +31,8 @@ interface AgentFiles {
   scorers?: Record<string, string>;
   /** Map of relative path under `skills/` to file content. */
   skills?: Record<string, string>;
+  /** Map of relative path under `schedules/` to file content. */
+  schedules?: Record<string, string>;
   /** Declared subagents, written under `subagents/<id>/`. */
   subagents?: Record<string, AgentFiles>;
 }
@@ -70,6 +73,13 @@ async function writeAgentDir(agentDir: string, files: AgentFiles) {
   if (files.skills) {
     for (const [relPath, content] of Object.entries(files.skills)) {
       const target = join(agentDir, 'skills', relPath);
+      await mkdir(join(target, '..'), { recursive: true });
+      await writeFile(target, content);
+    }
+  }
+  if (files.schedules) {
+    for (const [relPath, content] of Object.entries(files.schedules)) {
+      const target = join(agentDir, 'schedules', relPath);
       await mkdir(join(target, '..'), { recursive: true });
       await writeFile(target, content);
     }
@@ -1534,5 +1544,255 @@ describe('subagents', () => {
     expect(
       await readFile(join(bundleDir, 'workspace', 'supervisor', 'writer', 'editor', 'grandchild.txt'), 'utf-8'),
     ).toBe('g');
+  });
+});
+
+describe('schedules discovery', () => {
+  it('discovers .ts and .md schedules, keyed by path', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'heartbeat.ts': `export default { cron: '*/5 * * * *', prompt: 'Check health.' };`,
+        'cleanup.md': `---\ncron: "0 3 * * *"\n---\n\nDelete stale tickets.`,
+        'billing/sweep.ts': `export default { cron: '0 4 * * *', prompt: 'Sweep.' };`,
+      },
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.schedules.map(s => s.key)).toEqual(['billing/sweep', 'cleanup', 'heartbeat']);
+    expect(agent.schedules.map(s => s.kind)).toEqual(['module', 'markdown', 'module']);
+  });
+
+  it('parses markdown frontmatter as config and the body as the prompt', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'digest.md': `---\ncron: "0 9 * * 1"\ntimezone: "America/New_York"\nname: "weekly digest"\n---\n\nSummarize last week.\n`,
+      },
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    const schedule = agent.schedules[0]!;
+    expect(schedule.kind).toBe('markdown');
+    if (schedule.kind !== 'markdown') throw new Error('expected a markdown schedule');
+    expect(schedule.definition).toEqual({
+      cron: '0 9 * * 1',
+      prompt: 'Summarize last week.',
+      timezone: 'America/New_York',
+      name: 'weekly digest',
+    });
+    expect(schedule.path).toMatch(/agents\/support\/schedules\/digest\.md$/);
+  });
+
+  it('fails the build when a markdown schedule has no cron', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'broken.md': `Just a body, no frontmatter.` },
+    });
+
+    await expect(discoverFsAgents(dir)).rejects.toThrow(/missing a required "cron"/);
+  });
+
+  it('fails the build when a markdown schedule has an empty body', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'broken.md': `---\ncron: "0 3 * * *"\n---\n` },
+    });
+
+    await expect(discoverFsAgents(dir)).rejects.toThrow(/empty body/);
+  });
+
+  it('carries the full JSON-safe option set through frontmatter', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'threaded.md': `---\ncron: "0 3 * * *"\nthreadId: "ops"\nresourceId: "team"\nifIdle:\n  behavior: wake\nattributes:\n  source: cron\n---\n\nDo the thing.`,
+      },
+    });
+
+    const schedule = (await discoverFsAgents(dir))[0]!.schedules[0]!;
+    if (schedule.kind !== 'markdown') throw new Error('expected a markdown schedule');
+    expect(schedule.definition).toMatchObject({
+      threadId: 'ops',
+      resourceId: 'team',
+      ifIdle: { behavior: 'wake' },
+      attributes: { source: 'cron' },
+    });
+  });
+
+  it('fails the build on unknown frontmatter fields instead of dropping them', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'typo.md': `---\ncron: "0 3 * * *"\nifIdel:\n  behavior: wake\n---\n\nbody` },
+    });
+
+    await expect(discoverFsAgents(dir)).rejects.toThrow(/unknown frontmatter field\(s\): ifIdel/);
+  });
+
+  it('explains that the body is the prompt when frontmatter sets one', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'dupe.md': `---\ncron: "0 3 * * *"\nprompt: "in frontmatter"\n---\n\nbody` },
+    });
+
+    await expect(discoverFsAgents(dir)).rejects.toThrow(/document body is used as the prompt/);
+  });
+
+  it('explains that a cron must be quoted when YAML parsing fails on the alias', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'unquoted.md': `---\ncron: */5 * * * *\n---\n\nbody` },
+    });
+
+    await expect(discoverFsAgents(dir)).rejects.toThrow(/Cron expressions must be quoted/);
+  });
+
+  it('ignores test files under schedules/', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'heartbeat.ts': `export default { cron: '0 * * * *', prompt: 'hi' };`,
+        'heartbeat.test.ts': `export default {};`,
+        'heartbeat.spec.ts': `export default {};`,
+      },
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.schedules.map(s => s.key)).toEqual(['heartbeat']);
+  });
+
+  it('skips symlinked schedule files', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'real.ts': `export default { cron: '0 * * * *', prompt: 'hi' };` },
+    });
+    const outside = join(dir, 'outside.ts');
+    await writeFile(outside, `export default { cron: '0 * * * *', prompt: 'nope' };`);
+    await symlink(outside, join(dir, 'agents', 'support', 'schedules', 'linked.ts'));
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.schedules.map(s => s.key)).toEqual(['real']);
+  });
+
+  it('reports an empty list when the agent has no schedules directory', async () => {
+    await writeAgent('support', { instructions: 'hi' });
+    expect((await discoverFsAgents(dir))[0]!.schedules).toEqual([]);
+  });
+
+  it('sorts by key when a file and a directory share a name prefix', async () => {
+    // Sorting basenames only orders each directory. The directory `billing`
+    // sorts before the file `billing.ts`, so traversal alone would emit
+    // `billing/sweep` before `billing`. The list has to be sorted by key.
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'billing.ts': `export default { cron: '0 1 * * *', prompt: 'roll up' };`,
+        'billing/sweep.ts': `export default { cron: '0 2 * * *', prompt: 'sweep' };`,
+        'audit.ts': `export default { cron: '0 3 * * *', prompt: 'audit' };`,
+      },
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.schedules.map(s => s.key)).toEqual(['audit', 'billing', 'billing/sweep']);
+  });
+
+  it('discovers schedules declared on a subagent so assembly can reject them', async () => {
+    await writeAgent('parent', {
+      instructions: 'hi',
+      subagents: {
+        child: {
+          config: `export default { model: 'openai/gpt-4o', description: 'child' };`,
+          instructions: 'hi',
+          schedules: { 'heartbeat.ts': `export default { cron: '0 * * * *', prompt: 'hi' };` },
+        },
+      },
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.subagents[0]!.schedules.map(s => s.key)).toEqual(['heartbeat']);
+  });
+});
+
+describe('schedules validation seam', () => {
+  it('produces markdown definitions core accepts, including every optional field', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'full.md': `---\ncron: "0 9 * * 1"\ntimezone: "America/New_York"\nname: "digest"\nthreadId: "ops"\nresourceId: "team"\nsignalType: "notification"\ntagName: "digest"\nstatus: "paused"\nifIdle:\n  behavior: wake\nmetadata:\n  team: ops\n---\n\nSummarize the week.`,
+      },
+    });
+
+    const schedule = (await discoverFsAgents(dir))[0]!.schedules[0]!;
+    if (schedule.kind !== 'markdown') throw new Error('expected a markdown schedule');
+
+    // The deployer builds this object; core validates it during assembly. If
+    // the frontmatter allowlist ever drifts from what core accepts, this fails.
+    expect(() => assertValidScheduleDefinition(schedule.definition, 'agents/support/schedules/full')).not.toThrow();
+  });
+
+  it('surfaces core validation failures for markdown frontmatter values', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'bad.md': `---\ncron: "0 9 * * *"\nsignalType: "bogus"\n---\n\nbody` },
+    });
+
+    const schedule = (await discoverFsAgents(dir))[0]!.schedules[0]!;
+    if (schedule.kind !== 'markdown') throw new Error('expected a markdown schedule');
+
+    expect(() => assertValidScheduleDefinition(schedule.definition, 'agents/support/schedules/bad')).toThrowError(
+      /unknown signalType "bogus"/,
+    );
+  });
+
+  it('rejects a threadId without a resourceId through core validation', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'threaded.md': `---\ncron: "0 9 * * *"\nthreadId: "ops"\n---\n\nbody` },
+    });
+
+    const schedule = (await discoverFsAgents(dir))[0]!.schedules[0]!;
+    if (schedule.kind !== 'markdown') throw new Error('expected a markdown schedule');
+
+    expect(() => assertValidScheduleDefinition(schedule.definition, 'agents/support/schedules/threaded')).toThrowError(
+      /'resourceId' is required/,
+    );
+  });
+});
+
+describe('schedules codegen', () => {
+  it('imports .ts schedules and inlines .md schedules', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: {
+        'heartbeat.ts': `export default { cron: '0 * * * *', prompt: 'Check health.' };`,
+        'cleanup.md': `---\ncron: "0 3 * * *"\n---\n\nDelete stale tickets.`,
+      },
+    });
+
+    const agents = await discoverFsAgents(dir);
+    const source = await generateFsAgentsModule('/project/src/mastra/index.ts', agents);
+
+    expect(source).toMatch(/import schedule_0_\d+_support_schedule from ".*schedules\/heartbeat\.ts"/);
+    expect(source).toContain('key: "cleanup"');
+    expect(source).toContain('"cron":"0 3 * * *"');
+    expect(source).toContain('"prompt":"Delete stale tickets."');
+    expect(source).toContain('key: "heartbeat"');
+  });
+
+  it('preserves nested schedule keys in the generated entry', async () => {
+    await writeAgent('support', {
+      instructions: 'hi',
+      schedules: { 'billing/sweep.ts': `export default { cron: '0 4 * * *', prompt: 'Sweep.' };` },
+    });
+
+    const source = await generateFsAgentsModule('/project/src/mastra/index.ts', await discoverFsAgents(dir));
+    expect(source).toContain('key: "billing/sweep"');
+  });
+
+  it('emits no schedules field when the agent declares none', async () => {
+    await writeAgent('support', { instructions: 'hi' });
+
+    const source = await generateFsAgentsModule('/project/src/mastra/index.ts', await discoverFsAgents(dir));
+    expect(source).not.toContain('schedules:');
   });
 });

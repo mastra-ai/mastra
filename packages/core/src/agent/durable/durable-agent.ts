@@ -7,6 +7,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
+import type { DeclaredAgentSchedule } from '../../schedules/define';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -543,6 +544,25 @@ export class DurableAgent<
    */
   get agent(): Agent<TAgentId, TTools, TOutput> {
     return this.#wrappedAgent;
+  }
+
+  /**
+   * File-based schedules live on the wrapped agent: `assembleAgentFromFsEntry`
+   * attaches them to the inner `Agent` before it is wrapped for durable
+   * execution, and `#declaredSchedules` is private to each instance. Without
+   * this delegate the wrapper would report none of its own and Mastra would
+   * never sync a durable agent's `schedules/` directory.
+   */
+  public override getDeclaredSchedules(): DeclaredAgentSchedule[] {
+    return this.#wrappedAgent.getDeclaredSchedules();
+  }
+
+  /**
+   * Mirrors {@link getDeclaredSchedules} so attaching schedules to an
+   * already-wrapped agent lands on the instance the getter reads from.
+   */
+  public override __setDeclaredSchedules(schedules: DeclaredAgentSchedule[]): void {
+    this.#wrappedAgent.__setDeclaredSchedules(schedules);
   }
 
   /**

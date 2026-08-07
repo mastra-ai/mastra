@@ -1493,6 +1493,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           {
             org_id: input.orgId,
             factory_project_id: input.factoryProjectId,
+            thread_id: input.session.threadId,
+            resource_id: input.resourceId,
+            session_id: input.session.sessionId,
+            status: 'active',
+          },
+          { status: 'revoked', revoked_at: now },
+        );
+        await ops.updateMany(
+          'factory_run_bindings',
+          {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
             work_item_id: item.id,
             role: input.role,
             status: 'active',

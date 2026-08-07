@@ -1,6 +1,8 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ArrowUpRight,
@@ -11,6 +13,7 @@ import {
   MessagesSquare,
   Play,
   Trash2,
+  TriangleAlert,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -20,13 +23,16 @@ import { externalLinkLabel, itemThreadSession, liveSessions, metadataLabels, wor
 import { RUN_PHASE_LABELS, itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
+import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
+import { workItemActivity } from '../workItemActivity';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, SOURCE_ICONS } from './BoardIcons';
+import { BoardStageIcon, PullRequestStatusIcon, SOURCE_ICONS } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
+import { WorkItemActivity } from './WorkItemActivity';
 
 function decisionStatusText(decision: FactoryDecisionSummary): string {
   if (decision.status === 'pending') return `Rule effect pending · ${decision.type}`;
@@ -39,6 +45,7 @@ export function WorkItemCard({
   item,
   columnStage,
   allItems,
+  activityPage,
   liveWorktreePaths,
   runDisabled,
   preparing,
@@ -56,6 +63,7 @@ export function WorkItemCard({
   item: WorkItem;
   columnStage: BoardStageId;
   allItems: WorkItem[];
+  activityPage?: AuditEventPage;
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
@@ -90,6 +98,7 @@ export function WorkItemCard({
   const threadSession = itemThreadSession(sessions);
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
+  const activity = workItemActivity(item, activityPage);
 
   return (
     <CardTitleTooltip title={item.title}>
@@ -191,13 +200,18 @@ export function WorkItemCard({
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
           <div className="flex min-w-0 items-center gap-1.5">
-            <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            {item.source === 'github-pr' ? (
+              <PullRequestStatusIcon item={item} />
+            ) : (
+              <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            )}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />
             </span>
           </div>
         </div>
         <CardLabels labels={labels} />
+        <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
         {threadSession !== undefined && (
           <span className="text-ui-xs text-accent1 flex items-center gap-1">
             <MessagesSquare size={11} aria-hidden />
@@ -271,12 +285,32 @@ export function WorkItemCard({
         )}
         {!evaluating && decision !== undefined && (
           <div className="flex items-center justify-between gap-2">
-            <span
-              role={decision.status === 'failed' ? 'alert' : 'status'}
-              className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
-            >
-              {decisionStatusText(decision)}
-            </span>
+            {decision.status === 'failed' ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Badge
+                      variant="error"
+                      size="xs"
+                      icon={<TriangleAlert aria-hidden />}
+                      role="alert"
+                      aria-label={decisionStatusText(decision)}
+                      tabIndex={0}
+                      className="focus-visible:ring-accent1 relative z-20 cursor-help outline-hidden focus-visible:ring-2"
+                    >
+                      Error
+                    </Badge>
+                  }
+                />
+                <TooltipContent side="top" className="max-w-80">
+                  <span className="wrap-anywhere whitespace-pre-wrap">{decisionStatusText(decision)}</span>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span role="status" className="text-ui-xs text-icon4">
+                {decisionStatusText(decision)}
+              </span>
+            )}
             {decision.status === 'failed' ? (
               <Button
                 type="button"

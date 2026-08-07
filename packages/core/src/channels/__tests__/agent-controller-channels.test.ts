@@ -126,6 +126,7 @@ async function createSetup({
   toolDisplay,
   stateSchema,
   agentMemory,
+  onSessionStart,
 }: {
   responseText?: string;
   model?: MockLanguageModelV2;
@@ -134,6 +135,7 @@ async function createSetup({
   stateSchema?: z.ZodTypeAny;
   /** Memory for the mode agent — required for signal persistence assertions. */
   agentMemory?: MockMemory;
+  onSessionStart?: (ctx: any) => void | Promise<void>;
 } = {}) {
   const adapter = createMockAdapter('discord');
   const agent = new Agent({
@@ -153,6 +155,7 @@ async function createSetup({
     defaultModeId: 'build',
     channels: {
       adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter },
+      ...(onSessionStart ? { onSessionStart } : {}),
     },
     ...(stateSchema ? { stateSchema } : {}),
   });
@@ -292,6 +295,97 @@ describe('AgentControllerChannels', () => {
     const threads = await getChannelThreads(mastra, 'chan-1:t-1');
     expect(threads).toHaveLength(1);
   }, 30_000);
+
+  /**
+   * A host can name a session (`resolveResourceId`) but never receives the
+   * `Session` object — it is created in here. This hook is the only seam where
+   * a channel-created session can be configured before it answers anything.
+   */
+  describe('session start hook', () => {
+    it('fires once per session, with the session already bound to its mapped thread', async () => {
+      const starts: Array<{ resourceId: string; boundThreadId: string }> = [];
+      const { adapter, mastra, channels } = await createSetup({
+        onSessionStart: ({ session, thread }) =>
+          void starts.push({ resourceId: thread.resourceId, boundThreadId: session.thread.getId() }),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'first'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'first reply' });
+
+      const threads = await getChannelThreads(mastra, 'chan-1:t-1');
+      expect(starts).toEqual([{ resourceId: 'channel:chan-1:t-1', boundThreadId: threads[0]!.id }]);
+
+      // A second message reuses the session, so it must not be reconfigured —
+      // that would overwrite anything set on the thread since.
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-2', 'second'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => chatThread.post.mock.calls.length >= 2, { what: 'second reply' });
+      expect(starts).toHaveLength(1);
+    }, 30_000);
+
+    it('makes concurrent first messages wait for the hook instead of dispatching unconfigured', async () => {
+      // Hold the hook open: any message that dispatches while it is pending
+      // would run on an unconfigured session, which is exactly the race a
+      // skip-style once-guard allows.
+      let releaseHook!: () => void;
+      const hookGate = new Promise<void>(resolve => (releaseHook = resolve));
+      let hookCalls = 0;
+      const { adapter, mastra, channels } = await createSetup({
+        onSessionStart: async () => {
+          hookCalls += 1;
+          await hookGate;
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+      const dispatches = Promise.all([
+        (channels as any).processChatMessage(chatThread, createMessage('m-1', 'first'), mastra, new RequestContext()),
+        (channels as any).processChatMessage(chatThread, createMessage('m-2', 'second'), mastra, new RequestContext()),
+      ]);
+
+      // Give a leaked dispatch every chance to happen before asserting.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(chatThread.post).not.toHaveBeenCalled();
+
+      releaseHook();
+      await dispatches;
+      // Concurrent messages on one session may supersede each other, so only
+      // require that replies exist at all - the claim under test is that none
+      // happened before the hook finished, asserted above.
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'a reply after the hook' });
+      expect(hookCalls).toBe(1);
+    }, 30_000);
+
+    it('still answers the message when the hook throws', async () => {
+      const { adapter, mastra, channels } = await createSetup({
+        onSessionStart: () => {
+          throw new Error('configuration backend down');
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      await waitFor(() => postedText(chatThread).includes('Hello from the controller!'), {
+        what: 'reply posted despite the failing hook',
+      });
+    }, 30_000);
+  });
 
   it('produces distinct sessions for distinct chat threads', async () => {
     const { adapter, controller, mastra, channels } = await createSetup();

@@ -2,7 +2,13 @@ import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
-import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
+import type {
+  DatasetTenancyFilters,
+  ExperimentGrouping,
+  ExperimentProvenance,
+  ExperimentStatus,
+  TargetType,
+} from '../../storage/types';
 import type { ExperimentEventObserver } from './events';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
@@ -162,8 +168,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   name?: string;
   /** Experiment description */
   description?: string;
-  /** Arbitrary metadata for the experiment */
+  /** Arbitrary display metadata for the experiment */
   metadata?: Record<string, unknown>;
+  /** Caller-provided source identity for traceability. */
+  provenance?: ExperimentProvenance;
+  /** Stable dimensions for grouping related experiment executions. */
+  grouping?: ExperimentGrouping;
   /** Global request context passed to agent.generate() for all items */
   requestContext?: Record<string, unknown>;
   /** Agent version ID to record against the experiment */
