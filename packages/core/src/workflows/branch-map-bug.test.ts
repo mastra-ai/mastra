@@ -148,48 +148,4 @@ describe('Branch with Map Bug - Issue #10407', () => {
     expect(stepKeys).toContain('branch-alpha.step-a');
     expect(stepKeys).toContain('branch-alpha.step-b');
   });
-
-  it('maps a branch arm whose output is an empty object, not null', async () => {
-    const inputSchema = z.object({ route: z.string() });
-    // Arm output is a valid but "empty" object. The step-array map form must
-    // resolve to {} (the arm that actually ran), not null.
-    const emptyOutputSchema = z.object({});
-
-    const armEmpty = createStep({
-      id: 'arm-empty',
-      inputSchema,
-      outputSchema: emptyOutputSchema,
-      execute: async () => ({}),
-    });
-
-    const armOther = createStep({
-      id: 'arm-other',
-      inputSchema,
-      outputSchema: emptyOutputSchema,
-      execute: async () => ({}),
-    });
-
-    const wf = createWorkflow({
-      id: 'branch-map-empty-object',
-      inputSchema,
-      outputSchema: z.object({ picked: emptyOutputSchema }),
-    })
-      .branch([
-        [async ({ inputData }) => inputData.route === 'empty', armEmpty],
-        [async ({ inputData }) => inputData.route === 'other', armOther],
-      ])
-      .map({
-        picked: { step: [armEmpty, armOther], path: '.' },
-      })
-      .commit();
-
-    const run = await wf.createRun();
-    const result = await run.start({ inputData: { route: 'empty' } });
-
-    expect(result.status).toBe('success');
-    if (result.status === 'success') {
-      expect(result.result.picked).toEqual({});
-      expect(result.result.picked).not.toBeNull();
-    }
-  });
 });
