@@ -1214,16 +1214,11 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
-    if (this.serverConfig.protocolVersion !== undefined) {
-      // The elicitation/create request handler below only fires on legacy (2025-era)
-      // connections. On a negotiated 2026-07-28 connection, server-side input requests
-      // use the multi-round-trip mechanism, which this client does not drive yet.
-      this.log(
-        'warning',
-        `An elicitation handler is registered while protocolVersion is set ('${this.serverConfig.protocolVersion}'). ` +
-          'Elicitation only works on legacy connections; it will not fire on a negotiated 2026-07-28 connection.',
-      );
-    }
+    // The handler serves both protocol eras: on legacy (2025-era) connections it
+    // answers elicitation/create wire requests; on negotiated 2026-07-28
+    // connections the SDK's multi-round-trip driver dispatches embedded
+    // elicitation requests from input_required results through the same
+    // registered handler and retries the originating call automatically.
     if (!this.hasElicitationCapability) {
       try {
         this.client.registerCapabilities({ elicitation: { form: {} } });

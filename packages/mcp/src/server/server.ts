@@ -46,6 +46,12 @@ import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import {
+  createReplayElicitation,
+  ElicitationReplayInterrupt,
+  isModernEraRequest,
+  replayInterruptToInputRequired,
+} from './mrtrElicitation';
 import { broadcastNotification } from './notificationBroadcast';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
@@ -1033,6 +1039,7 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler('tools/call', async (request, ctx) => {
       const startTime = Date.now();
       const extra = toMCPRequestHandlerExtra(ctx);
+      let replayInterrupt: ElicitationReplayInterrupt | undefined;
       try {
         const tool = this.convertedTools[request.params.name];
         if (!tool) {
@@ -1078,12 +1085,20 @@ export class MCPServer extends MCPServerBase {
           };
         }
 
-        // Create session-aware elicitation for this tool execution
-        const sessionElicitation: ElicitationActions = {
-          sendRequest: async (request: ElicitRequest['params'], options?: RequestOptions) => {
-            return this.handleElicitationRequest(request, serverInstance, options);
-          },
-        };
+        // Create session-aware elicitation for this tool execution.
+        // On a 2026-07-28 request there is no server→client request channel, so
+        // elicitation runs through the multi-round-trip replay seam instead of
+        // the legacy elicitation/create push. The interrupt is captured out of
+        // band because tool wrappers re-wrap thrown errors.
+        const sessionElicitation: ElicitationActions = isModernEraRequest(extra)
+          ? createReplayElicitation(extra, interrupt => {
+              replayInterrupt = interrupt;
+            })
+          : {
+              sendRequest: async (request: ElicitRequest['params'], options?: RequestOptions) => {
+                return this.handleElicitationRequest(request, serverInstance, options);
+              },
+            };
 
         const proxiedContext = await this.createProxiedRequestContext(extra);
 
@@ -1222,6 +1237,16 @@ export class MCPServer extends MCPServerBase {
 
         return response;
       } catch (error) {
+        // Tool wrappers may re-wrap the interrupt (e.g. into MastraError), so the
+        // out-of-band capture — not instanceof on the thrown error — is the signal.
+        if (replayInterrupt !== undefined) {
+          // Not an error: the tool asked for user input on a 2026-07-28 request.
+          // Return input_required so the client answers and retries the call.
+          this.logger.debug(`CallTool: Tool '${request.params.name}' requires client input (multi-round-trip).`, {
+            key: replayInterrupt.key,
+          });
+          return replayInterruptToInputRequired(replayInterrupt);
+        }
         const duration = Date.now() - startTime;
         if (error instanceof Error && 'issues' in error && Array.isArray((error as any).issues)) {
           const issues: Array<{ path: string[]; message: string }> = (error as any).issues;

@@ -421,3 +421,156 @@ describe('MCPServer without protocolVersion (legacy default)', () => {
     await client.disconnect().catch(() => {});
   });
 });
+
+describe('MCPServer elicitation on the 2026-07-28 leg (multi-round-trip)', () => {
+  let server: MCPServer;
+  let httpServer: http.Server;
+  let baseUrl: URL;
+  const executions = { ask: 0, twoStep: 0 };
+
+  beforeAll(async () => {
+    server = new MCPServer({
+      name: 'MRTR Elicitation Server',
+      version: '1.0.0',
+      protocolVersion: '2026-07-28',
+      tools: {
+        askTool: createTool({
+          id: 'askTool',
+          description: 'Asks the user for their favorite color',
+          inputSchema: z.object({}),
+          execute: async (_inputData, options) => {
+            executions.ask += 1;
+            const result = await options!.mcp!.elicitation.sendRequest({
+              message: 'What is your favorite color?',
+              requestedSchema: {
+                type: 'object',
+                properties: { color: { type: 'string' } },
+                required: ['color'],
+              },
+            });
+            if (result.action !== 'accept') return 'declined';
+            return `color: ${(result.content as { color: string }).color}`;
+          },
+        }),
+        twoStepTool: createTool({
+          id: 'twoStepTool',
+          description: 'Asks the user two sequential questions',
+          inputSchema: z.object({}),
+          execute: async (_inputData, options) => {
+            executions.twoStep += 1;
+            const sendRequest = options!.mcp!.elicitation.sendRequest;
+            const first = await sendRequest({
+              message: 'first',
+              requestedSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] },
+            });
+            const second = await sendRequest({
+              message: 'second',
+              requestedSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] },
+            });
+            const a = (first.content as { answer: string }).answer;
+            const b = (second.content as { answer: string }).answer;
+            return `${a}+${b}`;
+          },
+        }),
+      },
+    });
+    httpServer = http.createServer(async (req, res) => {
+      await server.startHTTP({
+        url: new URL(req.url || '', 'http://localhost'),
+        httpPath: '/mcp',
+        req,
+        res,
+      });
+    });
+    const port = await listenOnFreePort(httpServer);
+    baseUrl = new URL(`http://localhost:${port}/mcp`);
+  });
+
+  afterAll(async () => {
+    await server?.close();
+    await new Promise<void>(resolve => httpServer.close(() => resolve()));
+  });
+
+  const makeModernElicitingClient = (answers: Record<string, string>) => {
+    const client = new Client(
+      { name: 'elicit-client', version: '1.0.0' },
+      {
+        capabilities: { elicitation: { form: {} } },
+        versionNegotiation: { mode: { pin: '2026-07-28' } },
+      },
+    );
+    client.setRequestHandler('elicitation/create', async request => {
+      const key = request.params.message;
+      const answer = answers[key];
+      if (answer === undefined) return { action: 'decline' as const };
+      const field = 'color' in ((request.params as any).requestedSchema?.properties ?? {}) ? 'color' : 'answer';
+      return { action: 'accept' as const, content: { [field]: answer } };
+    });
+    return client;
+  };
+
+  it('completes a tool that elicits: the client answers and retries transparently', async () => {
+    executions.ask = 0;
+    const client = makeModernElicitingClient({ 'What is your favorite color?': 'blue' });
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    try {
+      const result = await client.callTool({ name: 'askTool', arguments: {} });
+      expect((result as any).isError).toBeFalsy();
+      expect((result as any).content[0].text).toBe('color: blue');
+      // Round 1 interrupts, round 2 replays with the answer.
+      expect(executions.ask).toBe(2);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('supports sequential elicitations across rounds via requestState accumulation', async () => {
+    executions.twoStep = 0;
+    const client = makeModernElicitingClient({ first: 'one', second: 'two' });
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    try {
+      const result = await client.callTool({ name: 'twoStepTool', arguments: {} });
+      expect((result as any).isError).toBeFalsy();
+      expect((result as any).content[0].text).toBe('one+two');
+      // Three rounds: interrupt on first, interrupt on second (first answered
+      // from requestState), then complete.
+      expect(executions.twoStep).toBe(3);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('surfaces a declined elicitation to the tool', async () => {
+    executions.ask = 0;
+    const client = makeModernElicitingClient({});
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    try {
+      const result = await client.callTool({ name: 'askTool', arguments: {} });
+      expect((result as any).content[0].text).toBe('declined');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('works through the Mastra client with a pinned protocolVersion and an elicitation handler', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'mastra-elicit-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+      },
+    });
+    client.elicitation.onRequest(async request => {
+      expect(request.message).toBe('What is your favorite color?');
+      return { action: 'accept', content: { color: 'green' } };
+    });
+    await client.connect();
+    try {
+      const tools = await client.tools();
+      const result = await tools.askTool.execute!({}, {} as any);
+      expect(JSON.stringify(result)).toContain('color: green');
+    } finally {
+      await client.disconnect();
+    }
+  });
+});

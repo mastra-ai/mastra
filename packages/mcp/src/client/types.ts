@@ -300,9 +300,10 @@ export type BaseServerOptions = {
    * - `'2026-07-28'`: pin to that revision exactly. Connecting to a server that
    *   does not offer it fails loudly with a typed error — no fallback.
    *
-   * Note: elicitation handlers currently only fire on legacy connections; on a
-   * negotiated `2026-07-28` connection, server-side input requests use the
-   * multi-round-trip mechanism, which this client does not drive yet.
+   * Elicitation handlers work on both eras: on a negotiated `2026-07-28`
+   * connection, embedded elicitation requests from `input_required` results are
+   * dispatched through the same registered handler and the originating call is
+   * retried automatically.
    *
    * @example
    * ```typescript
