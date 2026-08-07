@@ -708,14 +708,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
         reconcileFactoryState: this.#reconcileEnabled
-          ? attachGithubReconciler(
-              this,
-              ctx,
-              input => this.fetchPullRequestState(input),
-              input => this.fetchIssueState(input),
-            )
+          ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
-        reconcileIssuesFactoryState: this.#reconcileEnabled ? attachGithubIssueReconciler(this, ctx) : undefined,
+        reconcileIssuesFactoryState: this.#reconcileEnabled
+          ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+          : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
       }),
@@ -807,6 +804,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         updated_at?: string;
         user?: { login?: string } | null;
         assignees?: Array<{ login?: string }> | null;
+        labels?: Array<{ name?: string } | string> | null;
         pull_request?: unknown;
       }>(
         'GET',
@@ -819,6 +817,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         state: result.state === 'closed' ? 'closed' : 'open',
         ...(result.state_reason ? { stateReason: result.state_reason } : {}),
         assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+        labels: (result.labels ?? []).map(label => (typeof label === 'string' ? label : label.name)).filter((name): name is string => Boolean(name)),
         ...(result.user?.login ? { author: result.user.login } : {}),
         ...(result.created_at ? { createdAt: result.created_at } : {}),
         ...(result.updated_at ? { updatedAt: result.updated_at } : {}),

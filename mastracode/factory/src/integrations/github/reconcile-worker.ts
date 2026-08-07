@@ -11,7 +11,6 @@ import type {
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
 import type { GithubIssueReconciler } from './issue-reconciler.js';
-import { githubIssueReconcileScope } from './issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from './rules.js';
 
 export const DEFAULT_GITHUB_RECONCILE_INTERVAL_MS = 5 * 60_000;
@@ -175,9 +174,7 @@ export class GithubReconcileWorker extends MastraWorker {
       if (this.#reconcileIssues && hasLease) {
         const issueStartedAt = Date.now();
         try {
-          const { errors: issueErrors, ...issueCounts } = await this.#reconcileIssues(
-            githubIssueReconcileScope(targets),
-          );
+          const { errors: issueErrors, ...issueCounts } = await this.#reconcileIssues(targets);
           const issueContext = {
             ...issueCounts,
             candidateRepositories: targets.length,

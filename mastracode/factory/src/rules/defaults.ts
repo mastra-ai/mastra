@@ -312,6 +312,26 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
   } as const;
 }
 
+function linearIssueClosed(context: FactoryLinearRuleContext) {
+  if (!context.item || context.item.source !== 'linear-issue') return;
+  if (context.board !== 'work') return;
+  // Already off the board: nothing to reconcile.
+  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // Only terminal state types trigger close.
+  const stateType = context.issue.stateType;
+  if (stateType !== 'completed' && stateType !== 'canceled') return;
+  const canceled = stateType === 'canceled';
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: 'work',
+    stage: canceled ? 'canceled' : 'done',
+    message: {
+      text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+    },
+  } as const;
+}
+
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
     triage: {
@@ -338,7 +358,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },
   },
-  linear: { issueObserved: { onEvent: linearIssueObserved } },
+  linear: { issueObserved: { onEvent: linearIssueObserved }, issueClosed: { onEvent: linearIssueClosed } },
 };
 
 function mergeBoardRules(

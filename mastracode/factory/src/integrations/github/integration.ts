@@ -1111,14 +1111,9 @@ export class GithubIntegration implements FactoryIntegration {
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
-    const reconcile = attachGithubReconciler(
-      this,
-      ctx,
-      input => this.fetchPullRequestState(input),
-      input => this.fetchIssueState(input),
-    );
+    const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
     if (!reconcile) return [];
-    const issues = attachGithubIssueReconciler(this, ctx);
+    const issues = attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input));
     const intervalMs = Number(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
     const interval = Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {};
     return [
@@ -1194,6 +1189,9 @@ export class GithubIntegration implements FactoryIntegration {
         assignees: (issue.assignees ?? [])
           .map(user => user.login)
           .filter((login): login is string => Boolean(login)),
+        labels: (issue.labels ?? [])
+          .map(label => (typeof label === 'string' ? label : label.name))
+          .filter((name): name is string => Boolean(name)),
         ...(issue.user?.login ? { author: issue.user.login } : {}),
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,

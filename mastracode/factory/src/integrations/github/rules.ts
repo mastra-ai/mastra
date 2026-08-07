@@ -482,6 +482,7 @@ export interface ReconcileIssueState {
   /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
   stateReason?: string;
   assignees?: string[];
+  labels?: string[];
   author?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -508,10 +509,6 @@ export interface ReconcileSweepSummary {
   merged: number;
   /** Missed closes-without-merge replayed through the rules ingress. */
   closed: number;
-  /** Issue-backed work cards whose live state was fetched from GitHub. */
-  issuesChecked: number;
-  /** Missed issue closes replayed through the rules ingress. */
-  issuesClosed: number;
   /** PRs/issues (or whole repositories) skipped because of an error. */
   failed: number;
   /** Error samples with context, capped at {@link RECONCILE_ERROR_SAMPLE_LIMIT}. */
@@ -520,9 +517,9 @@ export interface ReconcileSweepSummary {
 
 export type GithubPullRequestReconciler = (repositories: ReconcileRepository[]) => Promise<ReconcileSweepSummary>;
 
-const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
+export const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
 
-function sameStrings(left: unknown, right: string[] | undefined): boolean {
+export function sameStrings(left: unknown, right: string[] | undefined): boolean {
   if (right === undefined) return true;
   if (!Array.isArray(left)) return false;
   const leftValues = new Set(left.flatMap(value => (typeof value === 'string' ? [value] : [])));
@@ -560,7 +557,7 @@ function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileR
  * trusted when the intake-stamped `githubRepositoryId` confirms the
  * repository, because the sweep initiates closes on its own.
  */
-function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+export function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'issue') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -677,7 +674,6 @@ async function retireReconciledSubscriptions(
 export function createGithubPullRequestReconciler(
   options: GithubRulesOptions,
   fetchPullRequest: GithubPullRequestFetcher,
-  fetchIssue?: GithubIssueFetcher,
 ): GithubPullRequestReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
@@ -686,22 +682,19 @@ export function createGithubPullRequestReconciler(
       checked: 0,
       merged: 0,
       closed: 0,
-      issuesChecked: 0,
-      issuesClosed: 0,
       failed: 0,
       errors: [],
     };
     const recordFailure = (
       repository: ReconcileRepository,
       error: unknown,
-      numbers?: { pullRequestNumber?: number; issueNumber?: number },
+      pullRequestNumber?: number,
     ) => {
       summary.failed += 1;
       if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
         summary.errors.push({
           repository: repository.fullName,
-          ...(numbers?.pullRequestNumber === undefined ? {} : { pullRequestNumber: numbers.pullRequestNumber }),
-          ...(numbers?.issueNumber === undefined ? {} : { issueNumber: numbers.issueNumber }),
+          ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -722,7 +715,6 @@ export function createGithubPullRequestReconciler(
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
       let cardsByNumber: Map<number, WorkItemRow[]>;
-      const issueNumbers = new Set<number>();
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
@@ -737,12 +729,6 @@ export function createGithubPullRequestReconciler(
           });
           for (const item of items) {
             const stage = item.stages[0];
-            if (fetchIssue) {
-              const issueNumber = reconcilableIssueNumber(item, repository);
-              // Issue cards need no metadata sync: only cards still on the
-              // board can have missed a close, so terminal stages are final.
-              if (issueNumber && stage !== 'done' && stage !== 'canceled') issueNumbers.add(issueNumber);
-            }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
             const metadata = item.metadata ?? {};
@@ -800,7 +786,7 @@ export function createGithubPullRequestReconciler(
                 },
               });
             } catch (error) {
-              recordFailure(repository, error, { pullRequestNumber });
+              recordFailure(repository, error, pullRequestNumber);
             }
           }
           if (state.state !== 'closed') continue;
@@ -809,23 +795,7 @@ export function createGithubPullRequestReconciler(
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {
-          recordFailure(repository, error, { pullRequestNumber });
-        }
-      }
-      if (!fetchIssue) continue;
-      for (const issueNumber of issueNumbers) {
-        try {
-          const state = await fetchIssue({
-            installationId: repository.installationId,
-            repository: repository.fullName,
-            number: issueNumber,
-          });
-          summary.issuesChecked += 1;
-          if (!state || state.state !== 'closed') continue;
-          await rules.ingest(reconciledIssueClosedEvent(repository, issueNumber, state));
-          summary.issuesClosed += 1;
-        } catch (error) {
-          recordFailure(repository, error, { issueNumber });
+          recordFailure(repository, error, pullRequestNumber);
         }
       }
     }
@@ -833,7 +803,7 @@ export function createGithubPullRequestReconciler(
   };
 }
 
-function githubRulesOptions(
+export function githubRulesOptions(
   github: GithubRulesIntegration,
   context: IntegrationContext,
 ): GithubRulesOptions | undefined {
@@ -862,9 +832,8 @@ export function attachGithubReconciler(
   github: GithubRulesIntegration,
   context: IntegrationContext,
   fetchPullRequest: GithubPullRequestFetcher,
-  fetchIssue?: GithubIssueFetcher,
 ): GithubPullRequestReconciler | undefined {
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
-  return createGithubPullRequestReconciler(options, fetchPullRequest, fetchIssue);
+  return createGithubPullRequestReconciler(options, fetchPullRequest);
 }

@@ -1,54 +1,158 @@
 import type { IntegrationContext } from '../base.js';
-import { createIssueReconciler } from '../issue-reconciler.js';
-import type { IssueReconciler } from '../issue-reconciler.js';
-import type { GithubIntegration } from './integration.js';
-import type { ReconcileRepository } from './rules.js';
+import {
+  githubRulesOptions,
+  reconcilableIssueNumber,
+  reconciledIssueClosedEvent,
+  RECONCILE_ERROR_SAMPLE_LIMIT,
+  sameStrings,GithubRules
+} from './rules.js';
+import type { GithubIssueFetcher, GithubRulesIntegration, GithubRulesOptions, ReconcileRepository } from './rules.js';
 
-/**
- * Repo-scoped issue reconciler. Callers pass the same
- * `ReconcileRepository[]` the PR reconciler receives so the issue sweep only
- * touches issue cards for repositories the caller has already resolved to
- * live installations.
- */
-export type GithubIssueReconciler = IssueReconciler<ReconcileRepository>;
-
-export function attachGithubIssueReconciler(
-  github: Pick<GithubIntegration, 'intake'>,
-  context: IntegrationContext,
-): GithubIssueReconciler | undefined {
-  if (!context.rules || !github.intake.resolveIntakeDispatch) return undefined;
-  return createIssueReconciler<ReconcileRepository>({
-    integrationId: 'github',
-    intake: github.intake,
-    projects: context.storage.projects,
-    storage: context.rules.workItems,
-    externalSource: item => {
-      const repositoryId = item.metadata?.githubRepositoryId;
-      const issueNumber = item.metadata?.githubIssueNumber;
-      return typeof repositoryId === 'number' && typeof issueNumber === 'number'
-        ? { type: 'issue', externalId: `${repositoryId}:${issueNumber}` }
-        : item.externalSource!;
-    },
-    issueId: item => {
-      const number = item.metadata?.githubIssueNumber;
-      return typeof number === 'number' && Number.isSafeInteger(number) && number > 0 ? String(number) : undefined;
-    },
-    metadata: (item, issue) => ({
-      githubRepositoryId: item.metadata?.githubRepositoryId,
-      githubIssueNumber: Number(issue.id),
-      state: issue.state,
-      author: issue.author,
-      assignees: issue.assignees ?? (issue.assignee ? [issue.assignee] : []),
-      labels: issue.labels ?? [],
-    }),
-  });
+export interface GithubIssueReconcileSummary {
+  /** Repositories included in the sweep. */
+  repositories: number;
+  /** Issue cards whose live state was fetched. */
+  checked: number;
+  /** Open issues with metadata patches. */
+  updated: number;
+  /** Closed issues replayed through the rules ingress. */
+  closed: number;
+  /** Errors encountered during the sweep. */
+  failed: number;
+  /** Error samples with context. */
+  errors: Array<{ repository: string; issueNumber?: number; error: string }>;
 }
 
-/** Build the scope the reconciler applies to filter issue cards by repository. */
-export function githubIssueReconcileScope(repositories: ReconcileRepository[]) {
-  return {
-    scopes: repositories,
-    matches: (item: import('../../storage/domains/work-items/base.js').WorkItemRow, target: ReconcileRepository) =>
-      item.metadata?.githubRepositoryId === target.id,
+export type GithubIssueReconciler = (repositories: ReconcileRepository[]) => Promise<GithubIssueReconcileSummary>;
+
+export function createGithubIssueReconciler(
+  options: GithubRulesOptions,
+  fetchIssue: GithubIssueFetcher,
+): GithubIssueReconciler {
+  const rules = new GithubRules(options);
+  return async repositories => {
+    const summary: GithubIssueReconcileSummary = {
+      repositories: 0,
+      checked: 0,
+      updated: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    for (const repository of repositories) {
+      summary.repositories += 1;
+
+      try {
+        const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
+          installationExternalId: String(repository.installationId),
+          repositoryExternalId: String(repository.id),
+        });
+        if (projects.length === 0) continue;
+
+        // Collect issue cards: number -> items (skip terminal stages)
+        const itemsByNumber = new Map<number, import('../../storage/domains/work-items/base.js').WorkItemRow[]>();
+
+        for (const project of projects) {
+          const items = await options.storage.list({
+            orgId: project.orgId,
+            factoryProjectId: project.factoryProjectId,
+          });
+          for (const item of items) {
+            const issueNumber = reconcilableIssueNumber(item, repository);
+            if (!issueNumber) continue;
+            const stage = item.stages[0];
+            if (stage === 'done' || stage === 'canceled') continue; // terminal, skip
+            let list = itemsByNumber.get(issueNumber);
+            if (!list) {
+              list = [];
+              itemsByNumber.set(issueNumber, list);
+            }
+            list.push(item);
+          }
+        }
+
+        // Fetch and reconcile each unique issue
+        for (const [issueNumber, items] of itemsByNumber) {
+          try {
+            const state = await fetchIssue({
+              installationId: repository.installationId,
+              repository: repository.fullName,
+              number: issueNumber,
+            });
+            if (!state) continue; // missing or PR-backed
+            summary.checked += 1;
+
+            // Close detection: replay through rules ingress
+            if (state.state === 'closed') {
+              await rules.ingest(reconciledIssueClosedEvent(repository, issueNumber, state));
+              summary.closed += 1;
+              continue; // card transitions, skip metadata patch
+            }
+
+            // Metadata sync for open issues
+            const desiredMetadata = {
+              githubRepositoryId: repository.id,
+              githubIssueNumber: issueNumber,
+              state: 'open' as const,
+              author: state.author,
+              assignees: state.assignees ?? [],
+              labels: state.labels ?? [],
+            };
+
+            for (const item of items) {
+              const current = item.metadata ?? {};
+              const metadataChanged =
+                current.githubRepositoryId !== desiredMetadata.githubRepositoryId ||
+                current.githubIssueNumber !== desiredMetadata.githubIssueNumber ||
+                current.state !== desiredMetadata.state ||
+                current.author !== desiredMetadata.author ||
+                !sameStrings(current.assignees as string[] | undefined, desiredMetadata.assignees) ||
+                !sameStrings(current.labels as string[] | undefined, desiredMetadata.labels);
+
+              if (!metadataChanged) continue;
+
+              await options.storage.update({
+                orgId: item.orgId,
+                id: item.id,
+                userId: 'factory-rule-dispatcher',
+                patch: { metadata: { ...current, ...desiredMetadata } },
+              });
+              summary.updated += 1;
+            }
+          } catch (error) {
+            summary.failed += 1;
+            if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
+              summary.errors.push({
+                repository: repository.fullName,
+                issueNumber,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+        }
+      } catch (error) {
+        summary.failed += 1;
+        if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
+          summary.errors.push({
+            repository: repository.fullName,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    return summary;
   };
+}
+
+export function attachGithubIssueReconciler(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+  fetchIssue: GithubIssueFetcher,
+): GithubIssueReconciler | undefined {
+  if (!context.rules) return undefined;
+  const options = githubRulesOptions(github, context);
+  if (!options) return undefined;
+  return createGithubIssueReconciler(options, fetchIssue);
 }

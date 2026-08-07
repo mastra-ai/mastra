@@ -6,6 +6,7 @@ export interface IssueReconcileSummary {
   projects: number;
   checked: number;
   updated: number;
+  closed: number;
   missing: number;
   failed: number;
   errors: Array<{ projectId: string; workItemId?: string; error: string }>;
@@ -30,6 +31,12 @@ export interface IssueReconcilerOptions<TScope = void> {
   externalSource?(item: WorkItemRow): { type: string; externalId: string };
   issueId(item: WorkItemRow): string | undefined;
   metadata(item: WorkItemRow, issue: IntakeIssue): Record<string, unknown>;
+  /**
+   * Called when a closed issue (stateType 'completed' or 'canceled') is detected
+   * on a non-terminal work item. Use this to replay the close event through
+   * the provider's rules ingress.
+   */
+  onClosed?(item: WorkItemRow, issue: IntakeIssue, project: FactoryProject): Promise<void>;
 }
 
 export type IssueReconciler<TScope = void> = TScope extends void
@@ -80,6 +87,7 @@ export function createIssueReconciler<TScope = void>(
       projects: 0,
       checked: 0,
       updated: 0,
+      closed: 0,
       missing: 0,
       failed: 0,
       errors: [],
@@ -116,6 +124,17 @@ export function createIssueReconciler<TScope = void>(
             summary.missing += 1;
             continue;
           }
+
+          // Close detection for Linear: replay through rules ingress if closed
+          const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
+          const stage = item.stages[0];
+          const isTerminal = stage === 'done' || stage === 'canceled';
+          if (isClosed && !isTerminal && options.onClosed) {
+            await options.onClosed(item, issue, project);
+            summary.closed += 1;
+            continue; // Skip metadata patch for closed issues
+          }
+
           const metadata = withoutUndefined(options.metadata(item, issue));
           if (metadataMatches(item.metadata, metadata)) continue;
           await options.storage.update({

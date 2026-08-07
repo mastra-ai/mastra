@@ -9,7 +9,6 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
-import { githubIssueReconcileScope } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
@@ -325,7 +324,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     if (!this.#reconcileIssuesFactoryState) return;
     const issueStartedAt = Date.now();
     try {
-      const { errors, ...counts } = await this.#reconcileIssuesFactoryState(githubIssueReconcileScope(targets));
+      const { errors, ...counts } = await this.#reconcileIssuesFactoryState(targets);
       const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - issueStartedAt };
       if (counts.failed > 0) {
         this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', {

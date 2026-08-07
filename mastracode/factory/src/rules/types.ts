@@ -24,7 +24,7 @@ export const FACTORY_GITHUB_EVENTS = [
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
-export const FACTORY_LINEAR_EVENTS = ['issueObserved'] as const;
+export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
