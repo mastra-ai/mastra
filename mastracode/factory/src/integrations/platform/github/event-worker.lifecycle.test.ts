@@ -160,7 +160,7 @@ describe('Platform GitHub event worker factory lifecycle', () => {
 
       expect(worker?.isRunning).toBe(false);
       expect(harness.sendNotificationSignal).toHaveBeenCalledOnce();
-      expect(releaseLease).toHaveBeenCalledOnce();
+      expect(releaseLease).toHaveBeenCalledWith('platform-github-events:github', expect.any(String));
       expect(await pubsub.getLeaseOwner('platform-github-events:github')).toBeUndefined();
       expect(vi.getTimerCount()).toBe(0);
     } finally {

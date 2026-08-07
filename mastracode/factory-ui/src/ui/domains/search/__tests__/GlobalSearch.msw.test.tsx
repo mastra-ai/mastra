@@ -35,6 +35,7 @@ const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 interface SearchRequestState {
   abortRequests: number;
   createSessionRequests: number;
+  runStarts: Record<string, unknown>[];
   intakeRequests: number;
   sessionRequests: Record<string, number>;
   workItemRequests: number;
@@ -45,6 +46,7 @@ interface StubSearchOptions {
   failRepositories?: string[];
   failIntake?: boolean;
   failWorkItems?: boolean;
+  runStartGate?: Promise<void>;
   secondRepositoryGate?: Promise<void>;
   onSecondRepositoryAbort?: () => void;
   running?: boolean;
@@ -60,6 +62,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
     createSessionRequests: 0,
+    runStarts: [],
     intakeRequests: 0,
     sessionRequests: {},
     workItemRequests: 0,
@@ -137,9 +140,15 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       }
       return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () => {
+    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, async ({ request }) => {
       state.createSessionRequests += 1;
-      return HttpResponse.json({ error: 'Search must not create sessions' }, { status: 500 });
+      const body = (await request.json()) as { branch?: string };
+      return HttpResponse.json({
+        session: {
+          sessionId: 'session-search',
+          branch: body.branch ?? 'factory/search',
+        },
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       const sessionId = String(params.sessionId);
@@ -157,6 +166,18 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         sandboxWorkdir: `/workspaces/${String(params.projectRepositoryId)}`,
       }),
     ),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+      state.runStarts.push((await request.json()) as Record<string, unknown>);
+      if (options.runStartGate) await options.runStartGate;
+      return HttpResponse.json({
+        prepared: {
+          workItemId: 'started-work-item',
+          threadId: 'thread-search',
+          sessionId: 'session-search',
+          kickoffStatus: 'sent',
+        },
+      });
+    }),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, async ({ request }) => {
       const resourceId = resourceIdFromRequestBody(await request.json());
       return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-search' });
@@ -210,6 +231,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/thread`, () => HttpResponse.json({ ok: true })),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/abort`, () => {
       state.abortRequests += 1;
       return HttpResponse.json({});
@@ -478,10 +500,14 @@ describe('Global search', () => {
     expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
   });
 
-  it('finds a board card with no session by identifier and opens its board', async () => {
-    const requests = stubSearchApi();
+  it('finds a board card with no session by identifier and starts its default run', async () => {
+    let releaseRunStart = () => {};
+    const runStartGate = new Promise<void>(resolve => {
+      releaseRunStart = resolve;
+    });
+    const requests = stubSearchApi({ runStartGate });
     const user = userEvent.setup();
-    const { router } = renderSearchRoute();
+    renderSearchRoute();
     const dialog = await openFromSidebar();
     await screen.findByText('Review command palette PR');
 
@@ -496,9 +522,18 @@ describe('Global search', () => {
 
     await user.click(card);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${ACTIVE_FACTORY_ID}/review`));
-    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
-    expect(requests.createSessionRequests).toBe(0);
+    await waitFor(() => expect(requests.runStarts).toHaveLength(1));
+    const loadingOption = card.closest('[role="option"]');
+    expect(loadingOption).toHaveAttribute('data-disabled', 'true');
+    expect(within(loadingOption as HTMLElement).getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(within(loadingOption as HTMLElement).getByText('Preparing run…')).toBeInTheDocument();
+    await user.click(card);
+    expect(requests.runStarts).toHaveLength(1);
+    expect(requests.createSessionRequests).toBe(1);
+
+    releaseRunStart();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
+    expect(requests.runStarts[0]).toMatchObject({ workItem: { id: 'work-item-unstarted-review', role: 'review' } });
   });
 
   it('scopes results to board cards with no session', async () => {
@@ -519,10 +554,10 @@ describe('Global search', () => {
     expect(screen.queryByText('research-notes')).not.toBeInTheDocument();
   });
 
-  it('finds a pull request that has no card yet and opens the review board', async () => {
+  it('finds a pull request that has no card yet and starts its default run', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
-    const { router } = renderSearchRoute();
+    renderSearchRoute();
     const dialog = await openFromSidebar();
     await screen.findByText('Review command palette PR');
 
@@ -532,8 +567,15 @@ describe('Global search', () => {
 
     await user.click(candidate);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${ACTIVE_FACTORY_ID}/review`));
-    expect(requests.createSessionRequests).toBe(0);
+    await waitFor(() => expect(requests.runStarts).toHaveLength(1));
+    expect(requests.runStarts[0]).toMatchObject({
+      workItem: {
+        role: 'review',
+        input: { title: 'Harden the review board drop target' },
+      },
+    });
+    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
+    expect(requests.createSessionRequests).toBe(1);
   });
 
   it('lists a pull request already filed as a card only once', async () => {

@@ -82,6 +82,118 @@ export function isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { create
   return false;
 }
 
+type MessagePart = NonNullable<MastraDBMessage['content']['parts']>[number];
+
+/**
+ * Return the toolCallId of a tool-invocation part in the given state, or undefined.
+ */
+function getToolInvocationId(part: MessagePart, state: 'call' | 'result'): string | undefined {
+  if (part?.type !== 'tool-invocation') return undefined;
+  if (part.toolInvocation.state !== state) return undefined;
+  return part.toolInvocation.toolCallId || undefined;
+}
+
+function collectPendingToolResultIds(allMessages: MastraDBMessage[], observedIds?: Set<string>): Set<string> {
+  const pendingToolResultIds = new Set<string>();
+
+  for (const msg of allMessages) {
+    if (!msg?.id) continue;
+    if (observedIds?.has(msg.id)) continue;
+
+    const parts = msg.content?.parts;
+    if (!parts || !Array.isArray(parts)) continue;
+
+    for (const part of parts) {
+      const id = getToolInvocationId(part, 'result');
+      if (id) pendingToolResultIds.add(id);
+    }
+  }
+
+  return pendingToolResultIds;
+}
+
+function hasPendingToolResultPair(message: MastraDBMessage, pendingToolResultIds: Set<string>): boolean {
+  if (pendingToolResultIds.size === 0) return false;
+
+  const parts = message.content?.parts;
+  if (!parts || !Array.isArray(parts)) return false;
+
+  return parts.some(part => {
+    const id = getToolInvocationId(part, 'call');
+    return id !== undefined && pendingToolResultIds.has(id);
+  });
+}
+
+function collectPendingToolResultIdsAfterMarker(
+  allMessages: MastraDBMessage[],
+  markerMessageIndex: number,
+  markerMessage: MastraDBMessage,
+): Set<string> {
+  const pendingToolResultIds = new Set<string>();
+  const unobservedMarkerParts = getUnobservedParts(markerMessage);
+
+  if (unobservedMarkerParts.length > 0) {
+    collectPendingToolResultIds(
+      [{ ...markerMessage, content: { ...markerMessage.content, parts: unobservedMarkerParts } }],
+      undefined,
+    ).forEach(id => pendingToolResultIds.add(id));
+  }
+
+  collectPendingToolResultIds(allMessages.slice(markerMessageIndex + 1), undefined).forEach(id =>
+    pendingToolResultIds.add(id),
+  );
+
+  return pendingToolResultIds;
+}
+
+function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): MastraDBMessage['content']['parts'] {
+  const parts = message.content?.parts;
+  if (!parts || !Array.isArray(parts)) return [];
+
+  const endMarkerIndex = findLastCompletedObservationBoundary(message);
+  if (endMarkerIndex === -1) {
+    return getUnobservedParts(message);
+  }
+
+  const unobservedParts = getUnobservedParts(message);
+  const unobservedResultIds = new Set<string>();
+
+  for (const part of unobservedParts) {
+    const id = getToolInvocationId(part, 'result');
+    if (id) unobservedResultIds.add(id);
+  }
+
+  if (unobservedResultIds.size === 0) {
+    return unobservedParts;
+  }
+
+  const preservedCalls = parts.slice(0, endMarkerIndex).filter(part => {
+    const id = getToolInvocationId(part, 'call');
+    return id !== undefined && unobservedResultIds.has(id);
+  });
+
+  return preservedCalls.length > 0 ? [...preservedCalls, ...unobservedParts] : unobservedParts;
+}
+
+/**
+ * Get the messages Observational Memory is allowed to work with.
+ *
+ * Messages supplied through the `context` option are per-run ephemeral input. Core's
+ * persistence contract already treats them as never-persist: `MessageStateManager` routes
+ * them into `userContextMessages`, and `drainUnsavedMessages` only drains input/response.
+ *
+ * OM builds its windows from `get.all.db()`, which includes context messages, and then
+ * seals and persists candidates directly — turning ephemeral context into durable user
+ * messages. Excluding them here keeps OM's window, sealing, persistence and token
+ * accounting consistent with that contract.
+ */
+export function getObservableMessages(messageList: MessageList): MastraDBMessage[] {
+  const allMessages = messageList.get.all.db();
+  const contextMessageIds = messageList.makeMessageSourceChecker().context;
+  if (contextMessageIds.size === 0) return allMessages;
+  return allMessages.filter(message => !contextMessageIds.has(message.id));
+}
+
 /**
  * Safely extract buffered observation chunks from a record.
  * Handles both array and JSON-string formats, returning empty array if malformed.
@@ -101,9 +213,10 @@ export function filterObservedMessages(opts: {
   preserveMessageIds?: Set<string>;
 }): void {
   const { messageList, record } = opts;
-  const allMessages = messageList.get.all.db();
+  const allMessages = getObservableMessages(messageList);
   const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
   const preserveMessageIds = opts.preserveMessageIds ?? new Set<string>();
+  const observedIds = new Set<string>(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);
 
   let markerMessageIndex = -1;
   let markerMessage: MastraDBMessage | null = null;
@@ -119,10 +232,16 @@ export function filterObservedMessages(opts: {
   }
 
   if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
+    const pendingToolResultIds = collectPendingToolResultIdsAfterMarker(allMessages, markerMessageIndex, markerMessage);
     const messagesToRemove: string[] = [];
     for (let i = 0; i < markerMessageIndex; i++) {
       const msg = allMessages[i];
-      if (msg?.id && msg.id !== 'om-continuation' && !preserveMessageIds.has(msg.id)) {
+      if (
+        msg?.id &&
+        msg.id !== 'om-continuation' &&
+        !preserveMessageIds.has(msg.id) &&
+        !hasPendingToolResultPair(msg, pendingToolResultIds)
+      ) {
         messagesToRemove.push(msg.id);
       }
     }
@@ -131,15 +250,14 @@ export function filterObservedMessages(opts: {
       messageList.removeByIds(messagesToRemove);
     }
 
-    const unobserved = getUnobservedParts(markerMessage);
+    const unobserved = getUnobservedPartsPreservingToolCallPairs(markerMessage);
     if (unobserved.length === 0) {
       if (markerMessage.id) messageList.removeByIds([markerMessage.id]);
     } else if (unobserved.length < (markerMessage.content?.parts?.length ?? 0)) {
       markerMessage.content.parts = unobserved;
     }
   } else if (record) {
-    const observedIds = new Set<string>(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []);
-
+    const pendingToolResultIds = collectPendingToolResultIds(allMessages, observedIds);
     const derivedCursor =
       opts.fallbackCursor ??
       getLastObservedMessageCursor(allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt));
@@ -148,13 +266,18 @@ export function filterObservedMessages(opts: {
 
     for (const msg of allMessages) {
       if (!msg?.id || msg.id === 'om-continuation' || preserveMessageIds.has(msg.id)) continue;
+      const hasPendingPair = hasPendingToolResultPair(msg, pendingToolResultIds);
 
       if (observedIds.has(msg.id)) {
+        if (hasPendingPair) {
+          continue;
+        }
         messagesToRemove.push(msg.id);
         continue;
       }
 
       if (derivedCursor && isMessageAtOrBeforeCursor(msg, derivedCursor)) {
+        if (hasPendingPair) continue;
         messagesToRemove.push(msg.id);
         continue;
       }
@@ -162,6 +285,7 @@ export function filterObservedMessages(opts: {
       if (lastObservedAt && msg.createdAt) {
         const msgDate = new Date(msg.createdAt);
         if (msgDate <= lastObservedAt) {
+          if (hasPendingPair) continue;
           messagesToRemove.push(msg.id);
         }
       }

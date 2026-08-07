@@ -199,6 +199,22 @@ const sidebars = {
         { type: 'doc', id: 'core/mastra-class', label: 'Mastra Class' },
         { type: 'doc', id: 'core/mastra-model-gateway', label: 'MastraModelGateway' },
         { type: 'doc', id: 'core/addGateway', label: '.addGateway()' },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflow',
+          label: '.addStoredWorkflow()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflows',
+          label: '.addStoredWorkflows()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
@@ -360,6 +376,7 @@ const sidebars = {
         { type: 'doc', id: 'file-based-agents/memory', label: 'Memory' },
         { type: 'doc', id: 'file-based-agents/observability', label: 'Observability' },
         { type: 'doc', id: 'file-based-agents/processors', label: 'Processors' },
+        { type: 'doc', id: 'file-based-agents/schedules', label: 'Schedules' },
         { type: 'doc', id: 'file-based-agents/scorers', label: 'Scorers' },
         { type: 'doc', id: 'file-based-agents/server', label: 'Server' },
         { type: 'doc', id: 'file-based-agents/skills', label: 'Skills' },
@@ -458,6 +475,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
                   label: 'CloudExporter (deprecated)',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/confident-ai',
+                  label: 'Confident AI',
                 },
                 {
                   type: 'doc',
@@ -697,6 +719,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'tools/ask-user-tool', label: 'askUserTool' },
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
+        { type: 'doc', id: 'tools/bedrock-kb-tool', label: 'createBedrockKBTool()' },
         {
           type: 'doc',
           id: 'tools/create-code-mode',
@@ -798,12 +821,21 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'workflows/run', label: 'Run Class' },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
+        {
+          type: 'doc',
+          id: 'workflows/stored-workflow-definition',
+          label: 'Stored Workflow Definition',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
         { type: 'doc', id: 'workflows/workflow-state-reader', label: 'Workflow State Reader' },
         {
           type: 'category',
           label: 'Methods',
           items: [
+            { type: 'doc', id: 'workflows/workflow-methods/agent', label: '.agent()' },
             { type: 'doc', id: 'workflows/workflow-methods/branch', label: '.branch()' },
             { type: 'doc', id: 'workflows/workflow-methods/commit', label: '.commit()' },
             { type: 'doc', id: 'workflows/workflow-methods/create-run', label: '.createRun()' },
@@ -815,6 +847,7 @@ const sidebars = {
             { type: 'doc', id: 'workflows/workflow-methods/sleep', label: '.sleep()' },
             { type: 'doc', id: 'workflows/workflow-methods/sleepUntil', label: '.sleepUntil()' },
             { type: 'doc', id: 'workflows/workflow-methods/then', label: '.then()' },
+            { type: 'doc', id: 'workflows/workflow-methods/tool', label: '.tool()' },
           ],
         },
         {

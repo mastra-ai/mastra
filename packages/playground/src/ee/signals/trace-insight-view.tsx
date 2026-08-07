@@ -30,6 +30,63 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
   );
 }
 
+type ObservationSeverity = 'info' | 'success' | 'problem';
+
+interface ParsedObservation {
+  severity?: ObservationSeverity;
+  kind?: string;
+  text: string;
+}
+
+function isObservationSeverity(value: string): value is ObservationSeverity {
+  return value === 'info' || value === 'success' || value === 'problem';
+}
+
+/**
+ * Trace summaries prefix each observation with a machine-readable
+ * `severity=… | kind=… |` header (see the trace-summary prompt). Strip it for
+ * display and keep the parts so the UI can render them as visual cues, the
+ * same way the observational-memory views parse their emoji markers out of
+ * the raw text.
+ */
+function parseTraceObservation(observation: string): ParsedObservation {
+  const match = observation.match(/^severity=(\w+)\s*\|\s*kind=(\w+)\s*\|\s*/);
+  if (!match) return { text: observation };
+  const [prefix, severity, kind] = match;
+  return {
+    severity: severity !== undefined && isObservationSeverity(severity) ? severity : undefined,
+    kind,
+    text: observation.slice(prefix.length),
+  };
+}
+
+const OBSERVATION_SEVERITY_CARD: Record<ObservationSeverity, string> = {
+  info: 'border-border1 bg-surface3',
+  success: 'border-green-400/30 bg-green-500/10',
+  problem: 'border-red-400/30 bg-red-500/10',
+};
+
+function ObservationItem({ observation }: { observation: string }) {
+  const { severity, kind, text } = parseTraceObservation(observation);
+
+  return (
+    <li className={`rounded-md border p-3 text-sm ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
+      {kind !== undefined && (
+        <p className="text-neutral3 font-mono text-[10px] tracking-wider uppercase">
+          {severity === 'problem' && (
+            <>
+              <span className="text-red-400">problem</span>
+              <span aria-hidden="true"> · </span>
+            </>
+          )}
+          <span>{kind}</span>
+        </p>
+      )}
+      <p className={`text-neutral5 ${kind === undefined ? '' : 'mt-1'}`}>{text}</p>
+    </li>
+  );
+}
+
 function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
   return (
     <>
@@ -52,12 +109,15 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
           )}
           {insight.summary.observations.length > 0 && (
             <>
-              <h3 className="text-neutral3 mt-4 font-mono text-xs tracking-wider uppercase">Observations</h3>
-              <ul className="mt-3 space-y-2">
+              <h3
+                id="trace-insight-observations-heading"
+                className="text-neutral3 mt-4 font-mono text-xs tracking-wider uppercase"
+              >
+                Observations
+              </h3>
+              <ul aria-labelledby="trace-insight-observations-heading" className="mt-3 space-y-2">
                 {insight.summary.observations.map((observation, index) => (
-                  <li key={`${observation}:${index}`} className="border-border2 text-neutral5 border-l pl-3 text-sm">
-                    {observation}
-                  </li>
+                  <ObservationItem key={`${observation}:${index}`} observation={observation} />
                 ))}
               </ul>
             </>

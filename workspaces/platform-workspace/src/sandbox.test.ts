@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
-import { PlatformSandbox } from './sandbox.js';
+import { PlatformSandbox, type SandboxAddressRegistry } from './sandbox.js';
 
 function json(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' }, ...init });
@@ -972,6 +972,690 @@ describe('PlatformSandbox', () => {
     });
   });
 
+  describe('private-network exec', () => {
+    /**
+     * Build a fake `privateNetFetch` that streams NDJSON frames driven by the
+     * caller. Mirrors the streamingFetch helper in private-net-exec.test.ts
+     * but scoped to this suite so the two files don't couple test helpers.
+     */
+    function streamingPrivateNetFetch() {
+      const encoder = new TextEncoder();
+      const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+      let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controllerRef = controller;
+        },
+      });
+      const fetch: typeof globalThis.fetch = async (input, init) => {
+        calls.push({ url: String(input), init });
+        return new Response(stream, { status: 200, headers: { 'content-type': 'text/plain' } });
+      };
+      return {
+        fetch,
+        calls,
+        push: (chunk: string) => controllerRef!.enqueue(encoder.encode(chunk)),
+        end: () => controllerRef!.close(),
+      };
+    }
+
+    /**
+     * Trivial in-memory implementation of the {@link SandboxAddressRegistry}
+     * three-method interface. On shipyard the same shape is populated by
+     * {@link PlatformSandbox.start} from the `instanceUrl` field on the
+     * workspace-proxy create/get response; here the test pre-seeds entries
+     * where convenient and observes `set`/`delete` calls to prove the
+     * lifecycle contract.
+     */
+    function fakeAddressRegistry(seed: Record<string, string> = {}) {
+      const entries = new Map<string, string>(Object.entries(seed));
+      const sets: Array<{ sandboxId: string; instanceUrl: string }> = [];
+      const deletes: string[] = [];
+      return {
+        registry: {
+          get: (id: string) => entries.get(id),
+          set: (id: string, url: string) => {
+            sets.push({ sandboxId: id, instanceUrl: url });
+            entries.set(id, url);
+          },
+          delete: (id: string) => {
+            deletes.push(id);
+            entries.delete(id);
+          },
+        } as SandboxAddressRegistry,
+        entries,
+        sets,
+        deletes,
+      };
+    }
+
+    it('routes execs to the sidecar over the private network when the registry has an address for the sandbox', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+      const priv = streamingPrivateNetFetch();
+      const { registry } = fakeAddressRegistry({
+        sbx_1: 'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000',
+      });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: priv.fetch,
+        addressRegistry: registry,
+      });
+
+      await sandbox._start();
+      const execPromise = sandbox.executeCommand('echo', ['ok'], { cwd: '/workspace', env: { A: '1' } });
+      priv.push('{"type":"stdout","data":"ok"}\n');
+      priv.push('{"type":"exit","code":0}\n');
+      priv.end();
+      const result = await execPromise;
+
+      expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok', command: 'echo ok' });
+      // Only the provision call to the proxy — no lease mint, no /exec-lease.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // The lease-path WebSocket was never opened.
+      expect(sockets).toHaveLength(0);
+      // The private-net fetch was called against the sidecar URL from the registry.
+      expect(priv.calls).toHaveLength(1);
+      expect(priv.calls[0]!.url).toBe('http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000/exec');
+      const body = JSON.parse(priv.calls[0]!.init!.body as string);
+      expect(body).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
+    });
+
+    it('falls straight through to the lease path when the registry has no address for the sandbox', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Registry is empty — the proxy response had no `instanceUrl` (older
+      // proxy, or discovery on the proxy side hasn't produced one yet).
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+      const priv = streamingPrivateNetFetch();
+      const { registry } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: priv.fetch,
+        addressRegistry: registry,
+      });
+
+      await sandbox._start();
+      const result = await sandbox.executeCommand('echo', ['ok']);
+
+      expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok' });
+      // Private-net fetch never called — no address to dial.
+      expect(priv.calls).toHaveLength(0);
+      // Lease was minted and the WS opened.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(sockets).toHaveLength(1);
+    });
+
+    it('falls straight through to the lease path when no addressRegistry is configured at all', async () => {
+      // Callers that don't opt into the registry (existing code, non-factory
+      // deployments) must keep the pre-existing lease-only behavior — no
+      // private-net dial, no crash on the optional-chain lookup.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+      const priv = streamingPrivateNetFetch();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: priv.fetch,
+        // no addressRegistry
+      });
+
+      await sandbox._start();
+      const result = await sandbox.executeCommand('echo', ['ok']);
+
+      expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok' });
+      expect(priv.calls).toHaveLength(0);
+      expect(sockets).toHaveLength(1);
+    });
+
+    it('evicts the registry entry and falls back to the lease when the sidecar refuses the connection', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'fallback-ok' });
+      const privFetch: typeof globalThis.fetch = async () => {
+        throw new Error('connect ECONNREFUSED');
+      };
+      const { registry, deletes, entries } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: privFetch,
+        addressRegistry: registry,
+      });
+
+      await sandbox._start();
+      const result = await sandbox.executeCommand('pwd');
+
+      // Fallback served the exec cleanly — no error surfaced to the caller.
+      expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'fallback-ok' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(sockets).toHaveLength(1);
+      // The registry saw the exact delete for this sandboxId — the next
+      // start() has to re-read `instanceUrl` from the workspace-proxy
+      // response before subsequent execs will trust the private-net path
+      // again.
+      expect(deletes).toEqual(['sbx_1']);
+      expect(entries.has('sbx_1')).toBe(false);
+    });
+
+    it('does not re-dial the sidecar after a transport-level eviction until the registry is re-populated', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse())
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory: wsFactory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+      let privCalls = 0;
+      const privFetch: typeof globalThis.fetch = async () => {
+        privCalls++;
+        throw new Error('connect ECONNREFUSED');
+      };
+      const { registry } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: privFetch,
+        addressRegistry: registry,
+      });
+
+      await sandbox._start();
+      await sandbox.executeCommand('one');
+      await sandbox.executeCommand('two');
+
+      // Sidecar dialed exactly once — the first attempt evicted the registry
+      // entry so `two` skipped straight to the lease path without wasting a
+      // second connection.
+      expect(privCalls).toBe(1);
+    });
+
+    it('falls back for a single call without evicting the registry entry when the sidecar returns 500', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory: wsFactory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+
+      // First private-net call returns 500; second streams a valid exec.
+      let privCallCount = 0;
+      const encoder = new TextEncoder();
+      const privFetch: typeof globalThis.fetch = async () => {
+        privCallCount++;
+        if (privCallCount === 1) {
+          return new Response('sidecar bug', { status: 500 });
+        }
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode('{"type":"stdout","data":"second-ok"}\n'));
+            controller.enqueue(encoder.encode('{"type":"exit","code":0}\n'));
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200 });
+      };
+      const { registry, deletes } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: privFetch,
+        addressRegistry: registry,
+      });
+
+      await sandbox._start();
+      // First exec: 500 → fall back to lease. Registry entry preserved.
+      const first = await sandbox.executeCommand('one');
+      expect(first.stdout).toBe('ok');
+      // Second exec: sidecar back to normal → private-net path used again.
+      const second = await sandbox.executeCommand('two');
+      expect(second.stdout).toBe('second-ok');
+
+      // Both private-net attempts happened; the 500 did not evict the entry.
+      expect(privCallCount).toBe(2);
+      expect(deletes).toEqual([]);
+    });
+
+    it('clone looks up its own sandboxId in the shared registry, not the parent address', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_parent', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // Child provisions its own sandbox.
+        .mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'child-ok' });
+      const priv = streamingPrivateNetFetch();
+      // Only the parent has a registered address. The child's sandbox id is
+      // absent from the registry (its sidecar hasn't posted ready yet).
+      const { registry } = fakeAddressRegistry({ sbx_parent: 'http://[fd00::parent]:47000' });
+
+      const parent = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: priv.fetch,
+        addressRegistry: registry,
+      });
+      await parent._start();
+
+      const child = parent.clone();
+      await child._start();
+      const result = await child.executeCommand('pwd');
+
+      // Child went straight to the lease path — the shared registry has no
+      // entry for `sbx_child`, and the parent's `sbx_parent` address is not
+      // reachable via a child-scoped lookup.
+      expect(result.stdout).toBe('child-ok');
+      expect(priv.calls).toHaveLength(0);
+      expect(sockets).toHaveLength(1);
+    });
+
+    it('does not send an Authorization header on private-net execs — the private IPv6 network is the auth boundary', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const priv = streamingPrivateNetFetch();
+      const { registry } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        privateNetFetch: priv.fetch,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+      const execPromise = sandbox.executeCommand('x');
+      priv.push('{"type":"exit","code":0}\n');
+      priv.end();
+      await execPromise;
+
+      const headers = new Headers(priv.calls[0]!.init!.headers);
+      expect(headers.get('authorization')).toBeNull();
+    });
+
+    it('destroy() explicitly evicts the registry entry for the destroyed sandbox', async () => {
+      // The transport-failure path also self-heals, but a clean destroy must
+      // not leave a stale entry that will produce a dial-to-nowhere on the
+      // next exec against a reused instance.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const { registry, deletes, entries } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+
+      await sandbox._start();
+      await sandbox.destroy();
+
+      expect(deletes).toEqual(['sbx_1']);
+      expect(entries.has('sbx_1')).toBe(false);
+    });
+
+    it('returns a timed-out private-net result to the caller instead of re-running the command via lease', async () => {
+      // Regression: a pre-headers timeout used to classify as a transport
+      // failure because `opened=false`, so the caller would evict the
+      // address AND re-execute the same command through the lease path
+      // with a fresh timeout window. For non-idempotent work (rm, git
+      // push, DB migrations) that's a silent double-run and the caller
+      // never sees `timedOut: true`. `timedOut` must short-circuit the
+      // lease fallback.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'lease-ran-it' });
+      const { registry, deletes, entries } = fakeAddressRegistry({ sbx_1: 'http://[fd12::1]:47000' });
+
+      // A private-net fetch that respects the AbortSignal — never resolves
+      // on its own, only rejects when the transport's own timer fires.
+      const privateNetCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
+      const hangingFetch: typeof globalThis.fetch = (input, init) =>
+        new Promise((_resolve, reject) => {
+          privateNetCalls.push({ url: String(input), init });
+          init?.signal?.addEventListener('abort', () => {
+            const err = new Error('The operation was aborted.');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        timeout: 10,
+        fetch: fetchMock,
+        webSocketFactory: wsFactory,
+        privateNetFetch: hangingFetch,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.executeCommand('rm -rf /nope');
+
+      // The timed-out private-net attempt IS the answer — no lease mint,
+      // no WebSocket, no second execution.
+      expect(result.timedOut).toBe(true);
+      expect(result.exitCode).toBe(124);
+      expect(privateNetCalls).toHaveLength(1);
+      expect(sockets).toHaveLength(0);
+      // Only the initial create fetch happened; no /exec-lease follow-up.
+      expect(fetchMock.mock.calls).toHaveLength(1);
+      // Address is still evicted so the next exec doesn't dial into the
+      // same hang — but the timed-out RESULT went back to the caller.
+      expect(deletes).toEqual(['sbx_1']);
+      expect(entries.has('sbx_1')).toBe(false);
+    });
+
+    it('populates the registry from the create response instanceUrl field on a fresh provision', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        json({
+          id: 'sbx_fresh',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          instanceUrl: 'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000',
+        }),
+      );
+      const { registry, sets, entries } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      // The one `set` came from the create response — no discovery exec,
+      // no side channel. Field copy, that's it.
+      expect(sets).toEqual([
+        { sandboxId: 'sbx_fresh', instanceUrl: 'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000' },
+      ]);
+      expect(entries.get('sbx_fresh')).toBe('http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000');
+    });
+
+    it('populates the registry from the reattach GET response instanceUrl on session recovery', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Reattach path: GET /sandbox/:id succeeds with the proxy-cached
+      // instanceUrl for a live sandbox. No POST /sandbox is issued.
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        json({
+          id: 'sbx_existing',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          instanceUrl: 'http://[fd12::abcd]:47000',
+        }),
+      );
+      const { registry, sets } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        sandboxId: 'sbx_existing',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      // Only the reattach GET fired — proxy's cached instanceUrl went
+      // straight into the registry with no extra round-trip.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
+      expect(sets).toEqual([{ sandboxId: 'sbx_existing', instanceUrl: 'http://[fd12::abcd]:47000' }]);
+    });
+
+    it('leaves the registry untouched when the create response omits instanceUrl', async () => {
+      // Older proxies that predate the discovery field, or a fresh provision
+      // where the proxy's discovery exec failed and it stored NULL.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+      const { registry, sets, entries } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+      const result = await sandbox.executeCommand('echo ok');
+
+      // No `set` fired, registry stays empty, exec falls straight through
+      // to the lease path (proven by the /exec-lease mint on the second fetch).
+      expect(sets).toEqual([]);
+      expect(entries.size).toBe(0);
+      expect(result.success).toBe(true);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+    });
+
+    it('leaves the registry untouched when the create response has instanceUrl: null', async () => {
+      // The proxy explicitly returns `null` when its discovery exec failed
+      // during Sandbox.create(); this must be treated the same as an absent
+      // field — leave the registry alone, exec via lease.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: null }));
+      const { registry, sets } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      expect(sets).toEqual([]);
+    });
+
+    it('start() does not touch the registry when no addressRegistry is injected', async () => {
+      // Baseline: pre-existing callers that don't opt into the registry must
+      // continue to work unchanged even when the proxy starts returning
+      // instanceUrl on the response.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: 'http://[fd12::1]:47000' }),
+        );
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        // no addressRegistry
+      });
+
+      await expect(sandbox._start()).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('getInfo() skips the proxy round-trip when the registry has an address for the sandbox', async () => {
+      // The issue this fix targets: workspace-proxy was seeing dozens of
+      // `GET /sandbox/:id` hits per session because `Workspace.getInfo()`
+      // polls unconditionally. When the address registry is populated the
+      // sandbox is provably reachable via the private-net path, so we can
+      // serve `getInfo()` from cached local state and skip the proxy hit
+      // (and the Railway GraphQL + `sandboxExec` awk it triggers on the
+      // proxy side).
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        json({
+          id: 'sbx_1',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          instanceUrl: 'http://[fd12::1]:47000',
+        }),
+      );
+      const { registry } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      const info = await sandbox.getInfo();
+
+      // Only the create call fired; no `GET /sandbox/:id`.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // Info still carries the platform-assigned sandboxId so callers that
+      // persist a reattach id continue to work.
+      expect(info.metadata?.sandboxId).toBe('sbx_1');
+      expect(info.id).toBe('sbx_1');
+    });
+
+    it('getInfo() falls through to the proxy when the registry has no entry for the sandbox', async () => {
+      // No registry entry means we don't know the sandbox is reachable via
+      // private-net, so the proxy remains the source of truth. Preserves the
+      // pre-existing behavior for older proxies / failed discovery.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        // create response has no instanceUrl → registry stays empty
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // getInfo() falls through to `GET /sandbox/:id`
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
+      const { registry } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+      await sandbox.getInfo();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('getInfo() falls through to the proxy when no addressRegistry is configured at all', async () => {
+      // Callers that don't opt into the registry (existing code, non-factory
+      // deployments) must keep the pre-existing proxy behavior for getInfo().
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({
+            id: 'sbx_1',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        )
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        // no addressRegistry
+      });
+      await sandbox._start();
+      await sandbox.getInfo();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('getInfo() falls through to the proxy after the registry entry has been evicted', async () => {
+      // Executes that fail transport evict the registry entry — the next
+      // getInfo() must return to proxy-truth because we no longer have
+      // liveness evidence for this sandbox.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({
+            id: 'sbx_1',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        )
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
+      const { registry } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      // Simulate an eviction (as _tryExecViaPrivateNetwork would do on
+      // transport failure). The next getInfo() must go to the proxy.
+      registry.delete('sbx_1');
+
+      await sandbox.getInfo();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+  });
+
   describe('clone', () => {
     it('constructs an unstarted sibling without any I/O', () => {
       const fetchMock = vi.fn();
@@ -1119,6 +1803,517 @@ describe('PlatformSandbox', () => {
 
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body.id).toBe('explicit-id');
+    });
+  });
+
+  describe('stop / destroy (checkpoint lifecycle)', () => {
+    // These tests pin down the semantic split between stop() and destroy()
+    // that mirrors @mastra/railway RailwaySandbox after mastra#20739:
+    //   stop()    -> preserve checkpoint (VM DELETE only)
+    //   destroy() -> release checkpoint (checkpoint DELETE + VM DELETE)
+    // The old behavior — stop() aliasing destroy() with no checkpoint delete
+    // in either — is the invariant break the split fixes.
+    it('stop() releases the VM without touching the checkpoint (DELETE /sandbox/:id only)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const sandbox = new PlatformSandbox({
+        // Explicit id so _hasRecoveryKey is true — the destroy() path guards
+        // on this, and we want to prove stop() does *not* branch on it.
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      await sandbox.stop();
+
+      // Exactly two upstream calls: the create and the sandbox DELETE.
+      // Anything else (in particular a DELETE /checkpoint) is a regression
+      // — stop() must not release the recovery checkpoint.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('destroy() releases the checkpoint (DELETE /sandbox/:id/checkpoint) and then the VM', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // DELETE /checkpoint -> 204
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        // DELETE /sandbox -> 204
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      await sandbox.destroy();
+
+      // The checkpoint DELETE must land *before* the VM DELETE so the
+      // upstream provisioner can look up the checkpoint on a sandbox that
+      // still exists. Reversing the order can leave a leaked checkpoint if
+      // the checkpoint delete fails after the VM is already gone.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/checkpoint',
+      );
+      expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
+    });
+
+    it('destroy() sends the recovery id on the checkpoint DELETE body so the proxy can locate the right checkpoint', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      await sandbox.destroy();
+
+      const checkpointDeleteBody = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+      // Mirrors the shape of POST /checkpoint's request body so the proxy
+      // hashes the same recovery key into the same on-provider checkpoint
+      // name for both capture and delete.
+      expect(checkpointDeleteBody).toEqual({ id: 'mc-session-42' });
+    });
+
+    it('destroy() without a recovery id skips the checkpoint DELETE (no checkpoint to release)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      // No `id` supplied — the auto-generated id is not a recovery key, so
+      // no checkpoint was ever registered against it. destroy() must not
+      // fire a delete against a name the proxy has no record of.
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      await sandbox.destroy();
+
+      // Only create + VM DELETE — no /checkpoint call.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('destroy() continues to VM teardown when the checkpoint DELETE 404s (idempotent)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // Checkpoint already gone (idle GC, prior delete). Proxy 404.
+        .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      // Must not throw — an already-absent checkpoint is a successful
+      // destroy from the caller's perspective (that's the state they asked
+      // for). The VM DELETE must still fire, otherwise a stale sandbox
+      // record would linger.
+      await sandbox.destroy();
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('destroy() continues to VM teardown when the checkpoint DELETE fails with 5xx (best-effort)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // Proxy failed to delete the checkpoint (transient).
+        .mockResolvedValueOnce(new Response('boom', { status: 500 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      // A transient upstream failure on the checkpoint delete must not
+      // block the VM DELETE — leaving the VM running with a lingering
+      // checkpoint is worse than a lingering checkpoint alone. The failure
+      // is logged; the caller sees success.
+      await sandbox.destroy();
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('destroy() is a no-op when the sandbox was never started (idempotent)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn();
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      // Never started — no _sandboxId, so nothing upstream to release.
+      await sandbox.destroy();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('stop() awaits an in-flight capture before tearing down so the preserved checkpoint reflects it', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+
+      // Gate the capture response so the test can control ordering.
+      let releaseCapture!: (value: Response) => void;
+      const capturePending = new Promise<Response>(resolve => {
+        releaseCapture = resolve;
+      });
+
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockReturnValueOnce(capturePending)
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      // Kick off a capture, then a stop while it's still in flight.
+      const capturePromise = sandbox.captureCheckpoint();
+      const stopPromise = sandbox.stop();
+
+      // stop() must not have progressed to the VM DELETE yet — only the
+      // create + the in-flight POST /checkpoint should be observable.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      releaseCapture(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+      await Promise.all([capturePromise, stopPromise]);
+
+      // Now the VM DELETE has fired, but no checkpoint DELETE (this is
+      // stop(), not destroy()).
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
+    });
+
+    it('stop() proceeds to teardown even if the in-flight capture fails (best-effort flush)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // Capture blows up with a transport error.
+        .mockResolvedValueOnce(new Response('quota exceeded', { status: 429 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      // Start the capture and let it fail before stop() runs — this puts
+      // the rejection on the in-flight promise stop() will await/catch.
+      const capturePromise = sandbox.captureCheckpoint();
+      await expect(capturePromise).rejects.toMatchObject({ status: 429 });
+
+      // A failed capture must not leave the caller unable to release the
+      // sandbox. The proxy's safety-net timer is the fallback for the
+      // checkpoint state.
+      await sandbox.stop();
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+  });
+
+  describe('captureCheckpoint (public, on-demand)', () => {
+    it('POSTs to /checkpoint with the recovery key and returns the captured name', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/checkpoint',
+      );
+      expect(fetchMock.mock.calls[1]![1].method).toBe('POST');
+      // The recovery key on the body must be the caller-supplied id, since
+      // the proxy hashes that to look up the on-provider checkpoint name.
+      const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+      expect(body).toEqual({ id: 'mc-session-42' });
+    });
+
+    it('returns coalesced with the same name when the proxy reports coalesced', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'coalesced' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'coalesced', checkpointName: 'mastra-checkpoint-abc123' });
+    });
+
+    it('returns no-checkpoint-name-configured when no caller id was supplied (auto-generated)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+      // No `id` in options → auto-generated random id → no meaningful recovery key.
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'skipped', reason: 'no-checkpoint-name-configured' });
+      // No POST /checkpoint was made — only the initial create.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns sandbox-not-running when the sandbox has not been started (pre-flight)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn();
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const result = await sandbox.captureCheckpoint();
+
+      expect(result).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('coalesces concurrent callers onto a single in-flight POST /checkpoint', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Hold the checkpoint response open so both callers observe an
+      // in-flight request when the second one arrives.
+      let releaseCheckpoint!: (value: Response) => void;
+      const held = new Promise<Response>(resolve => {
+        releaseCheckpoint = resolve;
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockReturnValueOnce(held);
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      const first = sandbox.captureCheckpoint();
+      const second = sandbox.captureCheckpoint();
+
+      releaseCheckpoint(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+
+      // Both callers observe the same successful outcome.
+      expect(firstResult).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
+      expect(secondResult).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
+      // Only one upstream POST /checkpoint was issued (plus the initial create).
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('normalizes a 410 to sandbox-not-running and clears local state so ensureSandbox provisions fresh', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const registry: SandboxAddressRegistry = {
+        set: vi.fn(),
+        get: vi.fn(),
+        delete: vi.fn(),
+      };
+      const fetchMock = vi
+        .fn()
+        // First create returns an instanceUrl so the registry gets populated.
+        .mockResolvedValueOnce(
+          json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: 'http://[::1]:8080' }),
+        )
+        // Capture attempt → 410.
+        .mockResolvedValueOnce(new Response('gone', { status: 410 }))
+        // Next start() after the destroy discovery must provision fresh
+        // (not reattach), so respond as if it's a brand-new POST /sandbox.
+        .mockResolvedValueOnce(json({ id: 'sbx_2', createdAt: '2026-06-27T00:00:00.000Z' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+      expect(result).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
+      // Sidecar address for the destroyed sandbox was evicted.
+      expect(registry.delete).toHaveBeenCalledWith('sbx_1');
+
+      // Next start() takes the fresh-provision branch (POST /sandbox),
+      // not the reattach branch (GET /sandbox/sbx_1) — proving _sandboxId
+      // was cleared.
+      await sandbox._start();
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect(fetchMock.mock.calls[2]![1].method).toBe('POST');
+    });
+
+    it('normalizes proxy-reported skipped to sandbox-not-running and clears local state', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const registry: SandboxAddressRegistry = {
+        set: vi.fn(),
+        get: vi.fn(),
+        delete: vi.fn(),
+      };
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: 'http://[::1]:8080' }),
+        )
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'skipped' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      const result = await sandbox.captureCheckpoint();
+      expect(result).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
+      expect(registry.delete).toHaveBeenCalledWith('sbx_1');
+    });
+
+    it('propagates non-410 transport failures (e.g. 500, 429) to the caller', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(new Response('quota exceeded', { status: 429 }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      await expect(sandbox.captureCheckpoint()).rejects.toMatchObject({
+        name: 'PlatformApiError',
+        status: 429,
+      });
+    });
+
+    it('releases the in-flight slot after a failure so a subsequent call retries', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // First capture fails transiently.
+        .mockResolvedValueOnce(new Response('boom', { status: 500 }))
+        // Second capture succeeds — proves the coalescing slot was released.
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
+
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+
+      await expect(sandbox.captureCheckpoint()).rejects.toMatchObject({ status: 500 });
+      const result = await sandbox.captureCheckpoint();
+      expect(result).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
     });
   });
 });

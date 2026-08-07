@@ -521,6 +521,17 @@ describe('MastraTUI queueing', () => {
     expect(tui.state.ui.requestRender).toHaveBeenCalledTimes(3);
   });
 
+  it('does not notify agent_done from the queued handler (#20860 — moved to receipt-time tap)', () => {
+    const state = createQueueState();
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    // The agent_done ping fires at event receipt in notifyForInputRequest;
+    // a second notify here would double-ping every completion.
+    expect(ctx.notify).not.toHaveBeenCalledWith('agent_done');
+  });
+
   it('removes the grey pending slash command when the queued command drains', () => {
     const state = createQueueState();
     const tui = Object.create(MastraTUI.prototype) as {
