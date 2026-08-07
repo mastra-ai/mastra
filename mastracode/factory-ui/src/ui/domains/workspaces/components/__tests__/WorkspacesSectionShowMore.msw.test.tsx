@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/github';
 import { WorkspacesSection } from '../WorkspacesSection';
@@ -94,7 +94,8 @@ describe('Workspaces sidebar show more', () => {
     const user = userEvent.setup();
 
     const rendered = renderSection();
-    const group = await screen.findByRole('region', { name: 'Review Sessions' });
+    await waitForMutationsIdle(rendered.client);
+    const group = screen.getByRole('region', { name: 'Review Sessions' });
     await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Pin session' }));
