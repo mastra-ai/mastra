@@ -280,32 +280,35 @@ function FlowCard({
                             <div
                               ref={dragProvided.innerRef}
                               {...dragProvided.draggableProps}
-                              className={`flex min-w-0 flex-1 basis-0 items-center justify-center gap-0.5 rounded-md border border-transparent px-2 py-1 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${
-                                dragSnapshot.isDragging
-                                  ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg'
-                                  : 'hover:border-border1 hover:bg-surface2'
-                              }`}
+                              className="flex min-w-0 flex-1 basis-0 items-center justify-center py-1"
                               data-dragging={dragSnapshot.isDragging}
                               style={{ ...dragProvided.draggableProps.style, translate: `${offsetPercent}%` }}
                             >
-                              <Tooltip>
-                                <TooltipTrigger
-                                  className="cursor-default font-mono text-xs font-semibold tracking-wider"
-                                  data-testid="signal-column-header"
-                                  style={{ color: nodeColor(getSignalHue(signalName)) }}
-                                >
-                                  {label.toUpperCase()}
-                                </TooltipTrigger>
-                                <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
-                              </Tooltip>
                               <div
-                                {...dragProvided.dragHandleProps}
-                                aria-disabled={reorderDisabled}
-                                aria-label={`Reorder ${label}`}
-                                className="text-neutral3 hover:text-neutral5 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
-                                title={`Drag to reorder the ${label} column`}
+                                className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${
+                                  dragSnapshot.isDragging ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg' : ''
+                                }`}
+                                data-testid="signal-column-header-content"
                               >
-                                <GripVertical aria-hidden="true" className="size-3.5" />
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    className="cursor-default font-mono text-xs font-semibold tracking-wider"
+                                    data-testid="signal-column-header"
+                                    style={{ color: nodeColor(getSignalHue(signalName)) }}
+                                  >
+                                    {label.toUpperCase()}
+                                  </TooltipTrigger>
+                                  <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
+                                </Tooltip>
+                                <div
+                                  {...dragProvided.dragHandleProps}
+                                  aria-disabled={reorderDisabled}
+                                  aria-label={`Reorder ${label}`}
+                                  className="text-neutral3 hover:text-neutral5 absolute top-1/2 left-full ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                                  title={`Drag to reorder the ${label} column`}
+                                >
+                                  <GripVertical aria-hidden="true" className="size-3.5" />
+                                </div>
                               </div>
                             </div>
                           )}
