@@ -266,6 +266,98 @@ describe('Hono Server Adapter', () => {
     });
   });
 
+  describe('Stream keepalive', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    const registerIdleStreamRoute = async (
+      path: string,
+      streamFormat: 'sse' | 'stream',
+      keepaliveMs: number | undefined,
+    ) => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        streamOptions: keepaliveMs === undefined ? undefined : { keepaliveMs },
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path,
+        responseType: 'stream',
+        streamFormat,
+        handler: async () => new ReadableStream(),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      return app;
+    };
+
+    it('writes an empty record to keep an idle record-separator stream alive', async () => {
+      const app = await registerIdleStreamRoute('/test/idle-stream', 'stream', 20);
+
+      const response = await app.request(new Request('http://localhost/test/idle-stream'));
+      const reader = response.body!.getReader();
+
+      try {
+        const firstChunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for keepalive')), 500),
+          ),
+        ]);
+
+        expect(new TextDecoder().decode(firstChunk.value)).toBe('\x1E');
+      } finally {
+        await reader.cancel();
+      }
+    });
+
+    it('writes an SSE comment to keep an idle SSE stream alive', async () => {
+      const app = await registerIdleStreamRoute('/test/idle-sse-stream', 'sse', 20);
+
+      const response = await app.request(new Request('http://localhost/test/idle-sse-stream'));
+      const reader = response.body!.getReader();
+
+      try {
+        const firstChunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for keepalive')), 500),
+          ),
+        ]);
+
+        expect(new TextDecoder().decode(firstChunk.value)).toBe(': keepalive\n\n');
+      } finally {
+        await reader.cancel();
+      }
+    });
+
+    it('writes no keepalive when disabled', async () => {
+      const app = await registerIdleStreamRoute('/test/idle-stream-no-keepalive', 'stream', 0);
+
+      const response = await app.request(new Request('http://localhost/test/idle-stream-no-keepalive'));
+      const reader = response.body!.getReader();
+
+      try {
+        const read = await Promise.race([
+          reader.read().then(() => 'read' as const),
+          new Promise<'idle'>(resolve => setTimeout(() => resolve('idle'), 200)),
+        ]);
+
+        expect(read).toBe('idle');
+      } finally {
+        await reader.cancel();
+      }
+    });
+  });
+
   describe('Stream Data Redaction', () => {
     let context: AdapterTestContext;
 

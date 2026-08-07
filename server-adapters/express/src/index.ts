@@ -7,10 +7,14 @@ import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
+  DEFAULT_STREAM_KEEPALIVE_MS,
   MastraServer as MastraServerBase,
+  RECORD_SEPARATOR_KEEPALIVE_FRAME,
+  SSE_KEEPALIVE_FRAME,
   checkRouteFGA,
   isZodError,
   normalizeQueryParams,
+  readWithKeepalive,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -153,9 +157,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       res.setHeader('X-Accel-Buffering', 'no');
     } else {
       res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('X-Accel-Buffering', 'no');
     }
     res.setHeader('Transfer-Encoding', 'chunked');
     res.flushHeaders();
+
+    const keepaliveMs = this.streamOptions?.keepaliveMs ?? DEFAULT_STREAM_KEEPALIVE_MS;
+    const keepaliveFrame = streamFormat === 'sse' ? SSE_KEEPALIVE_FRAME : RECORD_SEPARATOR_KEEPALIVE_FRAME;
 
     if (streamFormat === 'sse' && route.sseFlushOnConnect) {
       res.write(': connected\n\n');
@@ -165,10 +173,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const reader = readableStream.getReader();
 
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      for await (const read of readWithKeepalive(reader, keepaliveMs)) {
+        if (read.type === 'keepalive') {
+          res.write(keepaliveFrame);
+          continue;
+        }
 
+        const value = read.value;
         if (value) {
           if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
             res.write(value);

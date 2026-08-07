@@ -33,6 +33,12 @@ export * from './routes';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
 export {
+  RECORD_SEPARATOR_KEEPALIVE_FRAME,
+  SSE_KEEPALIVE_FRAME,
+  readWithKeepalive,
+  type StreamRead,
+} from './stream-keepalive';
+export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
@@ -67,7 +73,22 @@ export interface StreamOptions {
    * @default true
    */
   redact?: boolean;
+
+  /**
+   * Interval in milliseconds between keepalive frames written to an otherwise idle
+   * response stream. Keepalives stop intermediary infrastructure (proxies, CDNs, load
+   * balancers) from closing streams that go quiet for a long time, e.g. a workflow step
+   * that runs for minutes without emitting events.
+   *
+   * Set to 0 to disable.
+   *
+   * @default 20000
+   */
+  keepaliveMs?: number;
 }
+
+/** Default interval between keepalive frames on idle response streams. */
+export const DEFAULT_STREAM_KEEPALIVE_MS = 20_000;
 
 const AGENT_CHANNEL_WEBHOOK_PATH = /^\/api\/agents\/([^/]+)\/channels\/([^/]+)\/webhook\/?$/;
 
