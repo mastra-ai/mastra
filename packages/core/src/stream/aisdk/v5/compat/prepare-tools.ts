@@ -10,6 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+import type { ModelToolDefinition } from '../../../../observability';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 import { isProviderDefinedTool } from '../../../../tools/toolchecks';
 
@@ -232,4 +233,45 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           ? { type: toolChoice }
           : { type: 'tool' as const, toolName: toolChoice.toolName as string },
   };
+}
+
+/**
+ * Serialize a tool set into `ModelToolDefinition[]` for the `tools` attribute
+ * on MODEL_GENERATION spans, reusing the same conversion the provider request
+ * goes through so exporters see the schemas the model actually received.
+ *
+ * Never throws — tracing must not break model execution. Returns undefined
+ * when there are no tools or serialization fails.
+ */
+export function getToolDefinitionsForTracing<TOOLS extends Record<string, Tool>>({
+  tools,
+  toolChoice,
+  activeTools,
+}: {
+  tools: TOOLS | undefined;
+  toolChoice: ToolChoice<TOOLS> | undefined;
+  activeTools: Array<keyof TOOLS> | undefined;
+}): ModelToolDefinition[] | undefined {
+  try {
+    // Pass the real toolChoice through: 'none' strips tools from the provider
+    // request, and the span must not claim tools the model never received.
+    const { tools: prepared } = prepareToolsAndToolChoice({ tools, toolChoice, activeTools });
+    if (!prepared?.length) return undefined;
+    return prepared.map(tool =>
+      tool.type === 'function'
+        ? {
+            type: 'function',
+            name: tool.name,
+            ...(tool.description !== undefined ? { description: tool.description } : {}),
+            parameters: tool.inputSchema as Record<string, unknown>,
+          }
+        : {
+            type: tool.type,
+            name: tool.name,
+            id: tool.id,
+          },
+    );
+  } catch {
+    return undefined;
+  }
 }

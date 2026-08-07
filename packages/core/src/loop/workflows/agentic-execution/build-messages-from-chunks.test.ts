@@ -48,6 +48,17 @@ describe('buildMessagesFromChunks', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('should keep an empty text span whose deltas carry providerMetadata (#20469)', () => {
+    const meta = { google: { thoughtSignature: 'sig-abc' } };
+    const result = parts([
+      { type: 'text-start', payload: { id: 't1' } },
+      { type: 'text-delta', payload: { id: 't1', text: '', providerMetadata: meta } },
+      { type: 'text-end', payload: { id: 't1' } },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ type: 'text', text: '', providerMetadata: meta });
+  });
+
   it('should handle text-delta without a matching text-start', () => {
     const result = parts([
       { type: 'text-delta', payload: { id: 't1', text: 'orphan' } },

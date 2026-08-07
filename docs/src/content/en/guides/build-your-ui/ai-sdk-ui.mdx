@@ -409,7 +409,8 @@ Mastra streams data to the frontend as "parts" within messages. Each part has a 
 | `data-workflow` | `workflowRoute()` | Workflow execution state snapshots with step status and final outputs |
 | `data-workflow-step` | `workflowRoute()` | Workflow step delta with the full payload for the changed step |
 | `data-network` | `networkRoute()` | Agent network execution with ordered steps and outputs |
-| `data-tool-agent` | Nested agent in tool | Agent output streamed from within a tool's `execute()` |
+| `data-tool-agent` | Nested agent in tool | Compact nested-agent snapshot while the current step is still running |
+| `data-tool-agent-step` | Nested agent in tool | Full nested-agent step payload emitted when a nested step finishes |
 | `data-tool-workflow` | Nested workflow in tool | Workflow output streamed from within a tool's `execute()` |
 | `data-tool-network` | Nested network in tool | Network output streamed from within a tool's `execute()` |
 | `data-{custom}` | `writer.custom()` | Custom events for progress indicators, status updates, etc. |
@@ -1290,7 +1291,7 @@ For a complete implementation, see the [workflow-suspend-resume example](https:/
 
 ### Nested agent streams in tools
 
-Tools can call agents internally and stream the agent's output back to the UI. This creates `data-tool-agent` parts that can be rendered alongside the tool's final output.
+Tools can call agents internally and stream the agent's output back to the UI. This creates compact `data-tool-agent` snapshots while the nested step is still running, `data-tool-agent-step` parts when a nested step finishes, and one full `data-tool-agent` snapshot when the nested run finishes.
 
 The pattern uses:
 
@@ -1349,13 +1350,13 @@ The pattern uses:
   </TabItem>
 
   <TabItem value="frontend" label="Frontend">
-    Handle `data-tool-agent` parts to display the nested agent's streamed output.
+    Handle `data-tool-agent` parts for the live snapshot and `data-tool-agent-step` parts for the completed nested step payload.
 
     ```typescript title="src/components/nested-agent-chat.tsx"
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import { useState } from 'react'
-    import type { AgentDataPart } from '@mastra/ai-sdk'
+    import type { AgentDataPart, AgentStepDataPart } from '@mastra/ai-sdk'
 
     export function NestedAgentChat() {
       const [input, setInput] = useState('')
@@ -1395,6 +1396,15 @@ The pattern uses:
                     </div>
                   )
                 }
+                if (part.type === 'data-tool-agent-step') {
+                  const { data } = part as AgentStepDataPart
+                  return (
+                    <div key={index} className="nested-agent-step">
+                      <strong>Completed nested step {data.stepIndex + 1}</strong>
+                      {data.step.text && <p>{data.step.text}</p>}
+                    </div>
+                  )
+                }
                 return null
               })}
             </div>
@@ -1409,7 +1419,8 @@ The pattern uses:
 Key points:
 
 - Piping `fullStream` to `context.writer` creates `data-tool-agent` parts
-- The `AgentDataPart` has `id` (on the part) and `data.text` (the agent's streamed text)
+- Read `data-tool-agent-step` when you need the full payload for the nested step that just finished
+- The `AgentDataPart` has `id` (on the part) and `data.text` (the current nested-agent text snapshot)
 - The tool still returns its own output after the stream completes
 
 For a complete implementation, see the [tool-nested-streams example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/tool-nested-streams.tsx) in UI Dojo.
