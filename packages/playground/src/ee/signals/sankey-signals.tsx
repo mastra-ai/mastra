@@ -100,6 +100,7 @@ function DrillFilterBanner({
   selections,
   filteredTraceCount,
   totalTraceCount,
+  isUnavailable,
   onViewDetails,
   onRemove,
   onClearAll,
@@ -107,6 +108,7 @@ function DrillFilterBanner({
   selections: ThemeSelection[];
   filteredTraceCount?: number;
   totalTraceCount: number;
+  isUnavailable: boolean;
   onViewDetails?: (selection: ThemeSelection) => void;
   onRemove: (signalName: TraceSignalName) => void;
   onClearAll: () => void;
@@ -177,9 +179,11 @@ function DrillFilterBanner({
         );
       })}
       <span className="text-neutral4 min-w-fit flex-1 text-xs">
-        {filteredTraceCount === undefined
-          ? 'Loading matching traces…'
-          : `Showing ${filteredTraceCount} of ${totalTraceCount} traces that match all filters`}
+        {isUnavailable
+          ? 'Filters unavailable for this snapshot'
+          : filteredTraceCount === undefined
+            ? 'Loading matching traces…'
+            : `Showing ${filteredTraceCount} of ${totalTraceCount} traces that match all filters`}
       </span>
       {selections.length > 1 ? (
         <Button aria-label="Clear all filters" onClick={onClearAll} size="sm" type="button" variant="ghost">
@@ -578,9 +582,11 @@ export function SankeySignals({
           />
           <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
             {drillStack.length > 0
-              ? pathsQuery.data
-                ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}`
-                : `Filtering… · ${snapshotSummaryLabel(snapshot, currentFlow)}`
+              ? !drillInAvailable
+                ? `Filters unavailable · ${snapshotSummaryLabel(snapshot, currentFlow)}`
+                : pathsQuery.data
+                  ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}`
+                  : `Filtering… · ${snapshotSummaryLabel(snapshot, currentFlow)}`
               : snapshotSummaryLabel(snapshot, flow)}
           </p>
           {drillStack.length > 0 ? (
@@ -588,7 +594,8 @@ export function SankeySignals({
               selections={drillStack}
               filteredTraceCount={pathsQuery.data ? flow.snapshot.traceCount : undefined}
               totalTraceCount={currentFlow.snapshot.traceCount}
-              onViewDetails={pathsQuery.data ? openSelectionDetails : undefined}
+              isUnavailable={!drillInAvailable}
+              onViewDetails={drillInAvailable && pathsQuery.data ? openSelectionDetails : undefined}
               onRemove={signalName => setDrillStack(current => current.filter(item => item.signalName !== signalName))}
               onClearAll={() => setDrillStack([])}
             />

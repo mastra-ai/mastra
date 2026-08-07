@@ -693,13 +693,18 @@ describe('SankeyChart', () => {
 
     it('keeps changing node dimensions aligned with animated ribbons', async () => {
       render(<AnimatedDataChangeExample />);
-      await screen.findByLabelText('EU: 2 traces (50%)');
+      const previousEuNode = await screen.findByLabelText('EU: 2 traces (50%)');
+      const previousRect = previousEuNode.querySelector('rect');
+      const previousY = previousRect?.getAttribute('y');
+      const previousHeight = previousRect?.getAttribute('height');
 
       fireEvent.click(screen.getByRole('button', { name: 'Filter data' }));
 
       const euNode = await screen.findByLabelText('EU: 2 traces (100%)');
       const yAnimation = euNode.querySelector('rect animate[attributeName="y"]');
       const heightAnimation = euNode.querySelector('rect animate[attributeName="height"]');
+      expect(yAnimation?.getAttribute('from')).toBe(previousY);
+      expect(heightAnimation?.getAttribute('from')).toBe(previousHeight);
       expect(yAnimation?.getAttribute('from')).not.toBe(yAnimation?.getAttribute('to'));
       expect(heightAnimation?.getAttribute('from')).not.toBe(heightAnimation?.getAttribute('to'));
       expect(euNode.querySelector('animateTransform')?.getAttribute('from')).toMatch(/\s0$/);

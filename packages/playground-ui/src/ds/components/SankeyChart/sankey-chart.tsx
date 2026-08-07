@@ -80,7 +80,6 @@ export function SankeyChart({
     if (!fixedGeometry) return;
     previousLayoutRef.current = { key: layoutKey, graph, geometry: fixedGeometry };
   }, [fixedGeometry, graph, layoutKey]);
-  const previousNodeWeights = previousLayout ? getSankeyChartNodeWeights(previousLayout.graph) : undefined;
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
@@ -127,26 +126,14 @@ export function SankeyChart({
                   shouldAnimateLayout && node && previousLayout
                     ? previousLayout.geometry.nodes.get(node.id)
                     : undefined;
-                const previousNode =
-                  previousNodeGeometry && previousLayout
-                    ? previousLayout.graph.nodes.find(candidate => candidate.id === node?.id)
-                    : undefined;
-                const previousVisibleHeight = previousNodeGeometry
-                  ? scaleSankeyDimension(
-                      previousNodeGeometry.height,
-                      previousNode?.displayValue,
-                      previousNode ? previousNodeWeights?.get(previousNode.id) : undefined,
-                    )
+                const animationFrom = previousNodeGeometry
+                  ? {
+                      x: previousNodeGeometry.x,
+                      y: previousNodeGeometry.y,
+                      visibleY: previousNodeGeometry.y,
+                      visibleHeight: previousNodeGeometry.height,
+                    }
                   : undefined;
-                const animationFrom =
-                  previousNodeGeometry && previousVisibleHeight !== undefined
-                    ? {
-                        x: previousNodeGeometry.x,
-                        y: previousNodeGeometry.y,
-                        visibleY: previousNodeGeometry.y + (previousNodeGeometry.height - previousVisibleHeight) / 2,
-                        visibleHeight: previousVisibleHeight,
-                      }
-                    : undefined;
                 const selection = node ? getSankeyChartNodeSelection(node) : undefined;
                 const clickable = Boolean(
                   onNodeClick && selection && (isNodeClickable === undefined || isNodeClickable(selection)),

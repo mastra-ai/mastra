@@ -1050,6 +1050,10 @@ describe('SankeySignals drill-in', () => {
       expect(
         await screen.findByText(/These filters are unavailable for snapshots with more than 2,000 traces/),
       ).not.toBeNull();
+      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filters unavailable · ');
+      expect(screen.getByText('Filters unavailable for this snapshot')).not.toBeNull();
+      expect(screen.queryByText('Loading matching traces…')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'View details for Goal · Add transcript' })).toBeNull();
 
       expect(screen.queryByLabelText('Trace signal distributions')).toBeNull();
       expect(screen.queryByLabelText('Trace signal theme flow')).toBeNull();
