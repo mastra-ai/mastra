@@ -511,7 +511,7 @@ export class MemorySpanner extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { messages: [] };
+      throw mastraError;
     }
   }
 

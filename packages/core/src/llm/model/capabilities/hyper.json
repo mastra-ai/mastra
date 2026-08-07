@@ -7,7 +7,8 @@
     "qwen3.6-flash",
     "qwen3.6-plus",
     "qwen3.7-flash",
-    "qwen3.7-plus"
+    "qwen3.7-plus",
+    "qwen3.8-max"
   ],
   "temperature": [
     "deepseek-v4-flash",
