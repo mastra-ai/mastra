@@ -25,6 +25,6 @@ switch (result.status) {
 }
 ```
 
-Both `captured` and `coalesced` now carry `checkpointName` — they both represent a successful capture the caller can persist against. `skipped` carries a machine-readable `reason` so the set stays extensible without another breaking return-shape change.
+Both `captured` and `coalesced` now carry `checkpointName` — they both represent a successful capture the caller can persist against. `skipped` carries a machine-readable `reason` so the set stays extensible without another return-shape change.
 
-This is a breaking change to the `captureCheckpoint()` return type introduced in the previous release. The method has no other callers in the OSS packages.
+The prior return shape landed one release ago and has no consumers yet, so this is a straight fix rather than a semver-breaking change.
