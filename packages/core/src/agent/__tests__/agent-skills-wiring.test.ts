@@ -343,4 +343,41 @@ describe('Agent-level skills wiring', () => {
       expect(resolver).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('tracing context for dynamic resolvers', () => {
+    it('passes tracingContext to the resolver during an execution', async () => {
+      let seen: unknown = 'never-called';
+      const agent = new Agent({
+        id: 'dynamic-skills-tracing',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: ({ tracingContext }) => {
+          seen = tracingContext;
+          return [];
+        },
+      });
+
+      await agent.generate('Hello');
+
+      expect(seen).toBeDefined();
+      expect(seen).toHaveProperty('currentSpan');
+    });
+
+    it('passes an empty tracingContext on metadata reads like listSkills', async () => {
+      let seen: unknown = 'never-called';
+      const agent = new Agent({
+        id: 'dynamic-skills-tracing-metadata',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: ({ tracingContext }) => {
+          seen = tracingContext;
+          return [];
+        },
+      });
+
+      await agent.listSkills();
+
+      expect(seen).toHaveProperty('currentSpan', undefined);
+    });
+  });
 });

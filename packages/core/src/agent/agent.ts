@@ -61,13 +61,21 @@ import {
   summarizeNotifications,
 } from '../notifications/signals';
 import type { SendNotificationSignalInput } from '../notifications/types';
-import type { DefinitionSource, TracingProperties, ObservabilityContext, TracingPolicy } from '../observability';
+import type {
+  DefinitionSource,
+  TracingProperties,
+  ObservabilityContext,
+  TracingContext,
+  TracingPolicy,
+} from '../observability';
 import {
   EntityType,
   InternalSpans,
   SpanType,
+  executeWithContext,
   getOrCreateSpan,
   createObservabilityContext,
+  resolveCurrentSpan,
   resolveObservabilityContext,
 } from '../observability';
 import type {
@@ -1291,6 +1299,7 @@ export class Agent<
   private async resolveSkills(
     requestContext?: RequestContext,
     workspaceOverride?: AnyWorkspace,
+    tracingContext?: TracingContext,
   ): Promise<WorkspaceSkills | undefined> {
     const rc = requestContext || new RequestContext();
 
@@ -1299,7 +1308,11 @@ export class Agent<
     if (this.#skills) {
       let resolvedInputs: SkillInput[];
       if (typeof this.#skills === 'function') {
-        resolvedInputs = await this.#resolveDynamicSkills(this.#skills, rc as RequestContext<TRequestContext>);
+        resolvedInputs = await this.#resolveDynamicSkills(
+          this.#skills,
+          rc as RequestContext<TRequestContext>,
+          tracingContext,
+        );
       } else {
         resolvedInputs = this.#skills;
       }
@@ -1329,14 +1342,31 @@ export class Agent<
   #resolveDynamicSkills(
     resolver: AgentSkillsResolver<TRequestContext>,
     requestContext: RequestContext<TRequestContext>,
+    tracingContext?: TracingContext,
   ): Promise<SkillInput[]> {
     const pending = this.#resolvedSkillsByRequest.get(requestContext);
     if (pending) return pending;
 
-    const resolution = Promise.resolve(resolver({ requestContext })).catch(error => {
-      this.#resolvedSkillsByRequest.delete(requestContext);
-      throw error;
+    const parentSpan = tracingContext?.currentSpan ?? resolveCurrentSpan();
+    const skillsSpan = parentSpan?.createChildSpan({
+      type: SpanType.GENERIC,
+      name: 'resolve-skills',
+      metadata: { agentId: this.id },
     });
+
+    const resolution = executeWithContext({
+      span: skillsSpan,
+      fn: async () => resolver({ requestContext, tracingContext: { currentSpan: skillsSpan } }),
+    })
+      .then(skills => {
+        skillsSpan?.end({ metadata: { skillCount: skills.length } });
+        return skills;
+      })
+      .catch(error => {
+        skillsSpan?.error({ error: error instanceof Error ? error : new Error(String(error)), endSpan: true });
+        this.#resolvedSkillsByRequest.delete(requestContext);
+        throw error;
+      });
 
     this.#resolvedSkillsByRequest.set(requestContext, resolution);
     return resolution;
@@ -3851,7 +3881,11 @@ export class Agent<
     const workspace = await this.getWorkspace({ requestContext });
 
     // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
-    const skills = await this.resolveSkills(requestContext, workspace ?? undefined);
+    const skills = await this.resolveSkills(
+      requestContext,
+      workspace ?? undefined,
+      observabilityContext.tracingContext,
+    );
     if (!skills) {
       return convertedSkillTools;
     }
