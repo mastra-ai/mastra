@@ -471,12 +471,11 @@ describe('SankeySignals', () => {
       expect(screen.queryByRole('link', { name: 'Trace intelligence documentation' })).toBeNull();
     });
 
-    it('shows the range, snapshot count, trace count, and theme count below the timeline', async () => {
+    it('shows the selected snapshot date, trace count, and theme count in the timeline summary', async () => {
       renderSankeySignals();
 
-      expect(
-        await screen.findByText('Jul 1–8, 2026 · 4 snapshots · 50 traces at this point · 9 themes'),
-      ).not.toBeNull();
+      expect(await screen.findByText('Jul 1–8, 2026 · 50 traces · 9 themes')).not.toBeNull();
+      expect(screen.queryByText(/4 snapshots/)).toBeNull();
     });
 
     it('describes the active view under the tabs and swaps it with the tab', async () => {
@@ -872,14 +871,23 @@ describe('SankeySignals', () => {
       expect(within(chart).queryByText('0 (0%)')).toBeNull();
     });
 
-    it('places the play control below the landmark track', async () => {
+    it('places the selected snapshot summary and play control together below the landmark track', async () => {
       renderSankeySignals();
 
-      const timeline = await screen.findByRole('region', { name: 'Snapshot timeline' });
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      const timeline = screen.getByRole('region', { name: 'Snapshot timeline' });
       const track = within(timeline).getByRole('group', { name: 'Snapshot landmarks' });
       const playButton = within(timeline).getByRole('button', { name: 'Play snapshots' });
+      const summary = within(timeline).getByTestId('snapshot-summary');
 
-      expect(track.compareDocumentPosition(playButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      await waitFor(() =>
+        expect(summary.textContent).toBe(
+          snapshotSummaryLabel(multiThemeSnapshotsResponse.snapshots[0], earlierThemeFlowResponse),
+        ),
+      );
+      expect(summary.parentElement).toBe(playButton.parentElement);
+      expect(track.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      expect(screen.queryByText(/snapshots · .*traces at this point/)).toBeNull();
     });
 
     it('keeps the rendered frame visible while playback advances', async () => {
@@ -1087,7 +1095,7 @@ describe('SankeySignals', () => {
       }
     });
 
-    it('shows the selected date above the left-aligned play button and updates it with the timeline', async () => {
+    it('shows the selected summary inline with Play and updates it with the timeline', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
           HttpResponse.json(landmarkThemeSnapshotsResponse),
@@ -1103,9 +1111,10 @@ describe('SankeySignals', () => {
 
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       const timeline = screen.getByRole('region', { name: 'Snapshot timeline' });
-      const initialDate = within(timeline).getByText('Jul 1, 2026, 04:00');
+      const summary = within(timeline).getByTestId('snapshot-summary');
       const play = within(timeline).getByRole('button', { name: 'Play snapshots' });
-      expect(initialDate.compareDocumentPosition(play) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(summary.textContent).toContain('Jul 1, 2026, 04:00 ·');
+      expect(summary.parentElement).toBe(play.parentElement);
 
       const nextTick = within(timeline).getByRole('button', { name: /Snapshot 117 of 230/ });
       fireEvent.click(nextTick);
@@ -1113,7 +1122,7 @@ describe('SankeySignals', () => {
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /Snapshot 117 of 230/ }).getAttribute('aria-current')).toBe('true'),
       );
-      expect(screen.getByText('Jul 4, 2026, 09:00')).not.toBeNull();
+      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Jul 4, 2026, 09:00 ·');
     });
   });
 

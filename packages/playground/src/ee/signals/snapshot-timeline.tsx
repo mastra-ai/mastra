@@ -77,6 +77,7 @@ export function SnapshotTimeline({
   snapshots,
   selectedIndex,
   totalSnapshots,
+  summary,
   isPlaying,
   onPlayingChange,
   onSnapshotChange,
@@ -84,6 +85,7 @@ export function SnapshotTimeline({
   snapshots: ThemeSnapshot[];
   selectedIndex: number;
   totalSnapshots?: number;
+  summary: string;
   isPlaying: boolean;
   onPlayingChange: (isPlaying: boolean) => void;
   onSnapshotChange: (index: number) => void;
@@ -107,29 +109,34 @@ export function SnapshotTimeline({
   return (
     <section aria-label="Snapshot timeline" className="space-y-2 px-3 py-2.5 sm:px-4">
       {snapshots.length > 1 ? (
-        <>
-          <TimelineTrack
-            snapshots={snapshots}
-            totalCount={totalCount}
-            markers={new Map<number, TimelineMarkerKind>([[selectedIndex, 'selected']])}
-            onTickSelect={onSnapshotChange}
-          />
-          <div className="mx-2 flex flex-col items-start gap-2">
-            <p className="text-neutral4 font-mono text-xs tabular-nums">{selectedDate}</p>
-            <Button
-              aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
-              onClick={() => onPlayingChange(!isPlaying)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-              {isPlaying ? 'Pause' : 'Play'}
-            </Button>
-          </div>
-        </>
+        <TimelineTrack
+          snapshots={snapshots}
+          totalCount={totalCount}
+          markers={new Map<number, TimelineMarkerKind>([[selectedIndex, 'selected']])}
+          onTickSelect={onSnapshotChange}
+        />
       ) : null}
-      {/* Announced for assistive tech only; visible text here would resize the track on every tick change. */}
+      <div className="mx-2 flex flex-wrap items-center gap-2">
+        <p
+          className="text-neutral4 border-border1 rounded-md border px-2 py-1 font-mono text-xs tabular-nums"
+          data-testid="snapshot-summary"
+        >
+          {summary}
+        </p>
+        {snapshots.length > 1 ? (
+          <Button
+            aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
+            onClick={() => onPlayingChange(!isPlaying)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            {isPlaying ? 'Pause' : 'Play'}
+          </Button>
+        ) : null}
+      </div>
+      {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
         {statusParts.join(' · ')}
       </p>

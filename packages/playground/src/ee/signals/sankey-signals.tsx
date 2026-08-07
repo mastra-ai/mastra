@@ -26,11 +26,11 @@ import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { NoiseDetailPanel } from './noise-detail-panel';
 import {
   buildSignalGraphSummary,
-  dataContextLabel,
   getSignalRecordNodeId,
   getSignalRecordNodeLabel,
   getSignalRecordNodeValue,
   selectFlowSnapshotIds,
+  snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
 import { formatSignalName, getSignalDescription, SIGNAL_DESCRIPTIONS } from './signal-formatting';
@@ -578,13 +578,11 @@ export function SankeySignals({
           snapshots={snapshots}
           selectedIndex={selectedSnapshotIndex}
           totalSnapshots={totalSnapshots}
+          summary={snapshot ? snapshotSummaryLabel(snapshot, undefined) : ''}
           isPlaying={isPlaying}
           onPlayingChange={handlePlayingChange}
           onSnapshotChange={selectSnapshot}
         />
-        <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-          {dataContextLabel(snapshots, totalSnapshots, undefined)}
-        </p>
         <SignalsFrameLoadingSkeleton />
       </main>
     );
@@ -679,15 +677,11 @@ export function SankeySignals({
             snapshots={snapshots}
             selectedIndex={selectedSnapshotIndex}
             totalSnapshots={totalSnapshots}
+            summary={`${drillIn ? 'Filtered · ' : ''}${snapshotSummaryLabel(snapshot, flow)}`}
             isPlaying={isPlaying}
             onPlayingChange={handlePlayingChange}
             onSnapshotChange={selectSnapshot}
           />
-          <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-            {drillIn
-              ? `Filtered · ${dataContextLabel(snapshots, totalSnapshots, flow)}`
-              : dataContextLabel(snapshots, totalSnapshots, flow)}
-          </p>
           {drillIn ? (
             <ThemeFilterBanner
               selection={drillIn}
