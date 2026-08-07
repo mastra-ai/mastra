@@ -30,6 +30,7 @@ const sidebars = {
       label: 'Build',
       collapsed: false,
       collapsible: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
@@ -260,6 +261,7 @@ const sidebars = {
       label: 'Extend',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
@@ -438,6 +440,7 @@ const sidebars = {
       label: 'Develop / Deploy',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
@@ -669,6 +672,7 @@ const sidebars = {
       label: 'Observe',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
