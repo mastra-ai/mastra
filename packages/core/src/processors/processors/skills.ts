@@ -41,6 +41,13 @@ interface SkillsProcessorBaseOptions {
    * somewhere else (e.g. a sandbox workspace), that server path is
    * meaningless to the model. Override this to advertise a location the
    * model can actually reach, or a plain identifier.
+   *
+   * Note: the default location doubles as a skill identifier — the `skill`
+   * and `skill_read` tools resolve it back to the skill via its path.
+   * Overridden values do not get that treatment: unless the returned string
+   * is the skill's name or canonical path, tools cannot resolve it. When an
+   * override is set, the injected instruction therefore directs the model to
+   * refer to skills by name instead of by location.
    */
   formatLocation?: (skill: Skill) => string;
 }
@@ -229,14 +236,20 @@ ${skillsMd}`;
         });
       }
 
-      // Add instruction to use the skill tool
+      // Add instruction to use the skill tool. When a formatLocation override
+      // is set, the rendered location is display metadata that tools cannot
+      // resolve back to a skill, so direct the model to refer to skills by
+      // name instead of by location.
+      const locationGuidance = this._formatLocation
+        ? 'The location field is informational metadata: it is not guaranteed to exist on your workspace filesystem and is not a skill identifier, so refer to skills by name and read skill files with `skill_read` rather than with filesystem tools. '
+        : 'If multiple skills share the same name, use the skill path (shown in the location field) instead of the name to disambiguate. ' +
+          'The location field identifies a skill for the `skill` and `skill_read` tools; it is not guaranteed to exist on your workspace filesystem, so read skill files with `skill_read` rather than with filesystem tools. ';
       messageList.addSystem({
         role: 'system',
         content:
           'IMPORTANT: Skills are NOT tools. Do not call skill names directly as tool names. ' +
           'To use a skill, call the `skill` tool with the skill name as the "name" parameter. ' +
-          'If multiple skills share the same name, use the skill path (shown in the location field) instead of the name to disambiguate. ' +
-          'The location field identifies a skill for the `skill` and `skill_read` tools; it is not guaranteed to exist on your workspace filesystem, so read skill files with `skill_read` rather than with filesystem tools. ' +
+          locationGuidance +
           'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission first.',
       });
     }

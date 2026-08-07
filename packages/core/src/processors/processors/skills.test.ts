@@ -271,6 +271,38 @@ describe('SkillsProcessor', () => {
       expect(contents).not.toContain('/skills/code-review/SKILL.md');
     });
 
+    it('should instruct that the default location identifies a skill and files are read via skill_read', async () => {
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('The location field identifies a skill for the `skill` and `skill_read` tools');
+      expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
+      expect(contents).toContain('use the skill path (shown in the location field)');
+    });
+
+    it('should not advertise remapped locations as skill identifiers when formatLocation is overridden', async () => {
+      const remappedProcessor = new SkillsProcessor({
+        workspace: mockWorkspace,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      // Remapped locations do not resolve via WorkspaceSkills.get(), so the
+      // instruction must not present the location as a tool identifier.
+      expect(contents).not.toContain('The location field identifies a skill');
+      expect(contents).not.toContain('use the skill path (shown in the location field)');
+      expect(contents).toContain('refer to skills by name');
+      expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
+    });
+
     it('should not inject skills when none are configured', async () => {
       const emptyMockSkills = {
         ...createMockWorkspaceSkills(),
