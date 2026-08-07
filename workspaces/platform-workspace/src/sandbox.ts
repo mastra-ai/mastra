@@ -168,6 +168,29 @@ export class SandboxExecTransportError extends Error {
 }
 
 /**
+ * Outcome of {@link PlatformSandbox.captureCheckpoint}. Mirrors the shape of
+ * the OSS `@mastra/railway` `RailwaySandbox.captureCheckpoint()` return so a
+ * caller (e.g. the factory fleet) can branch on `status`/`reason` uniformly
+ * across providers without knowing which one is underneath.
+ *
+ * `captured` and `coalesced` both represent a successful capture the caller
+ * can persist against — they carry the checkpoint name inline so callers
+ * don't have to reach back into the sandbox instance to learn what was
+ * written. `skipped` carries a machine-readable `reason` so the discriminant
+ * set stays extensible.
+ *
+ * Note: the platform proxy's own `skipped` (returned when the upstream
+ * sandbox is already destroyed) is mapped to `sandbox-not-running` here to
+ * keep the discriminant identical to the OSS provider. The diagnostic
+ * distinction (pre-flight vs post-hoc discovery) is preserved in log lines,
+ * not the return type — see {@link PlatformSandbox.captureCheckpoint}.
+ */
+export type CaptureCheckpointResult =
+  | { status: 'captured'; checkpointName: string }
+  | { status: 'coalesced'; checkpointName: string }
+  | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
+
+/**
  * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
  * (Railway destroy, quota reclamation, etc.). The client cannot recover from
  * this on its own because it does not own the binding store; only the fleet
@@ -324,9 +347,27 @@ export class PlatformSandbox extends MastraSandbox {
    * Cleared (regardless of success or failure) when the request settles.
    */
   private _leaseInFlight: Promise<ExecLease & { expiresAtMs: number | null }> | null = null;
+  /**
+   * True when this sandbox was constructed with a caller-supplied `id` (the
+   * recovery key the proxy hashes into an on-provider checkpoint name).
+   * `captureCheckpoint()` needs this to distinguish "no checkpoint intent"
+   * (auto-generated random id — capture would land under a name no future
+   * boot would look for) from "capture on demand". Cloned sandboxes route
+   * `checkpointName` through `id`, so both entry points set this the same
+   * way.
+   */
+  private readonly _hasRecoveryKey: boolean;
+  /**
+   * In-flight `captureCheckpoint()` request. Concurrent callers on the same
+   * instance coalesce onto this single promise so we don't burn N `POST
+   * /checkpoint` round-trips when the fleet fires several turn-end captures
+   * before the first one resolves. Cleared when the request settles.
+   */
+  private _captureInFlight: Promise<CaptureCheckpointResult> | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
+    this._hasRecoveryKey = options.id !== undefined;
     this.id = options.id ?? this.generateId();
     this._client = new PlatformClient(options);
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
@@ -491,6 +532,133 @@ export class PlatformSandbox extends MastraSandbox {
     // or reattach) will re-populate the entry from the workspace-proxy's
     // response.
     this._addressRegistry?.delete(destroyedSandboxId);
+  }
+
+  /**
+   * Capture the sandbox's checkpoint on demand, outside any refresh timer the
+   * workspace-proxy owns internally.
+   *
+   * Intended for callers (e.g. a factory-side scheduler) that want to refresh
+   * the recovery checkpoint at semantic moments — turn end, session-idle,
+   * pre-teardown — rather than only just before the upstream's idle destroy.
+   *
+   * Mirrors the OSS `@mastra/railway` `RailwaySandbox.captureCheckpoint()`
+   * shape so factory can call `sandbox.captureCheckpoint()` uniformly and
+   * branch on `status`/`reason` without knowing which provider is underneath.
+   * Both `captured` and `coalesced` carry the checkpoint name inline so the
+   * caller can persist a session→checkpoint binding atomically with the
+   * awaited capture.
+   *
+   * Skip semantics:
+   *  - No caller-supplied `id`: returns `{ status: 'skipped', reason:
+   *    'no-checkpoint-name-configured' }`. An auto-generated random id is
+   *    never a meaningful recovery key (no future boot would look for a
+   *    checkpoint under it), so capturing would silently produce dead data.
+   *  - Not started (no `_sandboxId`): returns `{ status: 'skipped', reason:
+   *    'sandbox-not-running' }` without a round-trip.
+   *  - Upstream 410 (workspace-proxy or Railway reports the sandbox is
+   *    already destroyed): returns the same `sandbox-not-running` skip so
+   *    the discriminant matches the pre-flight case. Local state
+   *    (`_sandboxId`, `_lease`, sidecar address) is cleared as a side
+   *    effect so the next `start()` provisions fresh instead of reattaching
+   *    to a dead id. The diagnostic distinction (pre-flight vs post-hoc)
+   *    is preserved in log level: debug for the expected pre-flight skip,
+   *    warn for the surprise upstream destroy.
+   *
+   * Concurrent callers on the same instance coalesce onto a single in-flight
+   * `POST /checkpoint` so N simultaneous turn-end fires (e.g. several tabs)
+   * do not each round-trip the proxy. Both the originator and joiners
+   * receive `{ status: 'coalesced', ... }` for the joined result — the
+   * outer contract does not distinguish who started the request, only that
+   * one upstream capture was made.
+   *
+   * Never throws for expected outcomes. Transport failures (5xx, 4xx other
+   * than 410) propagate as {@link PlatformApiError}; a 410 is normalized
+   * to a skip as described above.
+   */
+  async captureCheckpoint(): Promise<CaptureCheckpointResult> {
+    if (!this._hasRecoveryKey) {
+      this.logger.debug(
+        `captureCheckpoint skipped: no recovery key configured for sandbox ${this._sandboxId ?? '(unstarted)'}`,
+      );
+      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
+    }
+
+    if (!this._sandboxId) {
+      this.logger.debug(`captureCheckpoint skipped: sandbox not running (local pre-flight, id=${this.id})`);
+      return { status: 'skipped', reason: 'sandbox-not-running' };
+    }
+
+    if (this._captureInFlight) {
+      return this._captureInFlight;
+    }
+
+    const sandboxId = this._sandboxId;
+    const capture = this._doCaptureCheckpoint(sandboxId).finally(() => {
+      if (this._captureInFlight === capture) {
+        this._captureInFlight = null;
+      }
+    });
+    this._captureInFlight = capture;
+    return capture;
+  }
+
+  /**
+   * The single `POST /checkpoint` attempt behind {@link captureCheckpoint}.
+   *
+   * Split out so the coalescing wrapper can install a shared in-flight
+   * promise without inlining the transport + response-mapping logic.
+   * Joined callers observe `{ status: 'coalesced', ... }` — the initiator
+   * sees the underlying `captured` / `coalesced` / `skipped` result the
+   * proxy returned. Both are legitimate: the OSS mirror uses the same
+   * "initiator sees the truth, joiners see coalesced" split.
+   */
+  private async _doCaptureCheckpoint(sandboxId: string): Promise<CaptureCheckpointResult> {
+    let response: Response;
+    try {
+      response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/checkpoint`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: this.id }),
+      });
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.status === 410) {
+        this.logger.warn(`captureCheckpoint skipped: sandbox destroyed upstream (proxy 410, sandboxId=${sandboxId})`);
+        this._clearDestroyedState(sandboxId);
+        return { status: 'skipped', reason: 'sandbox-not-running' };
+      }
+      throw error;
+    }
+    const json = (await response.json()) as { checkpointName: string; status: 'captured' | 'coalesced' | 'skipped' };
+    if (json.status === 'skipped') {
+      // Proxy's own `skipped` means the upstream sandbox is already
+      // destroyed — same actionable outcome as a 410, so normalize to
+      // the same discriminant + clear local state.
+      this.logger.warn(
+        `captureCheckpoint skipped: sandbox destroyed upstream (proxy reported skipped, sandboxId=${sandboxId})`,
+      );
+      this._clearDestroyedState(sandboxId);
+      return { status: 'skipped', reason: 'sandbox-not-running' };
+    }
+    return { status: json.status, checkpointName: json.checkpointName };
+  }
+
+  /**
+   * Clear local state that would otherwise let the caller keep exec'ing
+   * against a sandbox the upstream has already destroyed. Mirrors what
+   * `destroy()` does minus the outbound DELETE — the sandbox is already
+   * gone, so all that remains is to stop pointing at it.
+   *
+   * Also resets `status` to `'pending'` so a subsequent `_start()` on this
+   * reused instance re-runs provisioning instead of short-circuiting on
+   * the cached `'running'` state (see `MastraSandbox._start`).
+   */
+  private _clearDestroyedState(destroyedSandboxId: string): void {
+    this._sandboxId = undefined;
+    this._createdAt = null;
+    this._lease = null;
+    this._addressRegistry?.delete(destroyedSandboxId);
+    this.status = 'pending';
   }
 
   /**

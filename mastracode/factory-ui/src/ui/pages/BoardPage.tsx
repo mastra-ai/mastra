@@ -307,6 +307,7 @@ function BoardContent({
                     pendingRunRoles={runs.pendingRolesFor(item.id)}
                     onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
                     onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
+                    onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
                     onMove={toStage => items.move(item.id, toStage)}
                     onRemove={() => items.remove(item.id)}
                   />
