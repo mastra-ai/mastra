@@ -1812,9 +1812,7 @@ describe('PlatformSandbox', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-        .mockResolvedValueOnce(
-          json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }),
-        );
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
 
       const sandbox = new PlatformSandbox({
         id: 'mc-session-42',
@@ -1843,9 +1841,7 @@ describe('PlatformSandbox', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-        .mockResolvedValueOnce(
-          json({ checkpointName: 'mastra-checkpoint-abc123', status: 'coalesced' }),
-        );
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'coalesced' }));
 
       const sandbox = new PlatformSandbox({
         id: 'mc-session-42',
@@ -1863,9 +1859,7 @@ describe('PlatformSandbox', () => {
 
     it('returns no-checkpoint-name-configured when no caller id was supplied (auto-generated)', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
 
       // No `id` in options → auto-generated random id → no meaningful recovery key.
       const sandbox = new PlatformSandbox({
@@ -1990,9 +1984,7 @@ describe('PlatformSandbox', () => {
         .mockResolvedValueOnce(
           json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: 'http://[::1]:8080' }),
         )
-        .mockResolvedValueOnce(
-          json({ checkpointName: 'mastra-checkpoint-abc123', status: 'skipped' }),
-        );
+        .mockResolvedValueOnce(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'skipped' }));
 
       const sandbox = new PlatformSandbox({
         id: 'mc-session-42',

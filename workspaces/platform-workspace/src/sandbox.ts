@@ -623,9 +623,7 @@ export class PlatformSandbox extends MastraSandbox {
       });
     } catch (error) {
       if (error instanceof PlatformApiError && error.status === 410) {
-        this.logger.warn(
-          `captureCheckpoint skipped: sandbox destroyed upstream (proxy 410, sandboxId=${sandboxId})`,
-        );
+        this.logger.warn(`captureCheckpoint skipped: sandbox destroyed upstream (proxy 410, sandboxId=${sandboxId})`);
         this._clearDestroyedState(sandboxId);
         return { status: 'skipped', reason: 'sandbox-not-running' };
       }
