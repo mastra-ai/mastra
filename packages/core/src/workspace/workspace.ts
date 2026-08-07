@@ -947,6 +947,8 @@ export class Workspace<
       return undefined;
     }
 
+    this.assertSearchWritable();
+
     // Lazy initialization
     if (!this._skills) {
       // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
@@ -957,6 +959,7 @@ export class Workspace<
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
+        assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
       });
     }

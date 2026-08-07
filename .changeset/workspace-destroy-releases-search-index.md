@@ -7,4 +7,4 @@ Fixed destroyed workspaces holding on to their indexed documents and loaded skil
 **Also in this change**
 
 - Cleanup now runs even when another part of the workspace fails to shut down.
-- Indexing into a workspace that is being torn down now throws `WorkspaceNotReadyError` instead of quietly repopulating it.
+- Indexing or accessing skills after workspace teardown begins now throws `WorkspaceNotReadyError` instead of quietly repopulating released content.

@@ -540,19 +540,24 @@ Line 3 conclusion`;
       expect(await workspace.search('lazy')).toEqual([]);
     });
 
-    it('should release loaded skills on destroy', async () => {
+    it('should release loaded skills and reject skill access after destroy', async () => {
       await createSkillFixtures(tempDir);
 
       const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({ filesystem, skills: ['/skills'] });
+      const workspace = new Workspace({ filesystem, skills: ['skills'], bm25: true });
+      const skills = workspace.skills!;
 
-      expect(workspace.skills).toBeDefined();
-      await workspace.skills!.list();
+      await skills.list();
+      expect((await workspace.search('travel')).length).toBeGreaterThan(0);
 
       await workspace.destroy();
 
-      // The loaded skill sources must not stay reachable through the workspace.
+      // The loaded skill sources must not stay reachable through the workspace,
+      // and neither a fresh getter access nor a retained handle may reload them.
       expect((workspace as any)._skills).toBeUndefined();
+      expect(() => workspace.skills).toThrow(WorkspaceNotReadyError);
+      await expect(skills.list()).rejects.toThrow(WorkspaceNotReadyError);
+      expect(await workspace.search('travel')).toEqual([]);
     });
 
     it('should reject search writes once the workspace is destroyed', async () => {
