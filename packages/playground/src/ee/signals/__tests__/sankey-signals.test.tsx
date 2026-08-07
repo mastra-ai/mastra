@@ -602,13 +602,17 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       await screen.findByLabelText('Reorder Outcome');
-      const offsets = screen.getAllByTestId('signal-column-header').map(header => {
+      const draggableOffsets = screen.getAllByTestId('signal-column-header').map(header => {
         const draggable = header.closest<HTMLElement>('[data-rfd-draggable-id]');
         if (!draggable) throw new Error('Trace signal column header draggable was not rendered');
         return draggable.style.translate;
       });
+      const alignmentOffsets = screen
+        .getAllByTestId('signal-column-header-alignment')
+        .map(header => header.style.translate);
 
-      expect(offsets).toEqual(['-50%', '-16.666666666666668%', '16.666666666666664%', '50%']);
+      expect(draggableOffsets).toEqual(['', '', '', '']);
+      expect(alignmentOffsets).toEqual(['-50%', '-16.666666666666668%', '16.666666666666664%', '50%']);
       expect(screen.getAllByTestId('signal-column-header-content').map(header => header.dataset.headerAnchor)).toEqual([
         'start',
         'middle',

@@ -286,35 +286,41 @@ function FlowCard({
                               {...dragProvided.draggableProps}
                               className="flex min-w-0 flex-1 basis-0 items-center justify-center py-1"
                               data-dragging={dragSnapshot.isDragging}
-                              style={{ ...dragProvided.draggableProps.style, translate: `${offsetPercent}%` }}
+                              style={dragProvided.draggableProps.style}
                             >
                               <div
-                                className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass} ${
-                                  dragSnapshot.isDragging ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg' : ''
-                                }`}
-                                data-header-anchor={headerAnchor}
-                                data-testid="signal-column-header-content"
+                                className="flex w-full justify-center"
+                                data-testid="signal-column-header-alignment"
+                                style={{ translate: `${offsetPercent}%` }}
                               >
-                                <Tooltip>
-                                  <TooltipTrigger
-                                    className="cursor-default font-mono text-xs font-semibold tracking-wider"
-                                    data-testid="signal-column-header"
-                                    style={{ color: nodeColor(getSignalHue(signalName)) }}
-                                  >
-                                    {label.toUpperCase()}
-                                  </TooltipTrigger>
-                                  <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
-                                </Tooltip>
                                 <div
-                                  {...dragProvided.dragHandleProps}
-                                  aria-disabled={reorderDisabled}
-                                  aria-label={`Reorder ${label}`}
-                                  className={`text-neutral3 hover:text-neutral5 absolute top-1/2 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50 ${
-                                    headerAnchor === 'end' ? 'right-full mr-0.5' : 'left-full ml-0.5'
+                                  className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass} ${
+                                    dragSnapshot.isDragging ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg' : ''
                                   }`}
-                                  title={`Drag to reorder the ${label} column`}
+                                  data-header-anchor={headerAnchor}
+                                  data-testid="signal-column-header-content"
                                 >
-                                  <GripVertical aria-hidden="true" className="size-3.5" />
+                                  <Tooltip>
+                                    <TooltipTrigger
+                                      className="cursor-default font-mono text-xs font-semibold tracking-wider"
+                                      data-testid="signal-column-header"
+                                      style={{ color: nodeColor(getSignalHue(signalName)) }}
+                                    >
+                                      {label.toUpperCase()}
+                                    </TooltipTrigger>
+                                    <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
+                                  </Tooltip>
+                                  <div
+                                    {...dragProvided.dragHandleProps}
+                                    aria-disabled={reorderDisabled}
+                                    aria-label={`Reorder ${label}`}
+                                    className={`text-neutral3 hover:text-neutral5 absolute top-1/2 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50 ${
+                                      headerAnchor === 'end' ? 'right-full mr-0.5' : 'left-full ml-0.5'
+                                    }`}
+                                    title={`Drag to reorder the ${label} column`}
+                                  >
+                                    <GripVertical aria-hidden="true" className="size-3.5" />
+                                  </div>
                                 </div>
                               </div>
                             </div>
