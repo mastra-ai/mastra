@@ -365,9 +365,16 @@ export class PlatformLinearEventWorker extends MastraWorker {
 
       const lastId = page.events[page.events.length - 1]!.id;
 
+      // Resolve the project set once per page instead of once per event.
+      // The event stream can return up to EVENT_PAGE_SIZE (500) events; the
+      // project list rarely changes within the second or two it takes to
+      // dispatch a single page, and #dispatchEvent still consults storage
+      // per-project to check for a linked work item.
+      const projects = await this.#projects.listAll();
+
       for (const event of page.events) {
         if (!this.#running || !this.#hasLease) return;
-        await this.#dispatchEvent(linearWorkspaceId, event);
+        await this.#dispatchEvent(linearWorkspaceId, event, projects);
       }
 
       if ('afterEventId' in cursor && cursor.afterEventId === lastId) return;
@@ -379,7 +386,11 @@ export class PlatformLinearEventWorker extends MastraWorker {
     }
   }
 
-  async #dispatchEvent(linearWorkspaceId: string, event: LinearEventLogEntry): Promise<void> {
+  async #dispatchEvent(
+    linearWorkspaceId: string,
+    event: LinearEventLogEntry,
+    projects: readonly { id: string; orgId: string }[],
+  ): Promise<void> {
     if (event.envelope.type !== 'Issue') return;
     if (!this.#ingestFactoryIssue) return;
     const issue = parseIssueEnvelope(event.envelope);
@@ -399,7 +410,6 @@ export class PlatformLinearEventWorker extends MastraWorker {
     // First-observation of a Linear issue happens through the
     // user-authenticated `/web/linear/issues?factoryProjectId=...` intake path.
     const sourceKey = `linear:${issue.identifier}`;
-    const projects = await this.#projects.listAll();
     let dispatched = 0;
     for (const project of projects) {
       let items;

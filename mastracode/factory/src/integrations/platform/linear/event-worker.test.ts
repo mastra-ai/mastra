@@ -470,6 +470,46 @@ describe('PlatformLinearEventWorker', () => {
     await worker.stop();
   });
 
+  it('resolves the project list once per event page, not once per event', async () => {
+    // Regression: a 500-event page previously triggered 500 cross-org
+    // project scans. #dispatchEvent now takes the project list as an
+    // argument and #pollWorkspace resolves it once per page.
+    const settings = createSettingsStorage();
+    const ingestFactoryIssue = vi.fn(async (_input: LinearRulesIngress) => ({ status: 'committed' }));
+    const listAll = vi.fn(async () => [{ id: 'project-1', orgId: 'org-1' }] as never);
+    const events = Array.from({ length: 5 }, (_, index) =>
+      eventEntry(String(index + 1), issueEnvelope({ id: `issue-${index + 1}`, identifier: `ENG-${index + 1}` })),
+    );
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.searchParams.has('afterEventId')) return json({ events: [] });
+      return json({ events });
+    });
+
+    const worker = new PlatformLinearEventWorker({
+      client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+      linear: { listWorkspaces: async () => [{ linearWorkspaceId: 'workspace-1' }] } as never,
+      storage: settings.storage,
+      projects: { listAll } as never,
+      workItems: stubWorkItems({
+        'org-1:project-1': events.map((_, index) => `linear:ENG-${index + 1}`),
+      }),
+      ingestFactoryIssue,
+      intervalMs: 1_000,
+    });
+    await worker.init(createDeps({ getLeaseProvider: () => acquireOnlyLeaseProvider() }));
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await flushMicrotasks();
+
+    // Two pages: the initial page with 5 events, then the empty follow-up
+    // page. listAll fires once per page — not per event.
+    expect(ingestFactoryIssue).toHaveBeenCalledTimes(events.length);
+    expect(listAll).toHaveBeenCalledTimes(1);
+
+    await worker.stop();
+  });
+
   it('backs off polling when the lease cannot be acquired', async () => {
     const settings = createSettingsStorage();
     const ingestFactoryIssue = vi.fn(async () => ({ status: 'committed' }));
