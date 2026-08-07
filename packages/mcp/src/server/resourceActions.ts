@@ -11,7 +11,7 @@ interface ServerResourceActionsDependencies {
    * server is pinned to that revision and the handler exists. Modern clients
    * receive change events via `subscriptions/listen` instead of server push.
    */
-  getModernNotifier?: () => ServerNotifier | undefined;
+  getModernEraNotifier?: () => ServerNotifier | undefined;
 }
 
 /**
@@ -29,7 +29,7 @@ export class ServerResourceActions {
   private readonly getSubscribedServers: (uri: string) => Server[];
   private readonly getLogger: () => IMastraLogger;
   private readonly getSdkServers: () => Server[];
-  private readonly getModernNotifier?: () => ServerNotifier | undefined;
+  private readonly getModernEraNotifier?: () => ServerNotifier | undefined;
 
   /**
    * @internal
@@ -38,7 +38,7 @@ export class ServerResourceActions {
     this.getSubscribedServers = dependencies.getSubscribedServers;
     this.getLogger = dependencies.getLogger;
     this.getSdkServers = dependencies.getSdkServers;
-    this.getModernNotifier = dependencies.getModernNotifier;
+    this.getModernEraNotifier = dependencies.getModernEraNotifier;
   }
 
   /**
@@ -61,7 +61,7 @@ export class ServerResourceActions {
   public async notifyUpdated({ uri }: { uri: string }): Promise<void> {
     // Modern (2026-07-28) clients subscribe via subscriptions/listen; the bus routes
     // the event only to subscriptions that opted in to this URI. No-op when unset.
-    this.getModernNotifier?.()?.resourceUpdated(uri);
+    this.getModernEraNotifier?.()?.resourceUpdated(uri);
     const subscribedServers = this.getSubscribedServers(uri);
     if (subscribedServers.length === 0) {
       this.getLogger().debug(`Resource ${uri} was updated, but no active subscriptions for it.`);
@@ -96,7 +96,7 @@ export class ServerResourceActions {
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info('Resource list change externally notified. Sending notification.');
     // Modern (2026-07-28) clients subscribe via subscriptions/listen; no-op when unset.
-    this.getModernNotifier?.()?.resourcesChanged();
+    this.getModernEraNotifier?.()?.resourcesChanged();
     await broadcastNotification({
       servers: this.getSdkServers(),
       send: server => server.sendResourceListChanged(),

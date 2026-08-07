@@ -13,7 +13,7 @@ interface ServerToolActionsDependencies {
    * server is pinned to that revision and the handler exists. Modern clients
    * receive change events via `subscriptions/listen` instead of server push.
    */
-  getModernNotifier?: () => ServerNotifier | undefined;
+  getModernEraNotifier?: () => ServerNotifier | undefined;
 }
 
 /**
@@ -30,7 +30,7 @@ export class ServerToolActions {
   private readonly getSdkServers: () => Server[];
   private readonly addTools: (tools: ToolsInput) => void;
   private readonly removeTools: (toolIds: string[]) => string[];
-  private readonly getModernNotifier?: () => ServerNotifier | undefined;
+  private readonly getModernEraNotifier?: () => ServerNotifier | undefined;
 
   /**
    * @internal
@@ -40,7 +40,7 @@ export class ServerToolActions {
     this.getSdkServers = dependencies.getSdkServers;
     this.addTools = dependencies.addTools;
     this.removeTools = dependencies.removeTools;
-    this.getModernNotifier = dependencies.getModernNotifier;
+    this.getModernEraNotifier = dependencies.getModernEraNotifier;
   }
 
   /**
@@ -104,7 +104,7 @@ export class ServerToolActions {
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info('Tool list changed. Sending notification.');
     // Modern (2026-07-28) clients subscribe via subscriptions/listen; no-op when unset.
-    this.getModernNotifier?.()?.toolsChanged();
+    this.getModernEraNotifier?.()?.toolsChanged();
     await broadcastNotification({
       servers: this.getSdkServers(),
       send: server => server.sendToolListChanged(),

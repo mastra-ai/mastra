@@ -154,9 +154,9 @@ export class MCPServer extends MCPServerBase {
   // Cache hints advertised on cacheable 2026-07-28 results. Only applied under the flag.
   private cacheHints?: MCPServerCacheHints;
   // Lazily created dual-era HTTP handler (modern era native + stateless legacy fallback).
-  private modernHandler?: McpHttpHandler;
-  // Node (req, res) adapter over modernHandler.fetch.
-  private modernNodeHandler?: NodeMcpRequestHandler;
+  private modernEraHandler?: McpHttpHandler;
+  // Node (req, res) adapter over modernEraHandler.fetch.
+  private modernEraNodeHandler?: NodeMcpRequestHandler;
   // Handle for the dual-era stdio serving entry (flag on); close() tears it down.
   private stdioHandle?: { close(): Promise<void> };
 
@@ -460,7 +460,7 @@ export class MCPServer extends MCPServerBase {
         ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
         // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
         // no cache path, but gate on the flag anyway so it is the single opt-in.
-        ...(this.isModern() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
+        ...(this.servesModernEra() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
       },
     );
 
@@ -479,14 +479,14 @@ export class MCPServer extends MCPServerBase {
 
     // Only notify the 2026-07-28 subscription bus when the flag is on and the
     // handler was actually created (no HTTP served yet means no subscribers).
-    const getModernNotifier = () => (this.isModern() ? this.modernHandler?.notify : undefined);
+    const getModernEraNotifier = () => (this.servesModernEra() ? this.modernEraHandler?.notify : undefined);
 
     this.resources = new ServerResourceActions({
       getSubscribedServers: (uri: string) =>
         this.getAllSdkServers().filter(server => this.subscriptionsByInstance.get(server)?.has(uri)),
       getLogger: () => this.logger,
       getSdkServers: () => this.getAllSdkServers(),
-      getModernNotifier,
+      getModernEraNotifier,
     });
 
     this.prompts = new ServerPromptActions({
@@ -495,7 +495,7 @@ export class MCPServer extends MCPServerBase {
       clearDefinedPrompts: () => {
         this.definedPrompts = undefined;
       },
-      getModernNotifier,
+      getModernEraNotifier,
     });
 
     this.toolActions = new ServerToolActions({
@@ -503,7 +503,7 @@ export class MCPServer extends MCPServerBase {
       getSdkServers: () => this.getAllSdkServers(),
       addTools: tools => this.addTools(tools),
       removeTools: toolIds => this.removeTools(toolIds),
-      getModernNotifier,
+      getModernEraNotifier,
     });
 
     this.elicitation = {
@@ -530,7 +530,7 @@ export class MCPServer extends MCPServerBase {
    * Whether the server is pinned to the `2026-07-28` protocol revision.
    * When false (the default), all behavior is byte-identical to the legacy era.
    */
-  private isModern(): boolean {
+  private servesModernEra(): boolean {
     return this.protocolVersion === '2026-07-28';
   }
 
@@ -541,30 +541,30 @@ export class MCPServer extends MCPServerBase {
    * same endpoint. Each request gets a fresh server instance from
    * `createServerInstance()`, so all registered handlers apply to both eras.
    */
-  private getModernHandler(): McpHttpHandler {
-    if (!this.modernHandler) {
-      this.modernHandler = createMcpHandler(() => this.createServerInstance(), {
+  private getModernEraHandler(): McpHttpHandler {
+    if (!this.modernEraHandler) {
+      this.modernEraHandler = createMcpHandler(() => this.createServerInstance(), {
         legacy: 'stateless',
         onerror: error => {
           this.logger.error('MCP handler error', { error: error.toString() });
         },
       });
     }
-    return this.modernHandler;
+    return this.modernEraHandler;
   }
 
   /**
    * Node `(req, res)` adapter over the dual-era handler's web-standard `fetch`.
    */
-  private getModernNodeHandler(): NodeMcpRequestHandler {
-    if (!this.modernNodeHandler) {
-      this.modernNodeHandler = toNodeHandler(this.getModernHandler(), {
+  private getModernEraNodeHandler(): NodeMcpRequestHandler {
+    if (!this.modernEraNodeHandler) {
+      this.modernEraNodeHandler = toNodeHandler(this.getModernEraHandler(), {
         onerror: error => {
           this.logger.error('MCP Node handler adapter error', { error: error.toString() });
         },
       });
     }
-    return this.modernNodeHandler;
+    return this.modernEraNodeHandler;
   }
 
   /**
@@ -880,7 +880,7 @@ export class MCPServer extends MCPServerBase {
         ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
         // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
         // no cache path, but gate on the flag anyway so it is the single opt-in.
-        ...(this.isModern() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
+        ...(this.servesModernEra() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
       },
     );
 
@@ -1000,7 +1000,7 @@ export class MCPServer extends MCPServerBase {
           message: string,
           data?: Record<string, unknown>,
         ): Promise<void> => {
-          if (this.isModern()) {
+          if (this.servesModernEra()) {
             await extra.mcpReq.log(level, { message, ...data }, this.name);
             return;
           }
@@ -1674,7 +1674,7 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public async startStdio(): Promise<void> {
-    if (this.isModern()) {
+    if (this.servesModernEra()) {
       // Dual-era stdio: the opening exchange selects the era (server/discover probe
       // for modern clients, initialize handshake for legacy clients) and one fresh
       // instance from the factory is pinned for the connection lifetime.
@@ -1971,9 +1971,9 @@ export class MCPServer extends MCPServerBase {
     // Modern clients are served natively (stateless, per-request envelope); legacy
     // clients are served by the handler's built-in stateless fallback on the same
     // endpoint. Session/serverless options do not apply on this path.
-    if (this.isModern()) {
+    if (this.servesModernEra()) {
       try {
-        await this.getModernNodeHandler()(req, res);
+        await this.getModernEraNodeHandler()(req, res);
       } catch (error) {
         const mastraError = new MastraError(
           {
@@ -2413,10 +2413,10 @@ export class MCPServer extends MCPServerBase {
         await this.stdioHandle.close();
         this.stdioHandle = undefined;
       }
-      if (this.modernHandler) {
-        await this.modernHandler.close();
-        this.modernHandler = undefined;
-        this.modernNodeHandler = undefined;
+      if (this.modernEraHandler) {
+        await this.modernEraHandler.close();
+        this.modernEraHandler = undefined;
+        this.modernEraNodeHandler = undefined;
       }
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
