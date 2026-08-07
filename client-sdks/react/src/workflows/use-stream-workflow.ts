@@ -199,15 +199,13 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
    */
   const consumeStreamWithReconnect = useCallback(
     async ({
-      workflowId,
-      runId,
       stream,
+      reconnect,
       readerRef,
       errorMessage,
     }: {
-      workflowId: string;
-      runId: string;
       stream: ReadableStream<StreamVNextChunkType>;
+      reconnect: (offset: number) => Promise<ReadableStream<StreamVNextChunkType>>;
       readerRef: StreamReaderRef;
       errorMessage: string;
     }) => {
@@ -235,8 +233,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
         if (!isMountedRef.current) return;
 
         try {
-          const run = await client.getWorkflow(workflowId).createRun({ runId });
-          currentStream = await run.observe({ offset: received });
+          currentStream = await reconnect(received);
         } catch (error) {
           lastError = error;
           currentStream = undefined;
@@ -252,7 +249,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
         setIsStreaming,
       );
     },
-    [client, consumeStream, handleStreamError],
+    [consumeStream, handleStreamError],
   );
 
   const streamWorkflow = useMutation<void, Error, StreamWorkflowParams>(
@@ -283,9 +280,8 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       try {
         await consumeStreamWithReconnect({
-          workflowId,
-          runId,
           stream,
+          reconnect: offset => run.observe({ offset }),
           readerRef,
           errorMessage: 'Error streaming workflow',
         });
@@ -323,9 +319,8 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       try {
         await consumeStreamWithReconnect({
-          workflowId,
-          runId,
           stream,
+          reconnect: offset => run.observe({ offset }),
           readerRef: observerRef,
           errorMessage: 'Error observing workflow',
         });
@@ -363,9 +358,8 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       try {
         await consumeStreamWithReconnect({
-          workflowId,
-          runId,
           stream,
+          reconnect: offset => run.observe({ offset }),
           readerRef: resumeStreamRef,
           errorMessage: 'Error resuming workflow stream',
         });
@@ -402,9 +396,8 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       try {
         await consumeStreamWithReconnect({
-          workflowId,
-          runId,
           stream,
+          reconnect: offset => run.observe({ offset }),
           readerRef: timeTravelStreamRef,
           errorMessage: 'Error time traveling workflow stream',
         });
