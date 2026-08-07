@@ -30,6 +30,8 @@ export interface LinearIssueIngress {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  /** Display name of the Linear user who created the issue, when available. */
+  creator: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;

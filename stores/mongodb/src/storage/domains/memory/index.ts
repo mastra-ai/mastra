@@ -496,6 +496,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'FAILED'),
@@ -510,13 +514,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -671,6 +669,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
@@ -682,13 +684,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -1109,7 +1105,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
-      throw new MastraError(
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
+      const mastraError = new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
@@ -1121,6 +1121,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         },
         error,
       );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      throw mastraError;
     }
   }
 

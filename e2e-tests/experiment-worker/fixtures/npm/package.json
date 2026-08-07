@@ -1,0 +1,12 @@
+{
+  "name": "experiment-worker-npm-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "experiment-worker-e2e-test"
+  },
+  "devDependencies": {
+    "mastra": "experiment-worker-e2e-test"
+  }
+}
