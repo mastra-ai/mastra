@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import {
-  configureFactoryInitCommand,
-  runFactoryInitCommand,
-  type FactoryInitOptions,
-} from 'mastra/commands/factory';
+import { configureFactoryInitCommand, runFactoryInitCommand, type FactoryInitOptions } from 'mastra/commands/factory';
 import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import pkgJson from '../package.json' with { type: 'json' };
 import { redactError } from './utils/redact.js';
