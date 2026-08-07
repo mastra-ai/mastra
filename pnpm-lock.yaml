@@ -611,7 +611,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.7.0
-        version: 13.9.0
+        version: 13.9.0(encoding@0.1.13)
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -8210,8 +8210,8 @@ importers:
   voice/google:
     dependencies:
       '@google-cloud/speech':
-        specifier: ^6.7.1
-        version: 6.7.1(encoding@0.1.13)
+        specifier: ^7.5.0
+        version: 7.5.0
       '@google-cloud/text-to-speech':
         specifier: ^6.4.1
         version: 6.4.1
@@ -14025,10 +14025,6 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
-  '@google-cloud/common@5.0.2':
-    resolution: {integrity: sha512-V7bmBKYQyu0eVG2BFejuUjlBt+zrya6vtsKdY+JxMM/dNntPF41vZ9+LhOshEUH01zOHEqBSvI7Dad7ZS6aUeA==}
-    engines: {node: '>=14.0.0'}
-
   '@google-cloud/common@6.0.0':
     resolution: {integrity: sha512-IXh04DlkLMxWgYLIUYuHHKXKOUwPDzDgke1ykkkJPe48cGIS9kkL2U/o0pm4ankHLlvzLF/ma1eO86n/bkumIA==}
     engines: {node: '>=18'}
@@ -14087,9 +14083,9 @@ packages:
     resolution: {integrity: sha512-BvFYGKzvxZlLcJWBKuZagpcel6xIiu3Ai8K11OG4SddMA3eqWLCW958N+fZSFVCsnrZtL+zdAf3gIwhEl9k4IQ==}
     engines: {node: '>=18'}
 
-  '@google-cloud/speech@6.7.1':
-    resolution: {integrity: sha512-KgI2xmO8jHStYyoblj5FQ1G1Lk9JuvsR3wUpNSjxJP89yKA+Y/TBgGFvvu+mwm/f5x2ldLLY4So1VGNXZ+yzKg==}
-    engines: {node: '>=14.0.0'}
+  '@google-cloud/speech@7.5.0':
+    resolution: {integrity: sha512-Tvn9yvNNTGj+AcUVtTBgOASXuUfwqU3L2ugHAORhzPtj0G/Bxstlut9WhDl96FR/rihbJ6mvTMEijsbuOREDPA==}
+    engines: {node: '>=18'}
 
   '@google-cloud/storage@7.21.0':
     resolution: {integrity: sha512-l+IFTkd+6Y5LoAuXyYCKNAKtw/Ci+rAMqgdTB1jv4iZiLhw0rtq+0qjIRbBizXkNzEFmXiXUW0H7sZQQvk1ffA==}
@@ -38336,21 +38332,6 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
-  '@google-cloud/common@5.0.2(encoding@0.1.13)':
-    dependencies:
-      '@google-cloud/projectify': 4.0.0
-      '@google-cloud/promisify': 4.1.0
-      arrify: 2.0.1
-      duplexify: 4.1.3
-      extend: 3.0.2
-      google-auth-library: 9.15.1(encoding@0.1.13)
-      html-entities: 2.6.0
-      retry-request: 7.0.2(encoding@0.1.13)
-      teeny-request: 9.0.0(encoding@0.1.13)
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
   '@google-cloud/common@6.0.0':
     dependencies:
       '@google-cloud/projectify': 4.0.0
@@ -38365,7 +38346,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/firestore@7.11.6':
+  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
@@ -38477,16 +38458,14 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/speech@6.7.1(encoding@0.1.13)':
+  '@google-cloud/speech@7.5.0':
     dependencies:
-      '@google-cloud/common': 5.0.2(encoding@0.1.13)
+      '@google-cloud/common': 6.0.0
       '@types/pumpify': 1.4.4
-      google-gax: 4.6.1(encoding@0.1.13)
+      google-gax: 5.0.6
       pumpify: 2.0.1
       stream-events: 1.0.5
-      uuid: 11.1.1
     transitivePeerDependencies:
-      - encoding
       - supports-color
 
   '@google-cloud/storage@7.21.0(encoding@0.1.13)':
@@ -45433,7 +45412,8 @@ snapshots:
       '@types/koa-compose': 3.2.8
       '@types/node': 22.19.15
 
-  '@types/long@4.0.2': {}
+  '@types/long@4.0.2':
+    optional: true
 
   '@types/lru-cache@7.10.10':
     dependencies:
@@ -50249,7 +50229,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.9.0
 
-  firebase-admin@13.9.0:
+  firebase-admin@13.9.0(encoding@0.1.13):
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -50262,7 +50242,7 @@ snapshots:
       node-forge: 1.4.0
       uuid: 11.1.1
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
@@ -50657,6 +50637,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+    optional: true
 
   google-gax@5.0.6:
     dependencies:

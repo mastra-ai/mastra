@@ -17,6 +17,19 @@ Retrieve a list of all available workflows:
 const workflows = await mastraClient.listWorkflows()
 ```
 
+## Getting workflow run counts
+
+Retrieve per-workflow counts of `running` and [`suspended`](/docs/workflows/suspend-and-resume) runs in a single request. The counts are computed on the server and keyed by the workflow's registry key — the key used when registering the workflow in the Mastra config, which can differ from the workflow's own `id`:
+
+```typescript
+const runCounts = await mastraClient.listWorkflowRunCounts()
+// { "cityWorkflow": { running: 2, suspended: 1 }, ... }
+```
+
+Returns: `Record<string, { running: number; suspended: number }>`
+
+The server may cache the counts for a few seconds between requests. Servers that predate this endpoint respond with `404 Not Found` — handle the error when the client can talk to older deployments.
+
 ## Working with a specific workflow
 
 Get an instance of a specific workflow by its ID:

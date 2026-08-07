@@ -17,7 +17,7 @@ type Shared_Auxiliary_290 =
       [key: string]: Shared_Auxiliary_290;
     };
 
-type Shared_Auxiliary_1076 =
+type Shared_Auxiliary_1077 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1076 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1076[];
+      args: Shared_Auxiliary_1077[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1076;
+      arg: Shared_Auxiliary_1077;
     };
 
-type Shared_Auxiliary_1217 = {
+type Shared_Auxiliary_1218 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1217[] | undefined;
+  children?: Shared_Auxiliary_1218[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2457,13 +2457,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1076[];
+      predicates: Shared_Auxiliary_1077[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1076;
+      predicate: Shared_Auxiliary_1077;
     };
 
 type Shared_Type_108 = {
@@ -2800,7 +2800,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1217[] | undefined;
+  files?: Shared_Auxiliary_1218[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -5526,6 +5526,31 @@ export interface GetWorkflows_RouteContract {
   body: never;
   request: GetWorkflows_Request;
   response: GetWorkflows_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /workflows/run-counts
+// ============================================================================
+export type GetWorkflowsRunCounts_Response = {
+  [key: string]: {
+    running: number;
+    suspended: number;
+  };
+};
+
+export type GetWorkflowsRunCounts_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetWorkflowsRunCounts_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetWorkflowsRunCounts_Request;
+  response: GetWorkflowsRunCounts_Response;
   responseType: 'json';
 }
 
@@ -16254,7 +16279,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1217[] | undefined;
+  files?: Shared_Auxiliary_1218[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16312,7 +16337,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1217[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1218[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21292,6 +21317,7 @@ export interface RouteTypes {
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
+  'GET /workflows/run-counts': GetWorkflowsRunCounts_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
   'GET /workflows/:workflowId/runs/:runId': GetWorkflowsWorkflowIdRunsRunId_RouteContract;
@@ -22646,6 +22672,9 @@ export interface Client {
   };
   '/workflows/events': {
     POST: PostWorkflowsEvents_RouteContract;
+  };
+  '/workflows/run-counts': {
+    GET: GetWorkflowsRunCounts_RouteContract;
   };
   '/workspaces': {
     GET: GetWorkspaces_RouteContract;
