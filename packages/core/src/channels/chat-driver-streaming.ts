@@ -65,6 +65,12 @@ export interface StreamingDriverArgs {
   typingGate: { active: boolean };
   /** Optional adapter-supplied formatter for `error` chunks; defaults to a plain prefix. */
   formatError?: (error: Error) => unknown;
+  /**
+   * Dialect for the final reply text on the buffered fallback path.
+   * `'markdown'` (the absent-value default) posts `{ markdown }`; `'plain'`
+   * posts the bare string. The native streaming path is always markdown.
+   */
+  textFormat?: 'markdown' | 'plain';
 }
 
 interface StreamingSession {
@@ -95,6 +101,7 @@ export async function runStreamingDriver({
   takePendingApproval,
   typingGate,
   formatError,
+  textFormat,
 }: StreamingDriverArgs): Promise<void> {
   const platform = adapter.name;
 
@@ -197,7 +204,7 @@ export async function runStreamingDriver({
         const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
         if (cleaned) {
           try {
-            await chatThread.post(cleaned);
+            await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });
           } catch (postErr) {
             logger?.debug('[CHANNEL] buffered fallback also failed', { error: postErr });
           }

@@ -51,6 +51,19 @@ export interface ChannelAdapterBaseConfig {
   formatError?: (error: Error) => PostableMessage;
 
   /**
+   * Dialect for the agent's final reply text.
+   * - `'markdown'` (default) - replies post as `{ markdown }`; adapters with native
+   *   markdown rendering (Slack `markdown_text`) use it, others convert to their
+   *   platform format.
+   * - `'plain'` - replies post as literal plain text (the pre-1.x-behavior escape
+   *   hatch for agents prompted to emit a platform dialect such as Slack mrkdwn).
+   *
+   * Applies to final reply text only; tool cards, error messages, and tripwire
+   * notices are unaffected.
+   */
+  textFormat?: 'markdown' | 'plain';
+
+  /**
    * Show platform typing indicators (and adaptive status text where supported,
    * e.g. Slack Assistant mode displays `<App Name> <status>`).
    *
