@@ -12,6 +12,7 @@ export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
   'issueEdited',
+  'issueClosed',
   'issueCommentCreated',
   'issueCommentEdited',
   'issueCommentDeleted',
@@ -23,7 +24,7 @@ export const FACTORY_GITHUB_EVENTS = [
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
-export const FACTORY_LINEAR_EVENTS = ['issueObserved'] as const;
+export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
@@ -108,6 +109,10 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     createdAt?: string;
     updatedAt?: string;
     assignees?: string[];
+    labels?: string[];
+    state?: 'open' | 'closed';
+    /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
+    stateReason?: string;
   };
   issueChange?: { title: boolean; body: boolean };
   issueComment?: {
@@ -129,6 +134,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     merged: boolean;
     assignees?: string[];
     requestedReviewers?: string[];
+    labels?: string[];
     headBranch: string;
     baseBranch: string;
   };

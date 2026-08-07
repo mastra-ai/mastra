@@ -1,5 +1,16 @@
 # @mastra/server
 
+## 1.58.0-alpha.2
+
+### Patch Changes
+
+- Fixed agent-controller display-state events losing their tool state over SSE. The display state's Maps (active tools, streaming tool inputs, pending suspensions, active subagents, modified files) serialized to empty objects on the wire; they now arrive as plain records keyed the same way. ([#20805](https://github.com/mastra-ai/mastra/pull/20805))
+
+- Catch rejected background Run.resume() and Run.timeTravel() in the workflow /resume and /time-travel routes so they cannot become unhandled rejections and terminate the server process ([#20916](https://github.com/mastra-ai/mastra/pull/20916))
+
+- Updated dependencies [[`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/core@1.58.0-alpha.2
+
 ## 1.58.0-alpha.1
 
 ### Minor Changes

@@ -2,12 +2,13 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import type { GithubRepo, GithubStatus } from '../services/github';
-import { GithubIcon, SearchIcon } from '../../../ui/icons';
+import { SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface VcsFactoryStepProps {
@@ -78,7 +79,7 @@ export function VcsFactoryStep({
                     disabled={mutationPending}
                     onClick={() => onSelectRepository(repo)}
                   >
-                    <GithubIcon className="text-icon3 shrink-0" />
+                    <GithubIcon className="text-icon3 size-4 shrink-0" />
                     <span className="min-w-0 flex-1">
                       <span className="text-ui-sm text-icon6 block truncate font-medium">{repo.fullName}</span>
                       <span className="text-ui-xs text-icon3 block">
@@ -142,7 +143,7 @@ function GithubConnection({
       actionSlot={
         !unavailable ? (
           <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
-            {isConnecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
+            {isConnecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon className="size-4" />}
             Connect GitHub
           </Button>
         ) : missingEnvVars.length > 0 ? (

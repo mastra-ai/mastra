@@ -13,23 +13,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import {
-  Bell,
-  ChevronDown,
-  CircleDot,
-  CircleX,
-  ExternalLink,
-  GitMerge,
-  Info,
-  Layers,
-  Slack,
-  Wrench,
-  X,
-} from 'lucide-react';
+import { Bell, ChevronDown, CircleDot, ExternalLink, Info, Layers, Slack, Wrench, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
+import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import {
@@ -519,13 +508,13 @@ function notificationUrl(entry: NotificationEntry): string | undefined {
   return undefined;
 }
 
-function notificationPresentation(entry: NotificationEntry) {
+function notificationPresentation(entry: NotificationEntry): { state: string; icon: ReactNode; className?: string } {
   const action = entry.metadata?.action;
   if (entry.notifKind === 'pull-request-merged') {
-    return { state: 'merged', icon: <GitMerge size={13} />, className: 'text-accent3' };
+    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" size={13} decorative /> };
   }
   if (entry.notifKind === 'pull-request-closed') {
-    return { state: 'closed', icon: <CircleX size={13} />, className: 'text-error' };
+    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
     return { state: 'open', icon: <CircleDot size={13} />, className: 'text-accent1' };

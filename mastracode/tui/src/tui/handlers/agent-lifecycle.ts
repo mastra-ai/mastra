@@ -64,8 +64,6 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   ctx.updateStatusLine();
   flushRender(state);
 
-  ctx.notify('agent_done');
-
   drainQueuedAction(ctx);
 }
 

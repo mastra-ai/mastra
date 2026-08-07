@@ -1,12 +1,12 @@
-Web UI (Vite against the web host API): `pnpm --filter ./mastracode/factory-ui web`
+Dev (API on :4111 + Vite on :5173): `pnpm --filter ./mastracode/factory-ui web`
 Build: `pnpm --filter ./mastracode/factory-ui build`
 Typecheck: `pnpm --filter ./mastracode/factory-ui typecheck`
 Unit tests: `pnpm --filter ./mastracode/factory-ui test:unit`
 MSW UI tests: `pnpm --filter ./mastracode/factory-ui test:msw`
 
-This package owns the MastraCode React SPA, client data layer, Vite config, and UI tests. Its build is bundled into the Mastra CLI, not used by the web host at runtime. For split UI/API development, run `pnpm --dir mastracode/web api`, then `pnpm --dir mastracode/factory-ui web`; Vite runs on :5173 and proxies to :4111.
+This package owns the MastraCode React SPA, client data layer, Vite config, and UI tests. Its build is bundled into the Mastra CLI, not used by the web host at runtime. The `web` script runs both processes: `web:api` (the `mastracode/web` host, a standalone pnpm project outside the workspace) and `dev` (Vite on :5173, proxying to :4111). Run either alone to restart one side independently.
 
-Build workspace dependencies with `pnpm turbo build --filter ./mastracode/factory-ui`.
+Build workspace dependencies with `pnpm turbo build --filter ./mastracode/factory-ui`, or `pnpm turbo run dev --filter ./mastracode/factory-ui` to build them and start Vite in one step.
 
 Primary tests use Vitest, MSW, real `@mastra/client-js`, and React Query. Mock only the network boundary—never our hooks, services, or auth gating. Unit tests run from `vitest.config.ts`; MSW UI tests use `e2e/ui/vitest.config.ts`, `e2e/ui/msw-server.ts`, and `e2e/ui/render.tsx`. Use `waitForMutationsIdle` for query chains.
 

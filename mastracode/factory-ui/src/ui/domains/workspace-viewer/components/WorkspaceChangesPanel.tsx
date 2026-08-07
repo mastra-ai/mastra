@@ -360,16 +360,18 @@ function DiffViewer({
 export function WorkspaceChangesPanel({
   workspacePath,
   onShowFiles,
+  visible,
 }: {
   workspacePath: string;
   onShowFiles: () => void;
+  visible: boolean;
 }) {
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const changes = useWorkspaceChanges(workspacePath);
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
   const selectedChange = changes.data?.changes.find(change => change.path === selectedPath);
-  const diff = useWorkspaceDiff(workspacePath, selectedPath, selectedChange?.previousPath);
+  const diff = useWorkspaceDiff(workspacePath, selectedPath, selectedChange?.previousPath, { enabled: visible });
   const selectedDiff = diff.data?.path === selectedPath ? diff.data : undefined;
   const changeTree = buildChangeTree(changes.data?.changes ?? []);
 
