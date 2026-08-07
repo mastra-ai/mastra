@@ -95,6 +95,13 @@ export interface AgentSkillsContext<TRequestContext extends Record<string, any> 
  */
 export type AgentSkillsInput<TRequestContext extends Record<string, any> | unknown = unknown> =
   | SkillInput[]
-  | ((context: AgentSkillsContext<TRequestContext>) => SkillInput[] | Promise<SkillInput[]>);
+  | AgentSkillsResolver<TRequestContext>;
+
+/**
+ * The dynamic half of {@link AgentSkillsInput} — a function resolving skills per request.
+ */
+export type AgentSkillsResolver<TRequestContext extends Record<string, any> | unknown = unknown> = (
+  context: AgentSkillsContext<TRequestContext>,
+) => SkillInput[] | Promise<SkillInput[]>;
 
 export type { Skill, SkillMetadata, SkillFormat, WorkspaceSkills };
