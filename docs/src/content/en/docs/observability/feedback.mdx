@@ -41,7 +41,7 @@ await mastra.observability.addFeedback({
 
 ## Find the trace for a message
 
-Feedback is usually collected against a message a user just read, so you need the `traceId` for that message. Assistant messages carry it in `content.metadata`, both in the stream result and when the message is recalled later from memory:
+Feedback is usually collected against a message a user has already read, so you need the `traceId` for that message. Assistant messages carry it in `content.metadata`, both in the stream result and when the message is recalled later from memory:
 
 ```typescript title="src/mastra/message-trace.ts"
 const { messages } = await memory.recall({ threadId, perPage: false })
