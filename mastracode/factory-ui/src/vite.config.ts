@@ -206,11 +206,7 @@ const routesManifestPlugin = (): Plugin => {
     // array literal it returns. Keyed on the function name (not variable
     // shape) so the manifest stays in sync when the route table is edited.
     const visit = (node: ts.Node) => {
-      if (
-        ts.isFunctionDeclaration(node) &&
-        node.name?.text === 'createAppRoutes' &&
-        node.body
-      ) {
+      if (ts.isFunctionDeclaration(node) && node.name?.text === 'createAppRoutes' && node.body) {
         for (const statement of node.body.statements) {
           if (ts.isReturnStatement(statement) && statement.expression) {
             // Start with an empty parent so top-level `path: '/'` seeds the URL.
