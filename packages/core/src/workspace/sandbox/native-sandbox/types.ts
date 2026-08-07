@@ -50,7 +50,9 @@ export interface NativeSandboxConfig {
    * A profile you wrote is used exactly as written: mounted filesystem paths are not added
    * to it, so the profile must already allow access to the paths you mount. A generated
    * profile does allow mounted paths. Generated profiles carry a marker comment, so a later
-   * run regenerates them instead of reading them back as user-authored SBPL.
+   * run regenerates them instead of reading them back as user-authored SBPL. To edit a
+   * generated profile and keep the edits, delete that marker comment: the file then counts
+   * as yours, and mounted paths are no longer added to it.
    */
   seatbeltProfilePath?: string;
 

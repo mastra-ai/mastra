@@ -16,6 +16,7 @@ import {
   isBwrapAvailable,
   buildBwrapCommand,
   generateSeatbeltProfile,
+  GENERATED_PROFILE_MARKER,
 } from './native-sandbox';
 
 /** Minimal local `WorkspaceFilesystem` stub that mounts `basePath` as a symlink. */
@@ -1089,6 +1090,59 @@ describe('LocalSandbox', () => {
       } finally {
         await secondRun._destroy();
         await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
+    it('should take ownership of a generated profile once its marker comment is removed', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // The marker is the ownership signal. While it is present the profile is Mastra's, so an
+      // edit alongside it is regenerated away. Removing it hands the file to the user, and the
+      // edit then survives, which is how a generated profile is customised.
+      const profilePath = path.join(tempDir, 'generated-then-edited.sb');
+      const editedRule = '(allow file-read* (literal "/edited-marker"))';
+
+      const firstRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      await firstRun._start();
+      await firstRun._destroy();
+
+      const generated = await fs.readFile(profilePath, 'utf-8');
+      await fs.writeFile(profilePath, `${generated}\n${editedRule}\n`, 'utf-8');
+
+      const markedRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      try {
+        await markedRun._start();
+        expect(activeSeatbeltProfile(markedRun)).not.toContain(editedRule);
+      } finally {
+        await markedRun._destroy();
+      }
+
+      const ownedProfile = `${generated
+        .split('\n')
+        .filter(line => line !== GENERATED_PROFILE_MARKER)
+        .join('\n')}\n${editedRule}\n`;
+      await fs.writeFile(profilePath, ownedProfile, 'utf-8');
+
+      const ownedRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      try {
+        await ownedRun._start();
+        expect(activeSeatbeltProfile(ownedRun)).toBe(ownedProfile);
+      } finally {
+        await ownedRun._destroy();
       }
     });
 
