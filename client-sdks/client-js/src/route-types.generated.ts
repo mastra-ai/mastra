@@ -20736,7 +20736,6 @@ export type GetAgentControllerControllerIdWorkspace_PathParams = GetAgentControl
 
 export type GetAgentControllerControllerIdWorkspace_Response = {
   hasWorkspace: boolean;
-  isReady: boolean;
 };
 
 export type GetAgentControllerControllerIdWorkspace_Request = Simplify<

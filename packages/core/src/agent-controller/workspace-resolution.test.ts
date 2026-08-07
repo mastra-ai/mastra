@@ -35,7 +35,7 @@ function createAgent() {
 // ===========================================================================
 
 describe('AgentController workspace — static instance', () => {
-  it('createSession succeeds with a static workspace and initializes it', async () => {
+  it('createSession succeeds with a static workspace without reinitializing it', async () => {
     const ws = createMockWorkspace();
     const initSpy = vi.spyOn(ws, 'init');
     const controller = new AgentController({
@@ -45,10 +45,11 @@ describe('AgentController workspace — static instance', () => {
       workspace: ws,
     });
     await controller.init();
+    initSpy.mockClear();
 
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     expect(session).toBeDefined();
-    expect(initSpy).toHaveBeenCalled();
+    expect(initSpy).not.toHaveBeenCalled();
   });
 
   it('createSession succeeds when workspace is provided as a session override', async () => {
@@ -200,7 +201,7 @@ describe('AgentController createSession — workspace overrides', () => {
       workspace: sessionWs,
     });
 
-    expect(initSpy).toHaveBeenCalledTimes(1);
+    expect(initSpy).not.toHaveBeenCalled();
     expect(session).toBeDefined();
   });
 
@@ -222,8 +223,7 @@ describe('AgentController createSession — workspace overrides', () => {
     });
 
     expect(session).toBeDefined();
-    // The controller-level workspace is initialized for the session.
-    expect(initSpy).toHaveBeenCalled();
+    expect(initSpy).not.toHaveBeenCalled();
   });
 
   it('per-session workspace override takes precedence over controller-level', async () => {
@@ -248,8 +248,7 @@ describe('AgentController createSession — workspace overrides', () => {
     });
 
     expect(session).toBeDefined();
-    // The session-level workspace is initialized, not the controller-level one.
-    expect(sessionInitSpy).toHaveBeenCalled();
+    expect(sessionInitSpy).not.toHaveBeenCalled();
     expect(controllerInitSpy).not.toHaveBeenCalled();
   });
 });
@@ -287,8 +286,8 @@ describe('AgentController createSession — workspace isolation', () => {
     expect(sessionA.getWorkspace()).toBe(wsA);
     expect(sessionB.getWorkspace()).toBe(wsB);
     expect(sessionA.getWorkspace()).not.toBe(sessionB.getWorkspace());
-    expect(initSpyA).toHaveBeenCalled();
-    expect(initSpyB).toHaveBeenCalled();
+    expect(initSpyA).not.toHaveBeenCalled();
+    expect(initSpyB).not.toHaveBeenCalled();
   });
 
   it('one session workspace override does not leak into another session', async () => {
@@ -318,9 +317,9 @@ describe('AgentController createSession — workspace isolation', () => {
       }),
     ).rejects.toThrow('A session requires a valid workspace instance.');
 
-    // Session A still has its own workspace (init was called)
+    // Session A retains its own workspace without starting it.
     expect(sessionA).toBeDefined();
-    expect(initSpyA).toHaveBeenCalled();
+    expect(initSpyA).not.toHaveBeenCalled();
   });
 });
 

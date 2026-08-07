@@ -300,7 +300,6 @@ const listModelsResponseSchema = z.object({
 });
 const workspaceStatusResponseSchema = z.object({
   hasWorkspace: z.boolean(),
-  isReady: z.boolean(),
 });
 const omRecordResponseSchema = z.object({
   record: z.unknown().optional(),
@@ -1145,7 +1144,6 @@ export const GET_AGENT_CONTROLLER_WORKSPACE_STATUS_ROUTE = createRoute({
       await controller.init();
       return {
         hasWorkspace: controller.hasWorkspace(),
-        isReady: controller.isWorkspaceReady(),
       };
     } catch (error) {
       return handleError(error, 'error reading controller workspace status');

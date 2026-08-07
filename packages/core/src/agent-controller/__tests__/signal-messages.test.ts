@@ -24,6 +24,127 @@ function createAgentMock(activeRunId: () => string | null) {
 }
 
 describe('AgentController signal messages', () => {
+  it('initializes a session workspace on the first signal before dispatching to the agent', async () => {
+    const agent = createAgentMock(() => null);
+    const workspace = createMockWorkspace();
+    const steps: string[] = [];
+    vi.spyOn(workspace, 'init').mockImplementation(async () => {
+      steps.push('workspace.init');
+    });
+    agent.sendSignal.mockImplementation(signal => {
+      steps.push('agent.sendSignal');
+      return {
+        accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
+        signal,
+      };
+    });
+    const controller = new AgentController({
+      id: 'controller-lazy-workspace',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      workspace,
+    });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    expect(workspace.init).not.toHaveBeenCalled();
+
+    await expect(session.sendSignal({ content: 'hello' }).accepted).resolves.toEqual({
+      accepted: true,
+      runId: undefined,
+    });
+
+    expect(steps).toEqual(['workspace.init', 'agent.sendSignal']);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'workspace_status_changed', status: 'ready' },
+        { type: 'workspace_ready', workspaceId: workspace.id, workspaceName: workspace.name },
+      ]),
+    );
+  });
+
+  it('shares one workspace initialization attempt across concurrent first signals', async () => {
+    const agent = createAgentMock(() => null);
+    const workspace = createMockWorkspace();
+    let resolveInit: (() => void) | undefined;
+    const initSpy = vi.spyOn(workspace, 'init').mockImplementation(
+      () =>
+        new Promise<void>(resolve => {
+          resolveInit = resolve;
+        }),
+    );
+    const controller = new AgentController({
+      id: 'controller-concurrent-workspace',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      workspace,
+    });
+
+    const first = session.sendSignal({ content: 'first' });
+    const second = session.sendSignal({ content: 'second' });
+    await vi.waitFor(() => expect(initSpy).toHaveBeenCalledTimes(1));
+    resolveInit?.();
+
+    await Promise.all([first.accepted, second.accepted]);
+    expect(agent.sendSignal).toHaveBeenCalledTimes(2);
+  });
+
+  it('emits an error and retries workspace initialization without blocking signal delivery', async () => {
+    const agent = createAgentMock(() => null);
+    const workspace = createMockWorkspace();
+    const initSpy = vi
+      .spyOn(workspace, 'init')
+      .mockRejectedValueOnce(new Error('workspace unavailable'))
+      .mockResolvedValueOnce();
+    const controller = new AgentController({
+      id: 'controller-workspace-retry',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      workspace,
+    });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    await expect(session.sendSignal({ content: 'first' }).accepted).resolves.toEqual({
+      accepted: true,
+      runId: undefined,
+    });
+    await expect(session.sendSignal({ content: 'second' }).accepted).resolves.toEqual({
+      accepted: true,
+      runId: undefined,
+    });
+
+    expect(initSpy).toHaveBeenCalledTimes(2);
+    expect(agent.sendSignal).toHaveBeenCalledTimes(2);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'workspace_status_changed', status: 'error' }),
+        expect.objectContaining({ type: 'workspace_error', error: new Error('workspace unavailable') }),
+        { type: 'workspace_status_changed', status: 'ready' },
+        { type: 'workspace_ready', workspaceId: workspace.id, workspaceName: workspace.name },
+      ]),
+    );
+  });
+
   it('captures active signal intent before async acceptance can observe an idle subscription', async () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
