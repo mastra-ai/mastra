@@ -13,8 +13,17 @@ export type { InlineLinkEntry } from './inline-media';
 // Agent-side configuration types (consumer-facing)
 // =============================================================================
 
-/** Message content that can be posted to a channel. */
-export type PostableMessage = string | CardElement;
+/**
+ * Message content that can be posted to a channel.
+ *
+ * - `string` - posted as literal plain text (the adapter does not interpret
+ *   markdown in it).
+ * - `CardElement` - rendered as a rich card (e.g. Slack Block Kit).
+ * - `{ markdown: string }` - converted by the adapter to its platform format
+ *   (e.g. Slack `markdown_text`); adapters without native markdown rendering
+ *   convert it to their own dialect.
+ */
+export type PostableMessage = string | CardElement | { markdown: string };
 
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {

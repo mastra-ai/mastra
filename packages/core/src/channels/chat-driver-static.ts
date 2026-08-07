@@ -76,6 +76,13 @@ export async function runStaticDriver({
         // post an empty message into the chat.
         if (result.message == null) return null;
         if (typeof result.message === 'string' && result.message.length === 0) return null;
+        if (
+          typeof result.message === 'object' &&
+          'markdown' in result.message &&
+          result.message.markdown.trim().length === 0
+        ) {
+          return null;
+        }
         return result.message;
       }
       if (result.kind === 'stream') return chunkToFallbackMessage(result.chunk);

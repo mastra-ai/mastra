@@ -839,6 +839,80 @@ describe('ChatChannelOutputProcessor', () => {
       expect(posts).toHaveLength(1);
     });
 
+    it('toolDisplay fn returning empty { markdown } posts nothing (empty-markdown guard)', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+    });
+
+    it('toolDisplay fn returning whitespace-only { markdown } posts nothing', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '  \n\t ' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+    });
+
+    it('toolDisplay fn returning non-empty { markdown } posts it through unchanged', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '**done**' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect((posts[0] as any).arg).toEqual({ markdown: '**done**' });
+    });
+
     it('deprecated formatToolCall shims into toolDisplay fn for result events', async () => {
       const { channels, calls, chatThread } = makeChannels({
         streaming: false,
