@@ -24,10 +24,10 @@ export const stateCommandsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Thinking:/i, terminal);
     runtime.printScreen('after /think status', terminal);
 
-    // Direct level override — the response must identify the session override.
-    terminal.submit('/think high');
-    await runtime.waitForScreenText(/Thinking: High \(session override\)/i, terminal);
-    runtime.printScreen('after /think high', terminal);
+    // Direct maximum-effort override — the response must identify the session override.
+    terminal.submit('/think max');
+    await runtime.waitForScreenText(/Thinking: Max \(session override\)/i, terminal);
+    runtime.printScreen('after /think max', terminal);
 
     // Clearing the override reports the inherited configured default with its source.
     terminal.submit('/think default');
