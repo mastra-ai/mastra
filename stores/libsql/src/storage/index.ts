@@ -24,6 +24,7 @@ import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
 import { ThreadStateLibSQL } from './domains/thread-state';
 import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsLibSQL } from './domains/workflow-definitions';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -49,6 +50,7 @@ export {
   FavoritesLibSQL,
   ThreadStateLibSQL,
   ToolProviderConnectionsLibSQL,
+  WorkflowDefinitionsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -219,6 +221,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     const scores = new ScoresLibSQL(domainConfig);
     const workflows = new WorkflowsLibSQL(domainConfig);
+    const workflowDefinitions = new WorkflowDefinitionsLibSQL(domainConfig);
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
@@ -243,6 +246,7 @@ export class LibSQLStore extends MastraCompositeStore {
     this.stores = {
       scores,
       workflows,
+      workflowDefinitions,
       memory,
       observability,
       agents,
@@ -339,38 +343,14 @@ export class LibSQLStore extends MastraCompositeStore {
   }
 
   /**
-   * Closes the underlying libsql client, releasing all OS file handles.
-   *
-   * For local file databases, first runs PRAGMA wal_checkpoint(TRUNCATE) and
-   * switches back to journal_mode=DELETE so that Windows releases the -wal
-   * and -shm sidecar files promptly. Without this, the handles stay open
-   * until process exit, causing EBUSY errors when callers try to fs.rm the
-   * storage directory after Mastra.shutdown().
-   *
-   * Remote (Turso) databases skip the WAL pragmas and just close the client.
+   * Closes the underlying libsql client, releasing this store's OS file handles.
    *
    * Safe to call more than once; subsequent calls are no-ops.
    */
   async close(): Promise<void> {
-    if (this.client.closed) {
-      return;
+    if (!this.client.closed) {
+      this.client.close();
     }
-
-    // A store built from an injected client may still point at a local file even
-    // though `isLocalDb` (derived from the url config) is false, so also trust the
-    // client's own protocol to decide whether WAL cleanup is needed.
-    const isLocalFileDb = this.isLocalDb || this.client.protocol === 'file';
-
-    if (isLocalFileDb) {
-      try {
-        await this.client.execute('PRAGMA wal_checkpoint(TRUNCATE);');
-        await this.client.execute('PRAGMA journal_mode=DELETE;');
-      } catch (err) {
-        this.logger.warn('LibSQLStore: Failed to checkpoint WAL before close.', err);
-      }
-    }
-
-    this.client.close();
   }
 }
 

@@ -111,24 +111,11 @@ export class BackgroundTaskManager {
   async #doInit(pubsub: PubSub): Promise<void> {
     this.pubsub = pubsub;
 
-    // Worker: subscribes with group so only one worker processes each task.
-    this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
-      // A grouped delivery consumed while this process is shutting down must
-      // remain unacked so a durable broker can redeliver it to a live worker.
-      if (this.shuttingDown) return;
+    const isProducerOnly = this.config.mode === 'producer';
 
-      let handled = true;
-      if (event.type === 'task.dispatch' || event.type === 'task.restart') {
-        handled = await this.handleDispatch(event);
-      } else if (event.type === 'task.resume') {
-        handled = await this.handleResume(event);
-      } else if (event.type === 'task.cancel') {
-        this.handleCancel(event);
-      }
-      if (handled) await ack?.();
-    };
-
-    // Result listener: fan-out so all processes receive results
+    // Result listener: fan-out so all processes receive results.
+    // Both producer and worker modes need this — the producer uses it
+    // to receive completion/failure notifications for dispatched tasks.
     this.resultCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
         await this.handleResult(event);
@@ -136,49 +123,73 @@ export class BackgroundTaskManager {
       await ack?.();
     };
 
-    // Register the workflow BEFORE subscribing the worker so that any
-    // dispatch event the worker picks up can immediately resolve the
-    // workflow on Mastra. Reversing this order races: a publish that
-    // arrives between `subscribe(TOPIC_DISPATCH)` and the workflow
-    // registration triggers `__getInternalWorkflow` to throw
-    // `Workflow with id __background-task not found`, the task stays at
-    // `running` forever, and the dispatch is silently dropped.
-    if (this.#mastra) {
-      // Dynamic import breaks the static cycle:
-      // agent → background-tasks → manager → workflow → workflows/evented →
-      // workflows/index → agent. Static import works at runtime but during
-      // module evaluation in test environments the cycle leaves `Workflow`
-      // undefined when `evented/workflow.ts` evaluates its `class extends`.
-      const { buildBackgroundTaskWorkflow } = await import('./workflow');
-      const workflow = buildBackgroundTaskWorkflow(this);
-      if (!this.#mastra.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) {
-        // The `__background-task` workflow is typed against `EventedEngineType`
-        // and a concrete input/output schema, while `__registerInternalWorkflow`
-        // accepts the looser default `Workflow` shape. The cast is purely a
-        // type-level bridge — the runtime value is a real Workflow.
-        this.#mastra.__registerInternalWorkflow(
-          workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
-        );
-      }
-    }
+    if (!isProducerOnly) {
+      // Worker: subscribes with group so only one worker processes each task.
+      this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
+        // A grouped delivery consumed while this process is shutting down must
+        // remain unacked so a durable broker can redeliver it to a live worker.
+        if (this.shuttingDown) return;
 
-    await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
-    if (this.shuttingDown) {
-      await this.#releaseLateInitSubscriptions([[TOPIC_DISPATCH, this.workerCallback]]);
-      return;
+        let handled = true;
+        if (event.type === 'task.dispatch' || event.type === 'task.restart') {
+          handled = await this.handleDispatch(event);
+        } else if (event.type === 'task.resume') {
+          handled = await this.handleResume(event);
+        } else if (event.type === 'task.cancel') {
+          this.handleCancel(event);
+        }
+        if (handled) await ack?.();
+      };
+
+      // Register the workflow BEFORE subscribing the worker so that any
+      // dispatch event the worker picks up can immediately resolve the
+      // workflow on Mastra. Reversing this order races: a publish that
+      // arrives between `subscribe(TOPIC_DISPATCH)` and the workflow
+      // registration triggers `__getInternalWorkflow` to throw
+      // `Workflow with id __background-task not found`, the task stays at
+      // `running` forever, and the dispatch is silently dropped.
+      if (this.#mastra) {
+        // Dynamic import breaks the static cycle:
+        // agent → background-tasks → manager → workflow → workflows/evented →
+        // workflows/index → agent. Static import works at runtime but during
+        // module evaluation in test environments the cycle leaves `Workflow`
+        // undefined when `evented/workflow.ts` evaluates its `class extends`.
+        const { buildBackgroundTaskWorkflow } = await import('./workflow');
+        const workflow = buildBackgroundTaskWorkflow(this);
+        if (!this.#mastra.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) {
+          // The `__background-task` workflow is typed against `EventedEngineType`
+          // and a concrete input/output schema, while `__registerInternalWorkflow`
+          // accepts the looser default `Workflow` shape. The cast is purely a
+          // type-level bridge — the runtime value is a real Workflow.
+          this.#mastra.__registerInternalWorkflow(
+            workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
+          );
+        }
+      }
+
+      await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
+      if (this.shuttingDown) {
+        await this.#releaseLateInitSubscriptions([[TOPIC_DISPATCH, this.workerCallback]]);
+        return;
+      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
     if (this.shuttingDown) {
-      await this.#releaseLateInitSubscriptions([
-        [TOPIC_DISPATCH, this.workerCallback],
-        [TOPIC_RESULT, this.resultCallback],
-      ]);
+      // Producer mode never registers a worker callback, so only include the
+      // dispatch subscription when it actually exists.
+      const lateSubscriptions: Array<[string, EventCallback]> = [];
+      if (this.workerCallback) lateSubscriptions.push([TOPIC_DISPATCH, this.workerCallback]);
+      lateSubscriptions.push([TOPIC_RESULT, this.resultCallback]);
+      await this.#releaseLateInitSubscriptions(lateSubscriptions);
       return;
     }
 
-    // Recover stale tasks from a previous process
-    await this.recoverStaleTasks();
+    if (!isProducerOnly) {
+      // Recover stale tasks from a previous process — only workers should
+      // attempt recovery since they own execution.
+      await this.recoverStaleTasks();
+    }
 
     // Start periodic cleanup if configured
     const cleanupConfig = this.config.cleanup;
@@ -1274,7 +1285,7 @@ export class BackgroundTaskManager {
           resourceId,
           result: event.data.result,
           status: 'completed',
-          completedAt: task.completedAt!,
+          completedAt: task.completedAt,
           startedAt: task.startedAt!,
         });
 
@@ -1307,7 +1318,7 @@ export class BackgroundTaskManager {
           resourceId,
           error: event.data.error,
           status: 'failed',
-          completedAt: task.completedAt!,
+          completedAt: task.completedAt,
           startedAt: task.startedAt!,
         });
 

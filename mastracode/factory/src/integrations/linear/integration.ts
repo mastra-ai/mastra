@@ -38,6 +38,7 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { buildLinearRoutes } from './routes.js';
+import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -85,6 +86,8 @@ export interface LinearIssue {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  /** Display name of the Linear user who created the issue, when Linear returns one. */
+  creator: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;
@@ -174,6 +177,7 @@ interface IssuesQueryData {
       state: { name: string; type: string };
       project: { id: string };
       assignee: { name: string } | null;
+      creator: { name: string } | null;
       team: { key: string } | null;
       labels: { nodes: Array<{ name: string }> };
     }>;
@@ -205,6 +209,7 @@ interface IssueDetailQueryData {
     state: { name: string; type: string };
     project: { id: string };
     assignee: { name: string } | null;
+    creator: { name: string } | null;
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
     comments: IssueCommentsPage;
@@ -790,6 +795,7 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
+            creator { name }
             team { key }
             labels { nodes { name } }
           }
@@ -815,6 +821,7 @@ export class LinearIntegration implements FactoryIntegration {
         stateType: node.state.type,
         priorityLabel: node.priorityLabel,
         assignee: node.assignee?.name ?? null,
+        creator: node.creator?.name ?? null,
         team: node.team?.key ?? null,
         labels: node.labels.nodes.map(label => label.name),
         createdAt: node.createdAt,
@@ -877,6 +884,7 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
+            creator { name }
             team { key }
             labels { nodes { name } }
             comments(first: $commentsFirst) {
@@ -909,6 +917,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateType: issue.state.type,
       priorityLabel: issue.priorityLabel,
       assignee: issue.assignee?.name ?? null,
+      creator: issue.creator?.name ?? null,
       team: issue.team?.key ?? null,
       labels: issue.labels.nodes.map(label => label.name),
       createdAt: issue.createdAt,
@@ -972,7 +981,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
-      hooks: ctx.hooks,
+      ingestFactoryIssues: attachLinearRules(ctx),
     });
   }
 
@@ -1005,7 +1014,7 @@ function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,
-    author: null,
+    author: issue.creator,
     state: issue.state,
     stateType: issue.stateType,
     priority: issue.priorityLabel,

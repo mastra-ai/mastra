@@ -4,6 +4,7 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '@mastra/code-sdk/utils/errors';
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
@@ -44,6 +45,8 @@ export function showFormattedError(
         errorType?: string;
         retryable?: boolean;
         retryDelay?: number;
+        retryAttempt?: number;
+        maxRetries?: number;
       }
     | Error,
 ): void {
@@ -59,18 +62,22 @@ export function showFormattedError(
     errorText += theme.fg('muted', ` [url: ${parsed.requestUrl}]`);
   }
 
-  // Add retry info if applicable
-  const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
-  const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
+  // Retry timing is only shown when the controller explicitly scheduled a retry.
+  const retryable = 'error' in event && event.retryable === true;
+  const retryDelay = 'error' in event ? event.retryDelay : undefined;
   if (retryable && retryDelay) {
-    const seconds = Math.ceil(retryDelay / 1000);
-    errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
+    const seconds = retryDelay / 1000;
+    const retryAttempt = 'retryAttempt' in event ? event.retryAttempt : undefined;
+    const maxRetries = 'maxRetries' in event ? event.maxRetries : undefined;
+    const retryProgress = retryAttempt && maxRetries ? ` ${retryAttempt}/${maxRetries}` : '';
+    errorText += theme.fg('muted', ` (retry${retryProgress} in ${seconds}s)`);
   }
 
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
 
-  // Add helpful hints based on error type
-  const hint = getErrorHint(parsed.type);
+  const isObservationalMemoryError = /observational memory|\bOM (?:observation|reflection)/i.test(error.message);
+  const omRole = /reflect/i.test(error.message) ? state.session.om.reflector : state.session.om.observer;
+  const hint = withOMGuidance(getErrorHint(parsed.type), isObservationalMemoryError ? omRole.modelId() : undefined);
   if (hint) {
     lines.push(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
   }
@@ -78,6 +85,13 @@ export function showFormattedError(
   const component = new InfoMessageComponent(lines);
   insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   state.ui.requestRender();
+}
+
+function withOMGuidance(typeHint: string | null, omModelId: string | undefined): string | null {
+  if (!omModelId) return typeHint;
+  return [`Observational Memory is using ${omModelId}`, typeHint, 'Use /memory to choose another OM model']
+    .filter(Boolean)
+    .join('. ');
 }
 
 function getErrorHint(errorType: string): string | null {
@@ -104,4 +118,42 @@ export function notify(state: TUIState, reason: NotificationReason, message?: st
     message,
     hookManager: state.hookManager,
   });
+}
+
+/**
+ * Fire the notification for an input-request event the moment it is received,
+ * before the event enters the TUI's serialized dispatch queue. A pending prompt
+ * blocks that queue until the user answers, so any notify call living inside a
+ * queued handler is starved exactly when the user has walked away. This helper
+ * runs synchronously in the controller subscription listener instead.
+ *
+ * Non-input-request events are a no-op. Never throws: a notification failure
+ * must not break event delivery.
+ */
+export function notifyForInputRequest(state: TUIState, event: AgentControllerEvent): void {
+  try {
+    if (event.type === 'tool_approval_required') {
+      notify(state, 'tool_approval', `Approve ${event.toolName}?`);
+      return;
+    }
+    if (event.type === 'tool_suspended') {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      // Sandbox check first, mirroring the dispatch routing order.
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        notify(state, 'sandbox_access', `Sandbox access requested: ${String(payload.path ?? '')}`);
+      } else if (event.toolName === 'ask_user') {
+        notify(state, 'ask_question', String(payload.question ?? ''));
+      } else if (event.toolName === 'submit_plan') {
+        const planPath = String(payload.path ?? '');
+        notify(
+          state,
+          'plan_approval',
+          planPath ? `Plan "${planPath}" requires approval` : 'Plan requires your approval',
+        );
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[notify error] ${msg}\n`);
+  }
 }

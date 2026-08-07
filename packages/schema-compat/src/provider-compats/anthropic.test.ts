@@ -63,6 +63,47 @@ describe('AnthropicSchemaCompatLayer', () => {
     });
   });
 
+  describe('tool input root schemas', () => {
+    it('should convert a top-level object union to an object schema', () => {
+      const schema = z.union([z.object({ content: z.string() }), z.object({ sourceUrl: z.string().url() })]);
+
+      const jsonSchema = layer.processToJSONSchema(schema);
+
+      expect(jsonSchema).toMatchObject({
+        type: 'object',
+        properties: {
+          content: { type: 'string' },
+          sourceUrl: { type: 'string' },
+        },
+        additionalProperties: false,
+      });
+      expect(jsonSchema).not.toHaveProperty('anyOf');
+      expect(jsonSchema).not.toHaveProperty('oneOf');
+      expect(jsonSchema).not.toHaveProperty('allOf');
+    });
+
+    it('should preserve differing schemas for shared keys via a property-level anyOf', () => {
+      const schema = z.union([
+        z.object({ value: z.string(), label: z.string() }),
+        z.object({ value: z.number(), label: z.string() }),
+      ]);
+
+      const jsonSchema = layer.processToJSONSchema(schema);
+
+      expect(jsonSchema).toMatchObject({
+        type: 'object',
+        properties: {
+          value: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+          label: { type: 'string' },
+        },
+        required: ['value', 'label'],
+        additionalProperties: false,
+      });
+      expect(jsonSchema).not.toHaveProperty('anyOf');
+      expect(jsonSchema).not.toHaveProperty('oneOf');
+    });
+  });
+
   describe('number bounds', () => {
     it('should strip number bounds from JSON Schema while preserving Zod validation', async () => {
       const schema = z.object({

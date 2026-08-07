@@ -54,10 +54,10 @@ export async function GET(req: Request) {
 
 ## Returns
 
-`ReadableStream` — A stream of AI SDK UIMessage data parts containing:
+`ReadableStream`: A stream of AI SDK UIMessage data parts containing:
 
 - A `start` marker
-- A `WorkflowDataPart` with the overall workflow status and all step summaries
+- A `WorkflowDataPart` with the workflow status and all step summaries
 - A `WorkflowStepDataPart` for each step with its full output
 - A `finish` marker
 

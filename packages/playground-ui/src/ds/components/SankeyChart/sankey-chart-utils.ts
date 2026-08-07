@@ -38,6 +38,8 @@ export type FixedSankeyNodeGeometry = {
 };
 
 export type FixedSankeyLinkGeometry = {
+  sourceX: number;
+  targetX: number;
   sourceY: number;
   targetY: number;
   sourceWidth: number;
@@ -203,6 +205,60 @@ export function buildSankeyChartGraph(
   return { nodes, links: [...linksById.values()] };
 }
 
+export const SANKEY_NODE_WIDTH = 7;
+
+// mono faces we ship advance at ~0.6em — 0.62 biases toward truncating early
+const LABEL_CHARACTER_WIDTH_RATIO = 0.62;
+const LABEL_GUTTER = 16;
+const LABEL_ELLIPSIS = '…';
+
+export type SankeyLabelWidths = {
+  centered: number;
+  edge: number;
+};
+
+export function getSankeyLabelWidths({
+  chartWidth,
+  columnCount,
+  marginLeft,
+  marginRight,
+}: {
+  chartWidth: number;
+  columnCount: number;
+  marginLeft: number;
+  marginRight: number;
+}): SankeyLabelWidths {
+  if (chartWidth <= 0 || columnCount < 2) {
+    return { centered: Number.POSITIVE_INFINITY, edge: Number.POSITIVE_INFINITY };
+  }
+
+  const columnPitch = (chartWidth - marginLeft - marginRight - SANKEY_NODE_WIDTH) / (columnCount - 1);
+  const centered = Math.max(0, columnPitch - LABEL_GUTTER);
+  // edge columns anchor at start/end, so their label spreads toward one neighbour instead of two
+  const edge = Math.max(0, columnPitch + SANKEY_NODE_WIDTH / 2 - LABEL_GUTTER - centered / 2);
+
+  return { centered, edge };
+}
+
+export function truncateSankeyLabel(
+  label: string,
+  {
+    fontSize,
+    maxWidth,
+    maxCharacters = Number.POSITIVE_INFINITY,
+  }: { fontSize: number; maxWidth: number; maxCharacters?: number },
+): string {
+  const widthLimit = Number.isFinite(maxWidth)
+    ? Math.floor(maxWidth / (fontSize * LABEL_CHARACTER_WIDTH_RATIO))
+    : Number.POSITIVE_INFINITY;
+  const limit = Math.min(widthLimit, maxCharacters);
+
+  if (label.length <= limit) return label;
+  if (limit <= 1) return LABEL_ELLIPSIS;
+
+  return `${label.slice(0, limit - 1).trimEnd()}${LABEL_ELLIPSIS}`;
+}
+
 export function buildFixedSankeyGeometry(
   graph: SankeyChartGraph,
   {
@@ -266,6 +322,11 @@ export function buildFixedSankeyGeometry(
     const sourceOffset = sourceOffsets.get(link.sourceNode.id) ?? sourceGeometry.y;
     const targetOffset = targetOffsets.get(link.targetNode.id) ?? targetGeometry.y;
     links.set(link.id, {
+      // ribbons anchor to their own nodes' columns: depth-based layouts (like
+      // the underlying recharts sankey) would otherwise stretch links of a
+      // disconnected graph across the full chart width
+      sourceX: sourceGeometry.x + SANKEY_NODE_WIDTH,
+      targetX: targetGeometry.x,
       sourceY: sourceOffset + sourceWidth / 2,
       targetY: targetOffset + targetWidth / 2,
       sourceWidth,

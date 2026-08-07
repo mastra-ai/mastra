@@ -95,6 +95,71 @@ describe('AgentController exact thread id creation', () => {
     expect(await a.thread.list()).toHaveLength(1);
   });
 
+  it('honors the exact thread id when a thread-agnostic caller created the session first', async () => {
+    const controller = await createController(new InMemoryStore());
+    // Simulates an SSE subscribe / message list racing ahead of the exact-thread create.
+    const first = await controller.createSession({ id: 'session-1', ownerId: 'owner-1', resourceId: 'session-1' });
+    const initialThreadId = first.thread.getId();
+    expect(initialThreadId).not.toBe('session-1');
+
+    const second = await controller.createSession({
+      id: 'session-1',
+      ownerId: 'owner-1',
+      resourceId: 'session-1',
+      threadId: 'session-1',
+    });
+
+    expect(second).toBe(first);
+    expect(second.thread.getId()).toBe('session-1');
+    expect((await second.thread.getById({ threadId: 'session-1' }))?.resourceId).toBe('session-1');
+  });
+
+  it('switches a cached session back to an existing exact thread', async () => {
+    const controller = await createController(new InMemoryStore());
+    const session = await controller.createSession({
+      id: 'session-1',
+      ownerId: 'owner-1',
+      resourceId: 'session-1',
+      threadId: 'session-1',
+    });
+    await session.thread.create({ title: 'detour' });
+    expect(session.thread.getId()).not.toBe('session-1');
+
+    const again = await controller.createSession({
+      id: 'session-1',
+      ownerId: 'owner-1',
+      resourceId: 'session-1',
+      threadId: 'session-1',
+    });
+
+    expect(again).toBe(session);
+    expect(again.thread.getId()).toBe('session-1');
+    expect(await again.thread.list()).toHaveLength(2);
+  });
+
+  it('rejects an exact thread owned by another resource on a cached session', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createController(storage);
+    await controller.createSession({
+      id: 'session-a',
+      ownerId: 'owner-1',
+      resourceId: 'resource-a',
+      threadId: 'thread-a',
+    });
+    const cached = await controller.createSession({ id: 'session-b', ownerId: 'owner-1', resourceId: 'resource-b' });
+
+    await expect(
+      controller.createSession({
+        id: 'session-b',
+        ownerId: 'owner-1',
+        resourceId: 'resource-b',
+        threadId: 'thread-a',
+      }),
+    ).rejects.toThrow('Thread not found: thread-a');
+    // The cached session keeps its original binding.
+    expect(cached.thread.getId()).not.toBe('thread-a');
+  });
+
   it('keeps default multi-thread behavior when threadId is omitted', async () => {
     const controller = await createController(new InMemoryStore());
     const session = await controller.createSession({ id: 'session-1', ownerId: 'owner-1', resourceId: 'resource-1' });

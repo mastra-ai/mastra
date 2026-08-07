@@ -9,8 +9,10 @@ import { parseHeaders } from './headers.js';
 
 const LOCAL_URL = 'http://localhost:4111';
 const OBSERVABILITY_URL = 'https://observability.mastra.ai';
+const LEARNING_URL = 'https://output.signals.mastra.ai';
 const AUTHORIZATION_HEADER = 'Authorization';
 const PROJECT_ID_HEADER = 'X-Mastra-Project-Id';
+const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
 
 export interface ApiGlobalOptions {
   url?: string;
@@ -40,11 +42,22 @@ export async function resolveTarget(
   const apiPrefix = resolveApiPrefix(options);
 
   if (options.url) {
-    return { baseUrl: options.url, headers: customHeaders, timeoutMs, apiPrefix };
+    const headers = { ...customHeaders };
+    if (isPlatformHostedInstance(options.url) && !getHeader(customHeaders, AUTHORIZATION_HEADER)) {
+      const token = await getOptionalToken();
+      if (token) {
+        headers[AUTHORIZATION_HEADER] = `Bearer ${token}`;
+      }
+    }
+    return { baseUrl: options.url, headers, timeoutMs, apiPrefix };
   }
 
   if (isObservabilityPath(path)) {
-    return resolveObservabilityTarget(customHeaders, timeoutMs);
+    return resolvePlatformServiceTarget(OBSERVABILITY_URL, customHeaders, timeoutMs);
+  }
+
+  if (isLearningPath(path)) {
+    return resolvePlatformServiceTarget(LEARNING_URL, customHeaders, timeoutMs, { includeOrganization: true });
   }
 
   if (await canReachLocal(timeoutMs, fetchFn, apiPrefix)) {
@@ -85,18 +98,26 @@ export async function resolveTarget(
   }
 }
 
-async function resolveObservabilityTarget(
+/**
+ * Resolves a hosted Mastra platform service target (observability or learning)
+ * with platform credentials instead of a project deployment URL.
+ */
+async function resolvePlatformServiceTarget(
+  baseUrl: string,
   customHeaders: Record<string, string>,
   timeoutMs: number,
+  options: { includeOrganization?: boolean } = {},
 ): Promise<ResolvedTarget> {
   const env = loadDotenv(process.cwd());
   const explicitAuthorization = getHeader(customHeaders, AUTHORIZATION_HEADER);
   const explicitProjectId = getHeader(customHeaders, PROJECT_ID_HEADER);
+  const explicitOrganizationId = getHeader(customHeaders, ORGANIZATION_ID_HEADER);
   const envToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN || env.MASTRA_PLATFORM_ACCESS_TOKEN;
   const cliToken = explicitAuthorization ? undefined : await getOptionalToken();
   const envProjectId = process.env.MASTRA_PROJECT_ID || env.MASTRA_PROJECT_ID;
-  const configProjectId =
-    explicitProjectId || envProjectId ? undefined : (await loadProjectConfig(process.cwd()))?.projectId;
+  const envOrganizationId = process.env.MASTRA_ORGANIZATION_ID || env.MASTRA_ORGANIZATION_ID;
+  const projectConfig = await loadProjectConfig(process.cwd());
+  const configProjectId = explicitProjectId || envProjectId ? undefined : projectConfig?.projectId;
   const projectId = explicitProjectId || envProjectId || configProjectId;
   const headers = { ...customHeaders };
 
@@ -110,21 +131,58 @@ async function resolveObservabilityTarget(
     headers[PROJECT_ID_HEADER] = projectId;
   }
 
+  // The learning endpoint binds tenant scope from the organization header.
+  if (options.includeOrganization && !explicitOrganizationId) {
+    const organizationId = envOrganizationId || projectConfig?.organizationId;
+    if (organizationId) {
+      headers[ORGANIZATION_ID_HEADER] = organizationId;
+    }
+  }
+
   const fallbackHeaders =
     envToken && cliToken && envToken !== cliToken
       ? { ...headers, [AUTHORIZATION_HEADER]: `Bearer ${cliToken}` }
       : undefined;
 
   return {
-    baseUrl: OBSERVABILITY_URL,
+    baseUrl,
     headers,
     timeoutMs,
     fallbackHeaders,
   };
 }
 
+/**
+ * True when a URL points at a platform-hosted Mastra Studio or Factory instance
+ * (production or staging). Excludes `*.server.mastra.cloud` — those are
+ * user-provided instances that authenticate with their own credentials, not the
+ * stored CLI user token.
+ */
+export function isPlatformHostedInstance(url: string): boolean {
+  let hostname: string;
+  try {
+    const parsed = new URL(url);
+    // Only attach the stored bearer token over HTTPS to avoid leaking
+    // credentials on unencrypted connections.
+    if (parsed.protocol !== 'https:') return false;
+    hostname = parsed.hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return (
+    hostname.endsWith('.studio.mastra.cloud') ||
+    hostname.endsWith('.factory.mastra.cloud') ||
+    hostname.endsWith('.studio.staging.mastra.cloud') ||
+    hostname.endsWith('.factory.staging.mastra.cloud')
+  );
+}
+
 function isObservabilityPath(path?: string): boolean {
   return path?.startsWith('/observability/') || path === '/observability';
+}
+
+function isLearningPath(path?: string): boolean {
+  return path?.startsWith('/learning/') || path === '/learning';
 }
 
 function loadDotenv(cwd: string): Record<string, string> {

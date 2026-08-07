@@ -1,4 +1,10 @@
 export { AgentChannels } from './agent-channels';
+export { AgentControllerChannels } from './agent-controller-channels';
+export type {
+  AgentControllerChannelsConfig,
+  ChannelSessionStart,
+  ChannelSessionStartContext,
+} from './agent-controller-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
@@ -19,6 +25,7 @@ export type {
   ChannelContext,
   ChannelHandler,
   ChannelHandlerConfig,
+  ChannelHandlerContext,
   ChannelHandlers,
   ChannelInstallationInfo,
   ChannelPlatformInfo,

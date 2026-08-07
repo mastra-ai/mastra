@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -235,6 +236,42 @@ describe('vNext Workflow Handlers', () => {
       expect(workflow.stepCount).toBeUndefined();
     });
 
+    it("should stamp origin: 'code' for statically declared workflows", async () => {
+      const result = await LIST_WORKFLOWS_ROUTE.handler({ ...createTestServerContext({ mastra: mockMastra }) });
+      expect(result['test-workflow']?.origin).toBe('code');
+      expect(result['reusable-workflow']?.origin).toBe('code');
+    });
+
+    it("should stamp origin: 'stored' for workflows registered via addStoredWorkflow", async () => {
+      const echoTool = createTool({
+        id: 'echo',
+        description: 'echoes input',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const mastraForStored = new Mastra({
+        logger: false,
+        workflows: { 'test-workflow': mockWorkflow },
+        tools: { echo: echoTool } as any,
+        storage: new MockStore(),
+      });
+
+      await mastraForStored.addStoredWorkflow({
+        id: 'stored-only',
+        inputSchema: { type: 'object', properties: {}, required: [] },
+        outputSchema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'] },
+        graph: [{ type: 'step', step: { id: 'echo' } }] as any,
+      });
+
+      const result = await LIST_WORKFLOWS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraForStored }),
+      });
+      expect(result['stored-only']?.origin).toBe('stored');
+      // Code-defined workflows keep their 'code' origin in the same response.
+      expect(result['test-workflow']?.origin).toBe('code');
+    });
+
     it('should return no workflows when FGA is configured and no user is present', async () => {
       const filterAccessible = vi.fn();
       vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
@@ -339,6 +376,38 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       expect(result.steps['test-step'].status).toEqual('success');
+    });
+
+    it('should return a client error when workflow input is invalid', async () => {
+      const step = createStep({
+        id: 'number-step',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async ({ inputData }) => inputData,
+      });
+      const workflow = createWorkflow({
+        id: 'number-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(step)
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        workflows: { 'number-workflow': workflow },
+        storage: new MockStore(),
+      });
+
+      await expect(
+        START_ASYNC_WORKFLOW_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workflowId: 'number-workflow',
+          inputData: { value: 'not-a-number' },
+        } as any),
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining('expected number'),
+      });
     });
   });
 
@@ -553,6 +622,44 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       expect(result).toEqual({ message: 'Workflow run started' });
+    });
+
+    it('should not leave an unhandled rejection when run.start() rejects', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-reject',
+      });
+      await run.start({ inputData: {} });
+
+      const createRunSpy = vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue({
+        start: vi.fn().mockRejectedValue(new Error('invalid workflow input')),
+      } as any);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        const result = await START_WORKFLOW_RUN_ROUTE.handler({
+          mastra: mockMastra,
+          workflowId: 'test-workflow',
+          runId: 'test-run-reject',
+          inputData: { bad: true },
+          tracingOptions,
+        } as any);
+
+        expect(result).toEqual({ message: 'Workflow run started' });
+
+        // Let the rejected promise settle; .catch on the route must swallow it.
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        createRunSpy.mockRestore();
+      }
     });
 
     it('should preserve resourceId when starting workflow run after server restart', async () => {
@@ -926,6 +1033,47 @@ describe('vNext Workflow Handlers', () => {
       // Verify resourceId is stored
       const storedRun = await mockWorkflow.getWorkflowRunById('test-run-stream-resource');
       expect(storedRun?.resourceId).toBe(resourceId);
+    });
+
+    it('should return 409 when the run already finished', async () => {
+      vi.spyOn(mockWorkflow, 'getWorkflowRunById').mockResolvedValue({
+        runId: 'test-run-finished',
+        workflowName: 'test-workflow',
+        status: 'success',
+        resourceId: undefined,
+      } as any);
+
+      const createRunSpy = vi.spyOn(mockWorkflow, 'createRun');
+
+      await expect(
+        STREAM_WORKFLOW_ROUTE.handler({
+          mastra: mockMastra,
+          workflowId: 'test-workflow',
+          runId: 'test-run-finished',
+          inputData: {},
+        } as any),
+      ).rejects.toMatchObject({ status: 409 });
+
+      // The run is never re-created, so it can never be re-executed.
+      expect(createRunSpy).not.toHaveBeenCalled();
+    });
+
+    it('should still stream when the stored run is not finished', async () => {
+      vi.spyOn(mockWorkflow, 'getWorkflowRunById').mockResolvedValue({
+        runId: 'test-run-suspended',
+        workflowName: 'test-workflow',
+        status: 'suspended',
+        resourceId: undefined,
+      } as any);
+
+      const stream = await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-suspended',
+        inputData: {},
+      } as any);
+
+      expect(stream).toBeDefined();
     });
   });
 

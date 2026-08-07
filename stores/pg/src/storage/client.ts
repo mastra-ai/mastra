@@ -1,4 +1,5 @@
 import type { Pool, PoolClient, QueryResult } from 'pg';
+import type { SchemaSnapshot, SchemaSnapshotHost } from './db/schema-snapshot';
 
 // Re-export pg types for consumers
 export type { Pool, PoolClient, QueryResult } from 'pg';
@@ -83,7 +84,11 @@ export interface TxClient {
   manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]>;
   many<T = any>(query: string, values?: QueryValues): Promise<T[]>;
   query(query: string, values?: QueryValues): Promise<QueryResult>;
-  /** Execute multiple promises in parallel */
+  /**
+   * Await multiple query promises. Prefer collecting results from
+   * TransactionClient methods (which serialize onto one PoolClient);
+   * do not start raw `client.query` calls concurrently.
+   */
   batch<T>(promises: Promise<T>[]): Promise<T[]>;
 }
 
@@ -161,17 +166,25 @@ export class PoolAdapter implements DbClient {
     try {
       await client.query('BEGIN');
       const txClient = new TransactionClient(client);
-      const result = await callback(txClient);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
       try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        // Log rollback failure but throw original error
-        console.error('Transaction rollback failed:', rollbackError);
+        const result = await callback(txClient);
+        // Drain before COMMIT so fire-and-forget / batch tails can't race it.
+        await txClient.drain();
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        // Drain before ROLLBACK: Promise.all in batch() rejects on the first
+        // failure while later enqueued queries may still be running. Preserve
+        // the callback/drain error that caused this catch.
+        await txClient.drain().catch(() => undefined);
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          // Log rollback failure but throw original error
+          console.error('Transaction rollback failed:', rollbackError);
+        }
+        throw error;
       }
-      throw error;
     } finally {
       client.release();
     }
@@ -180,59 +193,111 @@ export class PoolAdapter implements DbClient {
 
 /**
  * Transaction client that wraps a PoolClient for executing queries within a transaction.
+ *
+ * Query methods are serialized through a tail promise (same pattern as
+ * PinnedClientAdapter). Callers such as memory.updateMessages historically
+ * did `queries.push(t.none(...))` then `await t.batch(queries)` — each
+ * `t.none()` is async and starts `client.query` immediately, so by the time
+ * batch runs, N queries are already in flight on one PoolClient. pg@8 queues
+ * those internally and emits a DeprecationWarning; pg@9 will throw.
+ * (#20820)
  */
 class TransactionClient implements TxClient {
+  /**
+   * Serialization tail. Without this gate, concurrent t.none()/t.query()
+   * from Promise.all / batch land on the same PoolClient at once.
+   */
+  #tail: Promise<void> = Promise.resolve();
+  #error: { value: unknown } | undefined;
+
   constructor(private readonly client: PoolClient) {}
 
-  async none(query: string, values?: QueryValues): Promise<null> {
-    await this.client.query(query, values);
-    return null;
+  #enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.#tail.then(fn);
+    this.#tail = next.then(
+      () => undefined,
+      error => {
+        this.#error ??= { value: error };
+      },
+    );
+    return next;
   }
 
-  async one<T = any>(query: string, values?: QueryValues): Promise<T> {
-    const result = await this.client.query(query, values);
-    if (result.rows.length === 0) {
-      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+  /**
+   * Wait until every enqueued query has settled and surface the first failure.
+   * PoolAdapter / PinnedClientAdapter call this before COMMIT/ROLLBACK so
+   * those control statements never overlap in-flight work on the same client.
+   */
+  async drain(): Promise<void> {
+    await this.#tail;
+    if (this.#error) {
+      const { value } = this.#error;
+      this.#error = undefined;
+      throw value;
     }
-    if (result.rows.length > 1) {
-      throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
-    }
-    return result.rows[0] as T;
   }
 
-  async oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
-    const result = await this.client.query(query, values);
-    if (result.rows.length === 0) {
+  none(query: string, values?: QueryValues): Promise<null> {
+    return this.#enqueue(async () => {
+      await this.client.query(query, values);
       return null;
-    }
-    if (result.rows.length > 1) {
-      throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
-    }
-    return result.rows[0] as T;
+    });
   }
 
-  async any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
-    const result = await this.client.query(query, values);
-    return result.rows as T[];
+  one<T = any>(query: string, values?: QueryValues): Promise<T> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      if (result.rows.length === 0) {
+        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+      }
+      if (result.rows.length > 1) {
+        throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
+      }
+      return result.rows[0] as T;
+    });
   }
 
-  async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+  oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      if (result.rows.length === 0) {
+        return null;
+      }
+      if (result.rows.length > 1) {
+        throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
+      }
+      return result.rows[0] as T;
+    });
+  }
+
+  any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      return result.rows as T[];
+    });
+  }
+
+  manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     return this.any<T>(query, values);
   }
 
-  async many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
-    const result = await this.client.query(query, values);
-    if (result.rows.length === 0) {
-      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
-    }
-    return result.rows as T[];
+  many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.#enqueue(async () => {
+      const result = await this.client.query(query, values);
+      if (result.rows.length === 0) {
+        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+      }
+      return result.rows as T[];
+    });
   }
 
-  async query(query: string, values?: QueryValues): Promise<QueryResult> {
-    return this.client.query(query, values);
+  query(query: string, values?: QueryValues): Promise<QueryResult> {
+    return this.#enqueue(() => this.client.query(query, values));
   }
 
   async batch<T>(promises: Promise<T>[]): Promise<T[]> {
+    // Promises are already enqueued (and thus serialized) by the query
+    // methods above; awaiting them together is fine.
     return Promise.all(promises);
   }
 }
@@ -355,11 +420,14 @@ export class PinnedClientAdapter implements DbClient {
     // can't interleave statements inside someone else's transaction.
     return this.#enqueue(async () => {
       await this.pinnedClient.query('BEGIN');
+      const txClient = new TransactionClient(this.pinnedClient);
       try {
-        const result = await callback(new TransactionClient(this.pinnedClient));
+        const result = await callback(txClient);
+        await txClient.drain();
         await this.pinnedClient.query('COMMIT');
         return result;
       } catch (error) {
+        await txClient.drain().catch(() => undefined);
         try {
           await this.pinnedClient.query('ROLLBACK');
         } catch (rollbackError) {
@@ -378,12 +446,30 @@ export class PinnedClientAdapter implements DbClient {
  * During PostgresStore.init() we temporarily pin a single-client adapter
  * so every domain's DDL flows through one backend connection.
  */
-export class RoutingDbClient implements DbClient {
+export class RoutingDbClient implements DbClient, SchemaSnapshotHost {
   #base: DbClient;
   #pinned: DbClient | null = null;
+  #schemaSnapshot: SchemaSnapshot | null = null;
 
   constructor(base: DbClient) {
     this.#base = base;
+  }
+
+  /**
+   * Catalog snapshot for the current init window, or `null` outside it.
+   *
+   * It lives here rather than on `PgDB` because every storage domain builds its
+   * own `PgDB` over this one shared client — hanging the snapshot off the
+   * client means one load serves all of them, and its lifetime lines up exactly
+   * with the pinned-init window that `pin()`/`unpin()` already delimit.
+   */
+  get schemaSnapshot(): SchemaSnapshot | null {
+    return this.#schemaSnapshot;
+  }
+
+  /** Install (or clear, with `null`) the init-window catalog snapshot. */
+  setSchemaSnapshot(snapshot: SchemaSnapshot | null): void {
+    this.#schemaSnapshot = snapshot;
   }
 
   /** Returns the currently active client (pinned if set, otherwise base). */

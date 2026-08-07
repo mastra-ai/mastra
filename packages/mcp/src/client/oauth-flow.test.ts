@@ -13,7 +13,7 @@ import { MCPOAuthClientProvider, InMemoryOAuthStorage } from './oauth-provider.j
 // =============================================================================
 // Fake OAuth authorization server
 //
-// Implements just enough of OAuth 2.1 for the MCP SDK's client flow: RFC 8414
+// Implements just enough of OAuth 2.1 for the MCP client's OAuth flow: RFC 8414
 // metadata discovery, RFC 7591 dynamic client registration, the authorization
 // code grant with PKCE (S256), and the refresh token grant. Tokens are opaque
 // random strings shared with the protected MCP server via `validTokens`.

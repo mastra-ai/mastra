@@ -62,6 +62,7 @@ export class BackgroundTaskWorker extends MastraWorker {
   #createOwnedManager(deps: WorkerDeps): void {
     this.#manager = new BackgroundTaskManager({
       enabled: true,
+      mode: 'worker',
       globalConcurrency: this.#config.globalConcurrency,
       perAgentConcurrency: this.#config.perAgentConcurrency,
       backpressure: this.#config.backpressure,

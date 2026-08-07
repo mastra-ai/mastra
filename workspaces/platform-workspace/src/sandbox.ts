@@ -13,8 +13,36 @@ import type {
 import { MastraSandbox, ProcessHandle, SandboxNotReadyError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { PlatformClientOptions } from './client.js';
 import { PlatformApiError, PlatformClient } from './client.js';
+import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
+import { execViaLease } from './direct-exec.js';
+import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
+import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
+
+/**
+ * In-process `sandboxId → instanceUrl` map that lets
+ * {@link PlatformSandbox.executeCommand} dial the in-sandbox sidecar over
+ * Railway's private network instead of paying for a lease + WebSocket
+ * round-trip through Railway's public control plane.
+ *
+ * The workspace proxy discovers each sandbox's IPv6 during
+ * `POST /v1/projects/:pid/sandbox` and returns it as `instanceUrl` on the
+ * create + get responses (see the platform inline-discovery issue). The
+ * `PlatformSandbox` client copies that field into this registry from both
+ * {@link PlatformSandbox.start} branches (fresh provision + reattach), evicts
+ * on {@link PlatformSandbox.destroy}, and evicts again on any observed
+ * transport failure so the next exec falls back to the lease path cleanly.
+ *
+ * See:
+ *   - `.scratch/factory-deploy/issue-runtime-sandbox-address-discovery.md`
+ *   - `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`
+ */
+export interface SandboxAddressRegistry {
+  set(sandboxId: string, instanceUrl: string): void;
+  get(sandboxId: string): string | undefined;
+  delete(sandboxId: string): void;
+}
 
 export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'processes'>, PlatformClientOptions {
   id?: string;
@@ -25,7 +53,52 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   env?: Record<string, string>;
   timeout?: number;
   instructions?: InstructionsOption;
+  /**
+   * Injected WebSocket factory used by the direct-exec code path. Defaults to
+   * the global `WebSocket` (available on Node 22+, this package's minimum) and
+   * only exists so tests can drive the exec state machine deterministically
+   * without a real network socket.
+   */
+  webSocketFactory?: DirectExecWebSocketFactory;
+  /**
+   * Injected fetch implementation used by the private-network exec code path
+   * to dial the in-sandbox sidecar. Defaults to `globalThis.fetch` and only
+   * exists so tests can drive that transport without a real HTTP server.
+   * Note: this is separate from the `fetch` on {@link PlatformClientOptions},
+   * which is used for calls to the workspace proxy.
+   */
+  privateNetFetch?: PrivateNetFetch;
+  /**
+   * Registry that maps `sandboxId → instanceUrl` for the private-network
+   * exec path. When set, {@link PlatformSandbox.start} populates it from the
+   * `instanceUrl` field workspace-proxy returns on create + get responses,
+   * and {@link PlatformSandbox.executeCommand} looks it up before every exec
+   * and tries the private-network transport first, falling back to the lease
+   * path on any transport failure (and invalidating the registry entry so
+   * the next call goes to the lease path cleanly). When absent, all execs
+   * go straight to the lease path — this is the pre-existing behavior and
+   * the expected mode outside the shipyard runtime. See
+   * {@link SandboxAddressRegistry}.
+   */
+  addressRegistry?: SandboxAddressRegistry;
 }
+
+interface ExecLeaseResponse {
+  provider: string;
+  sandboxId: string;
+  providerResourceId: string;
+  jwt: string;
+  wsEndpoint: string;
+  subprotocol: string;
+  expiresAt: string | null;
+}
+
+/**
+ * How long before a lease's stated `expiresAt` we should treat it as
+ * expired. Avoids a race where the JWT is valid at cache-hit time but the
+ * server rejects it by the time the WebSocket handshake completes.
+ */
+const LEASE_REFRESH_MARGIN_MS = 60_000;
 
 interface CreateSandboxResponse {
   id: string;
@@ -33,14 +106,90 @@ interface CreateSandboxResponse {
   status?: string;
   createdAt?: string;
   destroyedAt?: string | null;
+  /**
+   * Full sidecar URL (`http://[<ipv6>]:<port>`) the runtime can dial over
+   * Railway's private network to reach the in-sandbox exec sidecar. The
+   * workspace proxy discovers the sandbox's IPv6 during `Sandbox.create()`
+   * via one `sandbox.exec("awk … /proc/net/if_inet6")` and stores it in
+   * `environment_sandboxes.instance_url`; the same field is echoed on
+   * `GET /sandbox/:id`. `null` when discovery failed (returned by the proxy
+   * so the runtime knows to skip private-net dial for this sandbox rather
+   * than fall back on a missing-field ambiguity).
+   */
+  instanceUrl?: string | null;
 }
 
-interface ExecResponse {
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  truncated?: boolean;
-  timedOut?: boolean;
+/** Max attempts for `POST /sandbox` when the proxy returns transient 5xx errors. */
+const CREATE_MAX_ATTEMPTS = 3;
+/** Base delay between create retries; multiplied by the attempt number. */
+const CREATE_RETRY_BASE_DELAY_MS = 2_000;
+
+/**
+ * Diagnostic error thrown when the direct-exec WebSocket transport fails
+ * twice in a row (opening handshake refused or socket closed mid-stream
+ * without an `exit` frame). Distinguishes "the sandbox transport is broken"
+ * from "your command failed" so callers can decide whether to retry at a
+ * higher level (e.g. reprovision the sandbox) or surface the error.
+ *
+ * `opened` is `true` when the WebSocket completed its handshake at least
+ * once before closing; `false` when Railway refused the upgrade outright.
+ */
+export class SandboxExecTransportError extends Error {
+  readonly sandboxId: string | undefined;
+  readonly command: string;
+  readonly attempts: number;
+  readonly opened: boolean;
+  readonly closeCode: number | undefined;
+  readonly closeReason: string | undefined;
+  readonly wsEndpoint: string;
+
+  constructor(
+    message: string,
+    diagnostics: {
+      sandboxId?: string;
+      command: string;
+      attempts: number;
+      opened: boolean;
+      closeCode?: number;
+      closeReason?: string;
+      wsEndpoint: string;
+    },
+  ) {
+    super(message);
+    this.name = 'SandboxExecTransportError';
+    this.sandboxId = diagnostics.sandboxId;
+    this.command = diagnostics.command;
+    this.attempts = diagnostics.attempts;
+    this.opened = diagnostics.opened;
+    this.closeCode = diagnostics.closeCode;
+    this.closeReason = diagnostics.closeReason;
+    this.wsEndpoint = diagnostics.wsEndpoint;
+  }
+}
+
+/**
+ * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
+ * (Railway destroy, quota reclamation, etc.). The client cannot recover from
+ * this on its own because it does not own the binding store; only the fleet
+ * layer can clear the stale sandbox id and provision a fresh one. Callers
+ * (typically `SandboxFleet`) must catch this and reprovision-and-replay.
+ *
+ * When this is thrown the cached `_lease` and `_sandboxId` on the sandbox
+ * instance are cleared, so the next `ensureRunning()` on a reused instance
+ * will re-provision cleanly.
+ */
+export class SandboxDestroyedError extends Error {
+  readonly sandboxId: string | undefined;
+  readonly command: string;
+  readonly attempts: number;
+
+  constructor(message: string, diagnostics: { sandboxId?: string; command: string; attempts: number }) {
+    super(message);
+    this.name = 'SandboxDestroyedError';
+    this.sandboxId = diagnostics.sandboxId;
+    this.command = diagnostics.command;
+    this.attempts = diagnostics.attempts;
+  }
 }
 
 /**
@@ -147,6 +296,34 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
   private _createdAt: Date | null = null;
+  private readonly _webSocketFactory?: DirectExecWebSocketFactory;
+  private readonly _privateNetFetch?: PrivateNetFetch;
+  /**
+   * Registry that maps `sandboxId → instanceUrl` for the private-network
+   * exec path. Injected by the composition site via
+   * {@link PlatformSandboxOptions.addressRegistry} and populated by this
+   * class itself in `start()` when the workspace-proxy's create/reattach
+   * response includes an `instanceUrl` field. The registry IS the cache —
+   * there is no per-instance mirror on `PlatformSandbox`, so every exec is
+   * a `Map.get()` (in the default in-process impl) against the live view.
+   * When absent, executes go straight to the lease path with no extra
+   * round-trip.
+   */
+  private readonly _addressRegistry?: SandboxAddressRegistry;
+  /**
+   * Cached exec lease for this sandbox. `null` before the first exec and
+   * after {@link destroy}. Refreshed when `expiresAt - LEASE_REFRESH_MARGIN_MS < now`
+   * (see {@link _ensureLease}); a lease without a disclosed `expiresAt`
+   * is refreshed on every call.
+   */
+  private _lease: (ExecLease & { expiresAtMs: number | null }) | null = null;
+  /**
+   * In-flight mint request; concurrent `_ensureLease` callers on a cold or
+   * near-expiry cache all await this single promise so we don't burn N
+   * `POST /exec-lease` round-trips when the sandbox is doing N parallel execs.
+   * Cleared (regardless of success or failure) when the request settles.
+   */
+  private _leaseInFlight: Promise<ExecLease & { expiresAtMs: number | null }> | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -160,6 +337,9 @@ export class PlatformSandbox extends MastraSandbox {
     this._env = options.env ?? {};
     this._timeout = options.timeout;
     this._instructionsOverride = options.instructions;
+    this._webSocketFactory = options.webSocketFactory;
+    this._privateNetFetch = options.privateNetFetch;
+    this._addressRegistry = options.addressRegistry;
   }
 
   private generateId(): string {
@@ -179,8 +359,15 @@ export class PlatformSandbox extends MastraSandbox {
    * (e.g. one per project).
    */
   clone(options: SandboxCloneOptions = {}): PlatformSandbox {
+    // The proxy hashes `body.id` on POST /sandbox to look up a prior
+    // checkpoint. A stable `checkpointName` is only useful if it round-trips
+    // to `body.id`, so route it through the sandbox id when the caller
+    // didn't pick one explicitly. Without this, every clone gets a random
+    // id and no boot ever hits its captured checkpoint (see
+    // issue-platform-sandbox-clone-drops-checkpoint-name.md).
+    const id = options.id ?? options.checkpointName;
     return new PlatformSandbox({
-      ...(options.id !== undefined && { id: options.id }),
+      ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
       fetch: this._client.fetch,
@@ -191,6 +378,13 @@ export class PlatformSandbox extends MastraSandbox {
       env: options.env ?? this._env,
       ...(this._timeout !== undefined && { timeout: this._timeout }),
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+      ...(this._webSocketFactory !== undefined && { webSocketFactory: this._webSocketFactory }),
+      ...(this._privateNetFetch !== undefined && { privateNetFetch: this._privateNetFetch }),
+      // Propagate the registry — the clone is a different sandbox with a
+      // different id, so it will `get()` its OWN address (or nothing) out
+      // of the shared registry, not the parent's. See
+      // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
+      ...(this._addressRegistry !== undefined && { addressRegistry: this._addressRegistry }),
     });
   }
 
@@ -199,8 +393,15 @@ export class PlatformSandbox extends MastraSandbox {
       try {
         const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
         const json = (await response.json()) as CreateSandboxResponse;
-        this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
-        return;
+        // A destroyed record (idle GC, manual delete) is not reattachable —
+        // treat it like a missing sandbox so we fall through to a fresh
+        // provision instead of pointing exec at a dead resource.
+        if (!json.destroyedAt) {
+          this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+          this._populateAddressFromResponse(json);
+          return;
+        }
+        this._sandboxId = undefined;
       } catch (error) {
         if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
         this._sandboxId = undefined;
@@ -209,24 +410,63 @@ export class PlatformSandbox extends MastraSandbox {
 
     if (!this._environmentId) throw new Error('environmentId is required');
 
-    const response = await this._client.request('/sandbox', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        // Sent so the platform can associate the provisioned resource with a
-        // caller-stable identifier (used for opt-in checkpoint recovery). The
-        // platform treats it as an advisory key: unknown values fall through
-        // to a fresh sandbox, matching pre-existing behavior.
-        id: this.id,
-        environmentId: this._environmentId,
-        idleTimeoutMinutes: this._idleTimeoutMinutes,
-        networkIsolation: this._networkIsolation,
-        env: this._env,
-      }),
+    const body = JSON.stringify({
+      // Sent so the platform can associate the provisioned resource with a
+      // caller-stable identifier (used for opt-in checkpoint recovery). The
+      // platform treats it as an advisory key: unknown values fall through
+      // to a fresh sandbox, matching pre-existing behavior.
+      id: this.id,
+      environmentId: this._environmentId,
+      idleTimeoutMinutes: this._idleTimeoutMinutes,
+      networkIsolation: this._networkIsolation,
+      env: this._env,
     });
+    // Provisioning is observed to fail intermittently with proxy 500s while
+    // the provider is under load. A create either succeeds (201) or fails
+    // without allocating a caller-visible resource, so retrying transient
+    // 5xx responses with a short backoff is safe and keeps a single flaky
+    // window from killing the caller's whole workflow.
+    let response: Response | undefined;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        response = await this._client.request('/sandbox', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+        });
+        break;
+      } catch (error) {
+        const transient = error instanceof PlatformApiError && error.status >= 500;
+        if (!transient || attempt >= CREATE_MAX_ATTEMPTS) throw error;
+        await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
+      }
+    }
     const json = (await response.json()) as CreateSandboxResponse;
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+    this._populateAddressFromResponse(json);
+  }
+
+  /**
+   * Copy `response.instanceUrl` into the injected {@link SandboxAddressRegistry}
+   * when both are present. Called from both {@link start} branches (fresh
+   * provision + reattach) with the workspace-proxy response for this sandbox.
+   *
+   * The proxy discovers the IPv6 during `Sandbox.create()` and stores it in
+   * `environment_sandboxes.instance_url`; both the create response and
+   * `GET /sandbox/:id` echo the same field. The runtime does not do any
+   * discovery of its own — it only mirrors the field into an in-process map
+   * so {@link executeCommand} can `Map.get()` before every exec without an
+   * HTTP round-trip.
+   *
+   * `null`/absent `instanceUrl` (proxy discovery failed, or an older proxy
+   * that predates the field) leaves the registry untouched — executes fall
+   * through to the lease path with no branch here.
+   */
+  private _populateAddressFromResponse(json: CreateSandboxResponse): void {
+    if (!this._addressRegistry) return;
+    if (!json.instanceUrl) return;
+    this._addressRegistry.set(json.id, json.instanceUrl);
   }
 
   async stop(): Promise<void> {
@@ -235,11 +475,22 @@ export class PlatformSandbox extends MastraSandbox {
 
   async destroy(): Promise<void> {
     if (!this._sandboxId) return;
-    await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`, { method: 'DELETE' });
+    const destroyedSandboxId = this._sandboxId;
+    await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
     this._sandboxId = undefined;
     this._createdAt = null;
+    // Drop the exec lease with the sandbox — the JWT is tied to the provider
+    // instance id and would be rejected against a fresh one.
+    this._lease = null;
+    // Evict the sidecar address from the registry explicitly. Destroy
+    // deallocates the IPv6, so any stale entry would be a dial-to-nowhere;
+    // clearing here prevents a transport-failure round-trip on the next
+    // exec against a reused instance. A subsequent start() (fresh provision
+    // or reattach) will re-populate the entry from the workspace-proxy's
+    // response.
+    this._addressRegistry?.delete(destroyedSandboxId);
   }
 
   /**
@@ -265,37 +516,316 @@ export class PlatformSandbox extends MastraSandbox {
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
-    // Nullish check so an explicit `timeout: 0` is sent as `0` (interpreted as
-    // "no timeout" by the proxy) instead of being dropped by a truthy check.
+    // Nullish check so an explicit `timeout: 0` still overrides the instance
+    // default. `_runDirectExec` omits `timeoutMs` from the exec payload when
+    // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
-    const timeoutSec = effectiveTimeout != null ? Math.ceil(effectiveTimeout / 1000) : undefined;
-    // Pass our own signal for exec so the client's default per-request
-    // timeout (60s) doesn't cut off commands that expect to run longer.
-    // Give the proxy a generous buffer over the requested command timeout.
-    const clientSignal =
-      effectiveTimeout != null && effectiveTimeout > 0 ? AbortSignal.timeout(effectiveTimeout + 30_000) : undefined;
-    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}/exec`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        command: fullCommand,
-        timeoutSec,
-        cwd: options?.cwd,
-        env: options?.env,
-      }),
-      signal: clientSignal,
-    });
-    const json = (await response.json()) as ExecResponse;
-    const exitCode = json.exitCode ?? (json.timedOut ? 124 : 1);
+
+    // Preferred path: dial the in-sandbox sidecar over Railway's private
+    // network (~16 ms p50). No GraphQL, no lease mint, no public tcp-proxy.
+    // Available only when the in-process address registry has an entry for
+    // this sandboxId — populated by start() from the workspace-proxy's
+    // create/reattach response when the proxy discloses `instanceUrl`. On
+    // any transport failure (connection refused, mid-stream drop, no exit
+    // frame) we invalidate the registry entry and fall through to the lease
+    // path — application-level failures (sidecar returns 5xx) still fall
+    // back for this call but do NOT invalidate the entry. See
+    // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
+    const instanceUrl = this._addressRegistry?.get(this._sandboxId);
+    if (instanceUrl) {
+      const privateNet = await this._tryExecViaPrivateNetwork(instanceUrl, fullCommand, effectiveTimeout, options);
+      if (privateNet) {
+        const privateExit = privateNet.exitCode ?? 124;
+        return {
+          success: privateExit === 0,
+          exitCode: privateExit,
+          stdout: privateNet.stdout,
+          stderr: privateNet.stderr,
+          timedOut: privateNet.timedOut,
+          command: fullCommand,
+          executionTimeMs: Date.now() - started,
+        };
+      }
+      // Fall through — `_tryExecViaPrivateNetwork` already evicted the
+      // registry entry if this was a transport failure.
+    }
+
+    // Fallback: WebSocket direct-exec via `/exec-lease`. `_runDirectExec`
+    // handles single-shot transport retry and throws typed errors on
+    // unrecoverable failure: `SandboxDestroyedError` when `/exec-lease`
+    // returns 410 (fleet must reprovision), `SandboxExecTransportError`
+    // when the WebSocket transport fails twice against a live sandbox,
+    // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
+    // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
+    // in the Platform repo.
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
+    // `_runDirectExec` throws on transport failure (see its jsdoc), so a
+    // `null` exitCode here can only mean `timedOut: true` — the sandbox
+    // never got to send an exit frame because we cut the command short.
+    // Use 124 for that (the conventional timeout exit code). We are NOT
+    // coercing transport-failure nulls to fake exit codes — those throw.
+    const exitCode = result.exitCode ?? 124;
     return {
       success: exitCode === 0,
       exitCode,
-      stdout: json.stdout,
-      stderr: json.stderr,
-      executionTimeMs: Date.now() - started,
-      timedOut: json.timedOut,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      timedOut: result.timedOut,
       command: fullCommand,
+      executionTimeMs: Date.now() - started,
     };
+  }
+
+  /**
+   * Run a single exec against the direct-exec transport, with one in-flight
+   * retry on WebSocket transport failure (socket closed without an `exit`
+   * frame and the exec did not time out). The retry mints a fresh lease
+   * — the failure could be a stale JWT — and reopens a new WebSocket.
+   *
+   * Error taxonomy:
+   * - **410 on `/exec-lease`** (either attempt) → the sandbox is gone.
+   *   Nulls the cached `_lease` and `_sandboxId` and throws
+   *   {@link SandboxDestroyedError}. Callers (typically `SandboxFleet`) must
+   *   catch this, clear the stale binding, and reprovision + replay.
+   * - **Persistent transport failure** (both WS attempts close without an
+   *   `exit` frame against a live sandbox) → {@link SandboxExecTransportError}
+   *   with WebSocket close diagnostics.
+   * - **Other `PlatformApiError`s** (404/500/501) propagate directly.
+   * - **Real command result** (exit code from Railway's exit frame, or
+   *   `timedOut: true`) returns normally.
+   *
+   * Returns a result with a real `exitCode` OR `timedOut: true`. Never
+   * returns `{ exitCode: null, timedOut: false }` — that case throws.
+   */
+  private async _runDirectExec(
+    fullCommand: string,
+    effectiveTimeout: number | undefined,
+    options: ExecuteCommandOptions | undefined,
+  ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+    // Filter undefined values out of the env overlay so we match the
+    // Record<string, string> shape execViaLease expects. `ExecuteCommandOptions.env`
+    // is NodeJS.ProcessEnv (string | undefined).
+    const filteredEnv = options?.env
+      ? Object.fromEntries(
+          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        )
+      : undefined;
+
+    let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
+    let lastLease: (ExecLease & { expiresAtMs: number | null }) | undefined;
+    let attemptsMade = 0;
+    // Two attempts: initial + one retry. On the second attempt we drop the
+    // cached lease so we don't reuse a JWT that may itself be the cause of
+    // the transport failure — but only if the cache still holds the same
+    // lease we just failed against. A concurrent exec sharing this instance
+    // may have already cached a fresh, unrelated lease in between, and we
+    // must not discard that.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
+      let lease: ExecLease & { expiresAtMs: number | null };
+      try {
+        lease = await this._ensureLease();
+      } catch (error) {
+        // 410 → sandbox has been destroyed. Clear all cached state so a
+        // reused instance re-provisions cleanly, then hand off to the fleet
+        // layer via a typed error. Other PlatformApiErrors (404/500/501)
+        // propagate as-is — those are configuration or platform errors, not
+        // a "reprovision me" signal.
+        if (error instanceof PlatformApiError && error.status === 410) {
+          this._lease = null;
+          const priorSandboxId = this._sandboxId;
+          this._sandboxId = undefined;
+          throw new SandboxDestroyedError(
+            `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,
+            {
+              ...(priorSandboxId && { sandboxId: priorSandboxId }),
+              command: fullCommand,
+              attempts: attempt + 1,
+            },
+          );
+        }
+        throw error;
+      }
+      lastLease = lease;
+      attemptsMade = attempt + 1;
+      const result = await execViaLease(lease, {
+        command: fullCommand,
+        ...(options?.cwd !== undefined && { cwd: options.cwd }),
+        ...(filteredEnv !== undefined && { env: filteredEnv }),
+        ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
+        ...(this._webSocketFactory && { webSocketFactory: this._webSocketFactory }),
+      });
+      lastResult = result;
+      // `null` exitCode with `timedOut: false` means the socket closed
+      // without an exit frame — a transport failure (handshake stalled,
+      // mid-stream drop, expired token). Any other outcome (real exit code
+      // or timed-out) is a valid result and we return it.
+      if (result.exitCode !== null || result.timedOut) return result;
+    }
+
+    // Both attempts failed at the transport layer against a live sandbox.
+    // Surface a loud, typed error with close diagnostics so callers can
+    // distinguish "your command failed" from "the sandbox transport is
+    // broken."
+    const result = lastResult!;
+    const lease = lastLease!;
+    // The lease from the failed second attempt is still cached; drop it so
+    // the next `executeCommand` doesn't waste its first attempt on the same
+    // implicated JWT before minting fresh. Identity-check first so a
+    // concurrent exec that has already cached a fresh, unrelated lease
+    // isn't collateral-damaged.
+    if (this._lease === lease) this._lease = null;
+    throw new SandboxExecTransportError(
+      `Direct-exec transport failed for sandbox ${this._sandboxId ?? '(unknown)'} after ${attemptsMade} attempt(s)` +
+        (result.closeCode !== undefined
+          ? ` (close ${result.closeCode}${result.closeReason ? ` ${result.closeReason}` : ''})`
+          : ''),
+      {
+        ...(this._sandboxId && { sandboxId: this._sandboxId }),
+        command: fullCommand,
+        attempts: attemptsMade,
+        opened: result.opened ?? false,
+        ...(result.closeCode !== undefined && { closeCode: result.closeCode }),
+        ...(result.closeReason !== undefined && { closeReason: result.closeReason }),
+        wsEndpoint: lease.wsEndpoint,
+      },
+    );
+  }
+
+  /**
+   * Try to run the exec against the in-sandbox sidecar over Railway's private
+   * network. Returns the result on success (including non-zero exit codes and
+   * timeouts — those are real command results, not failures). Returns
+   * `undefined` when the caller should fall back to the lease path:
+   *
+   * - Transport failure (connection refused, mid-stream drop, no `exit`
+   *   frame). The registry entry is evicted so subsequent execs skip the
+   *   private-net dial until the sidecar re-registers.
+   * - Sidecar answered with a non-2xx HTTP status. Registry is left intact —
+   *   the address is still valid; something else is wrong (bad request,
+   *   sidecar bug). Only this specific exec falls back.
+   */
+  private async _tryExecViaPrivateNetwork(
+    instanceUrl: string,
+    fullCommand: string,
+    effectiveTimeout: number | undefined,
+    options: ExecuteCommandOptions | undefined,
+  ): Promise<PrivateNetExecResult | undefined> {
+    // Match the env-filter dance in `_runDirectExec`: ExecuteCommandOptions.env
+    // is NodeJS.ProcessEnv (string | undefined) but the wire body wants a
+    // Record<string, string>.
+    const filteredEnv = options?.env
+      ? Object.fromEntries(
+          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        )
+      : undefined;
+
+    const execOptions: PrivateNetExecOptions = {
+      command: fullCommand,
+      ...(options?.cwd !== undefined && { cwd: options.cwd }),
+      ...(filteredEnv !== undefined && { env: filteredEnv }),
+      ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
+      ...(this._privateNetFetch && { fetch: this._privateNetFetch }),
+    };
+
+    let result: PrivateNetExecResult;
+    try {
+      result = await execViaPrivateNetwork(instanceUrl, execOptions);
+    } catch (error) {
+      if (error instanceof PrivateNetExecHttpError) {
+        // Application-level failure from a reachable sidecar. Fall back for
+        // this call, but do NOT evict the registry entry — future calls
+        // should still prefer the private-network path.
+        return undefined;
+      }
+      // Anything else escaping is unexpected (e.g. options validation). Treat
+      // it like a transport failure so we don't wedge the caller.
+      this._invalidateAddress();
+      return undefined;
+    }
+
+    // A timeout is always the caller's answer, never a lease-fallback trigger:
+    // the sidecar may already be running the command, so re-executing on the
+    // lease path would double-run non-idempotent work (rm, git push, DB
+    // migrations) and return the second result instead of `timedOut: true`.
+    // If we never opened the response (pre-headers abort), the address is
+    // still evicted so subsequent execs skip a dial we already know is slow —
+    // but the timed-out result itself flows back to the caller unchanged.
+    if (result.timedOut) {
+      if (!result.opened) this._invalidateAddress();
+      return result;
+    }
+
+    // A completed exec (real exit code) is a valid result — hand it back even
+    // if exitCode is non-zero. Only evict when the transport itself failed:
+    // never opened, or opened without an exit frame. `opened=false` here
+    // means connection refused (no timeout to disambiguate).
+    const transportFailed = !result.opened || result.exitCode === null;
+    if (transportFailed) {
+      this._invalidateAddress();
+      return undefined;
+    }
+
+    return result;
+  }
+
+  /**
+   * Evict this sandbox's entry from the address registry after an observed
+   * transport failure. The entry stays gone until the next start() re-reads
+   * `instanceUrl` from a workspace-proxy response — until then, execs skip
+   * the private-net dial and go straight to the lease path.
+   */
+  private _invalidateAddress(): void {
+    if (this._sandboxId) this._addressRegistry?.delete(this._sandboxId);
+  }
+
+  /**
+   * Return a cached exec lease, minting a fresh one when the cache is empty
+   * or the JWT is within {@link LEASE_REFRESH_MARGIN_MS} of `expiresAt`.
+   *
+   * Callers are expected to be on the "sandbox is running" path; we don't
+   * re-check `_sandboxId` here because `executeCommand` already gated on it.
+   */
+  private async _ensureLease(): Promise<ExecLease & { expiresAtMs: number | null }> {
+    const now = Date.now();
+    // Cache hit only when we know the expiry AND we're comfortably before it.
+    // A null `expiresAtMs` means the provider didn't disclose a TTL — treat
+    // that as "refresh every call" rather than "cache forever", so a token
+    // that turns out to be short-lived can't wedge the sandbox until restart.
+    if (this._lease && this._lease.expiresAtMs !== null && this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now) {
+      return this._lease;
+    }
+    // Coalesce concurrent mints on a cold/expired cache.
+    if (this._leaseInFlight) return this._leaseInFlight;
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const sandboxId = this._sandboxId;
+    const inFlight = (async () => {
+      const response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
+        method: 'POST',
+      });
+      const json = (await response.json()) as ExecLeaseResponse;
+      const expiresAtMs = json.expiresAt ? Date.parse(json.expiresAt) : null;
+      const lease = {
+        jwt: json.jwt,
+        wsEndpoint: json.wsEndpoint,
+        subprotocol: json.subprotocol,
+        expiresAt: json.expiresAt,
+        // Guard against `Date.parse` returning NaN for malformed values by
+        // treating them as "no expiry known", which forces a mint every call
+        // rather than silently caching a broken lease forever.
+        expiresAtMs: expiresAtMs !== null && !Number.isNaN(expiresAtMs) ? expiresAtMs : null,
+      };
+      this._lease = lease;
+      return lease;
+    })();
+    this._leaseInFlight = inFlight;
+    try {
+      return await inFlight;
+    } finally {
+      // Clear on both success and failure so a failed mint doesn't wedge
+      // future callers into awaiting the same rejected promise forever.
+      if (this._leaseInFlight === inFlight) this._leaseInFlight = null;
+    }
   }
 
   async getInfo(): Promise<SandboxInfo> {
@@ -308,6 +838,30 @@ export class PlatformSandbox extends MastraSandbox {
         createdAt: this._createdAt ?? new Date(),
       };
     }
+    // Skip the workspace-proxy round-trip when the address registry has an
+    // entry for this sandbox — a live entry is proof that start() saw an
+    // `instanceUrl` on the create/reattach response and that no exec since
+    // has evicted it via a transport failure. Serving `getInfo()` from
+    // local state here removes the per-poll `GET /sandbox/:id` hit that
+    // otherwise triggers a Railway GraphQL call + `sandboxExec` awk on
+    // `/proc/net/if_inet6` inside the proxy.
+    //
+    // Note: this does NOT probe the sidecar. If the sandbox has been
+    // destroyed out-of-band the next exec will fail transport, evict the
+    // registry entry, and a subsequent getInfo() will fall through to the
+    // proxy below and observe the true status.
+    if (this._addressRegistry?.get(this._sandboxId)) {
+      return {
+        id: this._sandboxId,
+        name: this.name,
+        provider: this.provider,
+        status: this.status,
+        createdAt: this._createdAt ?? new Date(),
+        metadata: {
+          sandboxId: this._sandboxId,
+        },
+      };
+    }
     const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {
@@ -317,6 +871,12 @@ export class PlatformSandbox extends MastraSandbox {
       status: this.status,
       createdAt: json.createdAt ? new Date(json.createdAt) : (this._createdAt ?? new Date()),
       metadata: {
+        // The platform assigns its own sandbox id on create (the advisory id
+        // sent in the POST body is not honored). Expose it so callers that
+        // persist a reattach id (e.g. the Factory sandbox fleet, which reads
+        // `metadata.sandboxId`) store the id the proxy actually recognizes
+        // instead of the locally generated construction id.
+        sandboxId: json.id,
         providerResourceId: json.providerResourceId ?? undefined,
         platformStatus: json.status,
       },

@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
@@ -541,21 +541,9 @@ export class SessionThread {
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
 
-    // Stamp the session's scoping tags onto the thread so listings can be
-    // filtered back to this session's scope (e.g. a `projectPath` per git
-    // worktree). Fall back to a `projectPath` read from state for unscoped
-    // sessions that still carry one in their initial state.
-    const tags = session.getTags();
-    if (Object.keys(tags).length > 0) {
-      for (const [key, value] of Object.entries(tags)) {
-        if (!isReservedThreadMetadataKey(key)) metadata[key] = value;
-      }
-    } else {
-      const projectPath = (session.state.get() as any).projectPath;
-      if (projectPath) {
-        metadata.projectPath = projectPath;
-      }
-    }
+    // Stamp the session's scope so thread selection can filter listings back to
+    // it (e.g. a `projectPath` per git worktree).
+    Object.assign(metadata, session.getThreadScope());
 
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
@@ -1284,6 +1272,7 @@ export class SessionRun {
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
   readonly #teardownWaiters = new Set<() => void>();
+  readonly #abortRequestWaiters = new Set<() => void>();
 
   #notifyTeardown(): void {
     const waiters = [...this.#teardownWaiters];
@@ -1303,6 +1292,32 @@ export class SessionRun {
       };
       if (signal.aborted) return resolve();
       this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
+
+  #notifyAbortRequested(): void {
+    const waiters = [...this.#abortRequestWaiters];
+    this.#abortRequestWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  /**
+   * Resolves once an abort is requested for the current run (immediately if
+   * one already was), or when `signal` cancels the wait.
+   */
+  waitForAbortRequest(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#abortRequestWaiters.delete(done);
+        resolve();
+      };
+      if (this.#abortRequested || signal.aborted) return resolve();
+      this.#abortRequestWaiters.add(done);
       signal.addEventListener('abort', abort, { once: true });
     });
   }
@@ -1400,6 +1415,7 @@ export class SessionRun {
       } catch {}
       this.#abortController = null;
     }
+    this.#notifyAbortRequested();
   }
 }
 
@@ -2695,6 +2711,19 @@ export class Session<TState = unknown> {
   }
 
   /**
+   * The scope this session's threads carry: what `thread.create()` stamps and
+   * what thread selection filters on. Both must read it here — computing it on
+   * each side is what let selection drift off the controller-global state while
+   * creation stamped the session's own.
+   */
+  getThreadScope(): Record<string, string> {
+    const tags = Object.fromEntries(Object.entries(this.#tags).filter(([key]) => !isReservedThreadMetadataKey(key)));
+    if (Object.keys(tags).length > 0) return tags;
+    const { projectPath } = this.state.get() as { projectPath?: string };
+    return projectPath ? { projectPath } : {};
+  }
+
+  /**
    * The workspace resolved for this session.
    *
    * Dynamic workspace factories are evaluated independently when each session
@@ -3014,13 +3043,33 @@ export class Session<TState = unknown> {
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
+          /**
+           * Provider options attached to the resulting prompt turn. Surfaces as
+           * `providerOptions` on the `UserModelMessage` sent to the model and as
+           * `content.providerMetadata` on the persisted DB message (see
+           * {@link AgentSignalInput.providerOptions}).
+           */
+          providerOptions?: MastraProviderMetadata;
         },
     options?: {
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      /**
+       * When true, the returned `accepted` promise awaits the agent's real
+       * acceptance decision (`wake`/`deliver`/…) and propagates routing or
+       * stream-setup failures as rejections instead of resolving on the next
+       * tick. Callers that need delivery guarantees (e.g. the Factory rule
+       * dispatcher) use this so a failed wake is retried rather than silently
+       * treated as sent.
+       */
+      requireDelivery?: boolean;
     },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
+  ): {
+    id: string;
+    type: AgentSignalInput['type'];
+    accepted: Promise<{ accepted: true; runId?: string; action?: SendAgentSignalAccepted['action'] }>;
+  } {
     const settleRunId = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
     }): Promise<string | undefined> => {
@@ -3034,6 +3083,7 @@ export class Session<TState = unknown> {
     const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
+    const requireDelivery = options?.requireDelivery ?? false;
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
@@ -3049,7 +3099,9 @@ export class Session<TState = unknown> {
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+      'content' in input
+        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        : input,
     );
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
@@ -3059,6 +3111,7 @@ export class Session<TState = unknown> {
       const threadId = this.thread.getId()!;
 
       const agent = this.machinery.getAgent();
+      this.runEngine.setRequestContext(requestContextInput);
       await this.thread.ensureSubscription(threadId);
 
       if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
@@ -3075,6 +3128,14 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
         });
+        if (requireDelivery) {
+          const settled = await result.accepted;
+          return {
+            accepted: true as const,
+            runId: 'runId' in settled ? settled.runId : undefined,
+            action: settled.action,
+          };
+        }
         return { accepted: true as const, runId: await settleRunId(result) };
       }
 
@@ -3102,6 +3163,16 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
+      if (requireDelivery) {
+        // Delivery-guaranteed path: surface the real acceptance decision and
+        // propagate routing/stream-setup failures to the caller.
+        const settled = await result.accepted;
+        return {
+          accepted: true as const,
+          runId: 'runId' in settled ? settled.runId : undefined,
+          action: settled.action,
+        };
+      }
       try {
         await Promise.race([
           result.accepted.then(() => undefined),
@@ -3132,6 +3203,7 @@ export class Session<TState = unknown> {
     const threadId = this.thread.getId()!;
 
     const agent = this.machinery.getAgent();
+    this.runEngine.setRequestContext(requestContextInput);
     await this.thread.ensureSubscription(threadId);
 
     if (this.run.getRunId() && this.stream.activeRunId()) {
@@ -3520,6 +3592,7 @@ export class Session<TState = unknown> {
       throw new Error('Cannot resume a suspended tool without a current thread');
     }
 
+    this.runEngine.setRequestContext(requestContextInput);
     await this.thread.ensureSubscription(threadId);
     const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter(
       suspension.toolName === 'submit_plan' ? toolCallId : undefined,
