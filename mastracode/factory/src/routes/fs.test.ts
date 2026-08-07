@@ -307,6 +307,20 @@ describe('persisted session workspace files routes', () => {
     expect(listFiles).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['/web/workspace/files', `?workspacePath=${makeSession().sessionId}&threadId=%20`],
+    ['/web/workspace/file', `?workspacePath=${makeSession().sessionId}&threadId=%20&path=src/agent.ts`],
+  ])('rejects a whitespace-only thread id on %s', async (route, query) => {
+    const { deps, ensureUser, listFiles } = makeSessionFs();
+    const request = await requestSessionRoute(route, deps);
+
+    const response = await request(query);
+
+    expect(response.status).toBe(400);
+    expect(ensureUser).not.toHaveBeenCalled();
+    expect(listFiles).not.toHaveBeenCalled();
+  });
+
   it('isolates rows for a different thread', async () => {
     const { deps, listFiles } = makeSessionFs({ files: [] });
     const request = await requestSessionRoute('/web/workspace/files', deps);

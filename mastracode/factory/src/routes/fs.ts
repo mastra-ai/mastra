@@ -872,7 +872,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       requiresAuth: false,
       handler: async c => {
         const workspacePath = c.req.query('workspacePath');
-        const threadId = c.req.query('threadId');
+        const threadId = c.req.query('threadId')?.trim();
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!threadId) return c.json({ error: 'Missing required query param: threadId' }, 400);
         try {
@@ -931,9 +931,13 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       handler: async c => {
         const workspacePath = c.req.query('workspacePath');
         const path = c.req.query('path');
-        const threadId = c.req.query('threadId');
+        const requestedThreadId = c.req.query('threadId');
+        const threadId = requestedThreadId?.trim();
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        if (requestedThreadId !== undefined && !threadId) {
+          return c.json({ error: 'Missing required query param: threadId' }, 400);
+        }
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (session && sessionFs) {
