@@ -1,11 +1,13 @@
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PinnedClientAdapter, PoolAdapter } from './client';
+import { PoolAdapter } from './client';
 
 /**
  * Fake PoolClient that rejects overlapping queries (pg@9 semantics).
- * Used to prove COMMIT/ROLLBACK never races in-flight transaction work.
+ * Mirrors stores/pg/src/storage/client.tx-serialize.test.ts — the dsql
+ * TransactionClient is a separate copy of the pg one, so it needs its own
+ * guard against drift.
  */
 function createStrictClient() {
   let inFlight = 0;
@@ -38,7 +40,7 @@ function createStrictClient() {
   return { client, statements, query };
 }
 
-describe('TransactionClient COMMIT/ROLLBACK drain', () => {
+describe('TransactionClient COMMIT/ROLLBACK drain (dsql)', () => {
   it('serializes concurrent t.none() calls onto one client', async () => {
     const { client, statements } = createStrictClient();
     const pool = {
@@ -92,21 +94,5 @@ describe('TransactionClient COMMIT/ROLLBACK drain', () => {
     });
 
     expect(statements).toEqual(['BEGIN', 'SLOW2', 'COMMIT']);
-  });
-
-  it('PinnedClientAdapter also drains before ROLLBACK', async () => {
-    const { client, statements } = createStrictClient();
-    const pool = {} as Pool;
-    const adapter = new PinnedClientAdapter(pool, client);
-
-    await expect(
-      adapter.tx(async t => {
-        const q1 = t.none('FAIL1');
-        const q2 = t.none('SLOW2');
-        await t.batch([q1, q2]);
-      }),
-    ).rejects.toThrow('FAIL1');
-
-    expect(statements).toEqual(['BEGIN', 'FAIL1', 'SLOW2', 'ROLLBACK']);
   });
 });
