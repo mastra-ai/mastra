@@ -1,4 +1,4 @@
-import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
+import type { SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -21,11 +21,8 @@ function commandResult(overrides: Partial<{ exitCode: number; stdout: string; st
 }
 
 function createSession(results = [commandResult(), commandResult()]) {
-  const executeCommand = vi
-    .fn()
-    .mockResolvedValueOnce(results[0] ?? commandResult())
-    .mockResolvedValueOnce(results[1] ?? commandResult());
-  const listeners: AgentControllerEventListener[] = [];
+  const executeCommand = vi.fn(async () => results.shift() ?? commandResult());
+  const listeners: SessionBeforeAgentEndListener[] = [];
   const session: FilesystemCaptureSession = {
     identity: { getResourceId: () => 'resource-1' },
     thread: { requireId: () => 'thread-1' },
@@ -37,7 +34,7 @@ function createSession(results = [commandResult(), commandResult()]) {
         executeCommand,
       },
     }),
-    subscribe: listener => {
+    onBeforeAgentEnd: listener => {
       listeners.push(listener);
       return () => {
         const index = listeners.indexOf(listener);
@@ -160,24 +157,42 @@ describe('captureSessionFilesystem', () => {
 });
 
 describe('observeSessionFilesystem', () => {
-  it.each(['complete', 'aborted', 'error', 'suspended'] as const)('captures on %s agent-end events', async reason => {
-    const { session, listeners } = createSession();
+  it.each(['complete', 'aborted', 'error', 'suspended'] as const)(
+    'captures before %s agent-end events',
+    async reason => {
+      const { session, listeners } = createSession();
+      const dependencies = createDependencies();
+      observeSessionFilesystem(session, dependencies);
+
+      await listeners[0]!({ type: 'agent_end', reason });
+
+      expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('serializes captures when terminal events arrive before the prior capture finishes', async () => {
+    const { session, listeners } = createSession([commandResult(), commandResult(), commandResult(), commandResult()]);
+    let completeFirstCapture: (() => void) | undefined;
     const dependencies = createDependencies();
+    dependencies.filesystem.replaceFiles = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          completeFirstCapture = resolve;
+        }),
+    );
     observeSessionFilesystem(session, dependencies);
 
-    listeners[0]!({ type: 'agent_end', reason });
-
+    const first = listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
-  });
 
-  it('ignores non-terminal events', async () => {
-    const { session, listeners } = createSession();
-    const dependencies = createDependencies();
-    observeSessionFilesystem(session, dependencies);
-
-    listeners[0]!({ type: 'workspace_status_changed', status: 'ready' });
+    const second = listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await Promise.resolve();
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
 
-    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+    completeFirstCapture?.();
+    await first;
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2));
+    completeFirstCapture?.();
+    await second;
   });
 });

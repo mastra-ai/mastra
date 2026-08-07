@@ -1,4 +1,4 @@
-import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
+import type { SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 
 import type { FilesystemFile, FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -11,7 +11,7 @@ export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
   readonly thread: { requireId(): string };
   getWorkspace(): { sandbox?: Pick<WorkspaceSandbox, 'executeCommand'> };
-  subscribe(listener: AgentControllerEventListener): () => void;
+  onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void;
 }
 
 export interface FilesystemCaptureDependencies {
@@ -96,9 +96,9 @@ export function observeSessionFilesystem(
   session: FilesystemCaptureSession,
   dependencies: FilesystemCaptureDependencies,
 ): () => void {
-  return session.subscribe(event => {
-    if (event.type === 'agent_end') {
-      void captureSessionFilesystem(session, dependencies);
-    }
+  let capture = Promise.resolve();
+  return session.onBeforeAgentEnd(() => {
+    capture = capture.then(() => captureSessionFilesystem(session, dependencies));
+    return capture;
   });
 }

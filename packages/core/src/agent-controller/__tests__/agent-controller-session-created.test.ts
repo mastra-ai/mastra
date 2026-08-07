@@ -105,4 +105,29 @@ describe('AgentController.onSessionCreated', () => {
     expect(error).toHaveBeenCalledTimes(4);
     error.mockRestore();
   });
+
+  it('awaits before-agent-end listeners before exposing the terminal event', async () => {
+    const { controller } = createController(new InMemoryStore());
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    const events: string[] = [];
+    let release: (() => void) | undefined;
+    session.subscribe(event => {
+      if (event.type === 'agent_end') events.push(event.reason ?? 'complete');
+    });
+    session.onBeforeAgentEnd(
+      () =>
+        new Promise<void>(resolve => {
+          release = resolve;
+        }),
+    );
+
+    const completion = session.finishAgentRun('complete');
+    await Promise.resolve();
+    expect(events).toEqual([]);
+
+    release?.();
+    await completion;
+    expect(events).toEqual(['complete']);
+  });
 });

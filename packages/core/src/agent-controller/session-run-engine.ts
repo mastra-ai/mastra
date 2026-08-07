@@ -467,16 +467,15 @@ export class SessionRunEngine {
       this.#session.emit({ type: 'error', error: new Error(state.terminalError) });
     }
 
-    this.#session.emit({
-      type: 'agent_end',
-      reason: error
+    await this.#session.finishAgentRun(
+      error
         ? 'error'
         : result.suspended
           ? 'suspended'
           : aborted || this.#session.run.isAbortRequested()
             ? 'aborted'
             : 'complete',
-    });
+    );
 
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
@@ -1173,17 +1172,17 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
-    this.#session.emit({ type: 'agent_end', reason });
+    await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      this.#session.emit({ type: 'agent_end', reason: 'aborted' });
+      await this.#session.finishAgentRun('aborted');
     } else {
       this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
-      this.#session.emit({ type: 'agent_end', reason: 'error' });
+      await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
     this.#session.run.reset();
