@@ -874,6 +874,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         const prevResult = await this.service.entities.message.query
           .byThread({ entity: 'message', threadId: target.threadId })
           .lte({ createdAt: target.createdAt })
+          .where(({ resourceId: rid }: any, { eq }: any) => eq(rid, resourceId))
           .go({ order: 'desc', count: withPreviousMessages + 1 });
 
         const prevMessages = parseQueryMessages(prevResult.data).reverse();
@@ -883,6 +884,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           const nextResult = await this.service.entities.message.query
             .byThread({ entity: 'message', threadId: target.threadId })
             .gt({ createdAt: target.createdAt })
+            .where(({ resourceId: rid }: any, { eq }: any) => eq(rid, resourceId))
             .go({ order: 'asc', count: withNextMessages });
 
           includeMessages.push(...parseQueryMessages(nextResult.data));

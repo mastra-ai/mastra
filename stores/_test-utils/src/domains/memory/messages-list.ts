@@ -403,14 +403,22 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages).toHaveLength(6);
     });
 
-    it('should keep include context inside the resource when the thread holds another resource', async () => {
-      const foreignMessage = createSampleMessageV2({
-        threadId: thread.id,
-        resourceId: 'different-resource',
-        content: { content: 'Foreign message' },
-        createdAt: new Date(new Date(messages[2]!.createdAt).getTime() + 500),
-      });
-      await memoryStorage.saveMessages({ messages: [foreignMessage] });
+    it('should keep include context inside the resource without underfilling the requested window', async () => {
+      const foreignMessages = [
+        createSampleMessageV2({
+          threadId: thread.id,
+          resourceId: 'different-resource',
+          content: { content: 'Foreign message before' },
+          createdAt: new Date(new Date(messages[2]!.createdAt).getTime() - 500),
+        }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          resourceId: 'different-resource',
+          content: { content: 'Foreign message after' },
+          createdAt: new Date(new Date(messages[2]!.createdAt).getTime() + 500),
+        }),
+      ];
+      await memoryStorage.saveMessages({ messages: foreignMessages });
 
       const result = await memoryStorage.listMessages({
         threadId: thread.id,
@@ -418,23 +426,15 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         perPage: 0,
         include: [
           {
-            id: messages[1]!.id,
-            withPreviousMessages: 1,
-            withNextMessages: 1,
-          },
-          {
-            id: messages[3]!.id,
-            withPreviousMessages: 1,
-            withNextMessages: 1,
+            id: messages[2]!.id,
+            withPreviousMessages: 2,
+            withNextMessages: 2,
           },
         ],
       });
 
       const contents = result.messages.map((m: any) => m.content.content);
-      expect(contents).toContain('Message 2');
-      expect(contents).toContain('Message 3');
-      expect(contents).toContain('Message 4');
-      expect(contents).not.toContain('Foreign message');
+      expect(contents).toEqual(['Message 1', 'Message 2', 'Message 3', 'Message 4', 'Message 5']);
       expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
     });
 
