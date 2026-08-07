@@ -609,6 +609,12 @@ describe('SankeySignals', () => {
       });
 
       expect(offsets).toEqual(['-50%', '-16.666666666666668%', '16.666666666666664%', '50%']);
+      expect(screen.getAllByTestId('signal-column-header-content').map(header => header.dataset.headerAnchor)).toEqual([
+        'start',
+        'middle',
+        'middle',
+        'end',
+      ]);
     });
   });
 

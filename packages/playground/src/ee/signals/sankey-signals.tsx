@@ -269,6 +269,10 @@ function FlowCard({
                       const label = formatSignalName(signalName);
                       const offsetPercent =
                         headerSignalNames.length > 1 ? (index / (headerSignalNames.length - 1) - 0.5) * 100 : 0;
+                      const headerAnchor =
+                        index === 0 ? 'start' : index === headerSignalNames.length - 1 ? 'end' : 'middle';
+                      const contentOffsetClass =
+                        headerAnchor === 'start' ? 'translate-x-1/2' : headerAnchor === 'end' ? '-translate-x-1/2' : '';
                       return (
                         <Draggable
                           key={signalName}
@@ -285,9 +289,10 @@ function FlowCard({
                               style={{ ...dragProvided.draggableProps.style, translate: `${offsetPercent}%` }}
                             >
                               <div
-                                className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${
+                                className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass} ${
                                   dragSnapshot.isDragging ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg' : ''
                                 }`}
+                                data-header-anchor={headerAnchor}
                                 data-testid="signal-column-header-content"
                               >
                                 <Tooltip>
@@ -304,7 +309,9 @@ function FlowCard({
                                   {...dragProvided.dragHandleProps}
                                   aria-disabled={reorderDisabled}
                                   aria-label={`Reorder ${label}`}
-                                  className="text-neutral3 hover:text-neutral5 absolute top-1/2 left-full ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                                  className={`text-neutral3 hover:text-neutral5 absolute top-1/2 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50 ${
+                                    headerAnchor === 'end' ? 'right-full mr-0.5' : 'left-full ml-0.5'
+                                  }`}
                                   title={`Drag to reorder the ${label} column`}
                                 >
                                   <GripVertical aria-hidden="true" className="size-3.5" />
