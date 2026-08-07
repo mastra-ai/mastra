@@ -7,6 +7,7 @@ import {
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
+  ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,7 +28,8 @@ import {
   useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
-import { matchCommands } from '../services/commands';
+import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { commandRequiresReadySession, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
@@ -83,7 +85,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset } = useChatTranscript();
+  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
@@ -100,9 +102,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
 
+  const preparingThreadId = usePreparingThreadId();
+
   const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const spotlightRef = useComposerSpotlight();
+  const spotlightRef = useComposerSpotlight(!busy);
   const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
@@ -219,7 +223,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     const text = draft.trim();
     if (!text && images.length === 0) return;
     updateDraft('');
-    void handleInput(text);
+    void handleInput(text).catch(error => {
+      clearPending();
+      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
+    });
   };
 
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -281,9 +288,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    // commands act on a live session, unlike a message the controller can hold
+    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
+      updateDraft(text);
+      pushNotice('Commands run once the session is ready.');
+      return;
+    }
     if (await runComposerCommand(text)) return;
     // Steering is text-only; attached images stay pending until the next send.
-    if (busy) {
+    if (busy && !preparingThreadId) {
       await steer(text);
       return;
     }
@@ -298,7 +311,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   }
 
-  const disabled = status !== 'ready';
+  // the controller holds a message until the workspace is ready, so preparing sessions stay usable
+  const disabled = status !== 'ready' && !preparingThreadId;
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
@@ -324,89 +338,91 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           ))}
         </div>
       )}
-      <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
-        <div aria-hidden="true" className="composer-spotlight-surface" />
-        {images.length > 0 && (
-          <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
-            {images.map(img => (
-              <div key={img.id} className="relative">
-                <img
-                  src={`data:${img.mediaType};base64,${img.data}`}
-                  alt={img.filename ?? 'Attached image'}
-                  className="border-border1 h-14 w-14 rounded-md border object-cover"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-xs"
-                  className="bg-surface3 absolute -top-1 -right-1 rounded-full"
-                  onClick={() => removeImage(img.id)}
-                  aria-label="Remove image"
-                >
-                  <X size={10} />
-                </Button>
-              </div>
-            ))}
-          </ComposerAttachments>
-        )}
-        <ComposerInput
-          ref={inputRef}
-          value={draft}
-          onChange={e => updateDraft(e.target.value)}
-          onKeyDown={onComposerKeyDown}
-          onPaste={onPaste}
-          placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
-          disabled={disabled}
-          maxHeight={composerVariantMaxHeight[variant]}
-          className={cn(composerVariantClass[variant], 'text-[15px]')}
-          aria-label="Message"
-          aria-keyshortcuts="Shift+Tab"
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={onFileInputChange}
-          className="hidden"
-          aria-label="Attach images"
-        />
-        <ComposerActions className="static w-full flex-wrap items-end justify-between px-3 pb-3">
-          <StatusLine />
-          <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              disabled={disabled}
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach image"
-            >
-              <ImagePlus size={14} />
-            </Button>
-            {busy && (
+      <ComposerRing busy={busy} className={modeColorClass}>
+        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
+          <div aria-hidden="true" className="composer-spotlight-surface" />
+          {images.length > 0 && (
+            <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
+              {images.map(img => (
+                <div key={img.id} className="relative">
+                  <img
+                    src={`data:${img.mediaType};base64,${img.data}`}
+                    alt={img.filename ?? 'Attached image'}
+                    className="border-border1 h-14 w-14 rounded-md border object-cover"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-xs"
+                    className="bg-surface3 absolute -top-1 -right-1 rounded-full"
+                    onClick={() => removeImage(img.id)}
+                    aria-label="Remove image"
+                  >
+                    <X size={10} />
+                  </Button>
+                </div>
+              ))}
+            </ComposerAttachments>
+          )}
+          <ComposerInput
+            ref={inputRef}
+            value={draft}
+            onChange={e => updateDraft(e.target.value)}
+            onKeyDown={onComposerKeyDown}
+            onPaste={onPaste}
+            placeholder={busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…'}
+            disabled={disabled}
+            maxHeight={composerVariantMaxHeight[variant]}
+            className={cn(composerVariantClass[variant], 'text-[15px]')}
+            aria-label="Message"
+            aria-keyshortcuts="Shift+Tab"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onFileInputChange}
+            className="hidden"
+            aria-label="Attach images"
+          />
+          <ComposerActions className="static w-full flex-wrap items-end justify-between px-3 pb-3">
+            <StatusLine />
+            <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
               <Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                onClick={() => void abortMutation.mutateAsync()}
-                aria-label="Abort"
+                disabled={disabled}
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach image"
               >
-                <Square size={14} />
+                <ImagePlus size={14} />
               </Button>
-            )}
-            <Button
-              type="submit"
-              variant="outline"
-              size="icon-sm"
-              disabled={disabled || (!draft.trim() && images.length === 0)}
-              aria-label="Send message"
-            >
-              <ArrowUp size={16} />
-            </Button>
-          </ButtonsGroup>
-        </ComposerActions>
-      </ComposerBox>
+              {busy && !preparingThreadId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => void abortMutation.mutateAsync()}
+                  aria-label="Abort"
+                >
+                  <Square size={14} />
+                </Button>
+              )}
+              <Button
+                type="submit"
+                variant="outline"
+                size="icon-sm"
+                disabled={disabled || (!draft.trim() && images.length === 0)}
+                aria-label="Send message"
+              >
+                <ArrowUp size={16} />
+              </Button>
+            </ButtonsGroup>
+          </ComposerActions>
+        </ComposerBox>
+      </ComposerRing>
     </ComposerRoot>
   );
 }

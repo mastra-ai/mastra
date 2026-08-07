@@ -20,6 +20,15 @@ function isAbortError(error: unknown, abortSignal?: AbortSignal): boolean {
   );
 }
 
+function shouldRetryEmptyStructuredObject(
+  object: Record<string, unknown>,
+  extractors: readonly Extractor<any>[],
+): boolean {
+  return (
+    Object.keys(object).length === 0 && extractors.some(extractor => extractor.retryStructuredExtractionOnEmptyObject)
+  );
+}
+
 export async function extractStructuredValues(opts: {
   agent: Agent<any, any, any, any>;
   source: ExtractorSource;
@@ -76,13 +85,32 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   };
 
   let object: Record<string, unknown>;
+  let retryEmptyObject = false;
   try {
     object = await generateWithStructuredOutput();
+    retryEmptyObject = shouldRetryEmptyStructuredObject(object, structuredExtractors);
   } catch (error) {
     if (isAbortError(error, opts.abortSignal)) {
       throw error;
     }
 
+    try {
+      const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
+      object = await generateWithStructuredOutput(fallbackJsonPromptInjection);
+    } catch (fallbackError) {
+      if (isAbortError(fallbackError, opts.abortSignal)) {
+        throw fallbackError;
+      }
+
+      const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+      return {
+        values,
+        failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
+      };
+    }
+  }
+
+  if (retryEmptyObject) {
     try {
       const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
       object = await generateWithStructuredOutput(fallbackJsonPromptInjection);

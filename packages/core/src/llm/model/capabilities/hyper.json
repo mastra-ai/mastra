@@ -7,13 +7,14 @@
     "qwen3.6-flash",
     "qwen3.6-plus",
     "qwen3.7-flash",
-    "qwen3.7-plus"
+    "qwen3.7-plus",
+    "qwen3.8-max"
   ],
   "temperature": [
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "gemma-4-26b-a4b-it",
-    "glm-5",
     "glm-5.1",
     "glm-5.2",
     "gpt-oss-120b",
@@ -27,11 +28,14 @@
     "qwen3.6-flash",
     "qwen3.6-max",
     "qwen3.6-plus",
+    "qwen3.7-flash",
     "qwen3.7-max",
-    "qwen3.7-plus"
+    "qwen3.7-plus",
+    "qwen3.8-max"
   ],
   "structuredOutput": [
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "gemma-4-26b-a4b-it",
     "glm-5.1",
@@ -41,6 +45,7 @@
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
-    "qwen3.6-flash"
+    "qwen3.6-flash",
+    "qwen3.7-flash"
   ]
 }

@@ -9,10 +9,12 @@
     "gpt-5.5",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
-    "gpt-5.6-terra"
+    "gpt-5.6-terra",
+    "kimi-k3"
   ],
   "temperature": [
     "deepseek-v3.2",
+    "deepseek-v4-flash",
     "deepseek-v4-pro",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
@@ -22,6 +24,7 @@
     "gpt-5.6-terra"
   ],
   "structuredOutput": [
+    "deepseek-v4-flash",
     "deepseek-v4-pro",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
@@ -35,6 +38,7 @@
     "gpt-5.5",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
-    "gpt-5.6-terra"
+    "gpt-5.6-terra",
+    "kimi-k3"
   ]
 }
