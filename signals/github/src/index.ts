@@ -1599,8 +1599,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     const generation = this.#pollingGeneration;
     const threadGeneration = this.#pollingThreadGenerations.get(key) ?? 0;
     const isCurrentGeneration = () =>
-      this.#pollingGeneration === generation &&
-      (this.#pollingThreadGenerations.get(key) ?? 0) === threadGeneration;
+      this.#pollingGeneration === generation && (this.#pollingThreadGenerations.get(key) ?? 0) === threadGeneration;
     if (state) state.running = true;
     this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: true });
 
@@ -1917,10 +1916,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     for (const comment of comments) {
       if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
       if (
-        !(await this.#isAuthorizedAuthor(owner, repo, comment.author, {
-          authorType: comment.authorType,
-          isBot: comment.isBot,
-        }, isCurrentGeneration))
+        !(await this.#isAuthorizedAuthor(
+          owner,
+          repo,
+          comment.author,
+          {
+            authorType: comment.authorType,
+            isBot: comment.isBot,
+          },
+          isCurrentGeneration,
+        ))
       ) {
         continue;
       }
