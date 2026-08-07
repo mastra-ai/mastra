@@ -1,6 +1,13 @@
 import http from 'node:http';
 import { createTool } from '@mastra/core/tools';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import {
+  Client,
+  LOG_LEVEL_META_KEY,
+  SdkError,
+  SdkErrorCode,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
+import type { AuthInfo } from '@modelcontextprotocol/server';
 import getPort from 'get-port';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { z } from 'zod/v3';
@@ -34,7 +41,19 @@ const makeTools = () => ({
       return 'logged';
     },
   }),
+  authTool: createTool({
+    id: 'authTool',
+    description: 'Returns the authenticated client ID',
+    inputSchema: z.object({}),
+    execute: async (_inputData, options) => options?.mcp?.extra?.authInfo?.clientId ?? 'missing',
+  }),
 });
+
+const authInfo: AuthInfo = {
+  token: 'modern-era-test-token',
+  clientId: 'modern-era-test-client',
+  scopes: ['tools:call'],
+};
 
 describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
   let server: MCPServer;
@@ -48,8 +67,13 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       protocolVersion: '2026-07-28',
       cacheHints: { 'tools/list': { ttlMs: 60_000, cacheScope: 'private' } },
       tools: makeTools(),
+      resources: {
+        listResources: async () => [{ uri: 'test://resource', name: 'Test resource' }],
+        getResourceContent: async () => ({ text: 'resource content' }),
+      },
     });
     httpServer = http.createServer(async (req, res) => {
+      (req as typeof req & { auth: AuthInfo }).auth = authInfo;
       await server.startHTTP({
         url: new URL(req.url || '', 'http://localhost'),
         httpPath: '/mcp',
@@ -78,6 +102,20 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
 
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });
       expect((result as any).content[0].text).toBe('echo: hi');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('forwards Node request auth to modern-era tool execution', async () => {
+    const client = new Client(
+      { name: 'auth-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    try {
+      const result = await client.callTool({ name: 'authTool', arguments: {} });
+      expect((result as { content: Array<{ text?: string }> }).content[0]?.text).toBe(authInfo.clientId);
     } finally {
       await client.close();
     }
@@ -124,6 +162,8 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     try {
       const tools = await client.tools();
       expect(Object.keys(tools)).toContain('echoTool');
+      const sdkClient = (client as unknown as { client: Client }).client;
+      expect(sdkClient.getDiscoverResult()).toBeDefined();
     } finally {
       await client.disconnect();
     }
@@ -156,16 +196,49 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     }
   });
 
-  it('does not break tools that log on the modern leg (per-request log context)', async () => {
+  it('delivers URI-filtered resource updates via subscriptions/listen on the modern leg', async () => {
+    const client = new Client(
+      { name: 'resource-listen-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    const uri = 'test://resource';
+    const updated = new Promise<string>(resolve => {
+      client.setNotificationHandler('notifications/resources/updated', async notification => {
+        resolve(notification.params.uri);
+      });
+    });
+    const subscription = await client.listen({ resourceSubscriptions: [uri] });
+    try {
+      await server.resources.notifyUpdated({ uri });
+      await expect(updated).resolves.toBe(uri);
+    } finally {
+      await subscription.close();
+      await client.close();
+    }
+  });
+
+  it('delivers opted-in tool logs through the per-request modern-era log context', async () => {
     const client = new Client(
       { name: 'log-client', version: '1.0.0' },
       { versionNegotiation: { mode: { pin: '2026-07-28' } } },
     );
     await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    const logged = new Promise<unknown>(resolve => {
+      client.setNotificationHandler('notifications/message', async notification => {
+        resolve(notification.params.data);
+      });
+    });
     try {
-      const result = await client.callTool({ name: 'loggingTool', arguments: {} });
-      expect((result as any).isError).toBeFalsy();
-      expect((result as any).content[0].text).toBe('logged');
+      const result = await client.callTool({
+        name: 'loggingTool',
+        arguments: {},
+        _meta: { [LOG_LEVEL_META_KEY]: 'info' },
+      });
+      const toolResult = result as { isError?: boolean; content: Array<{ text?: string }> };
+      expect(toolResult.isError).toBeFalsy();
+      expect(toolResult.content[0]?.text).toBe('logged');
+      await expect(logged).resolves.toEqual({ message: 'log from loggingTool' });
     } finally {
       await client.close();
     }
@@ -222,7 +295,12 @@ describe('MCPServer without protocolVersion (legacy default)', () => {
         protocolVersion: '2026-07-28',
       },
     });
-    await expect(client.connect()).rejects.toThrow();
+    const error = await client.connect().then(
+      () => undefined,
+      error => error,
+    );
+    expect(error).toBeInstanceOf(SdkError);
+    expect((error as SdkError).code).toBe(SdkErrorCode.EraNegotiationFailed);
     await client.disconnect().catch(() => {});
   });
 });

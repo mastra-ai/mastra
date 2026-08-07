@@ -157,8 +157,11 @@ export class MCPServer extends MCPServerBase {
   private modernEraHandler?: McpHttpHandler;
   // Node (req, res) adapter over modernEraHandler.fetch.
   private modernEraNodeHandler?: NodeMcpRequestHandler;
-  // Handle for the dual-era stdio serving entry (flag on); close() tears it down.
+  // Handle and connected Server instance for the dual-era stdio serving entry.
+  // The instance is retained so runtime notifications can reach stdio subscriptions.
   private stdioHandle?: { close(): Promise<void> };
+  private stdioServerInstance?: Server;
+  private warnedAboutModernEraHttpOptions = false;
 
   /**
    * Provides methods to notify clients about resource changes.
@@ -523,7 +526,9 @@ export class MCPServer extends MCPServerBase {
    * cannot receive notifications.
    */
   private getAllSdkServers(): Server[] {
-    return [this.server, ...this.httpServerInstances.values()].filter(server => server.transport !== undefined);
+    return [this.server, this.stdioServerInstance, ...this.httpServerInstances.values()].filter(
+      (server): server is Server => server?.transport !== undefined,
+    );
   }
 
   /**
@@ -1678,11 +1683,18 @@ export class MCPServer extends MCPServerBase {
       // Dual-era stdio: the opening exchange selects the era (server/discover probe
       // for modern clients, initialize handshake for legacy clients) and one fresh
       // instance from the factory is pinned for the connection lifetime.
-      this.stdioHandle = serveStdio(() => this.createServerInstance(), {
-        onerror: error => {
-          this.logger.error('MCP stdio handler error', { error: error.toString() });
+      this.stdioHandle = serveStdio(
+        () => {
+          const serverInstance = this.createServerInstance();
+          this.stdioServerInstance = serverInstance;
+          return serverInstance;
         },
-      });
+        {
+          onerror: error => {
+            this.logger.error('MCP stdio handler error', { error: error.toString() });
+          },
+        },
+      );
       this.logger.info('Started MCP Server (stdio, 2026-07-28 dual-era)');
       return;
     }
@@ -1972,6 +1984,12 @@ export class MCPServer extends MCPServerBase {
     // clients are served by the handler's built-in stateless fallback on the same
     // endpoint. Session/serverless options do not apply on this path.
     if (this.servesModernEra()) {
+      if (options && !this.warnedAboutModernEraHttpOptions) {
+        this.warnedAboutModernEraHttpOptions = true;
+        this.logger.warn(
+          'startHTTP transport options are ignored when protocolVersion is 2026-07-28 because the dual-era handler is stateless',
+        );
+      }
       try {
         await this.getModernEraNodeHandler()(req, res);
       } catch (error) {
@@ -2412,6 +2430,7 @@ export class MCPServer extends MCPServerBase {
       if (this.stdioHandle) {
         await this.stdioHandle.close();
         this.stdioHandle = undefined;
+        this.stdioServerInstance = undefined;
       }
       if (this.modernEraHandler) {
         await this.modernEraHandler.close();

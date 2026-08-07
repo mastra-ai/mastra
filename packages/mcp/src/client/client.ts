@@ -616,10 +616,9 @@ export class InternalMastraMCPClient extends MastraBase {
           throw error;
         }
 
-        // A policy violation is final: retrying the blocked host over SSE cannot
-        // succeed, and falling through would bury the policy error under a generic
-        // "could not connect" message.
-        if (isUrlPolicyError(error)) {
+        // Policy violations and pinned protocol negotiation failures are final:
+        // retrying over legacy SSE cannot succeed and would bury the typed error.
+        if (isUrlPolicyError(error) || this.serverConfig.protocolVersion === '2026-07-28') {
           throw error;
         }
 
