@@ -1422,6 +1422,7 @@ function seedMaterializedSession() {
     orgId: 'org1',
     userId: 'u1',
     branch: 'feat/x',
+    title: null,
     baseBranch: 'main',
     sandboxId: 'sb-1',
     sandboxWorkdir: '/workspace/worktrees/feat-x',
@@ -1779,6 +1780,7 @@ describe('Factory session routes', () => {
       userId: 'u1',
       branch: 'feat/x',
       baseBranch: 'main',
+      title: null,
       sandboxId: null,
       sandboxWorkdir: null,
     });
@@ -1786,6 +1788,129 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(1);
     expect(ensureWorktree).not.toHaveBeenCalled();
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
+  });
+
+  it('uses a supplied UUID for branch identity and persists a normalized title', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const sessionId = '00000000-0000-4000-8000-000000000001';
+    const first = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId,
+      title: '  Fix\n  the\tlogin flow  ',
+    });
+
+    expect(first.status).toBe(200);
+    const firstSession = (await first.json()).session;
+    expect(firstSession).toMatchObject({
+      sessionId,
+      branch: `user/session-${sessionId}`,
+      title: 'Fix the login flow',
+    });
+
+    const loaded = await app.request(`/web/user-sessions/${sessionId}`);
+    expect((await loaded.json()).session.title).toBe('Fix the login flow');
+    const listed = await app.request('/web/github/projects/p1/sessions');
+    expect((await listed.json()).sessions).toEqual([
+      expect.objectContaining({ sessionId, title: 'Fix the login flow' }),
+    ]);
+  });
+
+  it('returns the same session when a supplied UUID is retried', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const request = {
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      title: 'Fix login flow',
+    };
+
+    const first = await postJson(app, '/web/github/projects/p1/sessions', request);
+    const second = await postJson(app, '/web/github/projects/p1/sessions', request);
+
+    expect((await second.json()).session).toEqual((await first.json()).session);
+    expect(tables.sessions).toHaveLength(1);
+  });
+
+  it('derives a branch from a server-generated UUID when no session ID is supplied', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {});
+    const session = (await res.json()).session;
+
+    expect(session.branch).toBe(`user/session-${session.sessionId}`);
+    expect(session.title).toBeNull();
+  });
+
+  it('truncates titles to 80 code points and stores blank titles as null', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const long = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      title: `${'x'.repeat(79)} word`,
+    });
+    const blank = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      title: ' \n\t ',
+    });
+    const atCap = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      title: `${'x'.repeat(79)}🙂`,
+    });
+    const pastCap = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000004',
+      title: `${'x'.repeat(80)}🙂`,
+    });
+
+    expect((await long.json()).session.title).toBe('x'.repeat(79));
+    expect((await blank.json()).session.title).toBeNull();
+    expect((await atCap.json()).session.title).toBe(`${'x'.repeat(79)}🙂`);
+    expect((await pastCap.json()).session.title).toBe('x'.repeat(80));
+  });
+
+  it.each([
+    [{ sessionId: 'not-a-uuid' }, 'Invalid sessionId'],
+    [{ sessionId: '00000000-0000-4000-8000-00000000000A' }, 'Invalid sessionId'],
+    [{ sessionId: 42 }, 'Invalid sessionId'],
+    [{ title: 42 }, 'Invalid title'],
+    [{ baseBranch: 42 }, 'Invalid baseBranch'],
+  ])('rejects invalid optional session fields', async (body, error) => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error });
+    expect(tables.sessions).toHaveLength(0);
+  });
+
+  it('rejects a supplied UUID already bound to another session identity', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const sessionId = '00000000-0000-4000-8000-000000000001';
+    await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x', sessionId });
+
+    const conflict = await postJson(app, '/web/github/projects/p1/sessions', { sessionId });
+
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toEqual({ error: 'Session ID conflict' });
+    expect(tables.sessions).toHaveLength(1);
+  });
+
+  it('returns a conflict when two identities concurrently claim the same supplied UUID', async () => {
+    seedMaterializedProject();
+    const sessionId = '00000000-0000-4000-8000-000000000001';
+
+    const responses = await Promise.all([
+      postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { sessionId }),
+      postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { sessionId }),
+    ]);
+
+    expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(tables.sessions).toHaveLength(1);
+  });
+
+  it('rejects a non-object body instead of treating it as an unnamed session', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', 42);
+    expect(res.status).toBe(400);
+    expect(tables.sessions).toHaveLength(0);
   });
 
   it('reuses the session for the same repository, user, and branch', async () => {

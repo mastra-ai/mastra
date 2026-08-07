@@ -1132,7 +1132,16 @@ describe('MastraClient', () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         headers: { get: () => 'application/json' },
-        json: async () => ({ experimentId: 'exp-1', status: 'pending', totalItems: 1, succeededCount: 0, failedCount: 0, startedAt: new Date().toISOString(), completedAt: null, results: [] }),
+        json: async () => ({
+          experimentId: 'exp-1',
+          status: 'pending',
+          totalItems: 1,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          results: [],
+        }),
       });
 
       await client.triggerDatasetExperiment({
@@ -1147,7 +1156,13 @@ describe('MastraClient', () => {
       const [url, init] = (global.fetch as any).mock.calls[0];
       expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
       expect(init.method).toBe('POST');
-      expect(JSON.parse(init.body)).toMatchObject({ targetType: 'agent', targetId: 'agent-1', name, description, metadata });
+      expect(JSON.parse(init.body)).toMatchObject({
+        targetType: 'agent',
+        targetId: 'agent-1',
+        name,
+        description,
+        metadata,
+      });
     });
 
     it('batchInsertDatasetItems preserves an explicit empty scorerIds override', async () => {

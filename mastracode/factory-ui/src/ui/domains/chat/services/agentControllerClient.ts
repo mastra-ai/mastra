@@ -46,7 +46,8 @@ export function createAgentControllerClient({
   const cached = clientCache.get(key);
   if (cached) return cached;
 
-  const client = new MastraClient({ baseUrl, credentials: 'include' });
+  // query-client.ts owns retry policy; silently re-POSTing non-idempotent sends duplicates messages
+  const client = new MastraClient({ baseUrl, credentials: 'include', retries: 0 });
   const controller = client.getAgentController(agentControllerId);
   const session = controller.session(resourceId, normalizedScope);
   const entry = { client, controller, session };

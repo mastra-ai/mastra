@@ -1,5 +1,42 @@
 # mastra
 
+## 1.23.1-alpha.1
+
+### Patch Changes
+
+- Preserve experiment name, description, and metadata from HTTP trigger requests. ([#20578](https://github.com/mastra-ai/mastra/pull/20578))
+
+- Improved Factory board cards by replacing long inline rule errors with a compact error badge that reveals details on hover. ([#20841](https://github.com/mastra-ai/mastra/pull/20841))
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+
+- Fixed `mastra api --url` returning 401 when pointed at a Mastra Cloud Studio or Factory instance. The CLI now uses your logged-in credentials to authenticate requests to `*.studio.mastra.cloud` and `*.factory.mastra.cloud` (and the corresponding staging domains). User-hosted `*.server.mastra.cloud` URLs and custom URLs are unchanged, and an explicit `--header Authorization: ...` always wins. ([#20828](https://github.com/mastra-ai/mastra/pull/20828))
+
+- Fixed experiment workers to: ([#20719](https://github.com/mastra-ai/mastra/pull/20719))
+
+  - emit Platform-compatible protocol version metadata and accepted-event negotiation details
+  - report a deterministic error when the customer `#mastra` module does not export `mastra`
+  - install explicitly configured external dependencies that are loaded dynamically at runtime
+  - disable worker-side persistence and resolve relative project roots
+  - produce reproducible, relocatable manifests that exclude installed dependencies, temporary build metadata, and source-machine paths, and reject absolute or artifact-escaping symlinks
+
+- Fixed Git initialization during project creation. Git now uses the user's global Git configuration. ([#20791](https://github.com/mastra-ai/mastra/pull/20791))
+
+- Added the delta polling parameters (`mode`, `after`, `limit`) to the lightweight trace list route in `mastra api`'s route metadata, so a polling client can fetch only the traces recorded since its last request: ([#20677](https://github.com/mastra-ai/mastra/pull/20677))
+
+  ```bash
+  mastra api trace list '{"mode":"delta","after":"<deltaCursor>","limit":100}'
+  ```
+
+  Each response returns a `deltaCursor` to pass as `after` on the next poll.
+
+- Included auto-triaged GitHub issues when building teammate options for the Factory board filter dropdown so triaged-only assignees are selectable. ([#20841](https://github.com/mastra-ai/mastra/pull/20841))
+
+- Updated dependencies [[`e7109ee`](https://github.com/mastra-ai/mastra/commit/e7109ee6f731bacc79c885906f3c7dca8d8f013a), [`772c0c8`](https://github.com/mastra-ai/mastra/commit/772c0c897cec383258de2e6178147f8014767c7b), [`578bf2e`](https://github.com/mastra-ai/mastra/commit/578bf2e6a88e9d5b8bf502204e15a95dfbb679ae), [`06b2d87`](https://github.com/mastra-ai/mastra/commit/06b2d87e63bcdd0ed59215c6789692b9b12de376), [`ac01d63`](https://github.com/mastra-ai/mastra/commit/ac01d6355974aec73fdb8781449ed12bac582094), [`a810a05`](https://github.com/mastra-ai/mastra/commit/a810a058f62ad407cfc1701e0be36ae91145d7cf), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`180a953`](https://github.com/mastra-ai/mastra/commit/180a953efb4b9c1c74de4d387839860f94045fb2), [`6104347`](https://github.com/mastra-ai/mastra/commit/61043473ba6bfd0a25156824e853e13165562e6c), [`45bfb88`](https://github.com/mastra-ai/mastra/commit/45bfb88fd52f1dd3be20e2a38905777c96499c90), [`e3b9307`](https://github.com/mastra-ai/mastra/commit/e3b9307098daefbfae2a52ae2ef51bc9fc701190), [`d6834c5`](https://github.com/mastra-ai/mastra/commit/d6834c5a7866b16734d23900163c2414ed70d791), [`c52d346`](https://github.com/mastra-ai/mastra/commit/c52d3462ec831a5d95926ecd3d3373f5928ad2e5), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`5018d58`](https://github.com/mastra-ai/mastra/commit/5018d588799898f443c303d8bbd2dbcc4562fbb3), [`0023e79`](https://github.com/mastra-ai/mastra/commit/0023e7919431078280abd11c89d1edeae35fcc69), [`c2ad51e`](https://github.com/mastra-ai/mastra/commit/c2ad51e2467f901eecba8c9f4a45e22a50bd7c18), [`3dc97ea`](https://github.com/mastra-ai/mastra/commit/3dc97ea415fad353b48a13095fad1835933cc12a), [`3d01cd3`](https://github.com/mastra-ai/mastra/commit/3d01cd387321b6f9c5cac31d487c84bf51b19c78), [`7bf3086`](https://github.com/mastra-ai/mastra/commit/7bf308663f0115ca74ad20554ade740f06640859), [`a8dd139`](https://github.com/mastra-ai/mastra/commit/a8dd1391a9fe9a6632c25809ef236980afa9a020), [`e5786be`](https://github.com/mastra-ai/mastra/commit/e5786be02bb903073082bd9d6da880ebaacc343f), [`2093fbd`](https://github.com/mastra-ai/mastra/commit/2093fbd53bb744bae19ec89f6d73db9a66fbe8a7), [`e7a5da4`](https://github.com/mastra-ai/mastra/commit/e7a5da4ef8e4dd452d2f232961b4e682a85ffe43), [`7b4393d`](https://github.com/mastra-ai/mastra/commit/7b4393d557411fdcf07b0e30e5acaf7cc85154ae)]:
+  - @mastra/core@1.58.0-alpha.1
+  - @mastra/deployer@1.58.0-alpha.1
+
 ## 1.23.1-alpha.0
 
 ### Patch Changes
