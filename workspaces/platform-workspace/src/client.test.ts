@@ -29,26 +29,18 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('reads the access token from MASTRA_PLATFORM_SECRET_KEY', () => {
+  it('reads the access token from MASTRA_PLATFORM_ACCESS_TOKEN', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform_access_token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+
+    expect(resolvePlatformOptions({}).accessToken).toBe('platform_access_token');
+  });
+
+  it('does not use MASTRA_PLATFORM_SECRET_KEY as an access token fallback', () => {
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
 
-    expect(resolvePlatformOptions({}).accessToken).toBe('sk_secret');
-  });
-
-  it('prefers MASTRA_PLATFORM_SECRET_KEY over the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_legacy');
-    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
-
-    expect(resolvePlatformOptions({}).accessToken).toBe('sk_secret');
-  });
-
-  it('falls back to the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_legacy');
-    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
-
-    expect(resolvePlatformOptions({}).accessToken).toBe('sk_legacy');
+    expect(() => resolvePlatformOptions({})).toThrow('accessToken is required');
   });
 
   it('throws PlatformApiError for non-2xx responses', async () => {

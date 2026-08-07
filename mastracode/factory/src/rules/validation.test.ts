@@ -33,6 +33,42 @@ describe('Factory rule validation', () => {
     expect(JSON.parse(JSON.stringify(validated))).toEqual(validated);
   });
 
+  it('validates the optional session message on transition decisions', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'transition',
+        idempotencyKey: 'merged-1',
+        board: 'review',
+        stage: 'done',
+        message: { text: '  PR merged; card moved to Done.  ', role: 'work' },
+      }),
+    ).toEqual({
+      type: 'transition',
+      idempotencyKey: 'merged-1',
+      board: 'review',
+      stage: 'done',
+      message: { text: 'PR merged; card moved to Done.', role: 'work' },
+    });
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'transition',
+        idempotencyKey: 'merged-1',
+        board: 'review',
+        stage: 'done',
+        message: { text: 'PR merged.', extra: true },
+      }),
+    ).toThrow(/unsupported field/i);
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'transition',
+        idempotencyKey: 'merged-1',
+        board: 'review',
+        stage: 'done',
+        message: { text: 'PR merged.', role: 'bad role' },
+      }),
+    ).toThrow(FactoryRuleValidationError);
+  });
+
   it('keeps rejection exclusive from commit-only fields and decisions', () => {
     expect(validateFactoryRuleDecision({ type: 'reject', code: 'forbidden', reason: 'Not authorized.' })).toEqual({
       type: 'reject',

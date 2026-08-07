@@ -473,9 +473,22 @@ export class MemoryMySQL extends MemoryStorage {
 
     const includeMessages: MastraDBMessage[] = [];
     const seenIds = new Set<string>();
+    const unresolvedIds = include.filter(inc => !inc.threadId).map(inc => inc.id);
+    const resolvedThreadIds = new Map<string, string>();
+
+    if (unresolvedIds.length > 0) {
+      const placeholders = unresolvedIds.map(() => '?').join(', ');
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT id, thread_id FROM ${formatTableName(TABLE_MESSAGES)} WHERE id IN (${placeholders})`,
+        unresolvedIds,
+      );
+      for (const row of rows) {
+        resolvedThreadIds.set(row.id, row.thread_id);
+      }
+    }
 
     for (const inc of include) {
-      const targetThreadId = inc.threadId ?? threadId;
+      const targetThreadId = inc.threadId ?? resolvedThreadIds.get(inc.id) ?? threadId;
 
       let threadMessages = messagesByThread.get(targetThreadId);
       if (!threadMessages) {
@@ -486,6 +499,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       // If the current cached set might be partial (e.g., paginated main thread), reload full thread
       const needsContext =
+        !threadMessages.some(message => message.id === inc.id) ||
         (inc.withPreviousMessages ?? 0) > 0 ||
         (inc.withNextMessages ?? 0) > 0 ||
         threadMessages.length < (inc.withNextMessages ?? 0) + (inc.withPreviousMessages ?? 0) + 1;
@@ -626,15 +640,22 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPageNormalized < total,
       };
     } catch (error) {
-      throw new MastraError(
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
+      const mastraError = new MastraError(
         {
-          id: 'MYSQL_MEMORY_LIST_THREADS_FAILED',
+          id: createStorageErrorId('MYSQL', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { filter: JSON.stringify(filter ?? {}) },
         },
         error,
       );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      throw mastraError;
     }
   }
 
@@ -1409,9 +1430,13 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: 'MYSQL_MEMORY_GET_MESSAGES_PAGINATED_FAILED',
+          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1424,7 +1449,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { messages: [], total: 0, page, perPage, hasMore: false };
+      throw mastraError;
     }
   }
 
@@ -1569,9 +1594,13 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES', 'FAILED'),
+          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -1580,13 +1609,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 

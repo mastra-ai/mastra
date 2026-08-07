@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
+import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
   getCustomProviderId,
@@ -13,8 +14,9 @@ import {
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
+  stripMastraCodeCustomProviderPrefix,
 } from '../settings.js';
-import type { BrowserSettings, GlobalSettings, StorageSettings } from '../settings.js';
+import type { BrowserSettings, CustomProviderSetting, GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };
@@ -92,6 +94,98 @@ const builtinPacks = [
     },
   },
 ];
+
+describe('explicit OM configuration', () => {
+  it('reports untouched settings as unconfigured', () => {
+    expect(hasExplicitOMConfiguration(createSettings())).toBe(false);
+  });
+
+  it.each([
+    [
+      'onboarding pack',
+      (settings: GlobalSettings) => {
+        settings.onboarding.omPackId = 'anthropic';
+      },
+    ],
+    [
+      'active pack',
+      (settings: GlobalSettings) => {
+        settings.models.activeOmPackId = 'openai';
+      },
+    ],
+    [
+      'shared model override',
+      (settings: GlobalSettings) => {
+        settings.models.omModelOverride = 'custom/shared';
+      },
+    ],
+    [
+      'observer override',
+      (settings: GlobalSettings) => {
+        settings.models.observerModelOverride = 'custom/observer';
+      },
+    ],
+    [
+      'reflector override',
+      (settings: GlobalSettings) => {
+        settings.models.reflectorModelOverride = 'custom/reflector';
+      },
+    ],
+  ])('treats a persisted %s as explicit configuration', (_name, configure) => {
+    const settings = createSettings();
+    configure(settings);
+    expect(hasExplicitOMConfiguration(settings)).toBe(true);
+  });
+
+  it('ignores a custom pack that carries no model', () => {
+    const settings = createSettings();
+    settings.onboarding.omPackId = 'custom';
+    settings.models.activeOmPackId = 'custom';
+
+    expect(hasExplicitOMConfiguration(settings)).toBe(false);
+  });
+
+  it('treats a custom pack with a model as explicit configuration', () => {
+    const settings = createSettings();
+    settings.onboarding.omPackId = 'custom';
+    settings.models.activeOmPackId = 'custom';
+    settings.models.omModelOverride = 'xai/grok-4.5';
+
+    expect(hasExplicitOMConfiguration(settings)).toBe(true);
+  });
+
+  it('applies a provider default while OM is untouched', () => {
+    const settings = createSettings();
+    const pack = {
+      id: 'openai',
+      name: 'OpenAI Mini',
+      description: 'Via Codex subscription',
+      modelId: 'openai/gpt-5.4-mini',
+    };
+
+    expect(applyOMDefaultIfUnconfigured(settings, pack)).toBe(true);
+    expect(settings.onboarding.omPackId).toBe('openai');
+    expect(settings.models.activeOmPackId).toBe('openai');
+    expect(settings.models.omModelOverride).toBeNull();
+  });
+
+  it('does not overwrite an explicit role model', () => {
+    const settings = createSettings();
+    settings.models.observerModelOverride = 'custom/observer';
+
+    expect(
+      applyOMDefaultIfUnconfigured(settings, {
+        id: 'anthropic',
+        name: 'Claude Haiku',
+        description: 'Via Max subscription',
+        modelId: 'anthropic/claude-haiku-4-5',
+      }),
+    ).toBe(false);
+    expect(settings.onboarding.omPackId).toBeNull();
+    expect(settings.models.activeOmPackId).toBeNull();
+    expect(settings.models.observerModelOverride).toBe('custom/observer');
+  });
+});
 
 function withTempSettingsFile(run: (filePath: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'mastracode-settings-'));
@@ -445,6 +539,48 @@ describe('customProviders parsing/persistence', () => {
   it('creates custom provider ids without custom- prefix', () => {
     expect(getCustomProviderId('Acme Provider')).toBe('acme-provider');
     expect(getCustomProviderId('  !!!  ')).toBe('provider');
+  });
+
+  describe('stripMastraCodeCustomProviderPrefix', () => {
+    const customProviders: CustomProviderSetting[] = [
+      { name: 'Custom Provider', url: 'https://example.com/v1', models: ['gemma-4-31b'] },
+    ];
+
+    it('strips the mastracode/ gateway prefix for a configured custom provider', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/custom-provider/gemma-4-31b', customProviders)).toBe(
+        'custom-provider/gemma-4-31b',
+      );
+    });
+
+    it('preserves nested model name segments after stripping', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/custom-provider/nested/model-name', customProviders)).toBe(
+        'custom-provider/nested/model-name',
+      );
+    });
+
+    it('leaves legitimate mastracode gateway-routed ids unchanged', () => {
+      expect(
+        stripMastraCodeCustomProviderPrefix('mastracode/anthropic/claude-sonnet-4-20250514', customProviders),
+      ).toBe('mastracode/anthropic/claude-sonnet-4-20250514');
+    });
+
+    it('leaves ids for unrecognized providers unchanged', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/unknown-provider/model', customProviders)).toBe(
+        'mastracode/unknown-provider/model',
+      );
+    });
+
+    it('leaves ids without the mastracode/ prefix unchanged', () => {
+      expect(stripMastraCodeCustomProviderPrefix('custom-provider/gemma-4-31b', customProviders)).toBe(
+        'custom-provider/gemma-4-31b',
+      );
+    });
+
+    it('leaves ids with an empty model portion unchanged', () => {
+      expect(stripMastraCodeCustomProviderPrefix('mastracode/custom-provider/', customProviders)).toBe(
+        'mastracode/custom-provider/',
+      );
+    });
   });
 
   it('round-trips optional api keys without forcing apiKey field', () => {

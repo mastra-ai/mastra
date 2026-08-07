@@ -47,6 +47,8 @@ export interface OnboardingOptions {
   modePacks: ModePack[];
   /** Available OM packs (pre-filtered by provider access). */
   omPacks: OMPack[];
+  /** Preferred OM pack for first-run setup, usually derived from the connected provider. */
+  preferredOmPackId?: string;
   /** Whether the user has any provider access (API key or OAuth) — even for providers without a built-in pack. */
   hasProviderAccess: boolean;
   /** Previously saved choices — used to highlight current selections when re-running. */
@@ -112,7 +114,11 @@ export class OnboardingInlineComponent extends Box implements Focusable {
     const prevOmPack = options.previous?.omPackId
       ? options.omPacks.find(p => p.id === options.previous!.omPackId)
       : undefined;
+    const preferredOmPack = options.preferredOmPackId
+      ? options.omPacks.find(p => p.id === options.preferredOmPackId)
+      : undefined;
     this.selectedOmPack = prevOmPack ??
+      preferredOmPack ??
       options.omPacks[0] ?? { id: 'none', name: 'None available', description: '', modelId: '' };
 
     if (options.previous?.yolo != null) {
@@ -143,8 +149,16 @@ export class OnboardingInlineComponent extends Box implements Focusable {
   }
 
   /** Refresh the available OM packs (e.g. after a login grants new provider access). */
-  updateOmPacks(packs: OMPack[]): void {
+  updateOmPacks(packs: OMPack[], preferredOmPackId?: string): void {
     this.options.omPacks = packs;
+    if (!this.options.previous?.omPackId && preferredOmPackId) {
+      const preferred = packs.find(p => p.id === preferredOmPackId);
+      if (preferred) {
+        this.selectedOmPack = preferred;
+        this.options.preferredOmPackId = preferred.id;
+        return;
+      }
+    }
     if (!this.selectedOmPack || !packs.find(p => p.id === this.selectedOmPack.id)) {
       this.selectedOmPack = packs[0]!;
     }
@@ -337,6 +351,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
         this.runCustomPackFlow();
       } else {
         this.selectedModePack = pack;
+        this.preferMatchingOmPack(pack.id);
         this.collapseStep(`Model pack → ${theme.bold(this.selectedModePack.name)}`);
         this.renderStep('omPack');
       }
@@ -473,6 +488,12 @@ export class OnboardingInlineComponent extends Box implements Focusable {
   // Step: OM pack
   // ---------------------------------------------------------------------------
 
+  private preferMatchingOmPack(providerId: string): void {
+    if (this.options.previous?.omPackId) return;
+    const matchingPack = this.options.omPacks.find(pack => pack.id === providerId);
+    if (matchingPack) this.selectedOmPack = matchingPack;
+  }
+
   private renderOmPack(): void {
     const omPacks = this.options.omPacks;
 
@@ -498,9 +519,10 @@ export class OnboardingInlineComponent extends Box implements Focusable {
 
     this.selectList = new SelectList(items, items.length, getSelectListTheme());
 
-    // Pre-select the previously chosen OM pack
-    const prevOmIdx = prevOmId ? omPacks.findIndex(p => p.id === prevOmId) : -1;
-    if (prevOmIdx > 0) this.selectList.setSelectedIndex(prevOmIdx);
+    // Pre-select the previous choice, or the pack matching the connected provider
+    const selectedOmId = prevOmId ?? this.selectedOmPack?.id ?? null;
+    const selectedOmIdx = selectedOmId ? omPacks.findIndex(p => p.id === selectedOmId) : -1;
+    if (selectedOmIdx > 0) this.selectList.setSelectedIndex(selectedOmIdx);
 
     this.selectList.onSelect = (item: SelectItem) => {
       const pack = omPacks.find(p => p.id === item.value) ?? omPacks[0]!;

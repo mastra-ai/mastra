@@ -234,6 +234,7 @@ const listRepoOpenIssues = vi.fn(
         title: 'Fix flaky test',
         url: 'https://github.com/octo/hello/issues/12',
         author: 'ada',
+        assignee: 'grace',
         labels: ['bug'],
         comments: 3,
         createdAt: '2026-07-01T00:00:00Z',
@@ -253,6 +254,8 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
       title: 'Add factory pages',
       url: 'https://github.com/octo/hello/pull/34',
       author: 'grace',
+      assignees: ['ada'],
+      requestedReviewers: ['octocat'],
       baseBranch: 'main',
       headBranch: 'feat/factory',
       createdAt: '2026-07-03T00:00:00Z',
@@ -321,7 +324,7 @@ const githubStub = {
           state: 'open',
           stateType: 'open',
           priority: null,
-          assignee: null,
+          assignee: issue.assignee,
           source: input.sourceIds[0]!,
           labels: issue.labels,
           commentCount: issue.comments,
@@ -399,6 +402,7 @@ const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) =>
   opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -446,6 +450,8 @@ vi.mock('./sandbox', () => {
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
+    recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
+      recycleClaimedWorkdir(sb, workdir, defaultBranch),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (input: any) => createPullRequest(input),
@@ -648,6 +654,7 @@ beforeEach(() => {
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   sourceControlStorage.sessionsRows = tables.sessions as any;
+  sourceControlStorage.sandboxPoolRows = [];
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
@@ -660,6 +667,7 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
+  recycleClaimedWorkdir.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
@@ -695,7 +703,6 @@ describe('webhook route', () => {
   it('accepts a valid signed issues event without guessing a Factory project repository', async () => {
     seedMaterializedProject();
     const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp(null, { runIssueTriage }).request(
       signedGithubWebhookRequest('issues', {
@@ -724,7 +731,6 @@ describe('webhook route', () => {
       sender: 'ada',
       installationId: 7,
     });
-    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
     expect(addIssueLabels).not.toHaveBeenCalled();
     expect(runIssueTriage).not.toHaveBeenCalled();
   });
@@ -1072,6 +1078,26 @@ describe('repos route', () => {
     expect(res.status).toBe(500);
     expect(tables.installations).toHaveLength(1);
   });
+
+  it('lists multiple installations concurrently', async () => {
+    install(7, 'octo');
+    install(8, 'other');
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return defaultImpl(installationId);
+    });
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(res.status).toBe(200);
+    // Serial listing would never overlap; the route must fan out.
+    expect(maxInFlight).toBe(2);
+  });
 });
 
 describe('auth scoping', () => {
@@ -1286,6 +1312,48 @@ describe('ensure (materialize)', () => {
     expect(res.status).toBe(404);
   });
 
+  it('self-heals a stale sandbox provider by recomputing the workdir against the current fleet', async () => {
+    // The row was linked while a different provider was active — its workdir
+    // points into that provider's filesystem and would fail to clone here.
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/old-provider/hello',
+      }),
+    );
+    // A per-user binding already inherited the stale workdir and thinks it is materialized.
+    tables.sandboxes.push(
+      sandboxRow({
+        id: 'sbrow-1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sb-old',
+        sandboxWorkdir: '/old-provider/hello',
+        materializedAt: new Date(),
+      }),
+    );
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/hello' });
+    // The project row was healed to the current fleet's provider + workdir…
+    expect(tables.projectRepositories[0]).toMatchObject({
+      sandboxProvider: 'railway',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    // …and the per-user binding was re-pointed and forced to re-materialize.
+    expect(tables.sandboxes[0]).toMatchObject({ sandboxWorkdir: '/workspace/hello', materializedAt: null });
+    expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
+    );
+  });
+
   it('streams server-side progress events when the client accepts an event stream', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({
@@ -1399,7 +1467,12 @@ describe('issues route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.issues).toHaveLength(1);
-    expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
+    expect(json.issues[0]).toMatchObject({
+      number: 12,
+      title: 'Fix flaky test',
+      assignee: 'grace',
+      labels: ['bug'],
+    });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined });
   });
@@ -1473,6 +1546,7 @@ describe('issues route', () => {
       branch: 'factory/issue-12',
     });
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
+    expect(addIssueLabels).toHaveBeenCalledOnce();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
@@ -1483,7 +1557,36 @@ describe('issues route', () => {
       resourceId: 'factory-p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
+      defaultModelId: undefined,
     });
+  });
+
+  it('normalises labels through the shared wrapper and resolves the default model', async () => {
+    seedMaterializedProject();
+    const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
+    const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
+      '/web/github/projects/p1/issues/5/triage',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Normalise labels',
+          url: 'https://github.com/octo/hello/issues/5',
+          labels: ['enhancement'],
+        }),
+      },
+    );
+    expect(res.status).toBe(202);
+    // The wrapper calls addIssueLabels exactly once (no duplicate from the handler).
+    expect(addIssueLabels).toHaveBeenCalledOnce();
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['auto-triaged']);
+    // The runner receives labels with 'auto-triaged' appended by the wrapper.
+    expect(runIssueTriage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: ['enhancement', 'auto-triaged'],
+        defaultModelId: undefined,
+      }),
+    );
   });
 
   it('400s when manual triage receives a non-canonical issue URL', async () => {
@@ -1557,7 +1660,13 @@ describe('prs route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pullRequests).toHaveLength(1);
-    expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
+    expect(json.pullRequests[0]).toMatchObject({
+      number: 34,
+      title: 'Add factory pages',
+      assignees: ['ada'],
+      requestedReviewers: ['octocat'],
+      headBranch: 'feat/factory',
+    });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
   });
@@ -1701,6 +1810,73 @@ describe('Factory session routes', () => {
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
+  });
+
+  it('returns a remote session sandbox to the reuse pool on delete instead of destroying it', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(
+      tables.sessions.find(row => row.sessionId === sessionId)!,
+      {
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      },
+    );
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+    // The VM stays alive for the next session, but the released session's
+    // work is scrubbed off it before it enters the pool.
+    await vi.waitFor(() => {
+      expect(reattachSandbox).toHaveBeenCalledWith('sb-live');
+      expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
+      expect(sourceControlStorage.sandboxPoolRows).toEqual([
+        expect.objectContaining({
+          orgId: 'org1',
+          projectRepositoryId: 'p1',
+          userId: 'u1',
+          sandboxId: 'sb-live',
+          sandboxWorkdir: '/workspace/hello',
+        }),
+      ]);
+    });
+  });
+
+  it('deletes the session without waiting for the sandbox scrub to finish', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(
+      tables.sessions.find(row => row.sessionId === sessionId)!,
+      {
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      },
+    );
+    // Scrubbing a large checkout takes minutes on a real VM.
+    let finishScrub!: () => void;
+    const scrubbing = new Promise<void>(resolve => {
+      finishScrub = resolve;
+    });
+    recycleClaimedWorkdir.mockImplementationOnce(async () => {
+      await scrubbing;
+    });
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    // The workspace is gone from the user's list while the VM is still busy.
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+    // Nothing can claim the sandbox until the scrub completes.
+    expect(sourceControlStorage.sandboxPoolRows).toEqual([]);
+
+    finishScrub();
+    await vi.waitFor(() => expect(sourceControlStorage.sandboxPoolRows).toHaveLength(1));
   });
 
   it('does not expose another user or organization session', async () => {

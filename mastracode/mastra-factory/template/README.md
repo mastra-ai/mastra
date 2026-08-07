@@ -36,6 +36,7 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | Sign-in (WorkOS)         | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`                                                                                                                |
 | GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `APP_DATABASE_URL`      |
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
+| Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
 | Cloud sandboxes          | `RAILWAY_API_TOKEN` (defaults to a local git sandbox otherwise)                                                                                     |
 
@@ -68,18 +69,29 @@ Webhooks (optional — powers auto-triage and PR notifications, requires a publi
 
 Create a Linear OAuth app (Linear → Settings → API → OAuth applications → New) with callback URL `<your app origin>/auth/linear/callback`, then set `LINEAR_CLIENT_ID` / `LINEAR_CLIENT_SECRET` in `.env`.
 
+### Slack (optional)
+
+Talk to the Factory from Slack threads. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) with:
+
+- **Event Subscriptions** request URL: `<your app origin>/api/agent-controllers/mastra-code/channels/slack/webhook` (subscribe to bot events for messages and mentions)
+- **OpenID Connect** redirect URL: `<your app origin>/connect/slack/oidc/callback` (used to link Slack users to their Factory accounts)
+
+Install it to your workspace, then copy the credentials into `.env`: `SLACK_APP_SIGNING_SECRET` and the client ID/secret from **Basic Information**, and `SLACK_APP_BOT_TOKEN` from **OAuth & Permissions**.
+
+Slack only delivers events to public HTTPS origins, so local development needs a tunnel (e.g. `cloudflared tunnel --url http://127.0.0.1:4111`); set `MASTRACODE_CHANNELS_PUBLIC_URL` to the tunnel origin.
+
 ## Scripts
 
 | Script                      | What it does                                                                        |
 | --------------------------- | ----------------------------------------------------------------------------------- |
 | `npm run dev`               | Factory server (:4111) serving the UI and the API                                   |
 | `npm run db:up` / `db:down` | Start/stop local Postgres + Redis (Docker)                                          |
-| `npm run build`             | Build the SPA and bundle the server to `.mastra/output`                             |
+| `npm run build`             | Bundle the server and copy the CLI-bundled Factory UI to `.mastra/output`           |
 | `npm run start`             | Run the production build                                                            |
 | `npm run deploy`            | Build and deploy to [Mastra Cloud](https://mastra.ai/docs/mastra-platform/overview) |
-| `npm run check`             | Typecheck server and UI                                                             |
+| `npm run check`             | Typecheck the Factory server                                                        |
 
-`mastra build` and `mastra deploy` detect the Factory entry automatically and build the SPA (Vite) before bundling. The SPA is copied to `.mastra/output/factory/` and a `mastra-project.json` manifest is emitted alongside it.
+`mastra build` and `mastra deploy` detect the Factory entry automatically and copy the versioned Factory UI bundled with the Mastra CLI while bundling the server. The SPA is written to `.mastra/output/factory/` and a `mastra-project.json` manifest is emitted alongside it.
 
 ## Requirements
 

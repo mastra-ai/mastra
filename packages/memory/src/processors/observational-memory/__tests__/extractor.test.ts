@@ -410,6 +410,37 @@ describe('Extractor', () => {
     expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries schema working-memory extraction when native output is an empty object', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"preferences":{}}'),
+    } as any;
+    const extractor = new WorkingMemoryExtractor();
+    const [resolved] = await resolveExtractors([extractor], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const generate = vi
+      .fn()
+      .mockResolvedValueOnce({ object: {} })
+      .mockResolvedValueOnce({ object: { 'working-memory': { preferences: { responseStyle: 'concise' } } } });
+
+    const result = await extractStructuredValues({
+      agent: { generate } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [resolved!],
+    });
+
+    expect(result.values).toEqual({ 'working-memory': { preferences: { responseStyle: 'concise' } } });
+    expect(result.failures).toEqual([]);
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
   it('falls back to system json prompt injection when inline support is not advertised', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi

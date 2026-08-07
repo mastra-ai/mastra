@@ -432,13 +432,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -857,12 +851,13 @@ export class MemoryStorageD1 extends MemoryStorage {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const threadPlaceholders = threadIds.map(() => '?').join(', ');
       let query = `
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${fullTableName}
-        WHERE thread_id = ?
+        WHERE thread_id IN (${threadPlaceholders})
       `;
-      const queryParams: any[] = [threadId];
+      const queryParams: any[] = [...threadIds];
 
       if (resourceId) {
         query += ` AND resourceId = ?`;
@@ -940,8 +935,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       const paginatedCount = paginatedMessages.length;
 
       // Get total count
-      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id = ?`;
-      const countParams: any[] = [threadId];
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id IN (${threadPlaceholders})`;
+      const countParams: any[] = [...threadIds];
 
       if (resourceId) {
         countQuery += ` AND resourceId = ?`;
@@ -1013,11 +1008,14 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-      const hasMore =
-        perPageInput !== false &&
-        (metadataFilter || returnedThreadMessageIds.size < total) &&
-        offset + paginatedCount < total;
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + paginatedCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -1027,6 +1025,10 @@ export class MemoryStorageD1 extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'FAILED'),
@@ -1044,13 +1046,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 

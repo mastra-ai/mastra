@@ -155,10 +155,70 @@ export interface OtherAgentControllerEvent {
 }
 
 /**
- * An agent controller event. Narrow on `type` to access known payloads; unknown
- * event types fall through to {@link OtherAgentControllerEvent}.
+ * An agent controller event. Comparing `event.type` to a literal does NOT
+ * narrow this union — {@link OtherAgentControllerEvent} types `type` as
+ * `string`, which matches every literal. Narrow with
+ * {@link isKnownAgentControllerEvent} first, then switch on `type`.
  */
 export type AgentControllerEvent = KnownAgentControllerEvent | OtherAgentControllerEvent;
+
+// Runtime mirror of the union — Record keyed by its `type` makes tsc reject a
+// missing or extra entry.
+const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
+  Object.keys({
+    agent_start: true,
+    agent_end: true,
+    message_start: true,
+    message_update: true,
+    message_end: true,
+    tool_input_start: true,
+    tool_input_delta: true,
+    tool_input_end: true,
+    tool_start: true,
+    tool_update: true,
+    shell_output: true,
+    tool_end: true,
+    tool_approval_required: true,
+    tool_suspended: true,
+    mode_changed: true,
+    model_changed: true,
+    thread_changed: true,
+    thread_created: true,
+    thread_deleted: true,
+    subagent_start: true,
+    subagent_end: true,
+    task_updated: true,
+    notification: true,
+    notification_summary: true,
+    usage_update: true,
+    display_state_changed: true,
+    goal_evaluation: true,
+    follow_up_queued: true,
+    om_observation_start: true,
+    om_observation_end: true,
+    om_observation_failed: true,
+    om_reflection_start: true,
+    om_reflection_end: true,
+    om_reflection_failed: true,
+    om_buffering_start: true,
+    om_buffering_end: true,
+    om_buffering_failed: true,
+    om_model_changed: true,
+    om_activation: true,
+    om_status: true,
+    om_thread_title_updated: true,
+    workspace_ready: true,
+    workspace_error: true,
+    workspace_status_changed: true,
+    info: true,
+    error: true,
+  } satisfies Record<KnownAgentControllerEvent['type'], true>),
+);
+
+/** Narrows to the explicitly typed events; see {@link AgentControllerEvent}. */
+export function isKnownAgentControllerEvent(event: AgentControllerEvent): event is KnownAgentControllerEvent {
+  return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
+}
 
 type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
 

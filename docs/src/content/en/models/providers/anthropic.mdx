@@ -329,7 +329,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "fallbacks",
-        "type": "{ model: string; max_tokens?: number | undefined; thinking?: Record<string, unknown> | undefined; output_config?: Record<string, unknown> | undefined; speed?: \"fast\" | \"standard\" | undefined; }[] | undefined",
+        "type": "\"default\" | { model: string; max_tokens?: number | undefined; thinking?: Record<string, unknown> | undefined; output_config?: Record<string, unknown> | undefined; speed?: \"fast\" | \"standard\" | undefined; }[] | undefined",
         "description": "",
         "isOptional": true
     },

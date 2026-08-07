@@ -177,6 +177,14 @@ const workspace = new Workspace({
             defaultValue: '2000',
           },
           {
+            name: 'writeLockTimeoutMs',
+            type: 'number',
+            description:
+              'Maximum time in milliseconds a write tool waits to acquire the per-file write lock before failing. Raise this for slow or cold-starting filesystems (e.g. remote sandboxes).',
+            isOptional: true,
+            defaultValue: '30000',
+          },
+          {
             name: 'hooks',
             type: 'WorkspaceToolHooks',
             description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',
@@ -228,7 +236,7 @@ See [workspace overview](/docs/workspace/overview#tool-configuration) for more e
 
 ### Tool name remapping
 
-Rename workspace tools by setting the `name` property on individual tool configs. The config key remains the original constant — only the name exposed to the agent changes.
+Rename workspace tools by setting the `name` property on individual tool configs. The config key remains the original constant: only the name exposed to the agent changes.
 
 ```typescript {8,9}
 import { Workspace } from '@mastra/core/workspace'
@@ -287,7 +295,7 @@ const workspace = new Workspace({
 ]}
 />
 
-If the owning agent also defines [tool hooks](/reference/agents/agent#tool-hooks), workspace hooks run inside the agent hook wrapper: agent `beforeToolCall` runs first, then workspace `beforeToolCall`, then the tool, then workspace `afterToolCall`, then agent `afterToolCall`.
+If the owning agent also defines [tool hooks](/reference/agents/agent#tool-hooks), workspace hooks run inside the agent hook wrapper. The order is agent `beforeToolCall` → workspace `beforeToolCall` → tool → workspace `afterToolCall` → agent `afterToolCall`.
 
 ## Properties
 
@@ -413,7 +421,7 @@ const info = await workspace.getInfo()
 // { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
 ```
 
-Pass `resolveDynamicProviders: false` to report resolver-backed providers as dynamic without invoking their resolver.
+Pass `resolveDynamicProviders: false` to report resolver-backed providers as runtime-defined without invoking their resolver.
 
 ```typescript
 const info = await workspace.getInfo({ resolveDynamicProviders: false })
@@ -478,7 +486,7 @@ const instructions = workspace.getInstructions({ requestContext })
 
 #### `getInstructionsAsync(opts?)`
 
-Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A dynamic filesystem is resolved per request; a dynamic sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
+Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A runtime-defined filesystem is resolved per request; a runtime-defined sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
 
 ```typescript
 const instructions = await workspace.getInstructionsAsync({ requestContext })
@@ -514,7 +522,7 @@ const config = workspace.getToolsConfig()
 
 #### `setToolsConfig(config?)`
 
-Replace the per-tool configuration at runtime. This performs a full replacement — it doesn't merge with the previous config. Pass `undefined` to reset to defaults. Changes take effect on the next agent interaction (the next `createWorkspaceTools()` call).
+Replace the per-tool configuration at runtime. This performs a full replacement: it doesn't merge with the previous config. Pass `undefined` to reset to defaults. Changes take effect on the next agent interaction (the next `createWorkspaceTools()` call).
 
 ```typescript
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
@@ -558,7 +566,7 @@ if (workspace.hasFilesystemConfig()) {
 
 #### `resolveFilesystem({ requestContext })`
 
-Resolve the filesystem for a given request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static filesystem is configured, returns it directly. Returns `undefined` if no filesystem is configured.
+Resolve the filesystem for a request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static filesystem is configured, returns it directly. Returns `undefined` if no filesystem is configured.
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'
@@ -597,7 +605,7 @@ if (workspace.hasSandboxConfig()) {
 
 #### `resolveSandbox({ requestContext })`
 
-Resolve the sandbox for a given request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static sandbox is configured, returns it directly. Returns `undefined` if no sandbox is configured.
+Resolve the sandbox for a request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static sandbox is configured, returns it directly. Returns `undefined` if no sandbox is configured.
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'
@@ -667,7 +675,7 @@ Added when a filesystem is configured:
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
 
 The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 
@@ -716,7 +724,7 @@ Added when a sandbox is configured:
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
-With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 
@@ -787,4 +795,4 @@ Added when skills are configured:
 | `skill_search` | Search across skill content. Accepts an optional list of skill names to filter and a `topK` parameter. |
 | `skill_read` | Read a specific file (reference, script, or asset) from a skill directory. |
 
-When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name _and_ source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Same-named skills](/docs/workspace/skills#same-named-skills) for details.
+When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name and source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Skills with the same name](/docs/workspace/skills#same-named-skills) for details.

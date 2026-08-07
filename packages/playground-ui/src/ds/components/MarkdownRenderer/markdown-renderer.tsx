@@ -31,7 +31,7 @@ const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockPro
   const code = typeof children === 'string' ? children : childrenTakeAllStringContents(children);
 
   const preClass = cn(
-    'overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm [scrollbar-width:none]',
+    '[scrollbar-width:none] overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm',
     className,
   );
 

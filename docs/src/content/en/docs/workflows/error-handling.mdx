@@ -63,7 +63,7 @@ if (result.status === 'failed') {
 
 ## Lifecycle callbacks
 
-For scenarios where you need to handle workflow completion without awaiting the result—such as background jobs, fire-and-forget workflows, or centralized logging—you can use lifecycle callbacks.
+For scenarios where you need to handle workflow completion without awaiting the result, such as background jobs, fire-and-forget workflows, or centralized logging, you can use lifecycle callbacks.
 
 ### `onFinish`
 
@@ -173,7 +173,7 @@ const pipelineWorkflow = createWorkflow({
 
 ### Error handling in callbacks
 
-Errors thrown inside callbacks are caught and logged—they won't affect the workflow result or cause it to fail. This ensures that callback issues don't break your workflows in production.
+Errors thrown inside callbacks are caught and logged, they won't affect the workflow result or cause it to fail. As a result, callback issues don't break your workflows in production.
 
 ```typescript prettier:false
 options: {

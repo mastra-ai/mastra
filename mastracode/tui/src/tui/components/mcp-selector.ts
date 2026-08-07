@@ -33,6 +33,16 @@ export interface McpSelectorOptions {
   onAuthenticateServer: (name: string) => Promise<McpServerStatus>;
   /** Callback to cancel a pending OAuth flow for a server by name — resolves true if one was cancelled */
   onCancelAuthenticateServer: (name: string) => Promise<boolean>;
+  /**
+   * Callback to disable/enable a server by name. `global: true` applies the
+   * change across every project instead of just this one. Rebuilds all
+   * connections (like reload), so it returns fresh statuses/skipped.
+   */
+  onSetServerDisabled: (
+    name: string,
+    disabled: boolean,
+    options?: { global?: boolean },
+  ) => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
   /** Get captured stderr logs for a server */
   getServerLogs: (name: string) => string[];
   /** Show an info message in the chat area */
@@ -50,16 +60,23 @@ interface ServerAction {
   key: string;
 }
 
+const DISABLE_ACTIONS: ServerAction[] = [
+  { label: 'Disable (this project)', key: 'disable' },
+  { label: 'Disable globally (all projects)', key: 'disable-global' },
+];
+
 const CONNECTED_ACTIONS: ServerAction[] = [
   { label: 'View tools', key: 'tools' },
   { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
+  ...DISABLE_ACTIONS,
 ];
 
 const FAILED_ACTIONS: ServerAction[] = [
   { label: 'View error', key: 'error' },
   { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
+  ...DISABLE_ACTIONS,
 ];
 
 const NEEDS_AUTH_ACTIONS: ServerAction[] = [
@@ -67,7 +84,12 @@ const NEEDS_AUTH_ACTIONS: ServerAction[] = [
   { label: 'View error', key: 'error' },
   { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
+  ...DISABLE_ACTIONS,
 ];
+
+const DISABLED_ACTIONS: ServerAction[] = [{ label: 'Enable', key: 'enable' }];
+
+const DISABLED_GLOBAL_ACTIONS: ServerAction[] = [{ label: 'Enable globally (all projects)', key: 'enable-global' }];
 
 const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
 
@@ -87,6 +109,7 @@ export class McpSelectorComponent extends Box implements Focusable {
   private onReconnectServerCallback: McpSelectorOptions['onReconnectServer'];
   private onAuthenticateServerCallback: McpSelectorOptions['onAuthenticateServer'];
   private onCancelAuthenticateServerCallback: McpSelectorOptions['onCancelAuthenticateServer'];
+  private onSetServerDisabledCallback: McpSelectorOptions['onSetServerDisabled'];
   private getServerLogsCallback: McpSelectorOptions['getServerLogs'];
   private showInfoCallback: McpSelectorOptions['showInfo'];
   private onCloseCallback: () => void;
@@ -133,6 +156,7 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.onReconnectServerCallback = options.onReconnectServer;
     this.onAuthenticateServerCallback = options.onAuthenticateServer;
     this.onCancelAuthenticateServerCallback = options.onCancelAuthenticateServer;
+    this.onSetServerDisabledCallback = options.onSetServerDisabled;
     this.getServerLogsCallback = options.getServerLogs;
     this.showInfoCallback = options.showInfo;
     this.onCloseCallback = options.onClose;
@@ -182,7 +206,12 @@ export class McpSelectorComponent extends Box implements Focusable {
 
       let icon: string;
       let stateText: string;
-      if (this._reloading) {
+      if (status.disabled) {
+        // Disabled wins over the reloading spinner — a disabled server is not
+        // reconnecting during a reload/enable/disable rebuild.
+        icon = theme.fg('muted', '⊘');
+        stateText = theme.fg('muted', status.disabledScope === 'global' ? 'disabled (global)' : 'disabled');
+      } else if (this._reloading) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'reconnecting...');
       } else if (this.isAuthenticating(status)) {
@@ -365,7 +394,9 @@ export class McpSelectorComponent extends Box implements Focusable {
     const status = this.statuses[this.selectedIndex];
     if (!status) return;
 
-    if (this.isAuthenticating(status)) {
+    if (status.disabled) {
+      this.subMenuActions = status.disabledScope === 'global' ? DISABLED_GLOBAL_ACTIONS : DISABLED_ACTIONS;
+    } else if (this.isAuthenticating(status)) {
       // A server mid-OAuth shows a cancel path (the user may have closed the
       // browser). Authoritative even if a polled refresh cleared `connecting`,
       // and after a close/reopen via the manager-owned status flag.
@@ -444,7 +475,79 @@ export class McpSelectorComponent extends Box implements Focusable {
         this.doCancelAuthentication(status);
         break;
       }
+      case 'disable': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, true, false);
+        break;
+      }
+      case 'disable-global': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, true, true);
+        break;
+      }
+      case 'enable': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, false, false);
+        break;
+      }
+      case 'enable-global': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, false, true);
+        break;
+      }
     }
+  }
+
+  private doSetServerDisabled(status: McpServerStatus, disabled: boolean, global: boolean): void {
+    const name = status.name;
+    // Disabling/enabling rebuilds every connection, so treat it like a reload:
+    // block input and show the reconnecting state until fresh statuses arrive.
+    this._reloading = true;
+    this.updateList();
+
+    this.onSetServerDisabledCallback(name, disabled, { global })
+      .then((result: { statuses: McpServerStatus[]; skipped: McpSkippedServer[] }) => {
+        this.statuses = result.statuses;
+        this.skipped = result.skipped;
+        // The rebuild disconnected everything, aborting any pending auth flows.
+        this._authenticating.clear();
+        this._cancelling.clear();
+        const total = this.getTotalItems();
+        if (this.selectedIndex >= total) {
+          this.selectedIndex = Math.max(0, total - 1);
+        }
+        const updated = result.statuses.find(s => s.name === name);
+        if (disabled) {
+          this.showInfoCallback(
+            global
+              ? `MCP: Disabled "${name}" globally (all projects). Re-enable it from /mcp.`
+              : `MCP: Disabled "${name}". Re-enable it from /mcp.`,
+          );
+        } else if (updated?.disabled) {
+          // Removed from one scope but the other still disables it.
+          this.showInfoCallback(
+            updated.disabledScope === 'global'
+              ? `MCP: "${name}" is still disabled globally — use "Enable globally" to re-enable it.`
+              : `MCP: "${name}" is still disabled in this project — use "Enable" to re-enable it.`,
+          );
+        } else if (updated?.connected) {
+          this.showInfoCallback(`MCP: Enabled "${name}" — ${updated.toolCount} tool(s)`);
+        } else if (updated?.needsAuth) {
+          this.showInfoCallback(`MCP: Enabled "${name}" — needs authentication \u2192 run /mcp to authenticate`);
+        } else {
+          this.showInfoCallback(
+            `MCP: Enabled "${name}" but it failed to connect: ${updated?.error ?? 'Unknown error'}`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        this.showInfoCallback(`MCP: Failed to ${disabled ? 'disable' : 'enable'} "${name}": ${errMsg}`);
+      })
+      .finally(() => {
+        this._reloading = false;
+        this.updateList();
+      });
   }
 
   private doReloadAll(): void {
@@ -472,7 +575,7 @@ export class McpSelectorComponent extends Box implements Focusable {
         const connected = result.statuses.filter(s => s.connected);
         const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
         this.showInfoCallback(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
-        for (const s of result.statuses.filter(s => !s.connected)) {
+        for (const s of result.statuses.filter(s => !s.connected && !s.disabled)) {
           if (s.needsAuth) {
             this.showInfoCallback(`MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
           } else {

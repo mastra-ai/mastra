@@ -1,5 +1,188 @@
 # @mastra/memory
 
+## 1.26.0
+
+### Minor Changes
+
+- Added persistence filtering for transient agent signals. Memory now excludes signals marked `transient: true` from standard message saves and observational-memory persistence, so per-turn reminders do not accumulate in stored thread history. ([#18909](https://github.com/mastra-ai/mastra/pull/18909))
+
+  ```typescript
+  await sendSignal?.({
+    type: 'reactive',
+    contents: 'Stay on the current task.',
+    transient: true,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed thread-scoped Observational Memory requests without a thread ID to return a clear bad request error instead of an internal server error. ([#20721](https://github.com/mastra-ai/mastra/pull/20721))
+
+- Fixed a bug where concurrent requests could create duplicate observational memory records. ([#19216](https://github.com/mastra-ai/mastra/pull/19216))
+
+- Updated dependencies [[`8d2399b`](https://github.com/mastra-ai/mastra/commit/8d2399b638f8e0945cf2cda0187dbea8dcf0b784), [`c8002da`](https://github.com/mastra-ai/mastra/commit/c8002da7775c468e2965b6ff5f82045450fa8cb9), [`92be47f`](https://github.com/mastra-ai/mastra/commit/92be47fbd26ffccec0e2131ef7c1d9e70dd5ef4a), [`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`810c7e7`](https://github.com/mastra-ai/mastra/commit/810c7e74929989d8b8b5db52cd3af22cd0998af4), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f9f9884`](https://github.com/mastra-ai/mastra/commit/f9f98848ee194dc71a787a709ec430b065cdc41b), [`e0904dc`](https://github.com/mastra-ai/mastra/commit/e0904dc538792e54e1806b70172e5900ac49bff4), [`9672fab`](https://github.com/mastra-ai/mastra/commit/9672fabfbcadb961a35c22a2d6722e077f7b24b9), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`64d6781`](https://github.com/mastra-ai/mastra/commit/64d67814bccddd314f7e09643243821e57cb87b6), [`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`c848e65`](https://github.com/mastra-ai/mastra/commit/c848e655a64ff10331a8ceafafe7f18e70a0f092), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`0494489`](https://github.com/mastra-ai/mastra/commit/049448906e4c3d2d615bbe865b073a0d890ddb7c), [`8d1aeb8`](https://github.com/mastra-ai/mastra/commit/8d1aeb8acf7c20c4bb8e4d8e4bdc6569c83ac561), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`d8fa243`](https://github.com/mastra-ai/mastra/commit/d8fa2430d21113e330c4e676ac65e1235cf44f81), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`f933ba3`](https://github.com/mastra-ai/mastra/commit/f933ba32700e1d0bf143311c1a08f88300b840b6), [`83065bf`](https://github.com/mastra-ai/mastra/commit/83065bfee9e47c3c6f09132a9034501f6cfb69cf), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c), [`01b162f`](https://github.com/mastra-ai/mastra/commit/01b162fe435295881aa7ea55f1759407ad5175ad)]:
+  - @mastra/core@1.57.0
+  - @mastra/schema-compat@1.3.5
+
+## 1.25.1-alpha.0
+
+### Patch Changes
+
+- Fixed thread-scoped Observational Memory requests without a thread ID to return a clear bad request error instead of an internal server error. ([#20721](https://github.com/mastra-ai/mastra/pull/20721))
+
+- Updated dependencies [[`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c)]:
+  - @mastra/core@1.57.0-alpha.1
+  - @mastra/schema-compat@1.3.5-alpha.0
+
+## 1.25.0
+
+### Minor Changes
+
+- Added config-level `hooks` to Observational Memory so apps can track what OM's background model calls cost. Previously the `ObserveHooks` lifecycle callbacks only fired when calling `observe()` manually — the automatic pipeline (turn-driven observation and fire-and-forget async buffering) computed token `usage` and `providerMetadata` and dropped them. Hooks set on the OM config (including through `Memory`'s `observationalMemory` options) now fire for every observation and reflection cycle, with `threadId`/`resourceId`/`trigger` call context: ([#19058](https://github.com/mastra-ai/mastra/pull/19058))
+
+  ```ts
+  const memory = new Memory({
+    storage,
+    options: {
+      observationalMemory: {
+        hooks: {
+          onObservationEnd: ({ usage, providerMetadata, error, threadId, trigger }) => {
+            recordOmSpend({ usage, providerMetadata, threadId, trigger });
+          },
+        },
+      },
+    },
+  });
+  ```
+
+  Failed async-buffered cycles never throw (they are fire-and-forget), so they report through the end hook's `error` field instead. Errors thrown by config-level hooks are caught and logged, never failing the cycle. Per-call `observe()` hooks keep their existing payloads and semantics.
+
+- Made Observational Memory recall guidance scope-aware and added support for appending custom recall instructions. ([#20160](https://github.com/mastra-ai/mastra/pull/20160))
+
+  With `retrieval.scope: "resource"`, the injected instructions now teach the agent how to route between `mode: "search"`, `mode: "threads"`, and `mode: "messages"` — including falling back to thread discovery when search results are irrelevant, since a short or recent thread may exist in raw message history before any observation of it was created. Search routing is only included when `retrieval.vector: true` is set; browsing-only retrieval guides the agent to `threads` and `messages` instead of a search mode that isn't configured. Resource-scoped recall guidance is now also injected before the first observation group exists, so the agent can browse other threads from the very first message of a conversation.
+
+  Applications can now append recall-specific guidance after Mastra's built-in instructions without replacing them:
+
+  ```ts
+  observationalMemory: {
+    retrieval: {
+      vector: true,
+      scope: 'resource',
+      instructions: 'Prefer the current conversation when it already contains the answer.',
+    },
+  },
+  ```
+
+  Omitting `instructions` keeps existing behavior. Fixes https://github.com/mastra-ai/mastra/issues/19561
+
+### Patch Changes
+
+- Fix schema-backed Observational Memory extractors throwing a "wrong resourceId" error during observer or reflector processing when the request context carries a resource ID. Agents configured with a schema-backed `Extractor` now run extraction passes without erroring. ([#19744](https://github.com/mastra-ai/mastra/pull/19744))
+
+- Agents using observational memory or working-memory state signals no longer fail when invoked without a chat thread. ([#20471](https://github.com/mastra-ai/mastra/pull/20471))
+
+  Ephemeral agent invocations (workflow agent steps, sub-agent tool calls) don't have — and don't need — a persistent chat thread, but the `observational-memory` and `working-memory-state` processors previously threw "requires Mastra memory with an active resourceId and threadId" the moment they ran without one, aborting the call.
+
+  Both processors now handle the no-thread case gracefully at execution time: observational memory returns the message list unchanged when no thread context resolves, and working-memory state-signal computation skips when thread/resource identity is unavailable. A genuinely missing memory instance still errors as before, and threaded invocations behave exactly as they did. Processor discovery (`getInputProcessors` / `getOutputProcessors`) attaches both processors unconditionally, so discovery also works before the runtime memory context is populated.
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`7f4e26d`](https://github.com/mastra-ai/mastra/commit/7f4e26dd57bd9b23c278ea21235ab823a3810a6c), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`322daa6`](https://github.com/mastra-ai/mastra/commit/322daa6d90552909204044790d850958f6745fed), [`db4e6ff`](https://github.com/mastra-ai/mastra/commit/db4e6ff744503112eb64deeaf6c2b54bf26a54c7), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`cadaa13`](https://github.com/mastra-ai/mastra/commit/cadaa1372e1077c8e85eb64c5499ba8803caa323), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`6d19a65`](https://github.com/mastra-ai/mastra/commit/6d19a6517f5da3911023d446b7e2d5dad8adb1cb), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`06000d7`](https://github.com/mastra-ai/mastra/commit/06000d73712911572e913b8a83339270296d0a22), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be), [`d94b8e1`](https://github.com/mastra-ai/mastra/commit/d94b8e1cee67416d518a8c30099040061bef6a1c), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`3de0188`](https://github.com/mastra-ai/mastra/commit/3de0188bfaf9a9c09c95fe322b53838cf52c70b6), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0
+
+## 1.25.0-alpha.2
+
+### Minor Changes
+
+- Made Observational Memory recall guidance scope-aware and added support for appending custom recall instructions. ([#20160](https://github.com/mastra-ai/mastra/pull/20160))
+
+  With `retrieval.scope: "resource"`, the injected instructions now teach the agent how to route between `mode: "search"`, `mode: "threads"`, and `mode: "messages"` — including falling back to thread discovery when search results are irrelevant, since a short or recent thread may exist in raw message history before any observation of it was created. Search routing is only included when `retrieval.vector: true` is set; browsing-only retrieval guides the agent to `threads` and `messages` instead of a search mode that isn't configured. Resource-scoped recall guidance is now also injected before the first observation group exists, so the agent can browse other threads from the very first message of a conversation.
+
+  Applications can now append recall-specific guidance after Mastra's built-in instructions without replacing them:
+
+  ```ts
+  observationalMemory: {
+    retrieval: {
+      vector: true,
+      scope: 'resource',
+      instructions: 'Prefer the current conversation when it already contains the answer.',
+    },
+  },
+  ```
+
+  Omitting `instructions` keeps existing behavior. Fixes https://github.com/mastra-ai/mastra/issues/19561
+
+### Patch Changes
+
+- Updated dependencies [[`82201f7`](https://github.com/mastra-ai/mastra/commit/82201f75fae8e050a8de2df08b74875ee74c6b83), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`fb18da5`](https://github.com/mastra-ai/mastra/commit/fb18da56fc35689ae370621a8f10b5b0d8606e20), [`0a6598b`](https://github.com/mastra-ai/mastra/commit/0a6598bde80bde008986ad6616bed9632b9294cb), [`9e1dad8`](https://github.com/mastra-ai/mastra/commit/9e1dad8f7b1cab2bb7ade90e5b7561f24577b88a), [`2f43145`](https://github.com/mastra-ai/mastra/commit/2f4314504c03cbba280414ac81ba3197448ee6b0), [`34d34d8`](https://github.com/mastra-ai/mastra/commit/34d34d8c811df512fef4dd5459f79b7821be1866)]:
+  - @mastra/core@1.56.0-alpha.6
+
+## 1.25.0-alpha.1
+
+### Patch Changes
+
+- Fix schema-backed Observational Memory extractors throwing a "wrong resourceId" error during observer or reflector processing when the request context carries a resource ID. Agents configured with a schema-backed `Extractor` now run extraction passes without erroring. ([#19744](https://github.com/mastra-ai/mastra/pull/19744))
+
+- Agents using observational memory or working-memory state signals no longer fail when invoked without a chat thread. ([#20471](https://github.com/mastra-ai/mastra/pull/20471))
+
+  Ephemeral agent invocations (workflow agent steps, sub-agent tool calls) don't have — and don't need — a persistent chat thread, but the `observational-memory` and `working-memory-state` processors previously threw "requires Mastra memory with an active resourceId and threadId" the moment they ran without one, aborting the call.
+
+  Both processors now handle the no-thread case gracefully at execution time: observational memory returns the message list unchanged when no thread context resolves, and working-memory state-signal computation skips when thread/resource identity is unavailable. A genuinely missing memory instance still errors as before, and threaded invocations behave exactly as they did. Processor discovery (`getInputProcessors` / `getOutputProcessors`) attaches both processors unconditionally, so discovery also works before the runtime memory context is populated.
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+
+## 1.25.0-alpha.0
+
+### Minor Changes
+
+- Added config-level `hooks` to Observational Memory so apps can track what OM's background model calls cost. Previously the `ObserveHooks` lifecycle callbacks only fired when calling `observe()` manually — the automatic pipeline (turn-driven observation and fire-and-forget async buffering) computed token `usage` and `providerMetadata` and dropped them. Hooks set on the OM config (including through `Memory`'s `observationalMemory` options) now fire for every observation and reflection cycle, with `threadId`/`resourceId`/`trigger` call context: ([#19058](https://github.com/mastra-ai/mastra/pull/19058))
+
+  ```ts
+  const memory = new Memory({
+    storage,
+    options: {
+      observationalMemory: {
+        hooks: {
+          onObservationEnd: ({ usage, providerMetadata, error, threadId, trigger }) => {
+            recordOmSpend({ usage, providerMetadata, threadId, trigger });
+          },
+        },
+      },
+    },
+  });
+  ```
+
+  Failed async-buffered cycles never throw (they are fire-and-forget), so they report through the end hook's `error` field instead. Errors thrown by config-level hooks are caught and logged, never failing the cycle. Per-call `observe()` hooks keep their existing payloads and semantics.
+
+### Patch Changes
+
+- Updated dependencies [[`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64)]:
+  - @mastra/core@1.56.0-alpha.3
+
+## 1.24.0
+
+### Minor Changes
+
+- Added exact metadata filtering to message history queries across Memory APIs and supported storage providers. ([#19991](https://github.com/mastra-ai/mastra/pull/19991))
+
+  ```ts
+  const messages = await memory.recall({
+    threadId: 'thread-1',
+    filter: {
+      metadata: {
+        status: 'done',
+        priority: 'high',
+      },
+    },
+  });
+  ```
+
+  Multiple fields use AND semantics. Supported values are strings, finite numbers, booleans, and `null`.
+
+### Patch Changes
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa), [`6218217`](https://github.com/mastra-ai/mastra/commit/62182171b6cfca0b099f1c6a77a2e65e7639ab86), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`29c584a`](https://github.com/mastra-ai/mastra/commit/29c584a13a88831e5ed1fdeb0ff8e82eae180433), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e), [`d12b2e4`](https://github.com/mastra-ai/mastra/commit/d12b2e4023fd9e3d3e93a9169f5088bcee2a849c)]:
+  - @mastra/core@1.54.0
+
 ## 1.24.0-alpha.0
 
 ### Minor Changes
