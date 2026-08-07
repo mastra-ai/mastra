@@ -25,6 +25,7 @@ import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useFactoryQuery } from '../../hooks/useFactories';
 
@@ -68,6 +69,7 @@ export function ThreadPage() {
 function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }) {
   useGlobalShortcuts();
   useRouteThreadSync();
+  useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
   const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
 

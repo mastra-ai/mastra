@@ -27,7 +27,11 @@ import {
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
+import { addCachedSession } from '../../../../hooks/useWorkspaces';
+import { createUserSession } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/github';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
+import { promptHandoffState } from '../hooks/useHandoffPrompt';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -79,9 +83,10 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
+  const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
+  const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
@@ -111,6 +116,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
+  const [creatingDraftSession, setCreatingDraftSession] = useState(false);
 
   const updateDraft = (next: string) => {
     setComposerDraft(next);
@@ -148,6 +154,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const addImageFiles = async (fileList: Iterable<File>) => {
+    // drop/paste bypass the disabled attach button; a draft has no session to attach to
+    if (onUserDraft) {
+      pushNotice('Images can be attached once the session is ready.');
+      return;
+    }
     const imageFiles = Array.from(fileList).filter(
       file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
     );
@@ -195,6 +206,34 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     void addImageFiles(e.target.files ?? []);
     e.target.value = '';
+  };
+
+  const createSessionFromDraft = async (text: string) => {
+    if (!draftSessionId || !factoryId || !factorySessionState?.projectRepositoryId) {
+      updateDraft(text);
+      pushNotice('Could not create the session. Reload the page and try again.', 'error');
+      return;
+    }
+
+    setCreatingDraftSession(true);
+    try {
+      const session = await createUserSession(baseUrl, factorySessionState.projectRepositoryId, {
+        sessionId: draftSessionId,
+        title: text,
+      });
+      queryClient.setQueryData<FactoryUserSession>(queryKeys.userSession(session.sessionId), session);
+      addCachedSession(queryClient, factorySessionState.projectRepositoryId, session);
+      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`, {
+        replace: true,
+        state: promptHandoffState(text),
+      });
+    } catch (error) {
+      updateDraft(text);
+      const message = error instanceof Error ? error.message : 'Session creation failed';
+      pushNotice(`Could not create the session: ${message}. Try again.`, 'error');
+    } finally {
+      setCreatingDraftSession(false);
+    }
   };
 
   const send = async (text: string, files: PendingImage[]) => {
@@ -288,6 +327,20 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    // user drafts have no controller; only local commands can run
+    if (onUserDraft && text.startsWith('/')) {
+      if (commandRequiresReadySession(text)) {
+        updateDraft(text);
+        pushNotice('This command needs a session. Send a prompt to create one first.');
+      } else {
+        await runComposerCommand(text);
+      }
+      return;
+    }
+    if (onUserDraft) {
+      await createSessionFromDraft(text);
+      return;
+    }
     // commands act on a live session, unlike a message the controller can hold
     if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
       updateDraft(text);
@@ -312,7 +365,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   }
 
   // the controller holds a message until the workspace is ready, so preparing sessions stay usable
-  const disabled = status !== 'ready' && !preparingThreadId;
+  const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
+  const attachDisabled = onUserDraft || blocked;
+  const disabled = creatingDraftSession || blocked;
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
@@ -393,7 +448,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                disabled={disabled}
+                disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach image"
               >

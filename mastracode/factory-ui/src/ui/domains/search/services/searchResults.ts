@@ -12,6 +12,7 @@ import {
   getFactorySessionKind,
   getReviewBranchIdentifier,
   getUserSessionLabel,
+  isAutomaticUserSessionBranch,
 } from '../../workspaces/services/sessionPresentation';
 
 export interface SessionSearchResult {
@@ -101,7 +102,7 @@ function createUserSessionResult(factoryId: string, session: FactoryUserSession)
     id: session.sessionId,
     kind,
     title,
-    context: `User session · ${session.branch}`,
+    context: isAutomaticUserSessionBranch(session) ? 'User session' : `User session · ${session.branch}`,
     value: buildValue(session, kind, title, undefined, undefined),
     path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
     preserveOrigin: false,

@@ -35,7 +35,7 @@ export function SessionNavRow({
   title?: string;
   url: string;
   active: boolean;
-  disabled: boolean;
+  disabled?: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
   /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
@@ -43,9 +43,9 @@ export function SessionNavRow({
   status?: 'running' | 'attention';
   preview?: SessionPreviewDetails;
   pinned?: boolean;
-  onSelect: () => void;
-  onPinChange: (pinned: boolean) => void;
-  onDelete: () => void;
+  onSelect?: () => void;
+  onPinChange?: (pinned: boolean) => void;
+  onDelete?: () => void;
 }) {
   const button = (
     <button
@@ -89,34 +89,35 @@ export function SessionNavRow({
       ) : null}
     </button>
   );
-  const action = loading ? undefined : (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Session actions for ${name}`}
-            disabled={disabled}
-            className="opacity-0 group-focus-within/session:opacity-100 group-hover/session:opacity-100 data-[popup-open]:opacity-100"
-          >
-            <MoreHorizontal />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end" className="min-w-28">
-        <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
-          {pinned ? <PinOff /> : <Pin />}
-          {pinned ? 'Unpin' : 'Pin session'}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
-          Delete
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
-  );
+  const action =
+    loading || !onPinChange || !onDelete ? undefined : (
+      <DropdownMenu>
+        <DropdownMenu.Trigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Session actions for ${name}`}
+              disabled={disabled}
+              className="opacity-0 group-focus-within/session:opacity-100 group-hover/session:opacity-100 data-[popup-open]:opacity-100"
+            >
+              <MoreHorizontal />
+            </Button>
+          }
+        />
+        <DropdownMenu.Content align="end" className="min-w-28">
+          <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
+            {pinned ? <PinOff /> : <Pin />}
+            {pinned ? 'Unpin' : 'Pin session'}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+            <Trash2 />
+            Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
   const row = (
     <MainSidebar.NavLink
       link={{ name, url }}
