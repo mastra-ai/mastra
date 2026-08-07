@@ -16,6 +16,7 @@ export type {
   FactoryAutomationActiveRunRequest,
   FactoryAutomationCommands,
   FactoryAutomationTransitionRequest,
+  FactoryAutomationWorkItemRequest,
 } from './rules/automation-commands.js';
 export { createStateSigner } from './state-signing.js';
 export type { StateSigner, StateTenant } from './state-signing.js';

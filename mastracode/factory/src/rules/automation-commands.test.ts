@@ -127,4 +127,20 @@ describe('Factory automation commands', () => {
     ).resolves.toBe(active);
     expect(listRunBindings).toHaveBeenCalledWith('org-1', 'project-1', 'item-1');
   });
+
+  it('reads a work item only through its exact tenant and project boundary', async () => {
+    const item = { id: 'item-1', stages: ['review'] };
+    const getForProject = vi.fn(async () => item);
+    const commands = createFactoryAutomationCommands({
+      integrationId: 'github-projects',
+      controller: {} as never,
+      storage: { getForProject } as never,
+      transitionService: { transition: vi.fn() },
+    });
+
+    await expect(
+      commands.getWorkItem({ orgId: 'org-1', factoryProjectId: 'project-1', workItemId: 'item-1' }),
+    ).resolves.toBe(item);
+    expect(getForProject).toHaveBeenCalledWith('org-1', 'project-1', 'item-1');
+  });
 });

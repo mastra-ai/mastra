@@ -3,7 +3,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import type { FactoryStartPreparedResult, FactoryStartRequest } from './start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from './transition-service.js';
@@ -39,11 +39,14 @@ export interface FactoryAutomationActiveRunRequest {
   workItemId: string;
 }
 
+export type FactoryAutomationWorkItemRequest = FactoryAutomationActiveRunRequest;
+
 /** Governed host commands exposed to trusted control-plane integrations. */
 export interface FactoryAutomationCommands {
   startWorkItem(request: FactoryAutomatedStartInput): Promise<FactoryStartPreparedResult>;
   transitionWorkItem(request: FactoryAutomationTransitionRequest): Promise<FactoryTransitionResult>;
   getActiveRun(request: FactoryAutomationActiveRunRequest): Promise<FactoryRunBindingRecord | null>;
+  getWorkItem(request: FactoryAutomationWorkItemRequest): Promise<WorkItemRow | null>;
 }
 
 export interface CreateFactoryAutomationCommandsOptions {
@@ -162,5 +165,6 @@ export function createFactoryAutomationCommands(
       );
       return bindings.findLast(binding => binding.status === 'active') ?? null;
     },
+    getWorkItem: request => options.storage.getForProject(request.orgId, request.factoryProjectId, request.workItemId),
   };
 }
