@@ -165,17 +165,24 @@ export class PoolAdapter implements DbClient {
     try {
       await client.query('BEGIN');
       const txClient = new TransactionClient(client);
-      const result = await callback(txClient);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
       try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        // Log rollback failure but throw original error
-        console.error('Transaction rollback failed:', rollbackError);
+        const result = await callback(txClient);
+        // Drain before COMMIT so fire-and-forget / batch tails can't race it.
+        await txClient.drain();
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        // Drain before ROLLBACK: Promise.all in batch() rejects on the first
+        // failure while later enqueued queries may still be running.
+        await txClient.drain();
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          // Log rollback failure but throw original error
+          console.error('Transaction rollback failed:', rollbackError);
+        }
+        throw error;
       }
-      throw error;
     } finally {
       client.release();
     }
@@ -206,6 +213,15 @@ class TransactionClient implements TxClient {
     const next = this.#tail.then(fn, fn);
     this.#tail = next.catch(() => undefined);
     return next;
+  }
+
+  /**
+   * Wait until every enqueued query has settled.
+   * PoolAdapter calls this before COMMIT/ROLLBACK so those control
+   * statements never overlap in-flight work on the same client.
+   */
+  async drain(): Promise<void> {
+    await this.#tail;
   }
 
   none(query: string, values?: QueryValues): Promise<null> {

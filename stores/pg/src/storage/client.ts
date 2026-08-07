@@ -166,17 +166,24 @@ export class PoolAdapter implements DbClient {
     try {
       await client.query('BEGIN');
       const txClient = new TransactionClient(client);
-      const result = await callback(txClient);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
       try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        // Log rollback failure but throw original error
-        console.error('Transaction rollback failed:', rollbackError);
+        const result = await callback(txClient);
+        // Drain before COMMIT so fire-and-forget / batch tails can't race it.
+        await txClient.drain();
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        // Drain before ROLLBACK: Promise.all in batch() rejects on the first
+        // failure while later enqueued queries may still be running.
+        await txClient.drain();
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          // Log rollback failure but throw original error
+          console.error('Transaction rollback failed:', rollbackError);
+        }
+        throw error;
       }
-      throw error;
     } finally {
       client.release();
     }
@@ -207,6 +214,15 @@ class TransactionClient implements TxClient {
     const next = this.#tail.then(fn, fn);
     this.#tail = next.catch(() => undefined);
     return next;
+  }
+
+  /**
+   * Wait until every enqueued query has settled.
+   * PoolAdapter / PinnedClientAdapter call this before COMMIT/ROLLBACK so
+   * those control statements never overlap in-flight work on the same client.
+   */
+  async drain(): Promise<void> {
+    await this.#tail;
   }
 
   none(query: string, values?: QueryValues): Promise<null> {
@@ -393,11 +409,14 @@ export class PinnedClientAdapter implements DbClient {
     // can't interleave statements inside someone else's transaction.
     return this.#enqueue(async () => {
       await this.pinnedClient.query('BEGIN');
+      const txClient = new TransactionClient(this.pinnedClient);
       try {
-        const result = await callback(new TransactionClient(this.pinnedClient));
+        const result = await callback(txClient);
+        await txClient.drain();
         await this.pinnedClient.query('COMMIT');
         return result;
       } catch (error) {
+        await txClient.drain();
         try {
           await this.pinnedClient.query('ROLLBACK');
         } catch (rollbackError) {
