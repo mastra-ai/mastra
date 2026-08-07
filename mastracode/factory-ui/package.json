@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Browser application for MastraCode: React SPA, client data layer, Vite config, and UI tests. Produces the Factory SPA bundled by the Mastra CLI.",
   "scripts": {
-    "web": "run-p --print-label --race web:ui web:api",
-    "web:ui": "MASTRACODE_ENV_DIR=../web vite --config src/vite.config.ts",
+    "dev": "MASTRACODE_ENV_DIR=../web vite --config src/vite.config.ts",
+    "web": "run-p --print-label --race dev web:api",
     "web:api": "pnpm --dir ../web api",
     "build": "vite --config src/vite.config.ts build",
     "typecheck": "tsc --noEmit -p src/ui/tsconfig.json",
