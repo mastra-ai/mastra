@@ -16,7 +16,7 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
-export { agentControllerMessageText } from './resources/agent-controller';
+export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
   AgentControllerInfo,
   MastraDBMessage,

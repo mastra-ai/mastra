@@ -23,6 +23,7 @@ import type {
   V6UIMessageStream,
 } from './public-types';
 import type { MastraStreamTransformOptions } from './smooth-stream';
+import { assertValidHeartbeatMs, withSseHeartbeat } from './sse-heartbeat';
 
 export interface V6NativeApprovalResponse {
   resumeData: Record<string, unknown>;
@@ -436,6 +437,8 @@ export type chatRouteOptions<OUTPUT = undefined> = {
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
+    /** Target interval for periodic SSE comment heartbeats. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`. */
+    heartbeatMs?: number;
     onError?: (error: unknown) => string;
   };
 
@@ -452,11 +455,13 @@ export type chatRouteOptions<OUTPUT = undefined> = {
  * @param {boolean} [options.sendFinish=true] - Whether to send finish events in the stream
  * @param {boolean} [options.sendReasoning=false] - Whether to include reasoning steps in the stream
  * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
+ * @param {number} [options.heartbeatMs] - Target interval for periodic SSE comment heartbeats. Already-buffered source events and stream lifecycle signals take priority. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`.
  * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
  *
  * @returns {ReturnType<typeof registerApiRoute>} A registered API route handler
  *
  * @throws {Error} When path doesn't include `:agentId` and no fixed agent is specified
+ * @throws {RangeError} When `heartbeatMs` is `NaN`, positive infinity, or greater than 2,147,483,647
  * @throws {Error} When agent ID is missing at runtime
  * @throws {Error} When specified agent is not found in Mastra instance
  *
@@ -479,7 +484,7 @@ export type chatRouteOptions<OUTPUT = undefined> = {
  * @remarks
  * - The route handler expects a JSON body with a `messages` array
  * - Messages should follow the format: `{ role: 'user' | 'assistant' | 'system', content: string }`
- * - The response is a Server-Sent Events (SSE) stream compatible with AI SDK v5
+ * - The response is a Server-Sent Events (SSE) stream compatible with the selected AI SDK version
  * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
  * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
  */
@@ -494,11 +499,13 @@ export function chatRoute<OUTPUT = undefined>({
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
+  heartbeatMs,
   onError,
 }: chatRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
+  assertValidHeartbeatMs(heartbeatMs);
 
   return registerApiRoute(path, {
     method: 'POST',
@@ -694,17 +701,19 @@ export function chatRoute<OUTPUT = undefined>({
         onError,
       };
 
+      let response: Response;
       if (version === 'v6') {
         const uiMessageStream = await handleChatStream({
           ...handlerOptions,
           version: 'v6',
         });
-
-        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+        response = createUIMessageStreamResponseV6({ stream: uiMessageStream });
+      } else {
+        const uiMessageStream = await handleChatStream(handlerOptions);
+        response = createUIMessageStreamResponseV5({ stream: uiMessageStream });
       }
 
-      const uiMessageStream = await handleChatStream(handlerOptions);
-      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
+      return withSseHeartbeat(response, heartbeatMs);
     },
   });
 }

@@ -65,6 +65,18 @@ async function mockTraceLists(page: Page, onRequest?: (url: URL) => void) {
       }),
     });
   });
+  // The list asks for the lightweight projection first; same scope params apply.
+  await page.route('**/api/observability/traces/light?**', async route => {
+    onRequest?.(new URL(route.request().url()));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
 }
 
 test.describe('Agent observability tabs', () => {
