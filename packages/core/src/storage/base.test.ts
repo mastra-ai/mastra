@@ -202,6 +202,97 @@ describe('MastraCompositeStore init caching', () => {
   });
 });
 
+describe('MastraCompositeStore — close() forwarding', () => {
+  const spyOnLoggerError = (store: MastraCompositeStore) =>
+    vi
+      .spyOn((store as unknown as { logger: { error: (msg: string, ctx?: unknown) => void } }).logger, 'error')
+      .mockImplementation(() => {});
+
+  it('closes the underlying `default` store', async () => {
+    // Composing a store must not lose its teardown: Mastra.shutdown() only
+    // reaches the composite, so an unforwarded close() leaks the adapter's
+    // connection and keeps the process alive.
+    const inner = new InMemoryStore({ id: 'inner' });
+    const innerCloseSpy = vi.spyOn(inner, 'close');
+
+    const composite = new MastraCompositeStore({ id: 'outer', default: inner });
+
+    await composite.close();
+
+    expect(innerCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the underlying `editor` store', async () => {
+    const inner = new InMemoryStore({ id: 'editor-inner' });
+    const innerCloseSpy = vi.spyOn(inner, 'close');
+
+    const composite = new MastraCompositeStore({ id: 'outer-editor', editor: inner });
+
+    await composite.close();
+
+    expect(innerCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a shared parent once when used as both default and editor', async () => {
+    const shared = new InMemoryStore({ id: 'shared-inner' });
+    const sharedCloseSpy = vi.spyOn(shared, 'close');
+
+    const composite = new MastraCompositeStore({ id: 'outer-shared', default: shared, editor: shared });
+
+    await composite.close();
+
+    expect(sharedCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a domain that owns its own handle', async () => {
+    // Domains supplied via `domains` are not reachable through a parent, so a
+    // domain holding its own client (e.g. one constructed standalone) has to
+    // be closed directly.
+    const owner = new InMemoryStore({ id: 'domain-owner' });
+    const memory = owner.stores!.memory!;
+    const domainClose = vi.fn().mockResolvedValue(undefined);
+    (memory as unknown as { close: () => Promise<void> }).close = domainClose;
+
+    const composite = new MastraCompositeStore({ id: 'outer-domains', domains: { memory } });
+
+    await composite.close();
+
+    expect(domainClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a domain inherited from the default parent once, via the parent', async () => {
+    // A parent's domains share the parent's client; the parent's own close()
+    // is responsible for them. Closing such a domain directly as well would
+    // double-close the shared client.
+    const inner = new InMemoryStore({ id: 'inner' });
+    const domainClose = vi.fn().mockResolvedValue(undefined);
+    (inner.stores!.memory as unknown as { close: () => Promise<void> }).close = domainClose;
+    const innerCloseSpy = vi.spyOn(inner, 'close');
+
+    const composite = new MastraCompositeStore({ id: 'outer-inherited', default: inner });
+
+    await composite.close();
+
+    expect(innerCloseSpy).toHaveBeenCalledTimes(1);
+    expect(domainClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs and skips a failing store so the rest are still released', async () => {
+    const failing = new InMemoryStore({ id: 'failing-inner' });
+    const editor = new InMemoryStore({ id: 'editor-inner' });
+    vi.spyOn(failing, 'close').mockRejectedValueOnce(new Error('connection reset'));
+    const editorCloseSpy = vi.spyOn(editor, 'close');
+
+    const composite = new MastraCompositeStore({ id: 'outer-failing', default: failing, editor });
+    const loggerErrorSpy = spyOnLoggerError(composite);
+
+    await expect(composite.close()).resolves.toBeUndefined();
+
+    expect(editorCloseSpy).toHaveBeenCalledTimes(1);
+    expect(loggerErrorSpy).toHaveBeenCalledWith('close() failed for default storage', expect.anything());
+  });
+});
+
 describe('MastraCompositeStore.__registerMastra', () => {
   const mastra: StorageMastraRef = { getAgentById: () => undefined };
 

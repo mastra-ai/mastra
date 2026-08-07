@@ -2,7 +2,8 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ListFilter, RotateCcw, UsersRound } from 'lucide-react';
+import { ListFilter, RotateCcw, Tag, UsersRound } from 'lucide-react';
+import { useState } from 'react';
 
 import type { BoardKind } from '../boardStages';
 import { boardRelevanceOptions } from '../boardRelevance';
@@ -15,24 +16,43 @@ export function BoardRelevanceFilters({
   participants,
   selectedParticipantId,
   selectedTypes,
+  availableLabels,
+  selectedLabels,
   currentUserId,
   onParticipantChange,
   onTypeChange,
+  onLabelChange,
   onReset,
 }: {
   kind: BoardKind;
   participants: readonly BoardParticipant[];
   selectedParticipantId?: string;
   selectedTypes: ReadonlySet<BoardRelevanceType>;
+  availableLabels: readonly string[];
+  selectedLabels: ReadonlySet<string>;
   currentUserId?: string;
   onParticipantChange: (participantId: string | undefined) => void;
   onTypeChange: (type: BoardRelevanceType, selected: boolean) => void;
+  onLabelChange: (label: string, selected: boolean) => void;
   onReset: () => void;
 }) {
   const options = boardRelevanceOptions(kind);
-  const selectedLabels = options.filter(option => selectedTypes.has(option.id)).map(option => option.label);
-  const relevanceLabel = selectedLabels.length === options.length ? 'All relevance' : selectedLabels.join(', ');
-  const hasActiveFilters = selectedParticipantId !== undefined || selectedLabels.length !== options.length;
+  const selectedRelevanceLabels = options.filter(option => selectedTypes.has(option.id)).map(option => option.label);
+  const relevanceLabel =
+    selectedRelevanceLabels.length === options.length ? 'All relevance' : selectedRelevanceLabels.join(', ');
+  const labelButtonText =
+    selectedLabels.size === 0
+      ? 'All labels'
+      : selectedLabels.size === 1
+        ? [...selectedLabels][0]!
+        : `${selectedLabels.size} labels`;
+  const hasActiveFilters =
+    selectedParticipantId !== undefined || selectedRelevanceLabels.length !== options.length || selectedLabels.size > 0;
+  const [labelSearch, setLabelSearch] = useState('');
+  const normalizedSearch = labelSearch.trim().toLowerCase();
+  const visibleLabels = normalizedSearch
+    ? availableLabels.filter(label => label.toLowerCase().includes(normalizedSearch))
+    : availableLabels;
   const teammateOptions = [
     {
       label: 'All teammates',
@@ -83,6 +103,49 @@ export function BoardRelevanceFilters({
               onCheckedChange={checked => onTypeChange(option.id, checked === true)}
             >
               {option.label}
+            </DropdownMenu.CheckboxItem>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenu.Trigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={availableLabels.length === 0 && selectedLabels.size === 0}
+            aria-label="Filter by labels"
+          >
+            <Tag size={14} aria-hidden />
+            <span className="max-w-48 truncate">{labelButtonText}</span>
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" className="max-h-80 min-w-56 overflow-y-auto">
+          <DropdownMenu.Label>Labels</DropdownMenu.Label>
+          <div className="px-2 pb-1">
+            <input
+              type="search"
+              value={labelSearch}
+              onChange={event => setLabelSearch(event.target.value)}
+              placeholder="Search labels..."
+              aria-label="Search labels"
+              className="border-border-1 bg-surface-3 focus:border-border-2 w-full rounded-md border px-2 py-1 text-xs outline-none"
+            />
+          </div>
+          {visibleLabels.length === 0 && (
+            <div className="text-icon3 px-3 py-1.5 text-xs">
+              {availableLabels.length === 0 ? 'No labels available.' : 'No labels match.'}
+            </div>
+          )}
+          {visibleLabels.map(label => (
+            <DropdownMenu.CheckboxItem
+              key={label}
+              checked={selectedLabels.has(label)}
+              onCheckedChange={checked => onLabelChange(label, checked === true)}
+              onSelect={event => event.preventDefault()}
+            >
+              {label}
             </DropdownMenu.CheckboxItem>
           ))}
         </DropdownMenu.Content>

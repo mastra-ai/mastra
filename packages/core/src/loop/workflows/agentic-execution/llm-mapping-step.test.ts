@@ -18,6 +18,7 @@ type ToolCallOutput = {
   aborted?: boolean;
   providerMetadata?: Record<string, any>;
   providerExecuted?: boolean;
+  approval?: { id: string; approved: boolean; reason?: string };
 };
 
 describe('createLLMMappingStep HITL behavior', () => {
@@ -215,6 +216,47 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(false);
     // Should NOT emit tool-result chunks
     expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
+  });
+
+  it('should enqueue tool-output-denied when a requireApproval tool is declined (#20880)', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-denied',
+        toolName: 'sensitive-op',
+        args: { action: 'delete' },
+        result: undefined,
+        approval: {
+          id: 'approval-1',
+          approved: false,
+          reason: 'Tool call was not approved by the user',
+        },
+      },
+    ];
+
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'output-denied',
+          toolCallId: 'call-denied',
+          toolName: 'sensitive-op',
+          approval: expect.objectContaining({ approved: false }),
+        }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-output-denied',
+        payload: expect.objectContaining({
+          toolCallId: 'call-denied',
+          toolName: 'sensitive-op',
+          approval: expect.objectContaining({ approved: false }),
+        }),
+      }),
+    );
+    expect(result.stepResult.isContinued).toBe(true);
   });
 
   it('should emit tool-error for tools with errors and continue the loop for self-recovery', async () => {

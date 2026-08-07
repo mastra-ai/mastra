@@ -23,7 +23,7 @@ import type {
   AnySpan,
 } from '../../../../observability';
 import { EntityType } from '../../../../observability';
-import { getStepAvailableToolNames } from '../../../../observability/utils';
+import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../../processors/runner';
@@ -1508,13 +1508,20 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // persisted assistant message carries the same content.metadata
             // (modelId/provider): prefer the static model, fall back to the
             // response-metadata chunk.
+            // The traceId link (#19891) mirrors it too: message rows carry no traceId
+            // column, so this metadata is the only way a stored assistant message can
+            // be correlated back to its trace.
             const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
+            const responseTraceId = getRootExportSpan(
+              modelSpanTracker?.getTracingContext()?.currentSpan ?? tracingContext?.currentSpan,
+            )?.externalTraceId;
             const responseModelMetadata =
-              responseModelId || currentModel.provider
+              responseModelId || currentModel.provider || responseTraceId
                 ? {
                     metadata: {
                       ...(responseModelId ? { modelId: responseModelId } : {}),
                       ...(currentModel.provider ? { provider: currentModel.provider } : {}),
+                      ...(responseTraceId ? { traceId: responseTraceId } : {}),
                     },
                   }
                 : undefined;

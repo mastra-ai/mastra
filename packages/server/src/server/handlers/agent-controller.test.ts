@@ -426,6 +426,35 @@ describe('agent-controller routes', () => {
       expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
       expect(received.errorType).toBe('provider');
     });
+
+    it('converts display-state Maps to plain objects so tool state survives JSON serialization', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ds',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
+      session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
+
+      let received: unknown;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
+          received = value;
+        }
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      const wire = JSON.parse(JSON.stringify(received));
+      expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
+    });
   });
 
   describe('LIST_AGENT_CONTROLLER_MODES_ROUTE', () => {
