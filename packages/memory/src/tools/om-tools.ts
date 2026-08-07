@@ -1152,9 +1152,6 @@ export const recallTool = (
 ) => {
   const retrievalScope = options?.retrievalScope ?? 'thread';
   const isResourceScope = retrievalScope === 'resource';
-  // When no vector store is configured, semantic search can never succeed — omit
-  // mode="search" from the tool surface entirely so the model is not invited to
-  // call a mode that would throw. See #20775.
   const searchEnabled = options?.searchEnabled ?? true;
 
   const description = isResourceScope

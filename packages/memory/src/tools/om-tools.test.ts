@@ -2859,11 +2859,52 @@ describe('om-tools', () => {
       });
 
       const recall = memory.listTools().recall;
-      const schema = standardSchemaToJSONSchema(recall.inputSchema as any) as {
-        properties: Record<string, { enum?: string[] }>;
-      };
+      const schema = getInputJSONSchema(recall);
       expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
       expect(recall.description).not.toContain('mode="search"');
+    });
+
+    it('does not advertise search when a vector store exists but retrieval search is disabled', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: { id: 'test' } as any,
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: true,
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+      expect(recall.description).not.toContain('mode="search"');
+    });
+
+    it('advertises search when retrieval search, a vector store, and an embedder are configured', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: { id: 'test' } as any,
+        embedder: {
+          specificationVersion: 'v3',
+          modelId: 'test',
+          doEmbed: async () => ({ embeddings: [] }),
+        } as any,
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: { vector: true, scope: 'resource' },
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search']);
+      expect(recall.description).toContain('mode="search"');
     });
   });
 });
