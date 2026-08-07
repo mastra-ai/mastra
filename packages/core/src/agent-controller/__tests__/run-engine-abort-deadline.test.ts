@@ -220,6 +220,63 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(session.stream.isOpen()).toBe(false);
   });
 
+  it('Given teardown happens before the deadline observes it, Then a later abort still receives the full grace period', async () => {
+    vi.useFakeTimers();
+    const { engine, events, session } = createHarness();
+
+    const queue: StreamChunk[] = [];
+    let notify: (() => void) | undefined;
+    const push = (value: StreamChunk) => {
+      queue.push(value);
+      notify?.();
+      notify = undefined;
+    };
+    const subscription = {
+      stream: (async function* () {
+        while (true) {
+          while (queue.length > 0) yield queue.shift()!;
+          await new Promise<void>(resolve => {
+            notify = resolve;
+          });
+        }
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    const processed = engine.processSubscribedThreadStream(subscription);
+
+    // First run: abort, then finish immediately so teardown resolves the
+    // deadline race before its grace timer ever fires.
+    push(chunk({ type: 'text-start', payload: { id: 't1' } }));
+    await vi.advanceTimersByTimeAsync(0);
+    session.abortRun();
+    push(chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+
+    // Second run on the same subscription hangs after its abort.
+    push(chunk({ type: 'text-start', payload: { id: 't2' } }));
+    await vi.advanceTimersByTimeAsync(0);
+    session.abortRun();
+
+    // The later abort gets a full, fresh grace period — no early bail from a
+    // stale timer armed by the first abort...
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(session.stream.isOpen()).toBe(true);
+
+    // ...and the re-armed deadline still bails the hung run once it elapses.
+    await vi.advanceTimersByTimeAsync(1);
+    await processed;
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'aborted' },
+      { type: 'agent_end', reason: 'aborted' },
+    ]);
+    expect(session.run.isRunning()).toBe(false);
+    expect(session.stream.isOpen()).toBe(false);
+  });
+
   it('Given a stream that reacts to the abort signal in time, Then the deadline never fires', async () => {
     const { engine, events, session } = createHarness();
     const abortController = session.run.ensureAbortController();
