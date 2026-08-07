@@ -187,6 +187,7 @@ packageExtensionsChecksum: sha256-xGYNP5bHLPlbBT+RiHXWlNCiUtPhW6W9ntBiVM/duy4=
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
   '@earendil-works/pi-tui@0.80.6': 88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b
+  '@manypkg/tools@2.1.1': 6d493cdb757f34ceacd3b1a081f91d3c2bbe777930133424ef34d222b7fcfd7b
   gray-matter@4.0.3: 058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8
   read-yaml-file@1.1.0: 834a9a43c1785ff0b4911ae833daf9fc54055df0834080003b572e6cf4131eb9
 
@@ -3367,7 +3368,7 @@ importers:
         version: 3.1.0
       '@manypkg/tools':
         specifier: ^2.1.1
-        version: 2.1.1
+        version: 2.1.1(patch_hash=6d493cdb757f34ceacd3b1a081f91d3c2bbe777930133424ef34d222b7fcfd7b)
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
@@ -39662,7 +39663,7 @@ snapshots:
 
   '@manypkg/find-root@3.1.0':
     dependencies:
-      '@manypkg/tools': 2.1.1
+      '@manypkg/tools': 2.1.1(patch_hash=6d493cdb757f34ceacd3b1a081f91d3c2bbe777930133424ef34d222b7fcfd7b)
 
   '@manypkg/get-packages@1.1.3':
     dependencies:
@@ -39676,9 +39677,9 @@ snapshots:
   '@manypkg/get-packages@3.1.0':
     dependencies:
       '@manypkg/find-root': 3.1.0
-      '@manypkg/tools': 2.1.1
+      '@manypkg/tools': 2.1.1(patch_hash=6d493cdb757f34ceacd3b1a081f91d3c2bbe777930133424ef34d222b7fcfd7b)
 
-  '@manypkg/tools@2.1.1':
+  '@manypkg/tools@2.1.1(patch_hash=6d493cdb757f34ceacd3b1a081f91d3c2bbe777930133424ef34d222b7fcfd7b)':
     dependencies:
       jju: 1.4.0
       js-yaml: 5.2.3
