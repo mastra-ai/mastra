@@ -2345,7 +2345,9 @@ Notes:
     if (omConfig?.retrieval) {
       const retrievalScope =
         typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
-      tools.recall = recallTool(mergedConfig, { retrievalScope });
+      // Only advertise mode="search" when a vector store exists — searchMessages
+      // throws without one, and the fallback guidance handles stray calls (#20775).
+      tools.recall = recallTool(mergedConfig, { retrievalScope, searchEnabled: Boolean(this.vector) });
     }
 
     return tools;
