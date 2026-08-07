@@ -520,6 +520,9 @@ describe('materializeRepo', () => {
 
     await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
 
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard/);
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
