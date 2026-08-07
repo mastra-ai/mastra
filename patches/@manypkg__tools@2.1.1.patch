@@ -1,0 +1,14 @@
+diff --git a/dist/manypkg-tools.js b/dist/manypkg-tools.js
+index d005c29314a2d425664fdf7836872ad2082f1a79..f167637049f7cb0ed3997d2770a41e0395dff4b2 100644
+--- a/dist/manypkg-tools.js
++++ b/dist/manypkg-tools.js
+@@ -6,7 +6,8 @@ import * as fsp from 'node:fs/promises';
+ import fsp__default from 'node:fs/promises';
+ import { F_OK } from 'node:constants';
+ import { glob, globSync } from 'tinyglobby';
+-import yaml from 'js-yaml';
++// js-yaml >= 5 is ESM-only and dropped its default export; `load` is a named export there.
++import * as yaml from 'js-yaml';
+ import jju from 'jju';
+ 
+ /**

@@ -162,8 +162,9 @@ const SubscribeForm = ({
         />
 
         <Button
+          variant="ghost"
           className={cn(
-            'flex h-8 w-full items-center justify-center rounded-[10px] bg-(--mastra-surface-3) px-4 text-[14px] hover:opacity-90 dark:text-white',
+            'flex h-8 w-full items-center justify-center rounded-xl bg-(--mastra-surface-3) px-4 text-[14px] hover:opacity-90 dark:text-white',
             buttonClassName,
           )}
           onClick={e => {

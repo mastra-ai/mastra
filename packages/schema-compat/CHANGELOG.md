@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.6-alpha.1
+
+### Patch Changes
+
+- Fixed tool execute-time input validation for Zod tools on Anthropic Claude 3.5 Haiku. The compat layer now skips string min/max checks that were removed from the model-facing JSON Schema, while preserving refinements, defaults, and other validation semantics. ([#19701](https://github.com/mastra-ai/mastra/pull/19701))
+
 ## 1.3.6-alpha.0
 
 ### Patch Changes

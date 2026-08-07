@@ -26,6 +26,7 @@ import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
+import { ThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -93,6 +94,14 @@ export function SettingsPanel() {
                   updating={updateSettingsMutation.isPending}
                   onBehaviorChange={onBehaviorChange}
                 />
+              </SettingsCard>
+            </SettingsSubsection>
+            <SettingsSubsection
+              title="Thinking defaults"
+              description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
+            >
+              <SettingsCard>
+                <ThinkingDefaultsSection />
               </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection title="Provider access">

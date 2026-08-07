@@ -1,5 +1,31 @@
 # @mastra/factory
 
+## 0.6.0-alpha.2
+
+### Minor Changes
+
+- Added stable identities and display titles for Factory user sessions. ([#20781](https://github.com/mastra-ai/mastra/pull/20781))
+
+  `POST /web/github/projects/:id/sessions` now accepts optional `sessionId` and `title` fields. When `branch` is omitted, the session uses `user/session-<sessionId>`. Callers can create a client-side draft, safely retry the first server request with the same UUID, and show the first prompt as a human-readable title. If `sessionId` is omitted, the server generates one. Explicit branches still work unchanged.
+
+  ```ts
+  const sessionId = crypto.randomUUID();
+  const response = await fetch(`/web/github/projects/${projectRepositoryId}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify({ sessionId, title: 'Fix the login flow' }),
+  });
+  ```
+
+  Titles collapse whitespace, trim surrounding space, and are limited to 80 characters. Blank titles are stored as `null`.
+
+### Patch Changes
+
+- Work board cards now follow their GitHub issue when it closes: closing an issue moves its card to Done (or to Canceled when the issue was closed as `not_planned` or `duplicate`), and a card whose issue closed while the deployment was unreachable is caught up automatically by the periodic reconcile sweep. Previously these cards stayed on the board until moved by hand. ([#20895](https://github.com/mastra-ai/mastra/pull/20895))
+
+- Updated dependencies [[`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/core@1.58.0-alpha.2
+  - @mastra/code-sdk@1.2.0-alpha.2
+
 ## 0.6.0-alpha.1
 
 ### Minor Changes
