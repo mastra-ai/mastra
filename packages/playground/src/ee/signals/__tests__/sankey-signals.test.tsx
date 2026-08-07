@@ -886,6 +886,7 @@ describe('SankeySignals', () => {
         ),
       );
       expect(summary.parentElement).toBe(playButton.parentElement);
+      expect(playButton.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
       expect(track.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
       expect(screen.queryByText(/snapshots · .*traces at this point/)).toBeNull();
     });

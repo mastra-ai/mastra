@@ -107,22 +107,18 @@ export function SnapshotTimeline({
   ];
 
   return (
-    <section aria-label="Snapshot timeline" className="space-y-2 px-3 py-2.5 sm:px-4">
+    <section aria-label="Snapshot timeline" className="space-y-4">
       {snapshots.length > 1 ? (
-        <TimelineTrack
-          snapshots={snapshots}
-          totalCount={totalCount}
-          markers={new Map<number, TimelineMarkerKind>([[selectedIndex, 'selected']])}
-          onTickSelect={onSnapshotChange}
-        />
+        <div className="px-3 py-2.5 sm:px-4">
+          <TimelineTrack
+            snapshots={snapshots}
+            totalCount={totalCount}
+            markers={new Map<number, TimelineMarkerKind>([[selectedIndex, 'selected']])}
+            onTickSelect={onSnapshotChange}
+          />
+        </div>
       ) : null}
-      <div className="mx-2 flex flex-wrap items-center gap-2">
-        <p
-          className="text-neutral4 border-border1 rounded-md border px-2 py-1 font-mono text-xs tabular-nums"
-          data-testid="snapshot-summary"
-        >
-          {summary}
-        </p>
+      <div className="flex flex-wrap items-center gap-3">
         {snapshots.length > 1 ? (
           <Button
             aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
@@ -135,6 +131,9 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
+        <p className="text-neutral4 font-mono text-xs tabular-nums" data-testid="snapshot-summary">
+          {summary}
+        </p>
       </div>
       {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
