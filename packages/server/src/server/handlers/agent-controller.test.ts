@@ -440,12 +440,14 @@ describe('agent-controller routes', () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
-      session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } } as any);
+      session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
 
-      let received: any;
+      let received: unknown;
       for (let i = 0; i < 10 && received === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && (value as any).type === 'display_state_changed') received = value;
+        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
+          received = value;
+        }
       }
       await reader.cancel();
 
