@@ -35,6 +35,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
   const previousPaneKey = useRef(paneKey)
   const shouldAnimateContextualEntry = previousPaneKey.current === 'root' && paneKey !== 'root'
+  const shouldAnimateRootEntry = previousPaneKey.current !== 'root' && paneKey === 'root'
 
   useLayoutEffect(() => {
     if (previousPaneKey.current !== paneKey) {
@@ -115,7 +116,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
             ThemeClassNames.docs.docSidebarMenu,
             'menu__list',
             styles.pane,
-            contextualSidebar && styles.rootPaneInactive,
+            contextualSidebar ? styles.rootPaneInactive : shouldAnimateRootEntry && styles.rootPaneEntry,
           )}
         >
           <DocSidebarItems items={sidebar} activePath={path} level={1} />

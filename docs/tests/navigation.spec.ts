@@ -279,10 +279,38 @@ test.describe('Contextual sidebar', () => {
     const overviewHref = await agentsLink.getAttribute('href')
     expect(overviewHref).toBeTruthy()
 
+    await page.evaluate(() => {
+      const navigation = document.querySelector('nav[aria-label="Docs sidebar"]')
+      if (!navigation) throw new Error('Expected the desktop sidebar navigation')
+
+      const observer = new MutationObserver(() => {
+        const rootPanel = navigation.querySelector('ul[data-sidebar-panel="root"]')
+        const contextualPanel = navigation.querySelector('ul[data-sidebar-panel="contextual"]')
+        if (!rootPanel || !contextualPanel || document.documentElement.dataset.sidebarTransitionSample) return
+
+        requestAnimationFrame(() => {
+          document.documentElement.dataset.sidebarTransitionSample = JSON.stringify({
+            visibility: getComputedStyle(rootPanel).visibility,
+            activeAnimations: rootPanel.getAnimations().length,
+          })
+          observer.disconnect()
+        })
+      })
+      observer.observe(navigation, { attributes: true, childList: true, subtree: true })
+    })
+
     await agentsLink.click()
     await expect(page).toHaveURL(overviewHref!)
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const sample = document.documentElement.dataset.sidebarTransitionSample
+          return sample ? JSON.parse(sample) : undefined
+        }),
+      )
+      .toEqual({ visibility: 'hidden', activeAnimations: 0 })
     const backButton = contextualPane.getByRole('button', { name: 'Back to global sidebar' })
     await expect(backButton).toHaveText('Agents')
     await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
