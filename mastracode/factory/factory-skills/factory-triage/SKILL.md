@@ -86,8 +86,6 @@ Severity guide:
 
 Recompute the complete header and handoff on every refresh. `Route` describes the outcome of this completed investigation: use `Plan fix` for actionable issues advancing to Planning, `Await approval` for a feature or other maintainer decision, and `No transition / refresh` when Planning-or-later work is refreshed.
 
-This deep-investigation skill does not add or remove `auto-triaged`, `needs-approval`, or `status: needs triage`. Those first-contact labels remain owned by the GitHub `triage-issue` workflow; never append GitHub label mutations opportunistically during a Factory refresh.
-
 ## Phase 5: GitHub Handoff & Transition
 
 For GitHub issues, fetch the current issue body, labels, and full comment thread before writing the handoff. Then publish that handoff as one GitHub comment. The comment must begin with the exact `<!-- mastra-factory-triage -->` marker shown in the output contract.
@@ -105,7 +103,15 @@ else
 fi
 ```
 
-Set `COMMENT_BODY` to the marker followed by the structured handoff. Update the oldest marked comment authored by the current GitHub identity when duplicates exist; do not add another comment merely because a newer Factory comment exists. If a human deleted the marked comment, create it again. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
+Set `COMMENT_BODY` to the marker followed by the structured handoff. Update the oldest marked comment authored by the current GitHub identity when duplicates exist; do not add another comment merely because a newer Factory comment exists. If a human deleted the marked comment, create it again.
+
+After a GitHub comment is posted or updated, reconcile the triage labels before the terminal transition:
+
+- Add `auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "auto-triaged"`.
+- Remove `status: needs triage` when it appears in the labels fetched in Phase 1: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
+- Add `needs-approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "needs-approval"`.
+
+Apply only these label mutations. Do not remove `needs-approval` merely because a later refresh has a different route. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
 
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 

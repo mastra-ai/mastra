@@ -311,10 +311,17 @@ describe('getFactoryWorkspace', () => {
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain('Keep the issue in its current initial stage until manually moved to planning.');
+    const labelReconciliationIndex = triage.indexOf(
+      'After a GitHub comment is posted or updated, reconcile the triage labels',
+    );
+    expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
+    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "auto-triaged"');
+    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "needs-approval"');
+    expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
       'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
     );
-    expect(triage).toContain('does not add or remove `auto-triaged`, `needs-approval`, or `status: needs triage`');
 
     const plan = await read('factory-plan');
     expect(plan).toContain('if this conversation already contains a triage/understanding pass');
