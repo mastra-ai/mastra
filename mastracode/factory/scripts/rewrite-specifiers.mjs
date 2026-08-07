@@ -1,5 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import ts from 'typescript';
 
 /**
  * Rewrites a single relative specifier to its emitted Node ESM path.
@@ -36,27 +37,43 @@ export function rewriteSpecifier(specifier, resolveSuffix) {
  * @returns {string} Rewritten source
  */
 export function rewriteRelativeSpecifiers(source, resolveSuffix) {
-  let result = source;
+  const sourceFile = ts.createSourceFile('source.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const replacements = [];
 
-  // from '...' or from "..." (static import/export with from keyword)
-  result = result.replace(/\bfrom\s*(['"])(\.\.?\/[^'"]+)\1/g, (match, quote, specifier) => {
-    const rewritten = rewriteSpecifier(specifier, resolveSuffix);
-    return rewritten ? `from ${quote}${rewritten}${quote}` : match;
-  });
+  const addReplacement = node => {
+    if (!ts.isStringLiteralLike(node) || (!node.text.startsWith('./') && !node.text.startsWith('../'))) {
+      return;
+    }
 
-  // import('...') or import("...") (dynamic import)
-  result = result.replace(/\bimport\s*\(\s*(['"])(\.\.?\/[^'"]+)\1/g, (match, quote, specifier) => {
-    const rewritten = rewriteSpecifier(specifier, resolveSuffix);
-    return rewritten ? `import(${quote}${rewritten}${quote}` : match;
-  });
+    const rewritten = rewriteSpecifier(node.text, resolveSuffix);
+    if (rewritten) {
+      replacements.push({ start: node.getStart(sourceFile) + 1, end: node.getEnd() - 1, text: rewritten });
+    }
+  };
 
-  // import '...' or import "..." (side-effect import)
-  result = result.replace(/\bimport\s+(['"])(\.\.?\/[^'"]+)\1/g, (match, quote, specifier) => {
-    const rewritten = rewriteSpecifier(specifier, resolveSuffix);
-    return rewritten ? `import ${quote}${rewritten}${quote}` : match;
-  });
+  const visit = node => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      if (node.moduleSpecifier) {
+        addReplacement(node.moduleSpecifier);
+      }
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0
+    ) {
+      addReplacement(node.arguments[0]);
+    }
 
-  return result;
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+
+  return replacements
+    .sort((a, b) => b.start - a.start)
+    .reduce((result, replacement) => {
+      return result.slice(0, replacement.start) + replacement.text + result.slice(replacement.end);
+    }, source);
 }
 
 /**

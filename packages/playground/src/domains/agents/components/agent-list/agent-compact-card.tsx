@@ -61,7 +61,7 @@ export function AgentCompactCard({ agent }: AgentCompactCardProps) {
         appearance="surface"
         aria-label={`Open ${agent.name}`}
         aria-describedby={`${accessibleId}-instructions ${accessibleId}-metadata`}
-        className="absolute inset-0 group-focus-within/agent:bg-surface4 group-hover/agent:bg-surface4"
+        className="group-focus-within/agent:bg-surface4 group-hover/agent:bg-surface4 absolute inset-0"
       >
         <span className="sr-only">Open {agent.name}</span>
       </CardLink>

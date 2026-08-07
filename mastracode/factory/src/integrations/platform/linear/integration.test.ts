@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests } from '../test-utils.js';
@@ -94,6 +95,36 @@ describe('PlatformLinearIntegration', () => {
     expect(storedConnection?.data.accessToken).not.toBe(config.accessToken);
     expect(loadedConnection.accessToken).not.toBe(config.accessToken);
     await expect(integration.getFreshAccessToken(loadedConnection)).resolves.not.toBe(config.accessToken);
+  });
+
+  it('resolves dispatch context with the platform-managed token when a workspace is connected', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
+    const integration = createIntegration(fetchImpl);
+
+    const resolved = await integration.intake.resolveIntakeDispatch!({
+      orgId: 'org-1',
+      externalSource: { type: 'issue', externalId: 'issue-1' },
+    });
+    expect(resolved).toMatchObject({ connection: { type: 'oauth' }, issueId: 'issue-1' });
+    expect((resolved?.connection as { accessToken?: string }).accessToken).not.toBe(config.accessToken);
+  });
+
+  it('returns null dispatch context without a connected workspace or for non-issue sources', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [] }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.intake.resolveIntakeDispatch!({
+        orgId: 'org-1',
+        externalSource: { type: 'issue', externalId: 'issue-1' },
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      integration.intake.resolveIntakeDispatch!({
+        orgId: 'org-1',
+        externalSource: { type: 'pull-request', externalId: 'x' },
+      }),
+    ).resolves.toBeNull();
   });
 
   it('lists connected workspace projects as Intake sources', async () => {
@@ -198,6 +229,106 @@ describe('PlatformLinearIntegration', () => {
     expect(fetchImpl.mock.calls[1]?.[1]).toEqual(
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ body: 'Done' }) }),
     );
+  });
+
+  it('resolves a byType target to a workflow state and PATCHes the Linear issue', async () => {
+    const workflowStates = [
+      { id: 'state-todo', name: 'Todo', type: 'unstarted', position: 1, teamId: 'team-1' },
+      { id: 'state-done', name: 'Done', type: 'completed', position: 3, teamId: 'team-1' },
+    ];
+    const updatedIssue = { ...issue, state: { id: 'state-done', name: 'Done', type: 'completed' } };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/workflow-states'))
+        return json({ workflowStates, pageInfo: { hasNextPage: false, endCursor: null } });
+      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
+        // Two calls: initial locate + refreshed fetch after PATCH.
+        return fetchImpl.mock.calls.filter(c => String(c[0]).includes('?include=comments')).length > 1
+          ? json({ ...updatedIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } })
+          : json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+      }
+      return json({});
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.updateIssue({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceId: project1SourceId,
+      issueId: 'issue-1',
+      state: { kind: 'byType', stateType: 'completed' },
+    });
+    expect(result).toMatchObject({ id: 'issue-1', state: 'Done', stateType: 'completed' });
+
+    const patchCall = fetchImpl.mock.calls.find(call => (call[1] as RequestInit).method === 'PATCH');
+    expect(patchCall).toBeDefined();
+    expect(String(patchCall![0])).toContain(`/workspaces/workspace-1/issues/${encodeURIComponent('issue-1')}`);
+    expect(JSON.parse(String((patchCall![1] as RequestInit).body))).toEqual({ stateId: 'state-done' });
+  });
+
+  it('skips the PATCH when the current byType state already matches', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
+        return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+      }
+      return json({});
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.updateIssue({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceId: project1SourceId,
+      issueId: 'issue-1',
+      state: { kind: 'byType', stateType: 'unstarted' },
+    });
+    expect(result).toMatchObject({ stateType: 'unstarted' });
+    expect(fetchImpl.mock.calls.some(c => (c[1] as RequestInit).method === 'PATCH')).toBe(false);
+  });
+
+  it('returns null when no workflow state matches the byType target', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/workflow-states')) {
+        return json({
+          workflowStates: [{ id: 'state-todo', name: 'Todo', type: 'unstarted', position: 1, teamId: 'team-1' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
+        return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+      }
+      return json({});
+    });
+    const integration = createIntegration(fetchImpl);
+    await expect(
+      integration.intake.updateIssue({
+        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+        sourceId: project1SourceId,
+        issueId: 'issue-1',
+        state: { kind: 'byType', stateType: 'completed' },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('degrades to null when the workflow-states endpoint is not deployed on the platform', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/workflow-states')) return json({ detail: 'Not found' }, 404);
+      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
+        return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+      }
+      return json({});
+    });
+    const integration = createIntegration(fetchImpl);
+    await expect(
+      integration.intake.updateIssue({
+        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+        sourceId: project1SourceId,
+        issueId: 'issue-1',
+        state: { kind: 'byType', stateType: 'completed' },
+      }),
+    ).resolves.toBeNull();
+    expect(fetchImpl.mock.calls.some(c => (c[1] as RequestInit).method === 'PATCH')).toBe(false);
   });
 
   it('searches connected workspaces when issue operations have no source id and returns null on 404', async () => {
@@ -351,6 +482,71 @@ describe('PlatformLinearIntegration', () => {
     );
     expect(integration.diagnostics()).toEqual({ mode: 'platform', endpointHost: 'platform.example.com' });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('attaches Linear rules to fetched Platform issues', async () => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/workspaces/workspace-1/projects?')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-1/issues?')) {
+        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const projectRecord = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Acme app' },
+    });
+    await seed.intake.saveConfig({
+      orgId: 'org-1',
+      userId: 'user-1',
+      config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
+    });
+    const onEvent = vi.fn();
+    const context = {
+      auth: fakeAuth(),
+      storage: {
+        generic: seed.integrations.forIntegration('linear'),
+        sourceControl: seed.sourceControl.forIntegration('linear'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      rules: {
+        config: defaultFactoryRules({
+          version: 'test-rules',
+          overrides: { linear: { issueObserved: { onEvent } } },
+        }),
+        workItems: seed.workItems,
+      },
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({
+      storage: context.storage.generic,
+      projects: context.storage.projects,
+      auth: context.auth,
+    });
+    const app = new Hono();
+    for (const route of integration.routes(context)) {
+      if ('handler' in route) app.on(route.method, route.path, route.handler as never);
+    }
+
+    const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
+
+    expect(response.status).toBe(200);
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'issueObserved',
+        issue: expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' }),
+      }),
+    );
   });
 
   it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {

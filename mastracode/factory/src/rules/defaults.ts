@@ -23,18 +23,50 @@ function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): bo
   return context.actor.type === 'github' && context.actor.trusted;
 }
 
+function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): string | undefined {
+  return context.actor.type === 'github' ? context.actor.login : undefined;
+}
+
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-issue`,
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
     role: 'triage',
-    skillName: 'understand-issue',
+    skillName: 'factory-triage',
     arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
 }
 
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
+  if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
+    return;
+  }
   return invokeIssueInvestigation(context);
+}
+
+function retriageGithubIssue(context: FactoryGithubRuleContext) {
+  if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
+  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+
+  const reason =
+    context.event === 'issueEdited'
+      ? context.issueChange?.title && context.issueChange.body
+        ? 'issue title and body edited'
+        : context.issueChange?.title
+          ? 'issue title edited'
+          : 'issue body edited'
+      : context.event === 'issueCommentDeleted'
+        ? 'comment deleted'
+        : context.event === 'issueCommentEdited'
+          ? 'comment edited'
+          : 'comment created';
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: `Re-triage GitHub issue (${context.item.url}) after ${reason}.`,
+  } as const;
 }
 
 function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
@@ -43,19 +75,29 @@ function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
     : context.item.title;
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-linear-issue`,
+    idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
     role: 'triage',
-    skillName: 'understand-issue',
+    skillName: 'factory-triage',
     arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+  } as const;
+}
+
+function planWorkItem(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-plan`,
+    role: 'plan',
+    skillName: 'factory-plan',
+    arguments: context.item.url ? `Work item (${context.item.url})` : context.item.title,
   } as const;
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-pr`,
+    idempotencyKey: `${context.ingress.id}:factory-review`,
     role: 'review',
-    skillName: 'understand-pr',
+    skillName: 'factory-review',
     arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
   } as const;
 }
@@ -67,6 +109,8 @@ function resultContent(value: unknown): string | undefined {
   return typeof content === 'string' ? content : undefined;
 }
 
+// Interactive-session path only: factory-plan never calls submit_plan — it
+// advances planning → execute via factory_transition_work_item directly.
 function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
   if (
     context.result.status !== 'success' ||
@@ -111,6 +155,8 @@ function issueOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      assignees: context.issue.assignees ?? [],
     },
   } as const;
 }
@@ -133,12 +179,39 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+      state: context.pullRequest.state,
+      draft: context.pullRequest.draft,
+      merged: context.pullRequest.merged,
+      assignees: context.pullRequest.assignees ?? [],
+      requestedReviewers: context.pullRequest.requestedReviewers ?? [],
+      headBranch: context.pullRequest.headBranch,
+      baseBranch: context.pullRequest.baseBranch,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
     },
   } as const;
 }
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest?.merged) return;
+  if (context.board === 'review') {
+    // The event is bound to the PR's own Review card: a merged PR is finished
+    // review work, so always move the card to Done. The message only reaches
+    // an active session (if any) — cards without one just move, instead of
+    // failing retries against a binding that never existed.
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:pull-request-merged`,
+      board: 'review',
+      stage: 'done',
+      message: {
+        text:
+          `Pull request #${context.pullRequest.number} merged; this Review card was moved to Done. ` +
+          'No further review is needed unless follow-up work was requested.',
+      },
+    } as const;
+  }
+  // Provenance bound the event to the originating Work item instead: remind
+  // its agent to assess completion — never auto-complete the Work item.
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:assess-work-completion`,
@@ -146,6 +219,44 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
     message:
       `Pull request #${context.pullRequest.number} merged. Assess whether the linked Work item is complete. ` +
       'Do not mark it Done solely because this PR merged; use factory_transition_work_item only after verifying the work.',
+  } as const;
+}
+
+function pullRequestClosed(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
+  if (context.board !== 'review') return;
+  // A PR closed without merging is abandoned review work: clear the card off
+  // the board instead of leaving it in Reviewing forever.
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:pull-request-closed`,
+    board: 'review',
+    stage: 'canceled',
+    message: {
+      text:
+        `Pull request #${context.pullRequest.number} was closed without merging; ` +
+        'this Review card was moved to Canceled.',
+    },
+  } as const;
+}
+
+function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
+  // Only a review re-requested *from Factory's own bot* restarts the review —
+  // requesting a human reviewer is not Factory's signal.
+  if (!context.item || context.board !== 'review' || !context.reviewRequest?.factoryReviewer) return;
+  if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // Trusted (write/admin) requesters only: re-entering review checks out and
+  // executes PR code, the same bar pullRequestOpened applies to auto-review.
+  if (!trustedGithubActor(context)) return;
+  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // Already in Reviewing: a review pass is pending or running; re-entering
+  // would be a same-stage no-op anyway (stage rules only fire on change).
+  if (context.item.stages.length === 1 && context.item.stages[0] === 'review') return;
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:re-review-requested`,
+    board: 'review',
+    stage: 'review',
   } as const;
 }
 
@@ -162,12 +273,15 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     stage: 'triage',
     metadata: {
       linearIssueId: context.issue.id,
-      linearIssueIdentifier: context.issue.identifier,
+      identifier: context.issue.identifier,
       linearState: context.issue.state,
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,
       linearAssignee: context.issue.assignee,
+      linearCreator: context.issue.creator,
       linearTeam: context.issue.team,
+      ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
+      ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
     },
   } as const;
 }
@@ -178,13 +292,24 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: investigateTriagedIssue },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
     },
+    planning: {
+      issue: { onEnter: planWorkItem },
+      linearIssue: { onEnter: planWorkItem },
+      manual: { onEnter: planWorkItem },
+    },
   },
   review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },
+    issueEdited: { onEvent: retriageGithubIssue },
+    issueCommentCreated: { onEvent: retriageGithubIssue },
+    issueCommentEdited: { onEvent: retriageGithubIssue },
+    issueCommentDeleted: { onEvent: retriageGithubIssue },
     pullRequestOpened: { onEvent: pullRequestOpened },
+    pullRequestReviewRequested: { onEvent: reReviewRequestedPullRequest },
     pullRequestMerged: { onEvent: pullRequestMerged },
+    pullRequestClosed: { onEvent: pullRequestClosed },
   },
   linear: { issueObserved: { onEvent: linearIssueObserved } },
 };

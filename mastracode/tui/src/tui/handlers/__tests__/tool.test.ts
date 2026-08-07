@@ -5,6 +5,7 @@ import {
   clearPendingShellOutputs,
   clearToolInputParsers,
   handleShellOutput,
+  handleToolApprovalRequired,
   handleToolEnd,
   handleToolInputDelta,
   handleToolInputEnd,
@@ -260,5 +261,26 @@ describe('tool event handlers', () => {
     expect(rendered).toContain('search_content');
     expect(rendered).not.toContain('Streaming answer text');
     expect(rendered).toContain('Updated answer text');
+  });
+});
+
+describe('handleToolApprovalRequired', () => {
+  it('does not notify from the queued handler (#20398 — notification fires at event receipt)', () => {
+    const ctx = {
+      state: {
+        ui: {
+          showOverlay: vi.fn(() => ({ close: vi.fn() })),
+          requestRender: vi.fn(),
+          terminal: { columns: 120, rows: 40 },
+        },
+        hookManager: undefined,
+      },
+      notify: vi.fn(),
+    } as any;
+
+    handleToolApprovalRequired(ctx, 'call-approve', 'execute_command', { command: 'ls' });
+
+    expect(ctx.state.ui.showOverlay).toHaveBeenCalledTimes(1);
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 });

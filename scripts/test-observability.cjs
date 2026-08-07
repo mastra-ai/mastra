@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const { spawnSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const args = process.argv.slice(2);
 const packageArg = args[0];

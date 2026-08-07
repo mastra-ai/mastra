@@ -1447,7 +1447,11 @@ export class MCPServer extends MCPServerBase {
         continue;
       }
 
-      if (typeof toolInstance.execute !== 'function') {
+      if (
+        (typeof toolInstance !== 'object' && typeof toolInstance !== 'function') ||
+        !('execute' in toolInstance) ||
+        typeof toolInstance.execute !== 'function'
+      ) {
         this.logger.warn('Tool has no execute function, skipping', { tool: toolName });
         continue;
       }
@@ -1458,7 +1462,7 @@ export class MCPServer extends MCPServerBase {
         tracingContext: {},
         mastra: this.mastra,
         logger: this.logger,
-        description: toolInstance?.description,
+        description: 'description' in toolInstance ? toolInstance.description : undefined,
       };
 
       const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;

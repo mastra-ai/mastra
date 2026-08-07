@@ -1,6 +1,6 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
+import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { getCustomProviderId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
@@ -53,7 +53,13 @@ function loose(c: unknown): Context {
  * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
  */
 export type ProviderCredentialSource =
-  'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'stored-user' | 'stored-org';
+  | 'oauth'
+  | 'stored'
+  | 'env'
+  | 'none'
+  | 'oauth-user'
+  | 'stored-user'
+  | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
@@ -62,6 +68,12 @@ export interface ProviderInfo {
   envVar?: string;
   /** Where the active credential comes from. */
   source: ProviderCredentialSource;
+  /**
+   * Tenant mode: whether an org-wide API key exists for this provider, even
+   * when the caller's personal credential shadows it. Lets the UI tell
+   * "shared with the org" apart from "only works for me".
+   */
+  orgKey?: boolean;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
@@ -142,9 +154,11 @@ export async function listProviders({
 
     const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
+    let orgKey: boolean | undefined;
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
+      orgKey = orgRec?.credential.type === 'api_key';
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
@@ -167,6 +181,7 @@ export async function listProviders({
       provider: model.provider,
       envVar: model.apiKeyEnvVar,
       source,
+      ...(orgKey !== undefined ? { orgKey } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
   }
@@ -462,11 +477,9 @@ async function applyPackToSession({
 }
 
 // ── Observational memory ────────────────────────────────────────────────────
-// Mirrors the TUI `/om` command. Observer/reflector model + threshold reads come
-// from the session (state, falling back to omConfig defaults); writes go to both
-// the session (state + thread setting, via the same session methods the TUI uses)
-// and GlobalSettings (settings.json), so the choice survives restarts and stays
-// in sync with the terminal.
+// Mirrors the TUI `/om` command. Settings are persisted per organization and
+// user in the Factory app database. Requests with an active session also apply
+// changes immediately to that session's state and thread settings.
 
 /** Default thresholds mirror the TUI `/om` fallbacks. */
 const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
@@ -481,6 +494,11 @@ export interface OMConfigInfo {
   observeAttachments: 'auto' | boolean;
 }
 
+export interface ProviderOMDefaultsResponse {
+  ok: true;
+  config: OMConfigInfo;
+}
+
 export function readOMConfig(session: OMSession): OMConfigInfo {
   const state = session.state.get() ?? {};
   const observeAttachments = state.observeAttachments;
@@ -490,6 +508,16 @@ export function readOMConfig(session: OMSession): OMConfigInfo {
     observationThreshold: session.om.observer.threshold() ?? DEFAULT_OBSERVATION_THRESHOLD,
     reflectionThreshold: session.om.reflector.threshold() ?? DEFAULT_REFLECTION_THRESHOLD,
     observeAttachments: observeAttachments === true || observeAttachments === false ? observeAttachments : 'auto',
+  };
+}
+
+function readStoredOMConfig(record: MemorySettingsRecord | null): OMConfigInfo {
+  return {
+    observerModelId: record?.observerModelId ?? DEFAULT_OM_MODEL_ID,
+    reflectorModelId: record?.reflectorModelId ?? DEFAULT_OM_MODEL_ID,
+    observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
+    reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
+    observeAttachments: record?.observeAttachments ?? 'auto',
   };
 }
 
@@ -632,12 +660,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               auth,
               credentials: options.modelCredentials,
             });
+            // Tenant mode also reports whether the caller may write org-wide
+            // keys, so the settings UI can gate the "Everyone in org" option.
+            const tenant = auth.tenant(loose(c));
+            const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
             return c.json({
               providers: await listProviders({
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
               }),
+              ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1000,12 +1033,58 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
+      registerApiRoute('/web/config/om/provider-defaults', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          let body: { providerId?: unknown; factoryModelId?: unknown };
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : '';
+          const factoryModelId = typeof body.factoryModelId === 'string' ? body.factoryModelId.trim() : '';
+          if (!providerId) return c.json({ error: 'Missing required field: providerId' }, 400);
+
+          const context = await resolveMemorySettingsContext({
+            c: loose(c),
+            auth,
+            memorySettings: options.memorySettings,
+          });
+          if ('response' in context) return context.response;
+
+          try {
+            const tenantCredentials = await listTenantCredentialsForRequest({
+              c: loose(c),
+              auth,
+              credentials: options.modelCredentials,
+            });
+            const access = await buildProviderAccess({
+              controller,
+              authStorage: tenantCredentials ? undefined : authStorage,
+              tenantCredentials,
+            });
+            if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
+
+            const modelId = resolveProviderOMDefault(providerId, factoryModelId).modelId;
+            const record = await context.storage.patch({
+              orgId: context.orgId,
+              userId: context.userId,
+              patch: {},
+              fillIfUnset: { observerModelId: modelId, reflectorModelId: modelId },
+            });
+            return c.json({ ok: true, config: readStoredOMConfig(record) });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
       // ── Observational memory ──────────────────────────────────────────────────
-      // Mirrors the TUI's /om command. All five knobs are session-scoped (resolved
-      // from the session, persisted to its state + thread setting) and durably
-      // stored in the per-(org, user) `memory-settings` app table — never
-      // settings.json. GET hydrates the session from the stored row first so the
-      // DB, not the SDK's boot-time seed, is the source of truth.
+      // Mirrors the TUI's /om command. All five knobs are durably stored in the
+      // per-(org, user) `memory-settings` app table — never settings.json. When a
+      // session is supplied, changes are also applied to its state and thread.
 
       registerApiRoute('/web/config/om', {
         method: 'GET',
@@ -1013,7 +1092,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           const resourceId = c.req.query('resourceId');
           const scope = c.req.query('scope') || undefined;
-          if (!resourceId) return c.json({ error: 'Missing required query param: resourceId' }, 400);
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
@@ -1021,9 +1099,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+            if (!resourceId) return c.json({ config: readStoredOMConfig(record) });
+
+            // Session sync is best-effort: the stored row is authoritative and
+            // new sessions hydrate from it, so a resourceId without a live
+            // session (e.g. settings page after a restart) still reads the
+            // stored config instead of failing.
+            const session = await controller.getSessionByResource?.(resourceId, scope);
+            if (!session) return c.json({ config: readStoredOMConfig(record) });
             await hydrateSessionMemorySettings(session, record);
             return c.json({ config: readOMConfig(session) });
           } catch (error) {
@@ -1049,7 +1133,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
-          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
           if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
           const context = await resolveMemorySettingsContext({
             c: loose(c),
@@ -1058,11 +1141,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            const otherRole = role === 'observer' ? session.om.reflector : session.om.observer;
-            const otherRoleCurrentModelId = otherRole.modelId() ?? null;
-            await session.om[role].switchModel({ modelId });
+            // Best-effort session sync: persist regardless, apply to the live
+            // session only when one exists for the resourceId.
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const otherRole = session ? (role === 'observer' ? session.om.reflector : session.om.observer) : undefined;
+            const otherRoleCurrentModelId = otherRole?.modelId() ?? null;
+            await session?.om[role].switchModel({ modelId });
             // Pin the other role's current model too, so a later restart
             // doesn't drift it once this role is explicitly overridden. The
             // "only if still unset" check runs inside the storage layer's
@@ -1074,7 +1158,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               { [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId },
               otherRoleCurrentModelId ? { [otherKey]: otherRoleCurrentModelId } : undefined,
             );
-            return c.json({ ok: true, config: readOMConfig(session) });
+            const config = session
+              ? readOMConfig(session)
+              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+            return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1098,7 +1185,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
-          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
           const observation =
             typeof body.observationThreshold === 'number' && body.observationThreshold > 0
               ? Math.round(body.observationThreshold)
@@ -1117,13 +1203,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            if (observation !== undefined) {
+            // Best-effort session sync: persist regardless, apply to the live
+            // session only when one exists for the resourceId.
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            if (observation !== undefined && session) {
               await session.state.set({ observationThreshold: observation });
               await session.thread.setSetting({ key: 'observationThreshold', value: observation });
             }
-            if (reflection !== undefined) {
+            if (reflection !== undefined && session) {
               await session.state.set({ reflectionThreshold: reflection });
               await session.thread.setSetting({ key: 'reflectionThreshold', value: reflection });
             }
@@ -1131,7 +1218,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
               ...(reflection !== undefined ? { reflectionThreshold: reflection } : {}),
             });
-            return c.json({ ok: true, config: readOMConfig(session) });
+            const config = session
+              ? readOMConfig(session)
+              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+            return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1150,7 +1240,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
-          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
           const raw = body.value;
           const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
           if (raw !== 'auto' && raw !== true && raw !== false) {
@@ -1163,12 +1252,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            await session.state.set({ observeAttachments: value });
-            await session.thread.setSetting({ key: 'observeAttachments', value });
+            // Best-effort session sync: persist regardless, apply to the live
+            // session only when one exists for the resourceId.
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            if (session) {
+              await session.state.set({ observeAttachments: value });
+              await session.thread.setSetting({ key: 'observeAttachments', value });
+            }
             await persistMemorySettings(context, { observeAttachments: value });
-            return c.json({ ok: true, config: readOMConfig(session) });
+            const config = session
+              ? readOMConfig(session)
+              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+            return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

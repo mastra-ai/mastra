@@ -27,7 +27,9 @@ import {
 import type { BundlerPlatform } from './utils';
 
 type ErrorId =
-  'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD' | 'DEPLOYER_ANALYZE_TYPE_ERROR';
+  | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
+  | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
+  | 'DEPLOYER_ANALYZE_TYPE_ERROR';
 
 function preferDependencyInfo(
   existing: ExternalDependencyInfo | undefined,
@@ -282,6 +284,7 @@ async function validateOutput(
     output,
     reverseVirtualReferenceMap,
     usedExternals,
+    userExternals,
     outputDir,
     projectRoot,
     workspaceMap,
@@ -290,6 +293,7 @@ async function validateOutput(
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
     usedExternals: Record<string, Record<string, string>>;
+    userExternals: string[];
     outputDir: string;
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
@@ -355,7 +359,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
+      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...userExternals],
     });
   }
 
@@ -579,6 +583,7 @@ export async function analyzeBundle(
       output,
       reverseVirtualReferenceMap: fileNameToDependencyMap,
       usedExternals,
+      userExternals,
       outputDir,
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
@@ -637,6 +642,13 @@ export async function analyzeBundle(
   return {
     ...result,
     externalDependencies: mergedExternalDeps,
+    /**
+     * Workspace deps that were optimized (after isDev/externalsPreset pruning).
+     * Used by the watcher to re-run optimization when workspace sources change.
+     */
+    depsToOptimize,
+    workspaceRoot,
+    outputDir,
     ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),
   };
 }

@@ -3,6 +3,8 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
+import { hydrateFactorySession } from '../session/factory-session.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -18,6 +20,7 @@ export interface FactoryStartRequest {
   kickoffKey: string;
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryRuleStage;
+  defaultModelId?: string;
   workItem: {
     id?: string;
     role: string;
@@ -106,17 +109,20 @@ export class FactoryStartCoordinator {
   readonly #storage: WorkItemsStorage;
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
+  readonly #memorySettings?: MemorySettingsStorage;
 
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
+    memorySettings?: MemorySettingsStorage,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
+    this.#memorySettings = memorySettings;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -127,12 +133,48 @@ export class FactoryStartCoordinator {
     if (!request.requestContext) {
       requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
     }
+    // Sessions kicked off against third-party content (a PR under review, or
+    // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
+    // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
+    // or reminders — those files are attacker-writable in a PR branch.
+    const untrustedCheckout =
+      request.workItem.input.externalSource?.type === 'pull-request' ||
+      (request.invocation?.type === 'skill' && request.invocation.skillName === 'factory-review');
+    // The trusted ref the SDK may serve project instruction files from on an
+    // untrusted checkout (the PR's base branch). Prefer the session record's
+    // base branch; fall back to the intake metadata captured from the PR.
+    const metadataBaseBranch = request.workItem.input.metadata?.baseBranch;
+    const baseRef =
+      (sourceSession.baseBranch || undefined) ??
+      (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);
+    const sessionTags = {
+      factoryProjectId: request.factoryProjectId,
+      projectRepositoryId: sourceSession.projectRepositoryId,
+    };
     const session = await this.#controller.createSession({
       id: sourceSession.sessionId,
       ownerId: request.userId,
       resourceId: sourceSession.sessionId,
       threadId: sourceSession.sessionId,
       requestContext,
+      tags: sessionTags,
+    });
+    // Bound-agent authority gates (the transition tool, the factory-phase
+    // processor, workspace token selection) resolve the session address from
+    // controller state. Seed it server-side — `tags` covers fresh creation,
+    // the explicit setState covers get-or-create returning a session another
+    // caller created without them — so autonomous runs never depend on a
+    // browser connecting to populate the state. `untrustedCheckout` is a
+    // boolean so it rides only on state (tags are string-valued).
+    await session.state.set({
+      ...sessionTags,
+      ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
+    });
+    await hydrateFactorySession(session, {
+      orgId: request.orgId,
+      userId: request.userId,
+      defaultModelId: request.defaultModelId,
+      memorySettings: this.#memorySettings,
     });
     const threadId = await configureThread(session, request);
     const kickoffMessage = await resolveKickoffMessage(session, request.invocation);

@@ -10,6 +10,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { MastraStreamTransformOptions } from '../stream/types';
 import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
@@ -104,6 +105,14 @@ export interface DelegationStartContext {
   toolCallId: string;
   /** Messages accumulated so far */
   messages: MastraDBMessage[];
+  /**
+   * The request context the delegated run will receive. Entries are shallowly
+   * copied from the parent run's context, excluding `MastraMemory` and the
+   * reserved thread/resource keys. Mutate it with `requestContext.set()` to add
+   * entries without modifying the parent's context map. Values must be
+   * JSON-serializable to work with durable agents.
+   */
+  requestContext: RequestContext;
 }
 
 /**
@@ -593,6 +602,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
+
+  /**
+   * Experimental transforms applied to `MastraModelOutput.fullStream`.
+   * Transform factories create a fresh `TransformStream` for every consumer.
+   */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
 
   /** Per-invocation transform policy for tool payloads in display and transcript serializers. */
   transform?: ToolPayloadTransformPolicy;

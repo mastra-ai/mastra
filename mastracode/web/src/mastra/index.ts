@@ -23,11 +23,16 @@ import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { PlatformSandbox } from '@mastra/platform-workspace';
+import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
+import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
+import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -41,6 +46,16 @@ function positiveInt(raw: string | undefined): number | undefined {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
   return parsed;
+}
+
+function investigateIntakeIssue(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+  } as const;
 }
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
@@ -65,12 +80,47 @@ if (redisUrl) {
 
 // Factory dev is auth-less by default. Production can opt out explicitly;
 // otherwise MastraFactory installs its platform-backed auth provider.
-const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1' || process.env.MASTRA_FACTORY_DEV === 'true';
+const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {
   auth = null;
 }
+
+// Direct GitHub App fallback: when the platform-backed integration isn't in
+// play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
+// a GithubIntegration so the app still gets a real GitHub connection — Connect
+// GitHub in onboarding, the repo picker, and webhooks. A partial group stays
+// disabled so the status route can report exactly what's missing.
+const githubAppId = process.env.GITHUB_APP_ID?.trim();
+const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
+const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
+const githubClientSecret = process.env.GITHUB_APP_CLIENT_SECRET?.trim();
+const githubAppSlug = process.env.GITHUB_APP_SLUG?.trim();
+const github =
+  githubAppId && githubPrivateKey && githubClientId && githubClientSecret && githubAppSlug
+    ? new GithubIntegration({
+        appId: githubAppId,
+        privateKey: githubPrivateKey,
+        clientId: githubClientId,
+        clientSecret: githubClientSecret,
+        slug: githubAppSlug,
+        webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+      })
+    : undefined;
+
+// Direct Linear OAuth fallback for self-hosted / local deploys. As with the
+// GitHub fallback, only a complete credential group enables the integration;
+// partial configuration remains available to the diagnostics routes.
+const linearClientId = process.env.LINEAR_CLIENT_ID?.trim();
+const linearClientSecret = process.env.LINEAR_CLIENT_SECRET?.trim();
+const linear =
+  linearClientId && linearClientSecret
+    ? new LinearIntegration({
+        clientId: linearClientId,
+        clientSecret: linearClientSecret,
+      })
+    : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -104,10 +154,20 @@ function localSandboxEnv(): Record<string, string> {
 const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
 const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 
+// Private-network exec: the workspace-proxy discovers each sandbox's private
+// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
+// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
+// in-process registry; `PlatformSandbox.executeCommand()` reads it on every
+// exec to dial the sidecar's `POST /exec` directly over Railway's private
+// network, falling back to the lease path when no address is registered or
+// a dial fails. Only constructed when `PlatformSandbox` is in play; a
+// `LocalSandbox` dev run has no sidecar and no need for the registry.
+const sandboxAddressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
+
 // Use PlatformSandbox only when its complete identity is configured. Otherwise
 // fall back to LocalSandbox for single-user development.
 const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox()
+  ? new PlatformSandbox({ addressRegistry: sandboxAddressRegistry })
   : new LocalSandbox({
       workingDirectory:
         process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
@@ -136,6 +196,7 @@ const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.e
 if (!databaseUrl && !localDevelopmentMode) {
   throw new Error('DATABASE_URL is required outside local development and tests.');
 }
+
 const storage = databaseUrl
   ? new PgFactoryStorage({
       id: 'mastra-code-storage',
@@ -149,8 +210,53 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+// Deployment-stable secret for OAuth/link `state` signing. Shared by the
+// factory's integration signer and the channel-account-link deep link so both
+// sign/verify with the same key: webhook secret first, then the WorkOS cookie
+// password, then the Slack signing secret so a Slack-only deployment still has
+// a stable signer. Unset → per-process random secret (single-process local dev
+// only).
+const stateSecret =
+  process.env.GITHUB_APP_WEBHOOK_SECRET ||
+  process.env.WORKOS_COOKIE_PASSWORD ||
+  process.env.SLACK_APP_SIGNING_SECRET ||
+  undefined;
+
+// Slack channels + account linking. Optional: the Slack adapter validates the
+// signing secret at construction, so the integration is only built when the
+// Slack app env is configured. Repo-backed Slack threads come from the
+// factory's source-control owner (GitHub) — the integration wires itself.
+const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
+const slack = slackSigningSecret
+  ? new SlackIntegration({
+      signingSecret: slackSigningSecret,
+      botToken: process.env.SLACK_APP_BOT_TOKEN,
+      clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+      clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+      // Slack requires an HTTPS redirect_uri, which locally is the tunnel
+      // origin rather than the app's own public URL.
+      oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+      uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+    })
+  : undefined;
+
+const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+
+export const factoryRules = defaultFactoryRules({
+  version: 'mastracode-web-v1',
+  overrides: {
+    work: {
+      intake: {
+        issue: { onEnter: investigateIntakeIssue },
+      },
+    },
+  },
+});
+
 export const factory = new MastraFactory({
   auth,
+  integrations,
+  rules: factoryRules,
   sandbox: {
     machine: sandbox,
     // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
@@ -166,6 +272,11 @@ export const factory = new MastraFactory({
   storage,
   vector,
   pubsub,
+  platform: {
+    // Platform's GitHub App identity is not included in the Platform credentials.
+    // Reuse the deployment's configured App slug to ignore Factory's own handoff writes.
+    githubAppSlug,
+  },
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.
   publicUrl: process.env.MASTRACODE_PUBLIC_URL,
@@ -176,23 +287,18 @@ export const factory = new MastraFactory({
     .map(o => o.trim())
     .filter(Boolean),
   // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
-  // flows). Same resolution the state signer used before it moved into the
-  // factory: webhook secret first, then the WorkOS cookie password. Unset →
-  // per-process random secret (single-process local dev only).
-  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // flows). See `stateSecret` above.
+  stateSecret,
 });
+
+const preparedArgs = await factory.prepare();
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
-const prepared = await factory.prepare();
 export const mastra = new Mastra({
-  ...prepared,
-  bundler: {
-    externals: ['@anush008/tokenizers', '@duckdb/node-bindings', '@node-rs/xxhash', 'supports-color'],
-    transpilePackages: ['@mastra/factory'],
-  },
+  ...preparedArgs,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

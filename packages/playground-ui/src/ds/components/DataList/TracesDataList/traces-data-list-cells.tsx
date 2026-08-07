@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { DataListCell, DataListMonoCell } from '../data-list-cells';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -30,7 +29,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
     </span>
   );
   return (
-    <DataListCell height="compact" className="flex min-w-0 items-center gap-2 text-ui-smd text-neutral4">
+    <DataListCell height="compact" className="text-ui-smd text-neutral4 flex min-w-0 items-center gap-2">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -65,10 +64,10 @@ function EntityTypeIcon({ entityType, className }: { entityType: string; classNa
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
-    case EntityType.AGENT:
+    case 'agent':
       return <AgentIcon className={iconClass} aria-hidden />;
     case 'workflow':
-    case EntityType.WORKFLOW_RUN:
+    case 'workflow_run':
       return <WorkflowIcon className={iconClass} aria-hidden />;
     default:
       return null;
@@ -86,7 +85,7 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="min-w-0 truncate text-ui-smd">{entityName}</span> : '-'}
+      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -98,9 +97,11 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 const UNSET_STATUS_CONFIG = { label: '-', color: Colors.neutral4 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  completed: { label: 'OK', color: Colors.accent2 },
-  ok: { label: 'OK', color: Colors.accent2 },
+  completed: { label: 'OK', color: Colors.accent1 },
+  ok: { label: 'OK', color: Colors.accent1 },
+  success: { label: 'OK', color: Colors.accent1 },
   error: { label: 'ERR', color: Colors.error },
+  running: { label: 'RUN', color: Colors.neutral4 },
   unset: UNSET_STATUS_CONFIG,
 };
 

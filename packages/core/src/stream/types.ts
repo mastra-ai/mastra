@@ -1,3 +1,4 @@
+import type { TransformStream } from 'node:stream/web';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -317,7 +318,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
   [key: string]: unknown;
 }
 
-interface ToolErrorPayload {
+export interface ToolErrorPayload {
   id?: string;
   providerMetadata?: ProviderMetadata;
   toolCallId: string;
@@ -916,6 +917,7 @@ export type WorkflowStreamEvent =
       type: 'workflow-finish';
       payload: {
         workflowStatus: WorkflowRunStatus;
+        finalWorkflowResult?: unknown;
         output: {
           usage: {
             inputTokens: number;
@@ -1096,6 +1098,18 @@ export type MastraOnFinishCallback<OUTPUT = undefined> = (
   event: MastraOnFinishCallbackArgs<OUTPUT>,
 ) => Promise<void> | void;
 
+/**
+ * Creates a fresh transform for a Mastra model output stream.
+ *
+ * @experimental This API may change in a future release.
+ */
+export type MastraStreamTransform<OUTPUT = undefined> = () => TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>;
+
+/** @experimental This API may change in a future release. */
+export type MastraStreamTransformOptions<OUTPUT = undefined> =
+  | MastraStreamTransform<OUTPUT>
+  | readonly MastraStreamTransform<OUTPUT>[];
+
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
   toolCallStreaming?: boolean;
@@ -1116,6 +1130,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
   transportRef?: StreamTransportRef;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
 } & Partial<ObservabilityContext>;
 
 /**

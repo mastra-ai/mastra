@@ -1,4 +1,5 @@
 import type * as authStudioModule from '@mastra/auth-studio';
+import { AgentControllerChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -211,6 +212,7 @@ describe('MastraFactory.prepare', () => {
       'integrations',
       'projects',
       'source-control',
+      'channel-identity',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -285,6 +287,26 @@ describe('MastraFactory.prepare', () => {
     expect(config.vector).toBe(vector);
   });
 
+  it('tells the SDK which backend the Mastra store uses (instanceof breaks across duplicate package copies)', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    expect(config.storageBackend).toBe('libsql');
+  });
+
+  it('resolves the pg backend from the FactoryStorage class name', async () => {
+    class PgFactoryStorage extends LibSQLFactoryStorage {}
+    const storage = new PgFactoryStorage({ url: ':memory:', id: 'factory-test-pg-named' });
+    const config = await prepareFactory({ storage });
+    expect(config.storageBackend).toBe('pg');
+  });
+
+  it('keeps the host machine out of every session it mounts', async () => {
+    // On the controller, not per session — `createSession` clones
+    // `initialState` on every path, webhook recreation included.
+    const config = await prepareFactory({ storage: fakeStorage() });
+    expect(config.initialState).toMatchObject({ skipGlobalInstructions: true });
+    expect(config.disableSettingsOmSeed).toBe(true);
+  });
+
   it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
@@ -319,13 +341,13 @@ describe('MastraFactory.prepare', () => {
     } satisfies AuthInitContext);
   });
 
-  it('defaults publicUrl to the local Factory UI origin', async () => {
+  it('defaults publicUrl to the local Factory server origin (single server serves UI and API)', async () => {
     const auth = fakeProvider();
     const storage = fakeStorage();
     await prepareFactory({ auth, storage });
     expect(auth.init).toHaveBeenCalledExactlyOnceWith({
       database: storage.authDatabase(),
-      publicUrl: 'http://localhost:5173',
+      publicUrl: 'http://localhost:4111',
       allowedOrigins: [],
     } satisfies AuthInitContext);
   });
@@ -380,6 +402,32 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
     lookup.mockResolvedValue(null);
     await expect(extraTools({ requestContext })).resolves.toEqual({});
+  });
+
+  it('serves the not-registered /web/channel-accounts stub when no slack integration is registered', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    const buildApiRoutes = config.buildApiRoutes as (
+      deps: object,
+    ) => Array<{ path: string; method: string; handler: (c: unknown) => unknown }>;
+    const routes = buildApiRoutes({ controller: {}, authStorage: {} });
+    const stub = routes.find(r => r.path === '/web/channel-accounts');
+    expect(stub).toBeDefined();
+    expect(stub!.method).toBe('GET');
+    const json = vi.fn((payload: unknown) => payload);
+    stub!.handler({ json } as never);
+    expect(json).toHaveBeenCalledWith({ accounts: [], canConnect: false, reason: 'not_registered' });
+  });
+
+  it('does not mount the /web/channel-accounts stub when a slack integration is registered', async () => {
+    // A registered slack integration owns the path via its own connect
+    // routes — the stub colliding with them would shadow the real answer.
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'slack' })],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).not.toContain('/web/channel-accounts');
   });
 
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
@@ -749,6 +797,20 @@ describe('MastraFactory.prepare integrations', () => {
     expect(ctx.storage.sourceControl).toBeDefined();
   });
 
+  it('exposes the source-control owner on the routes context when github is registered', async () => {
+    const ctx = await prepareIntegrationContext({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'github' })],
+    });
+    expect(ctx.storage.sourceControlOwner).toBeDefined();
+    expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
+  });
+
+  it('omits the source-control owner from the routes context when github is absent', async () => {
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.storage.sourceControlOwner).toBeUndefined();
+  });
+
   it('does not collect workers from integrations that are not ready', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
@@ -766,6 +828,141 @@ describe('MastraFactory.prepare integrations', () => {
     const factory = new MastraFactory({ storage: fakeStorage(), integrations: [fakeIntegration({ id: 'custom' })] });
     const args = await factory.prepare();
     expect(args).not.toHaveProperty('workers');
+  });
+
+  /**
+   * Channel integrations attach chat platforms (Slack, Discord, …) to the
+   * mounted controller. The default `prepareMock` returns a placeholder `base`,
+   * so these tests swap in one carrying a controller whose `setChannels` can be
+   * observed.
+   */
+  describe('integration channels', () => {
+    function withController() {
+      const setChannels = vi.fn();
+      prepareMock.mockResolvedValueOnce({
+        base: { controller: { setChannels } },
+        mastraArgs: {},
+        finalize: vi.fn(async () => {}),
+      } as never);
+      return setChannels;
+    }
+
+    /** Minimal valid FactoryChannelsConfig (config-form adapter entry). */
+    function fakeChannelsConfig() {
+      return { adapters: { fake: { adapter: { name: 'fake' } as never } } };
+    }
+
+    it("constructs an AgentControllerChannels from a ready integration's config and attaches it", async () => {
+      const setChannels = withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      // Integrations return a CONFIG; the factory owns instance construction.
+      expect(setChannels).toHaveBeenCalledOnce();
+      expect(setChannels.mock.calls[0]![0]).toBeInstanceOf(AgentControllerChannels);
+      // Channels get the same context shape as routes()/workers(), plus the
+      // storage domain only a channel integration needs.
+      const ctx = channels.mock.calls[0]![0];
+      expect(ctx.storage.channelIdentity).toBeDefined();
+      expect(ctx.auth).toBeDefined();
+    });
+
+    it('exposes the source-control owner on the channels context when github is registered', async () => {
+      withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'github' }), fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      const ctx = channels.mock.calls[0]![0];
+      expect(ctx.storage.sourceControlOwner).toBeDefined();
+      expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
+    });
+
+    it('omits the source-control owner from the channels context when github is absent', async () => {
+      withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(channels.mock.calls[0]![0].storage.sourceControlOwner).toBeUndefined();
+    });
+
+    it('leaves the controller alone when no integration provides channels', async () => {
+      const setChannels = withController();
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'custom' })],
+      });
+
+      await factory.prepare();
+
+      expect(setChannels).not.toHaveBeenCalled();
+    });
+
+    it('does not attach channels from an integration that is not ready', async () => {
+      const setChannels = withController();
+      const storage = fakeStorage();
+      // A channel integration whose reverse index isn't migrated can't resolve
+      // a sender's tenant — attaching it would dispatch on default credentials.
+      vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
+      const channels = vi.fn(() => ({}) as never);
+      const factory = new MastraFactory({
+        storage,
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(channels).not.toHaveBeenCalled();
+      expect(setChannels).not.toHaveBeenCalled();
+    });
+
+    it('requires the channel-identity domain before a channel integration is ready', async () => {
+      const setChannels = withController();
+      const storage = fakeStorage();
+      // Everything the integration needs EXCEPT its reverse index. Without the
+      // channel-identity entry in the readiness gate this passes and channels
+      // attach against an unmigrated domain.
+      vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'channel-identity');
+      const channels = vi.fn(() => ({}) as never);
+      const factory = new MastraFactory({
+        storage,
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(channels).not.toHaveBeenCalled();
+      expect(setChannels).not.toHaveBeenCalled();
+    });
+
+    it('fails loud when two integrations both provide channels', async () => {
+      withController();
+      // setChannels replaces rather than merges, so the loser would silently
+      // never receive a message.
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({ id: 'slack', channels: vi.fn(() => ({}) as never) }),
+          fakeIntegration({ id: 'discord', channels: vi.fn(() => ({}) as never) }),
+        ],
+      });
+
+      await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
+    });
   });
 });
 

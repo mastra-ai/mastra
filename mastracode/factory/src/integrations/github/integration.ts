@@ -25,6 +25,7 @@
 
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
@@ -36,6 +37,7 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
+  UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type {
   PullRequest,
@@ -46,7 +48,10 @@ import type {
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { runGithubIssueTriage } from './issue-triage.js';
+import { GithubReconcileWorker } from './reconcile-worker.js';
 import { buildGithubRoutes } from './routes.js';
+import { attachGithubReconciler, attachGithubRules } from './rules.js';
+import type { ReconcilePullRequestState } from './rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -98,6 +103,7 @@ export interface IssueSummary {
   title: string;
   url: string;
   author: string | null;
+  assignees: string[];
   labels: string[];
   comments: number;
   createdAt: string;
@@ -146,6 +152,7 @@ export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
       const installations = await this.sourceControlStorage.installations.list({ orgId });
       const repositories = await Promise.all(
@@ -227,6 +234,7 @@ export class GithubIntegration implements FactoryIntegration {
     listIssues: input => this.#listIntakeIssues(input),
     getIssue: input => this.#getIntakeIssue(input),
     createComment: input => this.#createIntakeComment(input),
+    updateIssue: input => this.#updateIntakeIssue(input),
   };
   readonly versionControl: VersionControl = {
     initialize: ({ storage }) => {
@@ -347,6 +355,32 @@ export class GithubIntegration implements FactoryIntegration {
   get integrationStorage(): GithubSubscriptionStorage {
     if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
     return this.#storage.generic as unknown as GithubSubscriptionStorage;
+  }
+
+  /** Resolve a stored GitHub locator without scanning installations or repositories. */
+  async #resolveIntakeDispatch({
+    orgId,
+    externalSource,
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+  }): Promise<{ connection: IntegrationConnection; sourceId: string; issueId: string } | null> {
+    const target = parseGithubExternalTarget(externalSource.externalId);
+    if (!target) return null;
+    const repository = await this.sourceControlStorage.repositories.findByExternalId({
+      orgId,
+      externalId: target.repositoryId,
+    });
+    if (!repository) return null;
+    const installation = await this.sourceControlStorage.installations.get({ orgId, id: repository.installationId });
+    if (!installation) return null;
+    const installationId = Number.parseInt(installation.externalId, 10);
+    if (!Number.isSafeInteger(installationId)) return null;
+    return {
+      connection: { type: 'app-installation', installationId },
+      sourceId: repository.slug,
+      issueId: target.issueId,
+    };
   }
 
   /** Secret GitHub uses to sign webhook deliveries, when configured. */
@@ -495,7 +529,8 @@ export class GithubIntegration implements FactoryIntegration {
         state: 'open',
         stateType: 'open',
         priority: null,
-        assignee: null,
+        assignee: issue.assignees[0] ?? null,
+        assignees: issue.assignees,
         source: repoFullName,
         labels: issue.labels,
         commentCount: issue.comments,
@@ -534,6 +569,7 @@ export class GithubIntegration implements FactoryIntegration {
         stateType: issue.state,
         priority: null,
         assignee: issue.assignee?.login ?? null,
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
         source: repoFullName,
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         commentCount: issue.comments,
@@ -545,6 +581,67 @@ export class GithubIntegration implements FactoryIntegration {
           body: comment.body ?? '',
           createdAt: comment.created_at,
         })),
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  async #updateIntakeIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub Intake requires a repository source.');
+    const parts = splitRepoFullName(repoFullName);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    // GitHub has no custom workflow states; only open/closed. `byName` is a
+    // no-op with a warn log.
+    if (input.state.kind === 'byName') {
+      console.warn(`GitHub integration: updateIssue byName is not supported (name=${input.state.name}); ignoring.`);
+      return null;
+    }
+    const targetState: 'open' | 'closed' =
+      input.state.stateType === 'unstarted' || input.state.stateType === 'started' ? 'open' : 'closed';
+    const stateReason: 'completed' | 'not_planned' | null =
+      targetState === 'closed' ? (input.state.stateType === 'canceled' ? 'not_planned' : 'completed') : null;
+    const octokit = this.getInstallationOctokit(installationId);
+    try {
+      // Pre-flight: Factory does not close pull requests via `updateIssue`.
+      // PR merges/closes belong to the version-control pipeline.
+      const { data: current } = await octokit.issues.get({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: issueNumber,
+      });
+      if (current.pull_request) {
+        console.warn(
+          `GitHub integration: updateIssue rejected — target ${repoFullName}#${issueNumber} is a pull request.`,
+        );
+        return null;
+      }
+      const { data: issue } = await octokit.issues.update({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: issueNumber,
+        state: targetState,
+        ...(stateReason ? { state_reason: stateReason } : {}),
+      });
+      return {
+        id: String(issue.number),
+        identifier: `#${issue.number}`,
+        title: issue.title,
+        url: issue.html_url,
+        author: issue.user?.login ?? null,
+        state: issue.state,
+        stateType: issue.state,
+        priority: null,
+        assignee: issue.assignee?.login ?? null,
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
+        source: repoFullName,
+        labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+        commentCount: issue.comments,
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -923,6 +1020,7 @@ export class GithubIntegration implements FactoryIntegration {
         title: issue.title,
         url: issue.html_url,
         author: issue.user?.login ?? null,
+        assignees: issue.assignees?.flatMap(assignee => (assignee.login ? [assignee.login] : [])) ?? [],
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         comments: issue.comments,
         createdAt: issue.created_at,
@@ -986,6 +1084,7 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
+    const ingestFactoryEvent = attachGithubRules(this, ctx);
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -999,13 +1098,67 @@ export class GithubIntegration implements FactoryIntegration {
         : undefined,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
-      ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+      ingestFactoryEvent,
     });
   }
 
   /**
-   * Session-scoped agent tools: PR subscribe/unsubscribe for sessions bound
-   * to a GitHub-backed project. Empty for sessions outside a GitHub project.
+   * Merge-state safety net. Webhooks are the only other writer of merge state,
+   * and a self-hosted deployment GitHub cannot reach (private network, local
+   * dev) never receives one — without this sweep its PR cards stay open
+   * forever. Disable with `MASTRACODE_GITHUB_RECONCILE_ENABLED=false`.
+   */
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
+    const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
+    if (!reconcile) return [];
+    const intervalMs = Number(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    return [
+      new GithubReconcileWorker({
+        reconcile,
+        sourceControl: ctx.storage.sourceControl,
+        ...(Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {}),
+      }),
+    ];
+  }
+
+  /**
+   * Reads live PR state for the merge reconciler. Returns undefined when the PR
+   * cannot be resolved so a sweep never fabricates a merge.
+   */
+  async fetchPullRequestState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcilePullRequestState | undefined> {
+    try {
+      const pullRequest = await this.#getPullRequest({
+        connection: { type: 'app-installation', installationId: input.installationId },
+        sourceId: input.repository,
+        pullRequestId: String(input.number),
+      });
+      if (!pullRequest) return undefined;
+      return {
+        title: pullRequest.title,
+        url: pullRequest.url,
+        state: pullRequest.state === 'closed' ? 'closed' : 'open',
+        draft: pullRequest.draft,
+        merged: pullRequest.merged,
+        assignees: pullRequest.assignees ?? [],
+        requestedReviewers: pullRequest.requestedReviewers ?? [],
+        headBranch: pullRequest.headBranch,
+        baseBranch: pullRequest.baseBranch,
+        ...(pullRequest.author ? { author: pullRequest.author } : {}),
+        ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Session-scoped agent tools for token refresh and PR subscriptions in
+   * sessions bound to a GitHub-backed project. Empty elsewhere.
    */
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
     return createGithubSubscriptionTools(requestContext, this);
@@ -1034,6 +1187,8 @@ interface GithubPullRequestData {
   title: string;
   html_url: string;
   user: { login?: string } | null;
+  assignees?: Array<{ login?: string }> | null;
+  requested_reviewers?: Array<{ login?: string }> | null;
   body?: string | null;
   state: string;
   draft?: boolean | null;
@@ -1079,6 +1234,8 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     title: pr.title,
     url: pr.html_url,
     author: pr.user?.login ?? null,
+    assignees: (pr.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+    requestedReviewers: (pr.requested_reviewers ?? []).flatMap(reviewer => (reviewer.login ? [reviewer.login] : [])),
     body: pr.body?.trim() ? pr.body : null,
     state: pr.state === 'closed' ? 'closed' : 'open',
     draft: pr.draft ?? false,
@@ -1208,4 +1365,12 @@ function splitRepoFullName(repoFullName: string): { owner: string; repo: string 
   const slash = repoFullName.indexOf('/');
   if (slash <= 0 || slash === repoFullName.length - 1) return null;
   return { owner: repoFullName.slice(0, slash), repo: repoFullName.slice(slash + 1) };
+}
+
+function parseGithubExternalTarget(externalId: string): { repositoryId: string; issueId: string } | null {
+  const match = externalId.match(/^github:(\d+):(?:issue|pull-request):(\d+)$/) ?? externalId.match(/^(\d+):(\d+)$/);
+  if (!match?.[1] || !match[2]) return null;
+  const repositoryId = parsePositiveInteger(match[1]);
+  const issueId = parsePositiveInteger(match[2]);
+  return repositoryId && issueId ? { repositoryId: String(repositoryId), issueId: String(issueId) } : null;
 }

@@ -23,7 +23,7 @@ Use a signal provider when an external system produces events that an agent shou
 
 - The source emits events tied to a resource a thread cares about, such as a pull request, a channel, or a build.
 - You want one place that tracks which threads watch which external resources.
-- You want to receive events by polling, by webhook, or both.
+- You want to receive events by polling or by webhook, or alternatively both.
 
 If you only need to push a one-off event into a thread, call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) directly instead.
 
@@ -37,7 +37,9 @@ A signal provider combines three capabilities:
 - **Ingestion:** You override `poll()` for pull-based sources or `handleWebhook()` for push-based sources.
 - **Delivery:** When an event matches a subscription, call the protected `notify()` helper to forward a notification signal to the connected agent's thread.
 
-Register a provider by passing it to an agent. The agent connects the provider, starts polling if a `pollInterval` is set, and merges any processors or tools the provider exposes.
+Register a provider by passing it to an agent.
+
+The agent connects the provider and starts polling when a `pollInterval` is set. It also merges any processors or tools exposed by the provider.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'

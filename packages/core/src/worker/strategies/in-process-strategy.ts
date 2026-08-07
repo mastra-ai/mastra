@@ -1,7 +1,7 @@
 import { RequestContext } from '../../di';
 import type { Mastra } from '../../mastra';
 import { StepExecutor } from '../../workflows/evented/step-executor';
-import { getStep } from '../../workflows/evented/workflow-event-processor/utils';
+import { getStepEntry } from '../../workflows/evented/workflow-event-processor/utils';
 import type { StepResult } from '../../workflows/types';
 import type { StepExecutionParams, StepExecutionStrategy } from '../types';
 
@@ -25,10 +25,12 @@ export class InProcessStrategy implements StepExecutionStrategy {
       throw new Error('InProcessStrategy requires Mastra instance. Call __registerMastra() first.');
     }
 
-    const workflow = this.#mastra.getWorkflow(params.workflowId);
-    const step = getStep(workflow, params.executionPath);
+    // Use getWorkflowById — events carry the workflow's `id` property
+    // (e.g. "scheduled-workflow"), not the config key ("scheduledWorkflow").
+    const workflow = this.#mastra.getWorkflowById(params.workflowId);
+    const entry = getStepEntry(workflow, params.executionPath);
 
-    if (!step) {
+    if (!entry) {
       throw new Error(
         `InProcessStrategy: could not resolve step "${params.stepId}" at executionPath [${params.executionPath.join(',')}] in workflow "${params.workflowId}"`,
       );
@@ -56,7 +58,7 @@ export class InProcessStrategy implements StepExecutionStrategy {
 
     return executor.execute({
       workflowId: params.workflowId,
-      step,
+      entry,
       runId: params.runId,
       stepResults: params.stepResults as Record<string, StepResult<any, any, any, any>>,
       state: params.state,

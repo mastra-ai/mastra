@@ -31,6 +31,8 @@ export interface PullRequest {
   title: string;
   url: string;
   author: string | null;
+  assignees?: string[];
+  requestedReviewers?: string[];
   body: string | null;
   state: PullRequestState;
   draft: boolean;
@@ -52,6 +54,8 @@ export interface PullRequestRef {
   connection: IntegrationConnection;
   sourceId: string;
   pullRequestId: string;
+  /** End user the write should be attributed to, when the provider supports acting on a user's behalf. */
+  actingUserId?: string;
 }
 
 export interface ListPullRequestsInput {
@@ -70,6 +74,8 @@ export interface CreatePullRequestInput {
   baseBranch: string;
   headBranch: string;
   draft?: boolean;
+  /** End user the write should be attributed to, when the provider supports acting on a user's behalf. */
+  actingUserId?: string;
 }
 
 export interface UpdatePullRequestInput extends PullRequestRef {
@@ -118,12 +124,14 @@ export interface UpdatePullRequestCommentInput {
   sourceId: string;
   commentId: string;
   body: string;
+  actingUserId?: string;
 }
 
 export interface DeletePullRequestCommentInput {
   connection: IntegrationConnection;
   sourceId: string;
   commentId: string;
+  actingUserId?: string;
 }
 
 export type ReviewState = 'pending' | 'commented' | 'approved' | 'changes-requested' | 'dismissed';

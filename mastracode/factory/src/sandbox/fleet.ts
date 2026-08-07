@@ -36,7 +36,13 @@ export interface MaterializationSandbox {
   readonly id: string;
   start(): Promise<void>;
   getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
-  executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
+  executeCommand(
+    command: string,
+    args?: string[],
+    options?: { timeout?: number; env?: Record<string, string | undefined> },
+  ): Promise<SandboxCommandResult>;
+  /** Update an environment variable for future commands in this sandbox. */
+  setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
 }
@@ -45,7 +51,11 @@ export interface MaterializationSandbox {
 export interface SandboxCreateOptions {
   /** Reattach to this existing provider VM instead of provisioning a new one. */
   providerSandboxId?: string;
-  /** Environment variables baked into the sandbox. */
+  /**
+   * Environment variables for commands run in the sandbox. Adapter-level
+   * only: merged into every `executeCommand`, never baked into the provider
+   * VM (see `SandboxFleet.#build`).
+   */
   env?: Record<string, string>;
   /** Provider working directory for this sandbox. */
   workingDirectory?: string;
@@ -121,25 +131,51 @@ export interface SandboxBindingStore {
 }
 
 /**
+ * Stable identity for one binding's in-flight provision work, used to coalesce
+ * concurrent `ensureSandbox` calls. Prefer `checkpointName` — it is a pure
+ * function of the owning session and is set before the first provision, which
+ * is exactly when the herd forms (the stored `sandboxId` is still null then).
+ * Fall back to the stored provider id, and skip coalescing entirely for
+ * bindings with neither: keying those on a shared constant would wrongly
+ * funnel *different* bindings onto one sandbox.
+ */
+function coalesceKey(store: SandboxBindingStore): string | undefined {
+  if (store.checkpointName) return `checkpoint:${store.checkpointName}`;
+  if (store.sandboxId) return `sandbox:${store.sandboxId}`;
+  return undefined;
+}
+
+/**
  * Adapt a cloned `WorkspaceSandbox` to the minimal surface this module needs.
  * Lifecycle goes through the `_`-prefixed wrappers when present (they add
  * status tracking and concurrency safety on `MastraSandbox` subclasses),
  * falling back to the plain methods for interface-only implementations.
  */
-function toMaterializationSandbox(sandbox: WorkspaceSandbox): MaterializationSandbox {
+function toMaterializationSandbox(
+  sandbox: WorkspaceSandbox,
+  initialEnvironment: Record<string, string> = {},
+): MaterializationSandbox {
   if (typeof sandbox.executeCommand !== 'function') {
     throw new Error(
       `Sandbox provider '${sandbox.provider}' does not implement executeCommand() — cannot materialize repos.`,
     );
   }
   const lifecycle = sandbox as { _start?(): Promise<void>; _stop?(): Promise<void> };
+  const environment = { ...initialEnvironment };
   return {
     id: sandbox.id,
     start: async () => {
       await (lifecycle._start ?? sandbox.start)?.call(sandbox);
     },
     getInfo: async () => (await sandbox.getInfo?.()) ?? {},
-    executeCommand: (command, args, options) => sandbox.executeCommand!(command, args, options),
+    executeCommand: (command, args, options) =>
+      sandbox.executeCommand!(command, args, {
+        ...options,
+        env: { ...environment, ...options?.env },
+      }),
+    setEnvironmentVariable: (name, value) => {
+      environment[name] = value;
+    },
     stop: async () => {
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },
@@ -200,6 +236,8 @@ export class SandboxFleet {
   readonly #config: SandboxFleetConfig | undefined;
   #factory: SandboxFactory | undefined;
   #liveCount = 0;
+  /** In-flight `ensureSandbox` work, keyed per binding so concurrent callers coalesce. */
+  readonly #inflight = new Map<string, Promise<MaterializationSandbox>>();
 
   constructor(config?: SandboxFleetConfig) {
     this.#config = config;
@@ -318,23 +356,37 @@ export class SandboxFleet {
    * passed both as the logical `id` (providers that reattach by construction
    * id, e.g. local) and as the provider-native `sandboxId` hint (Railway) so
    * reattach works across the provider matrix.
+   *
+   * `env` is deliberately NOT forwarded to the provider clone: remote
+   * providers bake creation-time env into the VM for its whole lifetime
+   * (`POST /sandbox`), which would persist credentials like `GH_TOKEN` inside
+   * a VM that can outlive the session and be reused by another user via the
+   * sandbox pool. Instead the env lives only on the adapter, which merges it
+   * into every `executeCommand` — commands see the (refreshable) token, but
+   * the VM itself never stores it.
    */
   #build(opts: SandboxCreateOptions): MaterializationSandbox {
     if (this.#factory) return this.#factory(opts);
     if (!this.#config) throw new Error('No sandbox configured');
     const clone = this.#config.machine.clone!({
       ...(opts.providerSandboxId ? { id: opts.providerSandboxId, sandboxId: opts.providerSandboxId } : {}),
-      ...(opts.env ? { env: opts.env } : {}),
       ...(opts.workingDirectory ? { workingDirectory: opts.workingDirectory } : {}),
       ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
       ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
     });
-    return toMaterializationSandbox(clone);
+    return toMaterializationSandbox(clone, opts.env);
   }
 
   /**
    * Provision a new sandbox (persisting its provider id on first open) or
    * reattach to the stored one. Returns a started, live sandbox.
+   *
+   * Concurrent calls for the same binding coalesce onto one in-flight
+   * provision/reattach and share its sandbox handle — N simultaneous requests
+   * for one cold session (e.g. several browser tabs polling right after boot)
+   * must not each fire their own `POST /sandbox` against the provider.
+   * Failures are not cached: once the shared attempt settles, the next call
+   * starts fresh.
    */
   async ensureSandbox(store: SandboxBindingStore, onProgress?: ProgressFn): Promise<MaterializationSandbox>;
   async ensureSandbox(
@@ -356,6 +408,28 @@ export class SandboxFleet {
       typeof envOrProgress === 'function'
         ? ((progressOrOptions as EnsureSandboxOptions | undefined) ?? {})
         : maybeOptions;
+
+    const key = coalesceKey(store);
+    if (!key) return this.#ensureSandboxUncoalesced(store, env, onProgress, options);
+
+    const existing = this.#inflight.get(key);
+    if (existing) return existing;
+
+    const promise = this.#ensureSandboxUncoalesced(store, env, onProgress, options).finally(() => {
+      // Only clear when this is still the entry we own.
+      if (this.#inflight.get(key) === promise) this.#inflight.delete(key);
+    });
+    this.#inflight.set(key, promise);
+    return promise;
+  }
+
+  /** The single provision/reattach attempt behind {@link ensureSandbox}. */
+  async #ensureSandboxUncoalesced(
+    store: SandboxBindingStore,
+    env: Record<string, string> | undefined,
+    onProgress: ProgressFn | undefined,
+    options: EnsureSandboxOptions,
+  ): Promise<MaterializationSandbox> {
     const idleTimeoutMinutes = this.idleMinutes;
     const checkpointName = store.checkpointName;
 

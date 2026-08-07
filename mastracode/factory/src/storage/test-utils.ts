@@ -8,6 +8,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { onTestFinished } from 'vitest';
 
 import { AuditStorage } from './domains/audit/base.js';
+import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
@@ -32,6 +33,7 @@ export interface FactoryStorageTestSeed {
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
+  channelIdentity: ChannelIdentityStorage;
 }
 
 /**
@@ -52,6 +54,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
+  const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -67,5 +70,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     memorySettings,
     customProviders,
     queueHealth,
+    channelIdentity,
   };
 }

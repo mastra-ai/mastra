@@ -22,8 +22,9 @@ import { signAgentCard } from '../a2a/agent-card-signing';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
-import type { InMemoryTaskStore } from '../a2a/store';
-import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
+import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
+import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
+import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
@@ -183,7 +184,7 @@ export async function getAgentCardByIdHandler({
     skills: Object.entries(tools).map(([toolId, tool]) => ({
       id: toolId,
       name: toolId,
-      description: tool.description || `Tool: ${toolId}`,
+      description: ('description' in tool && tool.description) || `Tool: ${toolId}`,
       // Optional fields
       tags: ['tool'],
     })),
@@ -314,6 +315,288 @@ function createDataArtifactUpdate({
   };
 }
 
+/**
+ * Task metadata keys that store the resume bookkeeping for a suspended agent
+ * run so a follow-up message for an `input-required` task can resume it.
+ */
+const SUSPENDED_RUN_ID_METADATA_KEY = 'suspendedRunId';
+const SUSPENDED_TOOL_CALL_ID_METADATA_KEY = 'suspendedToolCallId';
+const SUSPENDED_REQUIRES_APPROVAL_METADATA_KEY = 'suspendedRequiresApproval';
+
+function toJsonSafe(value: unknown): unknown {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Builds the `input-required` status update for a suspended agent run.
+ * The status message carries a human-readable prompt plus a data part with
+ * the structured suspend payload and resume schema so A2A clients can
+ * render/collect the required input (HITL per the A2A spec).
+ */
+function createInputRequiredStatusUpdate({
+  taskId,
+  contextId,
+  suspendPayload,
+  resumeSchema,
+  logger,
+}: {
+  taskId: string;
+  contextId: string;
+  suspendPayload?: unknown;
+  resumeSchema?: unknown;
+  logger?: IMastraLogger;
+}): Omit<TaskStatus, 'timestamp'> {
+  // Suspension payloads are `{ toolCallId, toolName, suspendPayload, ... }`
+  // where the nested `suspendPayload` is the tool's own suspend() data. Use a
+  // `message` string from either level as the human-readable prompt.
+  const extractMessage = (value: unknown): string | undefined => {
+    if (!value || typeof value !== 'object') {
+      return undefined;
+    }
+
+    const messageValue = (value as { message?: unknown }).message;
+    return typeof messageValue === 'string' && messageValue.length > 0 ? messageValue : undefined;
+  };
+  const promptText =
+    extractMessage(suspendPayload) ??
+    extractMessage((suspendPayload as { suspendPayload?: unknown } | undefined)?.suspendPayload) ??
+    'Additional input is required to continue this task.';
+
+  const safeSuspendPayload = toJsonSafe(suspendPayload);
+  const safeResumeSchema = toJsonSafe(resumeSchema);
+  if (suspendPayload !== undefined && safeSuspendPayload === undefined) {
+    logger?.warn(`[Task ${taskId}] Suspend payload is not JSON-serializable and was omitted from the status message.`);
+  }
+  if (resumeSchema !== undefined && safeResumeSchema === undefined) {
+    logger?.warn(`[Task ${taskId}] Resume schema is not JSON-serializable and was omitted from the status message.`);
+  }
+  const data: Record<string, unknown> = {
+    ...(safeSuspendPayload !== undefined ? { suspendPayload: safeSuspendPayload } : {}),
+    ...(safeResumeSchema !== undefined ? { resumeSchema: safeResumeSchema } : {}),
+  };
+
+  return {
+    state: 'input-required',
+    message: {
+      messageId: crypto.randomUUID(),
+      kind: 'message',
+      role: 'agent',
+      taskId,
+      contextId,
+      parts: [
+        { kind: 'text', text: promptText },
+        ...(Object.keys(data).length > 0 ? [{ kind: 'data' as const, data }] : []),
+      ],
+    },
+  };
+}
+
+/**
+ * Extracts resume data from a follow-up message for an `input-required` task.
+ * Prefers a structured data part; falls back to parsing the text as JSON
+ * (the Mastra A2A client serializes structured resume data as JSON text),
+ * and finally to the raw text.
+ */
+function extractResumeData(message: MessageSendParams['message']): unknown {
+  const dataPart = message.parts.find(part => part.kind === 'data');
+  if (dataPart && 'data' in dataPart) {
+    return dataPart.data;
+  }
+
+  const text = message.parts
+    .filter((part): part is Extract<(typeof message.parts)[number], { kind: 'text' }> => part.kind === 'text')
+    .map(part => part.text)
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function getSuspendedRunId(task: Task | undefined | null): string | undefined {
+  const value = task?.metadata?.[SUSPENDED_RUN_ID_METADATA_KEY];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * Approval suspensions (`requireApproval`) carry `{ toolCallId, toolName, args, resumeSchema }`
+ * without a nested `suspendPayload`, while `suspend()` suspensions include one
+ * (see `ToolCallApprovalPayload` / `ToolCallSuspendedPayload` in @mastra/core).
+ */
+function isApprovalSuspension(suspendPayload: unknown): boolean {
+  if (!suspendPayload || typeof suspendPayload !== 'object') {
+    return false;
+  }
+
+  const payload = suspendPayload as { toolCallId?: unknown; suspendPayload?: unknown };
+  return typeof payload.toolCallId === 'string' && payload.suspendPayload === undefined;
+}
+
+const APPROVAL_AFFIRMATIVE_PATTERN = /^(y|yes|approve|approved|ok|okay|confirm|confirmed|true)[.!]?$/i;
+const APPROVAL_NEGATIVE_PATTERN = /^(n|no|decline|declined|deny|denied|reject|rejected|false)[.!]?$/i;
+
+/**
+ * Approval resumes are driven by `resumeData.approved` in the agentic loop, so
+ * plain-text replies from A2A clients ("yes", "no") are coerced to the
+ * `{ approved }` shape. Unrecognized values pass through unchanged.
+ */
+function normalizeResumeData(resumeData: unknown, requiresApproval: boolean): unknown {
+  if (!requiresApproval || typeof resumeData !== 'string') {
+    return resumeData;
+  }
+
+  const text = resumeData.trim();
+  if (APPROVAL_AFFIRMATIVE_PATTERN.test(text)) {
+    return { approved: true };
+  }
+  if (APPROVAL_NEGATIVE_PATTERN.test(text)) {
+    return { approved: false };
+  }
+
+  return resumeData;
+}
+
+/**
+ * Marks a task `input-required` for a suspended agent run and records the
+ * resume bookkeeping (runId, toolCallId, approval flag) in task metadata.
+ * Shared by the send and stream paths so both report identical suspensions.
+ */
+function applySuspensionToTask({
+  task,
+  suspendPayload,
+  resumeSchema,
+  runId,
+  logger,
+}: {
+  task: Task;
+  suspendPayload?: unknown;
+  resumeSchema?: unknown;
+  runId: string;
+  logger?: IMastraLogger;
+}): Task {
+  const nextTask = applyUpdateToTask(
+    task,
+    createInputRequiredStatusUpdate({
+      taskId: task.id,
+      contextId: task.contextId,
+      suspendPayload,
+      resumeSchema,
+      logger,
+    }),
+  );
+
+  const payload = suspendPayload as { toolCallId?: unknown } | undefined;
+  nextTask.metadata = {
+    ...clearSuspensionMetadata(nextTask.metadata),
+    [SUSPENDED_RUN_ID_METADATA_KEY]: runId,
+    ...(typeof payload?.toolCallId === 'string' ? { [SUSPENDED_TOOL_CALL_ID_METADATA_KEY]: payload.toolCallId } : {}),
+    ...(isApprovalSuspension(suspendPayload) ? { [SUSPENDED_REQUIRES_APPROVAL_METADATA_KEY]: true } : {}),
+  };
+
+  return nextTask;
+}
+
+/** Removes the suspension bookkeeping from task metadata once the run completes. */
+function clearSuspensionMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  const {
+    [SUSPENDED_RUN_ID_METADATA_KEY]: _runId,
+    [SUSPENDED_TOOL_CALL_ID_METADATA_KEY]: _toolCallId,
+    [SUSPENDED_REQUIRES_APPROVAL_METADATA_KEY]: _requiresApproval,
+    ...rest
+  } = metadata ?? {};
+  return rest;
+}
+
+interface ResumeClaim {
+  runId: string;
+  toolCallId?: string;
+  requiresApproval: boolean;
+}
+
+/**
+ * Claims an interrupted task for resume by transitioning it to `working`.
+ * `loadWithVersion` and the body of `InMemoryTaskStore.save` both execute
+ * synchronously, so two concurrent follow-up messages cannot both claim (and
+ * double-resume) the same suspended run.
+ */
+async function claimInterruptedTaskResume({
+  taskStore,
+  agentId,
+  taskId,
+}: {
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+}): Promise<ResumeClaim | undefined> {
+  const snapshot = taskStore.loadWithVersion({ agentId, taskId });
+  if (snapshot?.task.status.state !== 'input-required' && snapshot?.task.status.state !== 'auth-required') {
+    return undefined;
+  }
+
+  const task = snapshot.task;
+  const toolCallId = task.metadata?.[SUSPENDED_TOOL_CALL_ID_METADATA_KEY];
+  const claim: ResumeClaim = {
+    runId: getSuspendedRunId(task) ?? taskId,
+    ...(typeof toolCallId === 'string' ? { toolCallId } : {}),
+    requiresApproval: task.metadata?.[SUSPENDED_REQUIRES_APPROVAL_METADATA_KEY] === true,
+  };
+
+  try {
+    await taskStore.save({
+      agentId,
+      data: applyUpdateToTask(task, { state: 'working' }),
+      expectedVersion: snapshot.version,
+    });
+  } catch (error) {
+    if (error instanceof TaskStoreVersionConflictError) {
+      return undefined;
+    }
+    throw error;
+  }
+
+  return claim;
+}
+
+async function waitForClaimedResume({
+  taskStore,
+  agentId,
+  taskId,
+}: {
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+}): Promise<Task> {
+  let snapshot = taskStore.loadWithVersion({ agentId, taskId });
+  if (!snapshot) {
+    throw MastraA2AError.taskNotFound(taskId);
+  }
+
+  while (snapshot.task.status.state === 'working') {
+    snapshot = await taskStore.waitForNextUpdate({
+      agentId,
+      taskId,
+      afterVersion: snapshot.version,
+    });
+  }
+
+  return snapshot.task;
+}
+
 function resolvePushNotificationPair({
   pushNotificationStore,
   pushNotificationSender,
@@ -355,7 +638,14 @@ function createTaskPushNotificationConfig(
 }
 
 function shouldSendPushNotification(previousTask: Task | undefined, nextTask: Task) {
-  const pushTriggerStates: TaskState[] = ['completed', 'failed', 'canceled', 'input-required'];
+  const pushTriggerStates: TaskState[] = [
+    'completed',
+    'failed',
+    'canceled',
+    'rejected',
+    'input-required',
+    'auth-required',
+  ];
 
   if (!pushTriggerStates.includes(nextTask.status.state)) {
     return false;
@@ -370,6 +660,7 @@ async function saveTaskAndMaybeSendPushNotification({
   previousTask,
   nextTask,
   agentId,
+  expectedVersion,
   logger,
 }: {
   taskStore: InMemoryTaskStore;
@@ -377,9 +668,10 @@ async function saveTaskAndMaybeSendPushNotification({
   previousTask?: Task;
   nextTask: Task;
   agentId: string;
+  expectedVersion?: number;
   logger?: IMastraLogger;
 }) {
-  await taskStore.save({ agentId, data: nextTask });
+  await taskStore.save({ agentId, data: nextTask, expectedVersion });
 
   if (!shouldSendPushNotification(previousTask, nextTask)) {
     return;
@@ -456,8 +748,13 @@ function extractFinalStructuredObject(value: unknown): Record<string, unknown> |
   return objectValue && typeof objectValue === 'object' ? (objectValue as Record<string, unknown>) : undefined;
 }
 
-function isTerminalTaskState(state: TaskState) {
-  return ['completed', 'failed', 'canceled'].includes(state);
+function isSuspensionChunk(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || !('type' in value)) {
+    return false;
+  }
+
+  const type = (value as { type: string }).type;
+  return type === 'tool-call-suspended' || type === 'tool-call-approval';
 }
 
 function artifactIdentity(artifact: Artifact) {
@@ -558,6 +855,162 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
   }));
 }
 
+async function executeMessageSend({
+  requestId,
+  message,
+  metadata,
+  currentData,
+  taskStore,
+  pushNotificationSender,
+  agent,
+  agentId,
+  logger,
+  requestContext,
+  resume,
+}: {
+  requestId: number | string;
+  message: MessageSendParams['message'];
+  metadata: MessageSendParams['metadata'];
+  currentData: Task;
+  taskStore: InMemoryTaskStore;
+  pushNotificationSender: DefaultPushNotificationSender;
+  agent: Agent;
+  agentId: string;
+  logger?: IMastraLogger;
+  requestContext: RequestContext;
+  resume?: ResumeClaim;
+}) {
+  const { contextId } = message;
+
+  try {
+    // Pass contextId as threadId for memory persistence across A2A conversations
+    // Allow user to pass resourceId via metadata, fall back to agentId
+    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const result = resume
+      ? await agent.resumeGenerate(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
+          runId: resume.runId,
+          ...(resume.toolCallId ? { toolCallId: resume.toolCallId } : {}),
+          requestContext,
+        })
+      : await agent.generate([convertToCoreMessage(message)], {
+          runId: currentData.id,
+          requestContext,
+          ...(contextId ? { threadId: contextId, resourceId } : {}),
+        });
+
+    const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+    if (latestTask?.status.state === 'canceled') {
+      return createSuccessResponse(requestId, latestTask);
+    }
+    currentData = latestTask ?? currentData;
+
+    const artifactUpdate = createArtifactUpdate({
+      taskId: currentData.id,
+      contextId: currentData.contextId,
+      text: result.text,
+      data: result.object as Record<string, unknown> | undefined,
+    });
+
+    if (artifactUpdate) {
+      currentData = applyUpdateToTask(currentData, artifactUpdate);
+    }
+
+    // Agent suspensions (tool approval, suspend()) surface as the A2A
+    // `input-required` state so clients can provide the missing input and
+    // continue the task (HITL per the A2A spec).
+    if (result.finishReason === 'suspended') {
+      const previousTask = currentData;
+      currentData = applySuspensionToTask({
+        task: currentData,
+        suspendPayload: result.suspendPayload,
+        resumeSchema: result.resumeSchema,
+        runId: result.runId ?? currentData.id,
+        logger,
+      });
+
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender,
+        previousTask,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
+
+      return createSuccessResponse(requestId, currentData);
+    }
+
+    const previousTask = currentData;
+    currentData = applyUpdateToTask(currentData, {
+      state: 'completed',
+      message: undefined,
+    });
+
+    // Store execution details in task metadata
+    currentData.metadata = {
+      ...clearSuspensionMetadata(currentData.metadata),
+      execution: {
+        toolCalls: result.toolCalls,
+        toolResults: result.toolResults,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      },
+    };
+
+    await saveTaskAndMaybeSendPushNotification({
+      taskStore,
+      pushNotificationSender,
+      previousTask,
+      nextTask: currentData,
+      agentId,
+      logger,
+    });
+  } catch (handlerError) {
+    const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+    if (latestTask?.status.state === 'canceled') {
+      return createSuccessResponse(requestId, latestTask);
+    }
+    currentData = latestTask ?? currentData;
+
+    // If handler throws, apply 'failed' status, save, and rethrow
+    const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
+      state: 'failed',
+      message: {
+        messageId: crypto.randomUUID(),
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
+          },
+        ],
+        kind: 'message',
+      },
+    };
+    const previousTask = currentData;
+    currentData = applyUpdateToTask(currentData, failureStatusUpdate);
+
+    try {
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender,
+        previousTask,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
+    } catch (saveError) {
+      // @ts-expect-error saveError is an unknown error
+      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
+    }
+
+    return normalizeError(handlerError, requestId, currentData.id, logger); // Rethrow original error
+  }
+
+  // The loop finished, send the final task state
+  return createSuccessResponse(requestId, currentData);
+}
+
 export async function handleMessageSend({
   requestId,
   params,
@@ -584,6 +1037,29 @@ export async function handleMessageSend({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
+  const existingTask = taskStore.loadWithVersion({ agentId, taskId })?.task;
+  if (message.taskId && !existingTask) {
+    throw MastraA2AError.taskNotFound(message.taskId);
+  }
+  if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
+    return createSuccessResponse(requestId, existingTask);
+  }
+
+  if (existingTask?.status.state === 'working' && getSuspendedRunId(existingTask)) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    return createSuccessResponse(requestId, task);
+  }
+
+  // A follow-up message for an interrupted task resumes the suspended agent
+  // run instead of starting a fresh generation (A2A HITL continuation).
+  // The claim transitions the task to `working` synchronously so concurrent
+  // follow-ups cannot double-resume the same run.
+  const wasInterrupted = isInterruptedTaskState(existingTask?.status.state);
+  const resume = await claimInterruptedTaskResume({ taskStore, agentId, taskId });
+  if (wasInterrupted && !resume) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    return createSuccessResponse(requestId, task);
+  }
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -592,7 +1068,6 @@ export async function handleMessageSend({
     pushNotificationSender,
   });
 
-  // Load or create task
   let currentData = await loadOrCreateTask({
     taskId,
     taskStore,
@@ -609,97 +1084,45 @@ export async function handleMessageSend({
     });
   }
 
-  // Use the new TaskContext definition, passing history
-  const context = createTaskContext({
-    task: currentData,
-    userMessage: message,
-    history: currentData.history || [],
-    activeCancellations: taskStore.activeCancellations,
+  currentData = applyUpdateToTask(currentData, {
+    state: 'working',
+    message: {
+      messageId: crypto.randomUUID(),
+      kind: 'message',
+      role: 'agent',
+      parts: [{ kind: 'text', text: 'Generating response...' }],
+    },
+  });
+  await saveTaskAndMaybeSendPushNotification({
+    taskStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+    nextTask: currentData,
+    agentId,
+    logger,
   });
 
-  try {
-    // Pass contextId as threadId for memory persistence across A2A conversations
-    // Allow user to pass resourceId via metadata, fall back to agentId
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
-    const result = await agent.generate([convertToCoreMessage(message)], {
-      runId: taskId,
-      requestContext,
-      ...(contextId ? { threadId: contextId, resourceId } : {}),
+  const execution = executeMessageSend({
+    requestId,
+    message,
+    metadata,
+    currentData,
+    taskStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+    agent,
+    agentId,
+    logger,
+    requestContext,
+    resume,
+  });
+
+  if (params.configuration?.blocking === false) {
+    void execution.catch(error => {
+      logger?.error(`Unexpected background failure for A2A task ${currentData.id}`, error);
     });
-
-    const artifactUpdate = createArtifactUpdate({
-      taskId: currentData.id,
-      contextId: currentData.contextId,
-      text: result.text,
-      data: result.object as Record<string, unknown> | undefined,
-    });
-
-    if (artifactUpdate) {
-      currentData = applyUpdateToTask(currentData, artifactUpdate);
-    }
-
-    currentData = applyUpdateToTask(currentData, {
-      state: 'completed',
-      message: undefined,
-    });
-
-    // Store execution details in task metadata
-    currentData.metadata = {
-      ...currentData.metadata,
-      execution: {
-        toolCalls: result.toolCalls,
-        toolResults: result.toolResults,
-        usage: result.usage,
-        finishReason: result.finishReason,
-      },
-    };
-
-    await saveTaskAndMaybeSendPushNotification({
-      taskStore,
-      pushNotificationSender: resolvedPushNotificationSender,
-      previousTask: context.task,
-      nextTask: currentData,
-      agentId,
-      logger,
-    });
-    context.task = currentData;
-  } catch (handlerError) {
-    // If handler throws, apply 'failed' status, save, and rethrow
-    const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
-      state: 'failed',
-      message: {
-        messageId: crypto.randomUUID(),
-        role: 'agent',
-        parts: [
-          {
-            kind: 'text',
-            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
-          },
-        ],
-        kind: 'message',
-      },
-    };
-    currentData = applyUpdateToTask(currentData, failureStatusUpdate);
-
-    try {
-      await saveTaskAndMaybeSendPushNotification({
-        taskStore,
-        pushNotificationSender: resolvedPushNotificationSender,
-        previousTask: context.task,
-        nextTask: currentData,
-        agentId,
-        logger,
-      });
-    } catch (saveError) {
-      // @ts-expect-error saveError is an unknown error
-      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
-    }
-
-    return normalizeError(handlerError, requestId, currentData.id, logger); // Rethrow original error
+    return createSuccessResponse(requestId, currentData);
   }
 
-  // The loop finished, send the final task state
-  return createSuccessResponse(requestId, currentData);
+  return execution;
 }
 
 export async function handleTaskGet({
@@ -896,6 +1319,16 @@ export async function* handleMessageStream({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
+  if (message.taskId && !taskStore.loadWithVersion({ agentId, taskId })) {
+    throw MastraA2AError.taskNotFound(message.taskId);
+  }
+
+  // A follow-up message for an interrupted task resumes the suspended agent
+  // run instead of starting a fresh generation (A2A HITL continuation).
+  // The claim transitions the task to `working` synchronously so concurrent
+  // follow-ups cannot double-resume the same run.
+  const resume = await claimInterruptedTaskResume({ taskStore, agentId, taskId });
+
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -942,16 +1375,28 @@ export async function* handleMessageStream({
 
   try {
     const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
-    const result = await agent.stream([convertToCoreMessage(message)], {
-      runId: taskId,
-      requestContext,
-      ...(contextId ? { threadId: contextId, resourceId } : {}),
-    });
+    const result = resume
+      ? await agent.resumeStream(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
+          runId: resume.runId,
+          ...(resume.toolCallId ? { toolCallId: resume.toolCallId } : {}),
+          requestContext,
+        })
+      : await agent.stream([convertToCoreMessage(message)], {
+          runId: taskId,
+          requestContext,
+          ...(contextId ? { threadId: contextId, resourceId } : {}),
+        });
     let sawTextArtifact = false;
     let pendingTextChunk: string | undefined;
     let structuredData: Record<string, unknown> | undefined;
+    let suspended = false;
 
     for await (const chunk of result.fullStream) {
+      if (isSuspensionChunk(chunk)) {
+        suspended = true;
+        continue;
+      }
+
       const textDelta = extractFullStreamTextDelta(chunk);
       if (textDelta !== null) {
         if (!pendingTextChunk) {
@@ -988,83 +1433,130 @@ export async function* handleMessageStream({
       }
     }
 
-    structuredData ??= (await result.object) as Record<string, unknown> | undefined;
+    if (suspended) {
+      // Agent suspensions (tool approval, suspend()) surface as the A2A
+      // `input-required` state so clients can provide the missing input and
+      // continue the task (HITL per the A2A spec). Skip the completed path
+      // and avoid awaiting result promises that only settle on completion.
+      if (pendingTextChunk) {
+        const textUpdate = createTextChunkArtifactUpdate({
+          taskId: currentData.id,
+          contextId: currentData.contextId,
+          text: pendingTextChunk,
+          append: sawTextArtifact,
+          lastChunk: true,
+        });
 
-    if (!pendingTextChunk && !sawTextArtifact) {
-      const finalText = await result.text;
-      if (finalText) {
-        pendingTextChunk = finalText;
+        currentData = applyUpdateToTask(currentData, textUpdate);
+        await saveTaskAndMaybeSendPushNotification({
+          taskStore,
+          pushNotificationSender: resolvedPushNotificationSender,
+          nextTask: currentData,
+          agentId,
+          logger,
+        });
+        yield createSuccessResponse(requestId, textUpdate);
       }
-    }
 
-    if (pendingTextChunk) {
-      const textUpdate = createTextChunkArtifactUpdate({
-        taskId: currentData.id,
-        contextId: currentData.contextId,
-        text: pendingTextChunk,
-        append: sawTextArtifact,
-        lastChunk: !structuredData,
+      const previousTask = currentData;
+      // `suspendPayload`/`resumeSchema` resolve as soon as the suspension chunk
+      // is processed, so awaiting them here is safe and keeps the reported
+      // payload identical to the non-streaming path.
+      currentData = applySuspensionToTask({
+        task: currentData,
+        suspendPayload: await result.suspendPayload,
+        resumeSchema: await result.resumeSchema,
+        runId: result.runId ?? currentData.id,
+        logger,
       });
 
-      currentData = applyUpdateToTask(currentData, textUpdate);
       await saveTaskAndMaybeSendPushNotification({
         taskStore,
         pushNotificationSender: resolvedPushNotificationSender,
+        previousTask,
         nextTask: currentData,
         agentId,
         logger,
       });
-      yield createSuccessResponse(requestId, textUpdate);
+    } else {
+      structuredData ??= (await result.object) as Record<string, unknown> | undefined;
 
-      sawTextArtifact = true;
-      pendingTextChunk = undefined;
-    }
+      if (!pendingTextChunk && !sawTextArtifact) {
+        const finalText = await result.text;
+        if (finalText) {
+          pendingTextChunk = finalText;
+        }
+      }
 
-    if (structuredData) {
-      const dataUpdate = createDataArtifactUpdate({
-        taskId: currentData.id,
-        contextId: currentData.contextId,
-        data: structuredData,
-        lastChunk: true,
+      if (pendingTextChunk) {
+        const textUpdate = createTextChunkArtifactUpdate({
+          taskId: currentData.id,
+          contextId: currentData.contextId,
+          text: pendingTextChunk,
+          append: sawTextArtifact,
+          lastChunk: !structuredData,
+        });
+
+        currentData = applyUpdateToTask(currentData, textUpdate);
+        await saveTaskAndMaybeSendPushNotification({
+          taskStore,
+          pushNotificationSender: resolvedPushNotificationSender,
+          nextTask: currentData,
+          agentId,
+          logger,
+        });
+        yield createSuccessResponse(requestId, textUpdate);
+
+        sawTextArtifact = true;
+        pendingTextChunk = undefined;
+      }
+
+      if (structuredData) {
+        const dataUpdate = createDataArtifactUpdate({
+          taskId: currentData.id,
+          contextId: currentData.contextId,
+          data: structuredData,
+          lastChunk: true,
+        });
+
+        currentData = applyUpdateToTask(currentData, dataUpdate);
+        await saveTaskAndMaybeSendPushNotification({
+          taskStore,
+          pushNotificationSender: resolvedPushNotificationSender,
+          nextTask: currentData,
+          agentId,
+          logger,
+        });
+        yield createSuccessResponse(requestId, dataUpdate);
+      }
+
+      const previousTask = currentData;
+      const completedTask = applyUpdateToTask(currentData, {
+        state: 'completed',
+        message: undefined,
       });
 
-      currentData = applyUpdateToTask(currentData, dataUpdate);
+      completedTask.metadata = {
+        ...clearSuspensionMetadata(completedTask.metadata),
+        execution: {
+          toolCalls: await result.toolCalls,
+          toolResults: await result.toolResults,
+          usage: await result.usage,
+          finishReason: await result.finishReason,
+        },
+      };
+
+      currentData = completedTask;
+
       await saveTaskAndMaybeSendPushNotification({
         taskStore,
         pushNotificationSender: resolvedPushNotificationSender,
+        previousTask,
         nextTask: currentData,
         agentId,
         logger,
       });
-      yield createSuccessResponse(requestId, dataUpdate);
     }
-
-    const previousTask = currentData;
-    const completedTask = applyUpdateToTask(currentData, {
-      state: 'completed',
-      message: undefined,
-    });
-
-    completedTask.metadata = {
-      ...completedTask.metadata,
-      execution: {
-        toolCalls: await result.toolCalls,
-        toolResults: await result.toolResults,
-        usage: await result.usage,
-        finishReason: await result.finishReason,
-      },
-    };
-
-    currentData = completedTask;
-
-    await saveTaskAndMaybeSendPushNotification({
-      taskStore,
-      pushNotificationSender: resolvedPushNotificationSender,
-      previousTask,
-      nextTask: currentData,
-      agentId,
-      logger,
-    });
   } catch (handlerError) {
     const previousTask = currentData;
     currentData = applyUpdateToTask(currentData, {
@@ -1127,7 +1619,9 @@ export async function* handleTaskResubscribe({
 
   yield createSuccessResponse(requestId, snapshot.task);
 
-  if (isTerminalTaskState(snapshot.task.status.state)) {
+  // Interrupted states produce no further updates until the client sends a
+  // follow-up message, so the event stream ends here.
+  if (isTerminalTaskState(snapshot.task.status.state) || isInterruptedTaskState(snapshot.task.status.state)) {
     return;
   }
 
@@ -1144,17 +1638,20 @@ export async function* handleTaskResubscribe({
       yield createSuccessResponse(requestId, artifactUpdate);
     }
 
+    const nextState = nextUpdate.task.status.state;
+    const streamEnded = isTerminalTaskState(nextState) || isInterruptedTaskState(nextState);
+
     if (didTaskStatusChange(task, nextUpdate.task)) {
       yield createSuccessResponse(requestId, {
         kind: 'status-update',
         taskId: nextUpdate.task.id,
         contextId: nextUpdate.task.contextId,
         status: nextUpdate.task.status,
-        final: isTerminalTaskState(nextUpdate.task.status.state),
+        final: streamEnded,
       });
     }
 
-    if (isTerminalTaskState(nextUpdate.task.status.state)) {
+    if (streamEnded) {
       return;
     }
 
@@ -1240,56 +1737,53 @@ export async function handleTaskCancel({
   taskId: string;
   logger?: IMastraLogger;
 }) {
-  // Load task and history
-  let data = await taskStore.load({
-    agentId,
-    taskId,
-  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const snapshot = taskStore.loadWithVersion({ agentId, taskId });
+    const data = snapshot?.task;
 
-  if (!data) {
-    throw MastraA2AError.taskNotFound(taskId);
+    if (!data) {
+      throw MastraA2AError.taskNotFound(taskId);
+    }
+
+    if (isTerminalTaskState(data.status.state)) {
+      logger?.info(`Task ${taskId} already in final state ${data.status.state}, cannot cancel.`);
+      throw MastraA2AError.taskNotCancelable(taskId);
+    }
+
+    taskStore.activeCancellations.add(taskId);
+
+    const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
+      state: 'canceled',
+      message: {
+        role: 'agent',
+        parts: [{ kind: 'text', text: 'Task cancelled by request.' }],
+        kind: 'message',
+        messageId: crypto.randomUUID(),
+      },
+    };
+    const canceledTask = applyUpdateToTask(data, cancelUpdate);
+
+    try {
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvePushNotificationPair({ pushNotificationSender }).pushNotificationSender,
+        previousTask: data,
+        nextTask: canceledTask,
+        agentId,
+        expectedVersion: snapshot.version,
+        logger,
+      });
+      return createSuccessResponse(requestId, canceledTask);
+    } catch (error) {
+      if (!(error instanceof TaskStoreVersionConflictError)) {
+        throw error;
+      }
+    } finally {
+      taskStore.activeCancellations.delete(taskId);
+    }
   }
 
-  // Check if cancelable (not already in a final state)
-  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
-
-  if (finalStates.includes(data.status.state)) {
-    logger?.info(`Task ${taskId} already in final state ${data.status.state}, cannot cancel.`);
-    return createSuccessResponse(requestId, data);
-  }
-
-  // Signal cancellation
-  taskStore.activeCancellations.add(taskId);
-
-  // Apply 'canceled' state update
-  const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
-    state: 'canceled',
-    message: {
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Task cancelled by request.' }],
-      kind: 'message',
-      messageId: crypto.randomUUID(),
-    },
-  };
-
-  const previousTask = data;
-  data = applyUpdateToTask(data, cancelUpdate);
-
-  // Save the updated state
-  await saveTaskAndMaybeSendPushNotification({
-    taskStore,
-    pushNotificationSender: resolvePushNotificationPair({ pushNotificationSender }).pushNotificationSender,
-    previousTask,
-    nextTask: data,
-    agentId,
-    logger,
-  });
-
-  // Remove from active cancellations *after* saving
-  taskStore.activeCancellations.delete(taskId);
-
-  // Return the updated task object
-  return createSuccessResponse(requestId, data);
+  throw MastraA2AError.invalidRequest(`Task ${taskId} was updated concurrently. Retry the request.`);
 }
 
 export async function getAgentExecutionHandler({

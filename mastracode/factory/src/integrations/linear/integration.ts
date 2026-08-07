@@ -30,6 +30,7 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
+  UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
@@ -37,6 +38,7 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { buildLinearRoutes } from './routes.js';
+import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -84,6 +86,8 @@ export interface LinearIssue {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  /** Display name of the Linear user who created the issue, when Linear returns one. */
+  creator: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;
@@ -173,6 +177,7 @@ interface IssuesQueryData {
       state: { name: string; type: string };
       project: { id: string };
       assignee: { name: string } | null;
+      creator: { name: string } | null;
       team: { key: string } | null;
       labels: { nodes: Array<{ name: string }> };
     }>;
@@ -204,6 +209,7 @@ interface IssueDetailQueryData {
     state: { name: string; type: string };
     project: { id: string };
     assignee: { name: string } | null;
+    creator: { name: string } | null;
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
     comments: IssueCommentsPage;
@@ -494,6 +500,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
       const connection = await this.loadConnection(orgId);
       if (!connection) return [];
@@ -534,7 +541,26 @@ export class LinearIntegration implements FactoryIntegration {
     listIssues: input => this.#listIntakeIssues(input),
     getIssue: input => this.#getIntakeIssue(input),
     createComment: input => this.#createIntakeComment(input),
+    updateIssue: input => this.#updateIntakeIssue(input),
   };
+
+  /**
+   * Background-dispatch context: the org's OAuth connection with a fresh
+   * token. Linear work items store the issue UUID directly as `externalId`.
+   */
+  async #resolveIntakeDispatch({
+    orgId,
+    externalSource,
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+  }): Promise<{ connection: IntegrationConnection; issueId: string } | null> {
+    if (externalSource.type !== 'issue') return null;
+    const connection = await this.loadConnection(orgId);
+    if (!connection) return null;
+    const accessToken = await this.getFreshAccessToken(connection);
+    return { connection: { type: 'oauth', accessToken }, issueId: externalSource.externalId };
+  }
   /**
    * The OAuth connect/callback flow round-trips a signed `state` through
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
@@ -659,6 +685,56 @@ export class LinearIntegration implements FactoryIntegration {
     return this.createIssueComment(accessToken, input.issueId, input.body);
   }
 
+  async #updateIntakeIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
+    const accessToken = getLinearAccessToken(input.connection);
+    const issue = await this.fetchIssueDetail(accessToken, input.issueId);
+    if (!issue) return null;
+    const teamKey = issue.team;
+    if (!teamKey) return null;
+    const states = await this.#listTeamWorkflowStates(accessToken, teamKey);
+    let targetState: { id: string; name: string; type: string } | null = null;
+    if (input.state.kind === 'byType') {
+      const wantedType = input.state.stateType;
+      targetState = states.find(state => state.type === wantedType) ?? null;
+    } else {
+      const wanted = input.state.name.toLowerCase();
+      targetState = states.find(state => state.name.toLowerCase() === wanted) ?? null;
+    }
+    if (!targetState) return null;
+    if (targetState.name === issue.state) {
+      return linearIssueToIntakeIssue(issue);
+    }
+    const data = await linearGraphql<{ issueUpdate: { success: boolean } }>(
+      accessToken,
+      `mutation UpdateIssueState($id: String!, $stateId: String!) {
+        issueUpdate(id: $id, input: { stateId: $stateId }) { success }
+      }`,
+      { id: issue.id, stateId: targetState.id },
+    );
+    if (!data.issueUpdate.success) {
+      throw new Error('Linear did not accept the issue update.');
+    }
+    const fresh = await this.fetchIssueDetail(accessToken, issue.id);
+    if (!fresh) return null;
+    return linearIssueToIntakeIssue(fresh);
+  }
+
+  async #listTeamWorkflowStates(
+    accessToken: string,
+    teamKey: string,
+  ): Promise<Array<{ id: string; name: string; type: string }>> {
+    const data = await linearGraphql<{
+      team: { states: { nodes: Array<{ id: string; name: string; type: string }> } } | null;
+    }>(
+      accessToken,
+      `query TeamStates($key: String!) {
+        team(id: $key) { states(first: 100) { nodes { id name type } } }
+      }`,
+      { key: teamKey },
+    );
+    return data.team?.states.nodes ?? [];
+  }
+
   /** List the workspace's projects (for the Settings intake-source picker). */
   async listProjects(accessToken: string): Promise<LinearProject[]> {
     const data = await linearGraphql<{
@@ -719,6 +795,7 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
+            creator { name }
             team { key }
             labels { nodes { name } }
           }
@@ -744,6 +821,7 @@ export class LinearIntegration implements FactoryIntegration {
         stateType: node.state.type,
         priorityLabel: node.priorityLabel,
         assignee: node.assignee?.name ?? null,
+        creator: node.creator?.name ?? null,
         team: node.team?.key ?? null,
         labels: node.labels.nodes.map(label => label.name),
         createdAt: node.createdAt,
@@ -806,6 +884,7 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
+            creator { name }
             team { key }
             labels { nodes { name } }
             comments(first: $commentsFirst) {
@@ -838,6 +917,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateType: issue.state.type,
       priorityLabel: issue.priorityLabel,
       assignee: issue.assignee?.name ?? null,
+      creator: issue.creator?.name ?? null,
       team: issue.team?.key ?? null,
       labels: issue.labels.nodes.map(label => label.name),
       createdAt: issue.createdAt,
@@ -901,7 +981,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
-      hooks: ctx.hooks,
+      ingestFactoryIssues: attachLinearRules(ctx),
     });
   }
 
@@ -934,7 +1014,7 @@ function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,
-    author: null,
+    author: issue.creator,
     state: issue.state,
     stateType: issue.stateType,
     priority: issue.priorityLabel,

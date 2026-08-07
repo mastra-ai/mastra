@@ -42,14 +42,20 @@ import { assertDeployDir } from './validate-dir.js';
  * Derive the public studio/server URLs from the environment slug.
  * These are the user-facing URLs, not the internal Railway instanceUrl.
  */
-function derivePublicUrls(slug: string): { studioUrl: string; serverUrl: string } {
+function derivePublicUrls(
+  slug: string,
+  projectType?: string,
+): { studioUrl: string; serverUrl: string; serverLabel: string } {
   // Determine if we're targeting staging or production
   const isStaging = MASTRA_PLATFORM_API_URL.includes('staging');
   const baseDomain = isStaging ? 'staging.mastra.cloud' : 'mastra.cloud';
+  const isFactory = projectType === 'factory';
+  const serverSubdomain = isFactory ? 'factory' : 'server';
 
   return {
     studioUrl: `https://${slug}.studio.${baseDomain}`,
-    serverUrl: `https://${slug}.server.${baseDomain}`,
+    serverUrl: `https://${slug}.${serverSubdomain}.${baseDomain}`,
+    serverLabel: isFactory ? 'Factory' : 'Server',
   };
 }
 
@@ -907,9 +913,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
 
   if (finalStatus.status === 'running') {
-    const { studioUrl, serverUrl } = derivePublicUrls(environment.slug);
+    const { studioUrl, serverUrl, serverLabel } = derivePublicUrls(environment.slug, projectType);
     p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
-    p.log.info(`  Server: ${pc.cyan(serverUrl)}`);
+    p.log.info(`  ${serverLabel}: ${pc.cyan(serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);

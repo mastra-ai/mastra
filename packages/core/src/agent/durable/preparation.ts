@@ -12,7 +12,7 @@ import type { VersionOverrides } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
-import { deepMerge } from '../../utils';
+import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
@@ -46,14 +46,17 @@ function snapshotRequestContextEntries(
   const out: Record<string, unknown> = {};
   let any = false;
   for (const [key, value] of requestContext.entries()) {
-    try {
-      const cloned = JSON.parse(JSON.stringify(value));
-      out[key as string] = cloned;
-      any = true;
-    } catch {
-      // Skip non-serializable entries silently — they wouldn't survive the
-      // wire on cross-process engines anyway.
-    }
+    // Serialize each entry exactly once with a bounded pass: a shared-reference
+    // graph would otherwise make JSON.stringify expand exponentially and wedge
+    // the event loop on every durable step, and reading the value twice (probe
+    // then clone) could disagree if a getter/toJSON is stateful. Entries that
+    // produce no JSON (non-serializable, or too large to serialize within
+    // budget) are skipped — they wouldn't survive the wire on cross-process
+    // engines anyway.
+    const json = boundedStringify(value);
+    if (json === undefined) continue;
+    out[key as string] = JSON.parse(json);
+    any = true;
   }
   return any ? out : undefined;
 }
@@ -700,9 +703,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           if (!shouldGenerate || thread?.title) return;
 
           const titleMessageList = new MessageList().deserialize(messageListState);
-          const uiMessages = titleMessageList.get.all.ui();
-          const coreMessages = titleMessageList.get.all.core();
-          if (coreMessages.length < (minMessages ?? 1)) return;
+          // Only messages of the thread being titled — resource-scoped memory can
+          // load messages from other threads into the deserialized list.
+          const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
+          if (uiMessages.length < (minMessages ?? 1)) return;
 
           const userMessage = agent.getMostRecentUserMessage(uiMessages);
           if (!userMessage) return;

@@ -169,16 +169,20 @@ const mockLoadSettings = vi.hoisted(() =>
   })),
 );
 
-vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: mockLoadSettings,
-  getCustomProviderId: (name: string) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, ''),
-  MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
-  MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
-}));
+vi.mock('../../onboarding/settings.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../onboarding/settings.js')>();
+  return {
+    ...actual,
+    loadSettings: mockLoadSettings,
+    getCustomProviderId: (name: string) =>
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, ''),
+    MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
+    MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
+  };
+});
 
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -271,6 +275,23 @@ describe('resolveModel', () => {
       },
     });
     expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
+  });
+
+  it('claims models.dev providers authenticated by the injected credential store', () => {
+    const gateway = createMastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
+      routeThroughMastraGateway: false,
+      credentialStore: {
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: provider =>
+          provider === 'alibaba-coding-plan' ? { type: 'api_key', key: 'sk-alibaba-tenant' } : undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      },
+    });
+
+    expect(gateway.handlesModel('alibaba-coding-plan/glm-5')).toBe(true);
   });
 
   describe('anthropic/* models', () => {
@@ -568,6 +589,17 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('model-router');
     });
 
+    it('passes stored API keys to model router providers', () => {
+      mockAuthStorageInstance.get.mockImplementation((provider: string) =>
+        provider === 'alibaba-coding-plan' ? { type: 'api_key', key: 'sk-alibaba-stored' } : undefined,
+      );
+
+      const result = resolveModel('alibaba-coding-plan/glm-5') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.apiKey).toBe('sk-alibaba-stored');
+    });
+
     it('resolves gateway auth through the MastraCode gateway hook', () => {
       const auth = resolveAuth(
         {
@@ -592,6 +624,40 @@ describe('resolveModel', () => {
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
       });
+    });
+
+    it('normalizes legacy mastracode/-prefixed custom provider ids at resolution time (#20799)', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'acme-secret',
+          },
+        ],
+        memoryGateway: {},
+      });
+
+      // Previously-saved settings may carry the gateway-qualified catalog id.
+      const result = resolveModel('mastracode/acme/reasoner-v1') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('reasoner-v1');
+      expect(result.url).toBe('https://llm.acme.dev/v1');
+      expect(result.apiKey).toBe('acme-secret');
+    });
+
+    it('leaves mastracode/-prefixed ids alone when the segment is not a configured custom provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: {},
+      });
+
+      const result = resolveModel('mastracode/acme/reasoner-v1') as Record<string, unknown>;
+
+      // No matching custom provider: id passes through to the model router unchanged.
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('mastracode/acme/reasoner-v1');
     });
 
     it('passes controller headers to custom providers', () => {

@@ -559,7 +559,7 @@ describe('dev command - factory mode environment', () => {
 
     expect(devBundlerConstructorSpy).toHaveBeenCalled();
     const lastCall = devBundlerConstructorSpy.mock.calls[devBundlerConstructorSpy.mock.calls.length - 1];
-    expect(lastCall[1]).not.toBe(true);
+    expect(lastCall[1]).toBeUndefined();
   });
 
   it('should not set MASTRA_FACTORY_DEV in spawned env when factory is not set', async () => {

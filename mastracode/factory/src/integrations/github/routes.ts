@@ -21,6 +21,7 @@ import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import { resolveFactoryDefaultModelId } from '../../session/factory-session.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -33,8 +34,10 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
-import { withProjectLock } from './project-lock.js';
+import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
+import type { GithubPatKind } from './pat.js';
 
+import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
   computeWorktreePath,
@@ -47,6 +50,28 @@ import {
   WorktreeError,
 } from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
+
+const sessionOperationLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Serialize same-session mutations within one Factory process. Factory sessions
+ * normally issue these operations sequentially, so this lock is probably not
+ * necessary; keep the cheap local guard until that invariant is enforced by
+ * the request protocol. It intentionally does not consume a database connection.
+ */
+function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = sessionOperationLocks.get(sessionId) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  const tail = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  sessionOperationLocks.set(sessionId, tail);
+  void tail.then(() => {
+    if (sessionOperationLocks.get(sessionId) === tail) sessionOperationLocks.delete(sessionId);
+  });
+  return next;
+}
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
 import { handleGithubWebhook } from './webhook.js';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
@@ -74,10 +99,7 @@ export interface MountGithubRoutesOptions {
    * respond 503.
    */
   fleet: SandboxFleet;
-  /**
-   * Factory storage backend. Supplies the cross-replica `withDistributedLock`
-   * capability for git write routes and the `appDbConfigured` diagnostic.
-   */
+  /** Factory storage backend used for the `appDbConfigured` diagnostic. */
   storage?: FactoryStorage;
   /**
    * The GitHub App integration the handlers operate on (Octokit access, token
@@ -108,24 +130,6 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
-}
-
-/**
- * Resolve the Factory project's default model for a triage run. Best-effort:
- * a missing project or an uninitialized storage domain simply means "no
- * default", never a failed run.
- */
-async function resolveFactoryDefaultModelId(
-  projects: FactoryProjectsStorage | undefined,
-  factoryProjectId: string | undefined,
-): Promise<string | undefined> {
-  if (!projects || !factoryProjectId) return undefined;
-  try {
-    const project = await projects.getById({ id: factoryProjectId });
-    return project?.defaultModelId ?? undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
@@ -286,11 +290,14 @@ function polledIssueEvent(
     title: string;
     url: string;
     author: string | null;
+    assignee: string | null;
+    assignees?: string[];
     labels: string[];
     createdAt: string;
   },
 ): ParsedGithubWebhook {
   const repositoryId = Number(project.repository.externalId);
+  const assigneeLogins = issue.assignees ?? (issue.assignee ? [issue.assignee] : []);
   return {
     event: 'issues',
     deliveryId: `poll:${repositoryId}:issue:${issue.number}:${issue.createdAt}`,
@@ -304,6 +311,7 @@ function polledIssueEvent(
         title: issue.title,
         html_url: issue.url,
         created_at: issue.createdAt,
+        assignees: assigneeLogins.map(login => ({ login })),
         labels: issue.labels.map(name => ({ name })),
       },
     },
@@ -317,6 +325,8 @@ function polledPullRequestEvent(
     title: string;
     url: string;
     author: string | null;
+    assignees: string[];
+    requestedReviewers: string[];
     headBranch: string;
     baseBranch: string;
     createdAt: string;
@@ -338,6 +348,8 @@ function polledPullRequestEvent(
         created_at: pullRequest.createdAt,
         state: 'open',
         merged: false,
+        assignees: pullRequest.assignees.map(login => ({ login })),
+        requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
         head: { ref: pullRequest.headBranch },
         base: { ref: pullRequest.baseBranch },
       },
@@ -621,48 +633,70 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
 
-        const installs = await github.sourceControlStorage.installations.list({ orgId: resolved.tenant.orgId });
+        const orgId = resolved.tenant.orgId;
+        const installs = await github.sourceControlStorage.installations.list({ orgId });
 
         const query = (c.req.query('q') ?? '').toLowerCase();
-        const repos = [];
+        // List every installation's repositories in parallel — installations
+        // are independent upstream calls, and serial listing multiplied
+        // worst-case latency by installation count.
+        const listed = await Promise.all(
+          installs.map(async inst => {
+            try {
+              return { inst, list: await github.listInstallationRepos(Number(inst.externalId)) };
+            } catch (err) {
+              // GitHub 404s when the installation no longer exists for this app
+              // (app uninstalled/reinstalled, or the row was recorded under
+              // different app credentials). Prune the stale row so `/status`
+              // reflects reality and the UI prompts a reconnect, then keep
+              // listing the remaining installations.
+              if ((err as { status?: number }).status !== 404) throw err;
+              console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
+              await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
+              return { inst, list: [] };
+            }
+          }),
+        );
+
+        // Filter + dedupe by repo id in installation order — same result
+        // ordering as the previous serial loop.
+        const matches = [];
         const seenRepositoryIds = new Set<number>();
-        for (const inst of installs) {
-          let list;
-          try {
-            list = await github.listInstallationRepos(Number(inst.externalId));
-          } catch (err) {
-            // GitHub 404s when the installation no longer exists for this app
-            // (app uninstalled/reinstalled, or the row was recorded under
-            // different app credentials). Prune the stale row so `/status`
-            // reflects reality and the UI prompts a reconnect, then keep
-            // listing the remaining installations.
-            if ((err as { status?: number }).status !== 404) throw err;
-            console.error(`[MastraCode Web] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
-            await github.sourceControlStorage.installations.delete({ orgId: resolved.tenant.orgId, id: inst.id });
-            continue;
-          }
+        for (const { inst, list } of listed) {
           for (const repo of list) {
             if (query && !repo.fullName.toLowerCase().includes(query)) continue;
             if (seenRepositoryIds.has(repo.id)) continue;
             seenRepositoryIds.add(repo.id);
-            const repository = await github.sourceControlStorage.repositories.upsert({
-              orgId: resolved.tenant.orgId,
-              input: {
-                installationId: inst.id,
-                externalId: repo.id.toString(),
-                slug: repo.fullName,
-                defaultBranch: isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main',
-                providerMetadata: { private: repo.private, owner: repo.owner },
-              },
-            });
-            repos.push({
-              ...repo,
-              installationStorageId: inst.id,
-              repositoryStorageId: repository.id,
-              sandboxProvider: fleet.provider,
-              sandboxWorkdir: fleet.computeWorkdir(repo.fullName),
-            });
+            matches.push({ inst, repo });
           }
+        }
+
+        // Mirror matches into storage with bounded concurrency instead of one
+        // awaited upsert per repository.
+        const repos = new Array(matches.length);
+        const upsertConcurrency = 10;
+        for (let start = 0; start < matches.length; start += upsertConcurrency) {
+          await Promise.all(
+            matches.slice(start, start + upsertConcurrency).map(async ({ inst, repo }, offset) => {
+              const repository = await github.sourceControlStorage.repositories.upsert({
+                orgId,
+                input: {
+                  installationId: inst.id,
+                  externalId: repo.id.toString(),
+                  slug: repo.fullName,
+                  defaultBranch: isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main',
+                  providerMetadata: { private: repo.private, owner: repo.owner },
+                },
+              });
+              repos[start + offset] = {
+                ...repo,
+                installationStorageId: inst.id,
+                repositoryStorageId: repository.id,
+                sandboxProvider: fleet.provider,
+                sandboxWorkdir: fleet.computeWorkdir(repo.fullName),
+              };
+            }),
+          );
         }
         return c.json({ repos });
       },
@@ -749,6 +783,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             title: issue.title,
             url: issue.url,
             author: issue.author,
+            assignee: issue.assignee,
+            assignees: issue.assignees,
             labels: issue.labels,
             comments: issue.commentCount ?? 0,
             createdAt: issue.createdAt,
@@ -802,13 +838,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           return c.json({ error: 'invalid_url' }, 400);
         }
 
-        if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        if (!runBoardIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
         const branch = `factory/issue-${issueNumber}`;
         const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        await github.addIssueLabels(Number(project.installation.externalId), project.repository.slug, issueNumber, [
-          'auto-triaged',
-        ]);
-        const result = await runIssueTriage({
+        const result = await runBoardIssueTriage({
           repository: project.repository.slug,
           issueNumber,
           issueTitle: body.title,
@@ -818,7 +851,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           resourceId: project.factoryProjectId,
           projectPath,
           branch,
-          defaultModelId: await resolveFactoryDefaultModelId(options.projects, project.factoryProjectId),
         });
         await emitAudit?.({
           context: loose(c),
@@ -868,6 +900,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             title: pr.title,
             url: pr.url,
             author: pr.author,
+            assignees: pr.assignees ?? [],
+            requestedReviewers: pr.requestedReviewers ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
             createdAt: pr.createdAt,
@@ -947,8 +981,68 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
+  // ── Org GitHub PATs ──────────────────────────────────────────────────────
+  // Installation tokens are the wrong credential for the `gh` CLI (integration
+  // -restricted endpoints 403 regardless of permissions), so orgs paste
+  // classic PATs the sandboxes use instead: a `default` worker token, and an
+  // optional `reviewer` token that review-board sessions use so PR reviews
+  // come from a different account. Tokens are never sent back to the browser —
+  // only whether each is configured.
+  const parsePatKind = (value: unknown): GithubPatKind | null => {
+    if (value === undefined || value === null || value === 'default') return 'default';
+    if (value === 'reviewer') return 'reviewer';
+    return null;
+  };
+  routes.push(
+    registerApiRoute('/web/github/pat', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        return c.json(await getGithubPatStatus(() => github.integrationStorage, resolved.tenant.orgId));
+      },
+    }),
+    registerApiRoute('/web/github/pat', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        let body: { token?: unknown; kind?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const kind = parsePatKind(body.kind);
+        if (!kind) return c.json({ error: "kind must be 'default' or 'reviewer'" }, 400);
+        const token = typeof body.token === 'string' ? body.token.trim() : '';
+        if (!token) return c.json({ error: 'A token is required' }, 400);
+        if (token.length > 500) return c.json({ error: 'Token too long (max 500 characters)' }, 400);
+        if (/\s/.test(token)) return c.json({ error: 'Token must not contain whitespace' }, 400);
+
+        await setGithubPat(github.integrationStorage, resolved.tenant.orgId, token, kind);
+        return c.json(await getGithubPatStatus(() => github.integrationStorage, resolved.tenant.orgId));
+      },
+    }),
+    registerApiRoute('/web/github/pat', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const kind = parsePatKind(c.req.query('kind'));
+        if (!kind) return c.json({ error: "kind must be 'default' or 'reviewer'" }, 400);
+        await clearGithubPat(github.integrationStorage, resolved.tenant.orgId, kind);
+        return c.json(await getGithubPatStatus(() => github.integrationStorage, resolved.tenant.orgId));
+      },
+    }),
+  );
+
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, storage, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, emitAudit }));
 
   return routes;
 }
@@ -1036,16 +1130,33 @@ async function prepareProject(options: {
   userId: string;
   onProgress?: ProgressFn;
 }): Promise<EnsureResult> {
-  const { github, fleet, project, userId, onProgress } = options;
-  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  const sandbox = await ensureProjectSandbox({
-    fleet,
-    row: sandboxRow,
-    storage: github.sourceControlStorage.sandboxes,
-    onProgress,
-  });
-  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
-  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
+  const { github, fleet, userId, onProgress } = options;
+  // Self-heal a sandbox provider switch. The project row snapshots
+  // sandboxProvider/sandboxWorkdir at link time, so when the server's provider
+  // later changes (platform ↔ local) the stored workdir points into the old
+  // provider's filesystem (e.g. `/workspace/…` on a macOS host, where the
+  // clone dies on the read-only root volume). Recompute against the current
+  // fleet and persist so every later open uses the corrected target.
+  let project = options.project;
+  if (project.sandboxProvider !== fleet.provider) {
+    const sandboxWorkdir = fleet.computeWorkdir(project.repository.slug);
+    await github.sourceControlStorage.projectRepositories.update({
+      orgId: project.installation.orgId,
+      id: project.id,
+      input: { sandboxProvider: fleet.provider, sandboxWorkdir },
+    });
+    project = { ...project, sandboxProvider: fleet.provider, sandboxWorkdir };
+  }
+  let sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  // The per-user binding inherits its workdir at creation time — re-point it
+  // (and force a re-clone) whenever the project's workdir has since moved.
+  if (sandboxRow.sandboxWorkdir !== project.sandboxWorkdir) {
+    await github.sourceControlStorage.sandboxes.setWorkdir({
+      id: sandboxRow.id,
+      sandboxWorkdir: project.sandboxWorkdir,
+    });
+    sandboxRow = { ...sandboxRow, sandboxWorkdir: project.sandboxWorkdir, materializedAt: null };
+  }
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,
@@ -1053,6 +1164,19 @@ async function prepareProject(options: {
   if (!access.authorization) {
     throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
   }
+  // The sandbox env token feeds the `gh` CLI — a configured org PAT wins
+  // there. Git clone/pull below keep the minted installation token.
+  const ghCliToken =
+    (await getGithubPat(() => github.integrationStorage, project.installation.orgId)) ?? access.authorization.token;
+  const sandbox = await ensureProjectSandbox({
+    fleet,
+    row: sandboxRow,
+    storage: github.sourceControlStorage.sandboxes,
+    token: ghCliToken,
+    onProgress,
+  });
+  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
+  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo({
     row: finalRow,
@@ -1145,13 +1269,11 @@ function buildProjectGitRoutes({
   github,
   auth,
   fleet,
-  storage,
   emitAudit,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
-  storage?: FactoryStorage;
   emitAudit?: AuditEmitter['emit'];
 }): ApiRoute[] {
   return [
@@ -1227,29 +1349,22 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        let sandbox: MaterializationSandbox | undefined;
-        if (session.sandboxId) {
-          try {
-            sandbox = await fleet.reattachSandbox(session.sandboxId);
-          } catch {
-            // The provider may already have reclaimed the sandbox.
-          }
-          await fleet.teardownSandbox(
-            {
-              sandboxId: session.sandboxId,
-              setSandboxId: async () => {},
-              clear: async () => {
-                await github.sourceControlStorage.sessions.setSandbox({
-                  id: session.id,
-                  sandboxId: null,
-                  sandboxWorkdir: session.sandboxWorkdir ?? '',
-                });
-              },
-            },
-            sandbox,
-          );
-        }
+        // Answer as soon as the workspace is actually gone. Reclaiming its
+        // sandbox wakes the VM and scrubs the checkout, which takes minutes on
+        // a large repository — the caller must not sit through that for a
+        // workspace that has already been removed.
         await github.sourceControlStorage.sessions.delete(session.id);
+        void reclaimDeletedSessionSandbox({
+          fleet,
+          sourceControl: github.sourceControlStorage,
+          session,
+        }).catch((error: unknown) => {
+          console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+            sessionId: session.sessionId,
+            sandboxId: session.sandboxId,
+            error,
+          });
+        });
         return c.json({ removed: true });
       },
     }),
@@ -1279,31 +1394,27 @@ function buildProjectGitRoutes({
         const { workdir, sandboxBinding } = sessionWorkspace;
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
-              const result = await commitAll(
-                sandbox,
-                workdir,
-                body.message as string,
-                identityFromUser(await auth.ensureUser(loose(c))),
-              );
-              if (result.committed) {
-                await emitAudit?.({
-                  context: loose(c),
-                  input: {
-                    action: 'factory.git.commit',
-                    factoryProjectId: project.factoryProjectId,
-                    projectRepositoryId: project.id,
-                    targets: [{ type: 'session', id: sessionWorkspace.session.sessionId }],
-                    metadata: { sessionId: sessionWorkspace.session.sessionId },
-                  },
-                });
-              }
-              return c.json({ committed: result.committed });
-            },
+          return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
+            const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
+            const result = await commitAll(
+              sandbox,
+              workdir,
+              body.message as string,
+              identityFromUser(await auth.ensureUser(loose(c))),
+            );
+            if (result.committed) {
+              await emitAudit?.({
+                context: loose(c),
+                input: {
+                  action: 'factory.git.commit',
+                  factoryProjectId: project.factoryProjectId,
+                  projectRepositoryId: project.id,
+                  targets: [{ type: 'session', id: sessionWorkspace.session.sessionId }],
+                  metadata: { sessionId: sessionWorkspace.session.sessionId },
+                },
+              });
+            }
+            return c.json({ committed: result.committed });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
@@ -1337,29 +1448,25 @@ function buildProjectGitRoutes({
         const { workdir, sandboxBinding } = sessionWorkspace;
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
-              const access = await github.versionControl.getRepositoryAccess({
-                orgId,
-                repositoryId: project.repository.id,
-              });
-              if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
-              await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
-              await emitAudit?.({
-                context: loose(c),
-                input: {
-                  action: 'factory.git.push',
-                  factoryProjectId: project.factoryProjectId,
-                  projectRepositoryId: project.id,
-                  targets: [{ type: 'branch', id: branch }],
-                  metadata: { branch, sessionId: sessionWorkspace.session.sessionId },
-                },
-              });
-              return c.json({ pushed: true, branch });
-            },
+          return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
+            const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
+            const access = await github.versionControl.getRepositoryAccess({
+              orgId,
+              repositoryId: project.repository.id,
+            });
+            if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
+            await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
+            await emitAudit?.({
+              context: loose(c),
+              input: {
+                action: 'factory.git.push',
+                factoryProjectId: project.factoryProjectId,
+                projectRepositoryId: project.id,
+                targets: [{ type: 'branch', id: branch }],
+                metadata: { branch, sessionId: sessionWorkspace.session.sessionId },
+              },
+            });
+            return c.json({ pushed: true, branch });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
@@ -1410,59 +1517,56 @@ function buildProjectGitRoutes({
         }
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const result = await github.versionControl.createPullRequest({
-                connection: {
-                  type: 'app-installation',
-                  installationId: Number(project.installation.externalId),
-                },
-                sourceId: project.repository.slug,
-                baseBranch: base,
-                headBranch: head,
-                title,
-                body: prBody,
-              });
-              await emitAudit?.({
-                context: loose(c),
-                input: {
-                  action: 'factory.git.pr_opened',
-                  factoryProjectId: project.factoryProjectId,
+          return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
+            const result = await github.versionControl.createPullRequest({
+              connection: {
+                type: 'app-installation',
+                installationId: Number(project.installation.externalId),
+              },
+              sourceId: project.repository.slug,
+              baseBranch: base,
+              headBranch: head,
+              title,
+              body: prBody,
+              actingUserId: userId,
+            });
+            await emitAudit?.({
+              context: loose(c),
+              input: {
+                action: 'factory.git.pr_opened',
+                factoryProjectId: project.factoryProjectId,
+                projectRepositoryId: project.id,
+                targets: [{ type: 'pull_request', id: result.url, name: title }],
+                metadata: { branch: head, base, url: result.url },
+              },
+            });
+            const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repository.slug);
+            if (pullRequestNumber) {
+              const sessionId = sessionWorkspace.session.sessionId;
+              await subscribeToPullRequest(
+                {
+                  orgId,
+                  installationExternalId: project.installation.externalId,
                   projectRepositoryId: project.id,
-                  targets: [{ type: 'pull_request', id: result.url, name: title }],
-                  metadata: { branch: head, base, url: result.url },
+                  repositoryExternalId: project.repository.externalId,
+                  repositorySlug: project.repository.slug,
+                  changeRequestId: pullRequestNumber.toString(),
+                  sessionId,
+                  ownerId: userId,
+                  resourceId: sessionId,
+                  threadId: sessionId,
+                  source: 'factory-pr-create',
+                  subscribedByUserId: userId,
                 },
+                github.integrationStorage,
+              ).catch((error: unknown) => {
+                console.warn(
+                  `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
+                  error,
+                );
               });
-              const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repository.slug);
-              if (pullRequestNumber) {
-                const sessionId = sessionWorkspace.session.sessionId;
-                await subscribeToPullRequest(
-                  {
-                    orgId,
-                    installationExternalId: project.installation.externalId,
-                    projectRepositoryId: project.id,
-                    repositoryExternalId: project.repository.externalId,
-                    repositorySlug: project.repository.slug,
-                    changeRequestId: pullRequestNumber.toString(),
-                    sessionId,
-                    ownerId: userId,
-                    resourceId: sessionId,
-                    threadId: sessionId,
-                    source: 'factory-pr-create',
-                    subscribedByUserId: userId,
-                  },
-                  github.integrationStorage,
-                ).catch((error: unknown) => {
-                  console.warn(
-                    `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
-                    error,
-                  );
-                });
-              }
-              return c.json({ url: result.url });
-            },
+            }
+            return c.json({ url: result.url });
           });
         } catch (err) {
           return c.json(
@@ -1483,7 +1587,7 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { userId, project, sandboxRow } = owned;
+        const { sandboxRow } = owned;
 
         if (!sandboxRow.sandboxId) {
           // Nothing provisioned for this user — idempotent success.
@@ -1491,19 +1595,15 @@ function buildProjectGitRoutes({
         }
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
-              await teardownProjectSandbox({
-                fleet,
-                row: sandboxRow,
-                storage: github.sourceControlStorage.sandboxes,
-                sandbox,
-              });
-              return c.json({ tornDown: true });
-            },
+          return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
+            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
+            await teardownProjectSandbox({
+              fleet,
+              row: sandboxRow,
+              storage: github.sourceControlStorage.sandboxes,
+              sandbox,
+            });
+            return c.json({ tornDown: true });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);

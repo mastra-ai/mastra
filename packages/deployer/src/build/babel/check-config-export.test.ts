@@ -133,6 +133,21 @@ describe('checkConfigExport Babel plugin', () => {
     expect(runPlugin(code).projectType).toBeUndefined();
   });
 
+  it('does not detect factory when a local parameter shadows the imported binding', () => {
+    const code = `
+      import { MastraFactory } from './factory';
+      function create(MastraFactory: new () => unknown) {
+        return new MastraFactory();
+      }
+    `;
+    expect(runPlugin(code).projectType).toBeUndefined();
+  });
+
+  it('detects factory when the import declaration appears after construction', () => {
+    const code = `const f = new MastraFactory(); import { MastraFactory } from './factory'`;
+    expect(runPlugin(code).projectType).toBe('factory');
+  });
+
   it('does not detect factory for non-constructor usage of imported MastraFactory', () => {
     const code = `import { MastraFactory } from './factory'; const f = MastraFactory()`;
     expect(runPlugin(code).projectType).toBeUndefined();

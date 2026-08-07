@@ -1,6 +1,6 @@
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type NotificationStatus = 'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived' | 'discarded';
+export type NotificationStatus = 'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived' | 'discarded' | 'failed';
 
 export type NotificationSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 

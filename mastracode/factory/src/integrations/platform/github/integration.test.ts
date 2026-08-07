@@ -2,6 +2,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { defaultFactoryRules } from '../../../rules/defaults.js';
+import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -171,7 +173,7 @@ describe('PlatformGithubIntegration', () => {
           labels: ['bug'],
         }),
       ],
-      nextCursor: null,
+      nextCursor: '2',
     });
     await expect(
       integration.versionControl.listPullRequests({ connection: installationConnection, sourceId: 'acme/app' }),
@@ -180,6 +182,29 @@ describe('PlatformGithubIntegration', () => {
       nextCursor: null,
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('label=bug%2Curgent');
+  });
+
+  it('continues platform issue pagination after a short filtered page and stops on an empty page', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      return json({ issues: url.searchParams.get('page') === '1' ? [issue] : [] });
+    });
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    const firstPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: '1',
+    });
+    const secondPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: firstPage.nextCursor ?? undefined,
+    });
+
+    expect(firstPage).toMatchObject({ issues: [expect.objectContaining({ id: '12' })], nextCursor: '2' });
+    expect(secondPage).toEqual({ issues: [], nextCursor: null });
   });
 
   it('fetches issue details, creates comments, and preserves not-found semantics', async () => {
@@ -211,6 +236,69 @@ describe('PlatformGithubIntegration', () => {
       integration.intake.createComment({ connection, sourceId: 'acme/app', issueId: '12', body: 'Done' }),
     ).resolves.toEqual({ id: '91', url: comment.htmlUrl });
     await expect(integration.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '99' })).resolves.toBeNull();
+  });
+
+  it('updates issue state via PATCH after probing the pulls endpoint', async () => {
+    const closedIssue = { ...issue, state: 'closed' as const };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      // Pulls probe → 404 (it's an issue, not a PR)
+      .mockResolvedValueOnce(json({ detail: 'Not found' }, 404))
+      // PATCH issue → returns closed issue
+      .mockResolvedValueOnce(json(closedIssue));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.intake.updateIssue({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '12',
+        state: { kind: 'byType', stateType: 'completed' },
+      }),
+    ).resolves.toMatchObject({ id: '12', state: 'closed' });
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/repos/acme/app/pulls/12');
+    expect((fetchImpl.mock.calls[1]?.[1] as RequestInit).method).toBe('PATCH');
+    const patchBody = JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body)) as {
+      state: string;
+      state_reason: string;
+    };
+    expect(patchBody).toEqual({ state: 'closed', state_reason: 'completed' });
+  });
+
+  it('refuses to update a pull request through updateIssue', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      // Pulls probe → 200 (target IS a PR)
+      .mockResolvedValueOnce(json(pullRequest));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.intake.updateIssue({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '34',
+        state: { kind: 'byType', stateType: 'completed' },
+      }),
+    ).resolves.toBeNull();
+
+    // Only the pulls probe was made — no PATCH.
+    expect(fetchImpl.mock.calls).toHaveLength(1);
+  });
+
+  it('ignores byName targets on updateIssue (GitHub has no custom states)', async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.intake.updateIssue({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '12',
+        state: { kind: 'byName', name: 'In Review' },
+      }),
+    ).resolves.toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('propagates platform rate limits through GitHub capabilities', async () => {
@@ -297,6 +385,47 @@ describe('PlatformGithubIntegration', () => {
     ]);
     expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toMatchObject({ event: 'APPROVE' });
     expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body))).toMatchObject({ side: 'RIGHT' });
+    for (const call of fetchImpl.mock.calls) {
+      expect((call[1] as RequestInit).headers).not.toHaveProperty('x-acting-user-id');
+    }
+  });
+
+  it('sends the acting user header on writes when actingUserId is provided', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json(pullRequest))
+      .mockResolvedValueOnce(
+        json({
+          id: 91,
+          body: 'Done',
+          htmlUrl: 'https://github.com/acme/app/issues/12#issuecomment-91',
+          user: actor,
+          createdAt: '2026-07-03T00:00:00Z',
+          updatedAt: '2026-07-03T00:00:00Z',
+        }),
+      );
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    await integration.versionControl.createPullRequest({
+      connection,
+      sourceId: 'acme/app',
+      title: 'Ship intake',
+      baseBranch: 'main',
+      headBranch: 'feat/intake',
+      actingUserId: 'user-42',
+    });
+    await integration.intake.createComment({
+      connection,
+      sourceId: 'acme/app',
+      issueId: '12',
+      body: 'Done',
+      actingUserId: 'user-42',
+    });
+
+    for (const call of fetchImpl.mock.calls) {
+      expect((call[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
+    }
   });
 
   it('maps every version-control operation to its platform endpoint', async () => {
@@ -451,8 +580,122 @@ describe('PlatformGithubIntegration', () => {
     });
     expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
       repositories: ['app'],
-      permissions: { contents: 'write' },
+      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
     });
+  });
+
+  it('requests all write permissions when minting an installation token', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        json({
+          repositories: [
+            {
+              id: 101,
+              owner: 'acme',
+              name: 'app',
+              fullName: 'acme/app',
+              private: true,
+              defaultBranch: 'main',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(json({ token: 'ghs_installation', expiresAt: '2026-07-21T18:00:00Z' }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.mintInstallationToken(7)).resolves.toBe('ghs_installation');
+    expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
+      repositories: ['app'],
+      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+    });
+  });
+
+  it('reuses installation repository listings within the cache TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+        json({
+          repositories: [
+            { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+          ],
+        }),
+      );
+      const integration = createIntegration(fetchImpl);
+
+      const first = await integration.listInstallationRepos(7);
+      const second = await integration.listInstallationRepos(7);
+      expect(second).toBe(first);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // A different installation is a different cache entry.
+      await integration.listInstallationRepos(8);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+      // Expired entries are refetched.
+      vi.advanceTimersByTime(31_000);
+      await integration.listInstallationRepos(7);
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('evicts the oldest installation listing once the cache bound is reached', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ repositories: [] }));
+      const integration = createIntegration(fetchImpl);
+
+      // Fill the cache past its 1000-entry bound; installation 1 is oldest.
+      for (let installationId = 1; installationId <= 1001; installationId++) {
+        await integration.listInstallationRepos(installationId);
+      }
+      expect(fetchImpl).toHaveBeenCalledTimes(1001);
+
+      // Installation 1 was evicted (refetches); a recent entry is still cached.
+      await integration.listInstallationRepos(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+      await integration.listInstallationRepos(1001);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reuses repository access grants within the cache TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockImplementation(async () => json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
+      const installation = await integration.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+      });
+      const [repository] = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+      });
+
+      const input = { orgId: 'org-1', repositoryId: repository!.id };
+      const first = await integration.versionControl.getRepositoryAccess(input);
+      const second = await integration.versionControl.getRepositoryAccess(input);
+      expect(second).toBe(first);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // Expired grants re-mint through the platform.
+      vi.advanceTimersByTime(5 * 60_000 + 1_000);
+      await integration.versionControl.getRepositoryAccess(input);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
@@ -498,6 +741,7 @@ describe('PlatformGithubIntegration', () => {
       getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
     });
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
+      'github_refresh_token',
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
@@ -506,11 +750,52 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: true },
+      reconcile: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('forwards polled issues to the Factory ingestion hook', async () => {
+  it('maps pull request relevance from the Platform reconcile response', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      json({
+        title: 'Ship intake',
+        html_url: 'https://github.com/acme/app/pull/34',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        created_at: '2026-07-01T00:00:00Z',
+        user: { login: 'ada' },
+        assignees: [{ login: 'linus' }],
+        requested_reviewers: [{ login: 'margaret' }],
+        merged_by: { login: 'grace' },
+        head: { ref: 'feat/intake' },
+        base: { ref: 'main' },
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).resolves.toEqual({
+      title: 'Ship intake',
+      url: 'https://github.com/acme/app/pull/34',
+      state: 'closed',
+      draft: false,
+      merged: true,
+      assignees: ['linus'],
+      requestedReviewers: ['margaret'],
+      headBranch: 'feat/intake',
+      baseBranch: 'main',
+      author: 'ada',
+      createdAt: '2026-07-01T00:00:00Z',
+      mergedBy: 'grace',
+    });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls/34',
+    );
+  });
+
+  it('attaches GitHub rules to polled issue ingress', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
@@ -547,7 +832,7 @@ describe('PlatformGithubIntegration', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/tmp/app',
     });
-    const ingestGithubEvent = vi.fn(async () => ({ status: 'committed' as const }));
+    const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
       fleet: { enabled: false },
@@ -559,7 +844,13 @@ describe('PlatformGithubIntegration', () => {
       },
       controller: {},
       stateSigner: {},
-      hooks: { ingestGithubEvent },
+      rules: {
+        config: defaultFactoryRules({
+          version: 'test-rules',
+          overrides: { github: { issueOpened: { onEvent } } },
+        }),
+        workItems: seed.workItems,
+      },
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });
     integration.versionControl.initialize({ storage: sourceControl });
@@ -573,21 +864,21 @@ describe('PlatformGithubIntegration', () => {
     const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
 
     expect(response.status).toBe(200);
-    expect(ingestGithubEvent).toHaveBeenCalledOnce();
-    expect(ingestGithubEvent).toHaveBeenCalledWith(
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z',
-        event: 'issues',
+        event: 'issueOpened',
       }),
     );
   });
 
   it('uses platform installations for status and platform install URL for connect redirects', async () => {
     const seed = await createPlatformStorageForTests();
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        json({
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) {
+        return json({
           installations: [
             {
               installationId: 7,
@@ -598,9 +889,19 @@ describe('PlatformGithubIntegration', () => {
             },
           ],
           pendingRequests: [],
-        }),
-      )
-      .mockResolvedValueOnce(json({ url: 'https://github.com/apps/mastra/installations/new?state=platform-state' }));
+        });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({ connected: true, githubUsername: 'ada' });
+      }
+      if (url.includes('/github-app/install-url')) {
+        return json({ url: 'https://github.com/apps/mastra/installations/new?state=platform-state' });
+      }
+      if (url.includes('/github-app/authenticate')) {
+        return json({ url: 'https://github.com/login/oauth/authorize?client_id=abc&state=platform-state' });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
@@ -629,8 +930,14 @@ describe('PlatformGithubIntegration', () => {
       enabled: true,
       connected: true,
       installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }],
+      userConnected: true,
+      userGithubUsername: 'ada',
       reason: 'ready',
     });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/github-app/user-connection?userId=user-1',
+      expect.anything(),
+    );
     await expect(context.storage.sourceControl.installations.list({ orgId: 'org-1' })).resolves.toEqual([
       expect.objectContaining({ externalId: '7', accountName: 'acme' }),
     ]);
@@ -640,11 +947,118 @@ describe('PlatformGithubIntegration', () => {
     expect(connect.headers.get('location')).toBe(
       'https://github.com/apps/mastra/installations/new?state=platform-state',
     );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
+    expect(fetchImpl).toHaveBeenCalledWith(
       'https://platform.example.com/v1/server/github-app/install-url?action=install&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
       expect.anything(),
     );
+
+    const connectUser = await app.request('/auth/github/connect-user');
+    expect(connectUser.status).toBe(302);
+    expect(connectUser.headers.get('location')).toBe(
+      'https://github.com/login/oauth/authorize?client_id=abc&state=platform-state',
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/github-app/authenticate?userId=user-1&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
+      expect.anything(),
+    );
+  });
+
+  it('logs the user-connection verification failure reason', async () => {
+    const warningLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) {
+        return json({ installations: [], pendingRequests: [] });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({
+          connected: false,
+          githubUsername: 'ada',
+          reason: 'missing-permissions',
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      fleet: { enabled: true },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+
+    await expect(status.json()).resolves.toMatchObject({
+      userConnected: false,
+      userGithubUsername: 'ada',
+    });
+    const logged = warningLog.mock.calls.map(call => String(call[0])).join('\n');
+    expect(logged).toContain('[Mastra Factory] WARN Platform GitHub user connection verification failed');
+    expect(logged).toContain('"userId":"user-1"');
+    expect(logged).toContain('"reason":"missing-permissions"');
+    warningLog.mockRestore();
+  });
+
+  it('reports userConnected false when the platform lacks the user-connection endpoint', async () => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) {
+        return json({ installations: [], pendingRequests: [] });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({ error: 'Not found' }, 404);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      fleet: { enabled: true },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    await expect(status.json()).resolves.toMatchObject({
+      enabled: true,
+      connected: false,
+      userConnected: false,
+      userGithubUsername: null,
+      reason: 'not_connected',
+    });
   });
 
   it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
@@ -656,9 +1070,15 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
+  it('exposes an explicitly configured GitHub App slug to webhook rules', () => {
+    expect(new PlatformGithubIntegration({ slug: 'factory-app' }).slug).toBe('factory-app');
+    expect(new PlatformGithubIntegration().slug).toBeUndefined();
+  });
+
   it('can disable polling and resolves collaborator permissions through the platform API', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '9000');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       json({
         permission: 'maintain',
@@ -677,6 +1097,348 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: false, intervalMs: 9_000 },
+      reconcile: { enabled: false },
+    });
+  });
+
+  it('keeps the reconcile worker alive when polling is disabled but reconcile stays enabled', () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const integration = createIntegration();
+
+    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    expect(workers).toHaveLength(1);
+    expect(integration.diagnostics()).toMatchObject({
+      polling: { enabled: false },
+      reconcile: { enabled: true },
+    });
+  });
+
+  describe('resolveIntakeDispatch', () => {
+    it('derives repository + issue number from the intake externalId format', async () => {
+      const integration = createIntegration();
+      await expect(
+        integration.intake.resolveIntakeDispatch!({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: 'acme/app:34' },
+        }),
+      ).resolves.toEqual({
+        connection: { type: 'app-installation', installationId: 1 },
+        sourceId: 'acme/app',
+        issueId: '34',
+      });
+    });
+
+    it('resolves numeric repository locators with one direct storage lookup', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const integration = createIntegration();
+      const storage = sourceControl.forIntegration('github');
+      integration.versionControl.initialize({ storage });
+      const installation = await integration.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+      });
+      await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+      });
+
+      await expect(
+        integration.intake.resolveIntakeDispatch!({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: 'github:101:issue:12' },
+        }),
+      ).resolves.toMatchObject({ sourceId: 'acme/app', issueId: '12' });
+    });
+
+    it('returns null when the target cannot be derived', async () => {
+      const integration = createIntegration();
+      await expect(
+        integration.intake.resolveIntakeDispatch!({
+          orgId: 'org-1',
+          externalSource: { type: 'issue', externalId: 'github-issue:7' },
+        }),
+      ).resolves.toBeNull();
+    });
+  });
+
+  describe('installation recovery', () => {
+    it('recovers when a GitHub App installation is reinstalled with a new installation ID', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+
+      // Create an OLD installation (simulating before reinstall)
+      const oldInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7', // OLD GitHub installation ID
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+
+      // Create an OLD repository for the OLD installation
+      const oldRepository = await storage.repositories.upsert({
+        orgId: 'org-1',
+        input: {
+          installationId: oldInstallation.id,
+          externalId: '101',
+          slug: 'acme/app',
+          defaultBranch: 'main',
+        },
+      });
+
+      // Create a NEW installation (simulating after reinstall)
+      // This would be created by intake.listSources after the reinstall
+      const newInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '456', // NEW GitHub installation ID
+        accountName: 'acme', // Same account name
+        accountType: 'Organization',
+      });
+
+      // NOTE: We don't create a new repository row here.
+      // In a real scenario, intake.listSources creates the installation row,
+      // but repositories are registered lazily. The recovery flow will
+      // migrate the old repository's installation_id to the new installation.
+
+      // Mock Platform API:
+      // - Returns 404 for OLD installation token request
+      // - Returns token for NEW installation token request
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: 'Installation not found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      // Try to get repository access using OLD repository
+      // This should recover and succeed using the NEW installation
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toEqual({
+        cloneUrl: 'https://github.com/acme/app.git',
+        authorization: { scheme: 'bearer', token: 'ghs_recovered' },
+      });
+
+      // Verify the repository's installation_id was migrated to the new installation
+      const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(migratedRepository?.installationId).toBe(newInstallation.id);
+    });
+
+    /** Old installation on `7`, new one on `456`, both owned by `acme`. */
+    async function seedReinstalledOrg(storage: SourceControlStorageHandle) {
+      const oldInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      const oldRepository = await storage.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: oldInstallation.id, externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
+      });
+      const newInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '456',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      return { oldInstallation, oldRepository, newInstallation };
+    }
+
+    it('recovers when Platform reports the installation as suspended or soft-deleted', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldRepository, newInstallation } = await seedReinstalledOrg(storage);
+
+      // Platform answers 409 while its own row still exists but is unusable.
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ type: 'conflict', detail: 'GitHub App installation is not available.' }), {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toEqual({
+        cloneUrl: 'https://github.com/acme/app.git',
+        authorization: { scheme: 'bearer', token: 'ghs_recovered' },
+      });
+
+      const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(migratedRepository?.installationId).toBe(newInstallation.id);
+    });
+
+    it('leaves the repository alone when the mint fails for a transient reason', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldInstallation, oldRepository } = await seedReinstalledOrg(storage);
+
+      // A 502 covers a dead installation and a GitHub outage alike — migrating on it
+      // would repoint healthy repositories during an incident.
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ type: 'github_app_token_mint_failed' }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).rejects.toThrow();
+
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(oldInstallation.id);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('runIssueTriage wiring', () => {
+    async function buildTriageApp(options: {
+      constructorRunIssueTriage?: (input: any) => Promise<any>;
+      controller?: object | undefined;
+    }) {
+      const seed = await createPlatformStorageForTests();
+      const fetchImpl = vi.fn<typeof fetch>(async input => {
+        const url = String(input);
+        // addIssueLabels calls the platform label endpoint
+        if (url.includes('/labels')) return json({ labels: ['auto-triaged'] });
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      // Stub fetch BEFORE constructing the integration — PlatformApiClient
+      // captures `globalThis.fetch` at construction time.
+      vi.stubGlobal('fetch', fetchImpl);
+      const integration = options.constructorRunIssueTriage
+        ? new PlatformGithubIntegration({ runIssueTriage: options.constructorRunIssueTriage })
+        : new PlatformGithubIntegration();
+
+      const sourceControl = seed.sourceControl.forIntegration('github');
+      const project = await seed.projects.create({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: { name: 'Test App' },
+      });
+      const installation = await sourceControl.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+      });
+      const repository = await sourceControl.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
+      });
+      const connection = await sourceControl.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const projectRepository = await sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/tmp/app',
+      });
+
+      const context = {
+        auth: fakeAuth(),
+        fleet: { enabled: true },
+        storage: {
+          generic: seed.integrations.forIntegration('github'),
+          sourceControl,
+          projects: seed.projects,
+          intake: seed.intake,
+        },
+        controller: options.controller,
+        stateSigner: {},
+      } as unknown as IntegrationContext;
+      integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+      integration.versionControl.initialize({ storage: sourceControl });
+
+      const app = new Hono();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(app as never, integration.routes(context));
+
+      return { app, projectRepository };
+    }
+
+    function triageRequest(projectRepositoryId: string) {
+      return [
+        `/web/github/projects/${projectRepositoryId}/issues/42/triage`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            title: 'Fix the bug',
+            url: 'https://github.com/acme/app/issues/42',
+            labels: ['bug'],
+          }),
+        },
+      ] as const;
+    }
+
+    it('derives runIssueTriage from the controller when no explicit option is given', async () => {
+      const createSession = vi.fn(async () => {
+        throw new Error('mock-createSession-called');
+      });
+      const { app, projectRepository } = await buildTriageApp({
+        controller: { createSession },
+      });
+
+      const res = await app.request(...triageRequest(projectRepository.id));
+      // The route attempted the controller-derived runner (which invokes
+      // runGithubIssueTriage → controller.createSession) rather than
+      // returning 503 triage_unavailable.
+      expect(res.status).not.toBe(503);
+      expect(createSession).toHaveBeenCalledOnce();
+    });
+
+    it('uses an explicit constructor runIssueTriage over the controller default', async () => {
+      const explicitRunner = vi.fn(async () => ({ threadId: 'explicit-thread' }));
+      const { app, projectRepository } = await buildTriageApp({
+        constructorRunIssueTriage: explicitRunner,
+        controller: {}, // controller present but the explicit option should win
+      });
+
+      const res = await app.request(...triageRequest(projectRepository.id));
+      expect(res.status).toBe(202);
+      expect(explicitRunner).toHaveBeenCalledOnce();
+      await expect(res.json()).resolves.toMatchObject({ ok: true, threadId: 'explicit-thread' });
+    });
+
+    it('returns 503 triage_unavailable when neither controller nor option is provided', async () => {
+      const { app, projectRepository } = await buildTriageApp({
+        controller: undefined,
+      });
+
+      const res = await app.request(...triageRequest(projectRepository.id));
+      expect(res.status).toBe(503);
+      await expect(res.json()).resolves.toEqual({ error: 'triage_unavailable' });
     });
   });
 });

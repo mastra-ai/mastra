@@ -58,19 +58,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poolside/poolside/laguna-xs-2.1",
+    "model": "poolside/poolside/laguna-s-2.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 1048576,
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
   },
   {
-    "model": "poolside/poolside/laguna-xs.2",
+    "model": "poolside/poolside/laguna-xs-2.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -112,7 +112,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "poolside/poolside/laguna-xs.2"
+      ? "poolside/poolside/laguna-xs-2.1"
       : "poolside/poolside/laguna-m.1";
   }
 });

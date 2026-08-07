@@ -223,7 +223,7 @@ const result = await agent.generate('message for agent')
                     type: '(context: DelegationStartContext) => DelegationStartResult | void | Promise<DelegationStartResult | void>',
                     isOptional: true,
                     description:
-                      'Called before delegating to a subagent. Use this to modify the delegation parameters or reject the delegation entirely.',
+                      "Called before delegating to a subagent. Use this to modify the delegation parameters, reject the delegation entirely, or mutate `context.requestContext` to add entries to the subagent run's request context.",
                   },
                 ],
               },
@@ -847,7 +847,7 @@ const result = await agent.generate('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/editor/overview#versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
@@ -1357,7 +1357,7 @@ const limitedResult = await agent.generate('Write a short poem about coding', {
 
 ### With memory
 
-Give your agent access to conversation history and persistence by configuring memory options. This allows the agent to remember previous interactions and maintain context across messages.
+Give your agent access to conversation history and persistence by configuring memory options. It allows the agent to remember previous interactions and maintain context across messages.
 
 ```ts
 const memoryResult = await agent.generate('Remember my favorite color is blue', {
@@ -1406,7 +1406,7 @@ console.log(response.text)
 
 ### Using `maxSteps`
 
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 5, but can be increased:
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step generates a response and executes any tool calls before processing the result. Limiting steps helps prevent infinite loops and reduce latency. It also controls token usage for agents that use tools. The default is 5, but can be increased:
 
 ```typescript
 const response = await agent.generate('Help me organize my day', {
@@ -1432,7 +1432,7 @@ const response = await agent.generate('Help me organize my day', {
 
 ### Using `onTitleGenerated`
 
-When `generateTitle` is enabled in memory options, title generation runs asynchronously after the response completes. Use `onTitleGenerated` to react when the title is ready — for example, to push it to the client via SSE.
+When `generateTitle` is enabled in memory options, title generation runs asynchronously after the response completes. Use `onTitleGenerated` to react when the title is ready, for example by pushing it to the client via SSE.
 
 ```typescript
 const response = await agent.generate('What is quantum computing?', {
