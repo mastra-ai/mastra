@@ -151,22 +151,18 @@ function workspaceDiffUrl(workspacePath?: string, path?: string, previousPath?: 
   return `/web/workspace/changes/diff?${params}`;
 }
 
-function getOrSkip<T>(client: ApiClient, url: string | undefined) {
-  if (!url) return skipToken;
-  return () => client.get<T>(url);
-}
-
 export function useWorkspaceDiff(workspacePath?: string, filePath?: string, previousFilePath?: string) {
   const { client } = useApiConfig();
+  const url = workspaceDiffUrl(workspacePath, filePath, previousFilePath);
 
   return useQuery<WorkspaceDiff>({
     queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
-    queryFn: getOrSkip<WorkspaceDiff>(client, workspaceDiffUrl(workspacePath, filePath, previousFilePath)),
+    queryFn: url ? () => client.get<WorkspaceDiff>(url) : skipToken,
   });
 }
 ```
 
-The builder owns which params the endpoint requires, so that rule is stated once instead of being split between a ternary condition and a template literal.
+The builder owns which params the endpoint requires, so that rule is stated once instead of being split between a ternary condition and a template literal. The ternary stays — it is a one-line value pick, and `url` being `string | undefined` is what makes the skip branch impossible to forget. Extracting it into a `getOrSkip(client, url)` helper is the overshoot: it repeats the type argument, drags a context value through a module function, and closes the door on the `QueryFunctionContext` an abort signal or a page param would need.
 
 ### Fallback and Operator Soup
 
