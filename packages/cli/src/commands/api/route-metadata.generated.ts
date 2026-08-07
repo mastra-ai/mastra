@@ -1985,6 +1985,7 @@ export const API_ROUTE_METADATA = {
       "threadId",
       "timestamp",
       "traceId",
+      "traceIds",
       "userId"
     ],
     "bodyParams": [],
