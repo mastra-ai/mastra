@@ -383,6 +383,8 @@ export abstract class Bundler extends MastraBundler {
     );
   }
 
+  protected pnpmNodeLinker?: 'hoisted';
+
   protected async installDependencies(
     outputDirectory: string,
     rootDir = process.cwd(),
@@ -391,7 +393,11 @@ export abstract class Bundler extends MastraBundler {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    await deps.install({ dir: join(outputDirectory, this.outputDir), pnpmOverrides });
+    await deps.install({
+      dir: join(outputDirectory, this.outputDir),
+      pnpmOverrides,
+      pnpmNodeLinker: this.pnpmNodeLinker,
+    });
   }
 
   /**
