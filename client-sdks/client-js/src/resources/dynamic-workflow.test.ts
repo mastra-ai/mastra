@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import type { ListStoredWorkflowsResponse, StoredWorkflowDefinition, UpsertStoredWorkflowParams } from '../types';
+import type { ListDynamicWorkflowsResponse, DynamicWorkflowDefinition, UpsertDynamicWorkflowParams } from '../types';
 
 const fetchMock = vi.fn();
 
-describe('StoredWorkflow resource', () => {
+describe('DynamicWorkflow resource', () => {
   let client: MastraClient;
 
-  const workflow: StoredWorkflowDefinition = {
+  const workflow: DynamicWorkflowDefinition = {
     id: 'daily-summary',
     description: 'Summarizes the day',
     inputSchema: { type: 'object', properties: { prompt: { type: 'string' } } },
@@ -34,19 +34,19 @@ describe('StoredWorkflow resource', () => {
     client = new MastraClient({ baseUrl: 'http://localhost:4111', fetch: fetchMock });
   });
 
-  it('lists stored workflows with filters', async () => {
-    const response: ListStoredWorkflowsResponse = { workflows: [workflow], total: 1 };
+  it('lists dynamic workflows with filters', async () => {
+    const response: ListDynamicWorkflowsResponse = { workflows: [workflow], total: 1 };
     respond(response);
 
-    await expect(client.listStoredWorkflows({ status: 'active', authorId: 'user-1' })).resolves.toEqual(response);
+    await expect(client.listDynamicWorkflows({ status: 'active', authorId: 'user-1' })).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:4111/api/stored/workflows?status=active&authorId=user-1',
       expect.any(Object),
     );
   });
 
-  it('upserts a stored workflow definition', async () => {
-    const input: UpsertStoredWorkflowParams = {
+  it('upserts a dynamic workflow definition', async () => {
+    const input: UpsertDynamicWorkflowParams = {
       id: workflow.id,
       description: workflow.description,
       inputSchema: workflow.inputSchema,
@@ -55,25 +55,25 @@ describe('StoredWorkflow resource', () => {
     };
     respond({ ok: true, id: workflow.id });
 
-    await expect(client.upsertStoredWorkflow(input)).resolves.toEqual({ ok: true, id: workflow.id });
+    await expect(client.upsertDynamicWorkflow(input)).resolves.toEqual({ ok: true, id: workflow.id });
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:4111/api/stored/workflows',
       expect.objectContaining({ method: 'POST', body: JSON.stringify(input) }),
     );
   });
 
-  it('gets and deletes an id-scoped stored workflow', async () => {
+  it('gets and deletes an id-scoped dynamic workflow', async () => {
     respond(workflow);
-    await expect(client.getStoredWorkflow('daily summary').details()).resolves.toEqual(workflow);
+    await expect(client.getDynamicWorkflow('daily summary').details()).resolves.toEqual(workflow);
     expect(fetchMock).toHaveBeenLastCalledWith(
       'http://localhost:4111/api/stored/workflows/daily%20summary',
       expect.any(Object),
     );
 
-    respond({ success: true, message: 'Deleted stored workflow daily summary' });
-    await expect(client.getStoredWorkflow('daily summary').delete()).resolves.toEqual({
+    respond({ success: true, message: 'Deleted dynamic workflow daily summary' });
+    await expect(client.getDynamicWorkflow('daily summary').delete()).resolves.toEqual({
       success: true,
-      message: 'Deleted stored workflow daily summary',
+      message: 'Deleted dynamic workflow daily summary',
     });
     expect(fetchMock).toHaveBeenLastCalledWith(
       'http://localhost:4111/api/stored/workflows/daily%20summary',
@@ -82,7 +82,7 @@ describe('StoredWorkflow resource', () => {
   });
 
   it('drives create, retrieve, execute, replace, and delete through the client resources', async () => {
-    let stored: StoredWorkflowDefinition | undefined;
+    let stored: DynamicWorkflowDefinition | undefined;
     let revision = 0;
 
     fetchMock.mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
@@ -103,7 +103,7 @@ describe('StoredWorkflow resource', () => {
 
       if (url.pathname === '/api/stored/workflows/daily-summary' && init?.method === 'DELETE') {
         stored = undefined;
-        return new Response(JSON.stringify({ success: true, message: 'Deleted stored workflow daily-summary' }), {
+        return new Response(JSON.stringify({ success: true, message: 'Deleted dynamic workflow daily-summary' }), {
           status: 200,
         });
       }
@@ -136,7 +136,7 @@ describe('StoredWorkflow resource', () => {
       throw new Error(`Unhandled fetch to ${url}`);
     });
 
-    const definition: UpsertStoredWorkflowParams = {
+    const definition: UpsertDynamicWorkflowParams = {
       id: 'daily-summary',
       description: 'Initial summary',
       inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
@@ -144,9 +144,9 @@ describe('StoredWorkflow resource', () => {
       graph: [{ type: 'tool', id: 'load-items', toolId: 'load-items' }],
     };
 
-    await expect(client.upsertStoredWorkflow(definition)).resolves.toEqual({ ok: true, id: 'daily-summary' });
-    await expect(client.getStoredWorkflow('daily-summary').details()).resolves.toMatchObject(definition);
-    await expect(client.listStoredWorkflows()).resolves.toMatchObject({ total: 1 });
+    await expect(client.upsertDynamicWorkflow(definition)).resolves.toEqual({ ok: true, id: 'daily-summary' });
+    await expect(client.getDynamicWorkflow('daily-summary').details()).resolves.toMatchObject(definition);
+    await expect(client.listDynamicWorkflows()).resolves.toMatchObject({ total: 1 });
 
     const firstRun = await client.getWorkflow('daily-summary').createRun();
     await expect(firstRun.startAsync({ inputData: { prompt: 'today' } })).resolves.toMatchObject({
@@ -155,8 +155,8 @@ describe('StoredWorkflow resource', () => {
     });
 
     const replacement = { ...definition, description: 'Replacement summary' };
-    await expect(client.upsertStoredWorkflow(replacement)).resolves.toEqual({ ok: true, id: 'daily-summary' });
-    await expect(client.getStoredWorkflow('daily-summary').details()).resolves.toMatchObject(replacement);
+    await expect(client.upsertDynamicWorkflow(replacement)).resolves.toEqual({ ok: true, id: 'daily-summary' });
+    await expect(client.getDynamicWorkflow('daily-summary').details()).resolves.toMatchObject(replacement);
 
     const replacementRun = await client.getWorkflow('daily-summary').createRun();
     await expect(replacementRun.startAsync({ inputData: { prompt: 'tomorrow' } })).resolves.toMatchObject({
@@ -164,18 +164,18 @@ describe('StoredWorkflow resource', () => {
       result: { summary: 'Replacement summary: tomorrow' },
     });
 
-    await expect(client.getStoredWorkflow('daily-summary').delete()).resolves.toEqual({
+    await expect(client.getDynamicWorkflow('daily-summary').delete()).resolves.toEqual({
       success: true,
-      message: 'Deleted stored workflow daily-summary',
+      message: 'Deleted dynamic workflow daily-summary',
     });
-    await expect(client.listStoredWorkflows()).resolves.toEqual({ workflows: [], total: 0 });
+    await expect(client.listDynamicWorkflows()).resolves.toEqual({ workflows: [], total: 0 });
   });
 
   it('saves helper workflows alongside the root in one upsert and exposes their ids', async () => {
     // A root whose graph nests helpers that do not exist yet cannot be saved on
     // its own. `dependencies` sends them together; the server persists and
     // live-registers the whole set, then echoes the helper ids back.
-    const saved = new Map<string, StoredWorkflowDefinition>();
+    const saved = new Map<string, DynamicWorkflowDefinition>();
 
     fetchMock.mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -231,7 +231,7 @@ describe('StoredWorkflow resource', () => {
       throw new Error(`Unhandled fetch to ${url}`);
     });
 
-    const helper = (id: string, field: string): UpsertStoredWorkflowParams => ({
+    const helper = (id: string, field: string): UpsertDynamicWorkflowParams => ({
       id,
       description: `Look up ${field}`,
       inputSchema: { type: 'object', properties: { [field]: { type: 'string' } }, required: [field] },
@@ -239,7 +239,7 @@ describe('StoredWorkflow resource', () => {
       graph: [{ type: 'mapping', id: `pick-${field}`, mapConfig: JSON.stringify({ email: { path: field } }) }],
     });
 
-    const root: UpsertStoredWorkflowParams = {
+    const root: UpsertDynamicWorkflowParams = {
       id: 'parallel-customer-lookup',
       description: 'Looks up two customers in parallel',
       inputSchema: {
@@ -264,18 +264,18 @@ describe('StoredWorkflow resource', () => {
       dependencies: [helper('lookup-first', 'firstEmail'), helper('lookup-second', 'secondEmail')],
     };
 
-    await expect(client.upsertStoredWorkflow(root)).resolves.toEqual({
+    await expect(client.upsertDynamicWorkflow(root)).resolves.toEqual({
       ok: true,
       id: 'parallel-customer-lookup',
       dependencyIds: ['lookup-first', 'lookup-second'],
     });
 
-    // Helpers are ordinary stored workflows — individually retrievable and listed.
-    await expect(client.getStoredWorkflow('lookup-first').details()).resolves.toMatchObject({
+    // Helpers are ordinary dynamic workflows — individually retrievable and listed.
+    await expect(client.getDynamicWorkflow('lookup-first').details()).resolves.toMatchObject({
       id: 'lookup-first',
       description: 'Look up firstEmail',
     });
-    await expect(client.listStoredWorkflows()).resolves.toMatchObject({ total: 3 });
+    await expect(client.listDynamicWorkflows()).resolves.toMatchObject({ total: 3 });
 
     // The root is immediately runnable through the ordinary workflow resource.
     const run = await client.getWorkflow('parallel-customer-lookup').createRun();

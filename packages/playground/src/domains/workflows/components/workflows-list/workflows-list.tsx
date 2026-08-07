@@ -57,9 +57,9 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
             <EntityList.NameCell>
               <span className="inline-flex items-center gap-2">
                 {name}
-                {wf.origin === 'stored' && (
-                  <Badge size="xs" variant="info" title="Registered via the stored-workflows API">
-                    Stored
+                {wf.origin === 'dynamic' && (
+                  <Badge size="xs" variant="info" title="Registered via the dynamic-workflows API">
+                    Dynamic
                   </Badge>
                 )}
               </span>

@@ -1,5 +1,5 @@
 /**
- * Minimal JSON-Schema ↔ Zod bridge for stored workflows: a converter for the
+ * Minimal JSON-Schema ↔ Zod bridge for dynamic workflows: a converter for the
  * static subset Zod round-trips through `standardSchemaToJSONSchema`, plus a
  * non-throwing validator for the write path.
  */
@@ -81,7 +81,7 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
   for (const key of UNSUPPORTED_SCHEMA_KEYS) {
     if (key in schema) {
       return unsupported(
-        `Stored workflow schema uses unsupported JSON Schema keyword "${key}". ` +
+        `Dynamic workflow schema uses unsupported JSON Schema keyword "${key}". ` +
           `This converter only supports the static subset that Zod round-trips through ` +
           `standardSchemaToJSONSchema (object, array, string, number, integer, boolean, null, enum, const). ` +
           `Simplify the schema or extend jsonSchemaToZod to cover this keyword.`,
@@ -98,7 +98,7 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
     // can't be represented by z.literal, so treat them as unsupported.
     if (!isLiteralValue(schema.const)) {
       return unsupported(
-        `Stored workflow schema uses a non-primitive "const" value (${JSON.stringify(schema.const)}). ` +
+        `Dynamic workflow schema uses a non-primitive "const" value (${JSON.stringify(schema.const)}). ` +
           `Only string, number, boolean, and null literals are supported.`,
         opts,
       );
@@ -108,7 +108,7 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
     const values = schema.enum as unknown[];
     if (!values.every(isLiteralValue)) {
       return unsupported(
-        `Stored workflow schema uses an "enum" with non-primitive members. ` +
+        `Dynamic workflow schema uses an "enum" with non-primitive members. ` +
           `Only string, number, boolean, and null enum members are supported.`,
         opts,
       );
@@ -148,7 +148,7 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
         // positional constraint. Reject instead of silently widening.
         if (Array.isArray(schema.items)) {
           return unsupported(
-            `Stored workflow schema uses tuple-form "items" (an array of positional schemas). ` +
+            `Dynamic workflow schema uses tuple-form "items" (an array of positional schemas). ` +
               `Only a single item schema is supported; use "items": { ... } instead.`,
             opts,
           );
@@ -177,7 +177,7 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
         break;
       default:
         return unsupported(
-          `Stored workflow schema uses unsupported JSON Schema type "${String(schema.type)}". ` +
+          `Dynamic workflow schema uses unsupported JSON Schema type "${String(schema.type)}". ` +
             `This converter only supports object, array, string, number, integer, boolean, null, and enum.`,
           opts,
         );
@@ -200,7 +200,7 @@ export type StorableJsonSchemaValidation = { ok: true } | { ok: false; unsupport
 /**
  * Non-throwing companion to `jsonSchemaToZod`. Walks a JSON Schema and reports
  * every unsupported-keyword usage without converting. Use this at write time
- * (e.g. inside `Mastra.addStoredWorkflow`) to surface a warning before the
+ * (e.g. inside `Mastra.addDynamicWorkflow`) to surface a warning before the
  * schema is persisted — the row will still fail to rehydrate on the next boot
  * (`jsonSchemaToZod` throws), so this is a heads-up, not a guarantee.
  *

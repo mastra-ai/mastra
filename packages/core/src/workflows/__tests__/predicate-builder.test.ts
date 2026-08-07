@@ -15,7 +15,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
 import type { Predicate } from '../predicate';
-import { toStorableGraph } from '../stored';
+import { toStorableGraph } from '../dynamic';
 import { createStepFromTool } from '../workflow';
 
 const shoutTool = createTool({

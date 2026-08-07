@@ -2,14 +2,14 @@ import type { Mastra } from '@mastra/core/mastra';
 
 import { HTTPException } from '../http-exception';
 import {
-  storedWorkflowIdPathParams,
-  listStoredWorkflowsQuerySchema,
-  upsertStoredWorkflowBodySchema,
-  listStoredWorkflowsResponseSchema,
-  getStoredWorkflowResponseSchema,
-  upsertStoredWorkflowResponseSchema,
-  deleteStoredWorkflowResponseSchema,
-} from '../schemas/stored-workflows';
+  dynamicWorkflowIdPathParams,
+  listDynamicWorkflowsQuerySchema,
+  upsertDynamicWorkflowBodySchema,
+  listDynamicWorkflowsResponseSchema,
+  getDynamicWorkflowResponseSchema,
+  upsertDynamicWorkflowResponseSchema,
+  deleteDynamicWorkflowResponseSchema,
+} from '../schemas/dynamic-workflows';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
@@ -20,15 +20,15 @@ import { handleError } from './error';
  * Mirrors `LIST_STORED_AGENTS_ROUTE` but without favorites/visibility/authorship
  * scoping (which the workflow-definitions domain doesn't carry in v1).
  */
-export const LIST_STORED_WORKFLOWS_ROUTE = createRoute({
+export const LIST_DYNAMIC_WORKFLOWS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/workflows',
   responseType: 'json',
-  queryParamSchema: listStoredWorkflowsQuerySchema,
-  responseSchema: listStoredWorkflowsResponseSchema,
-  summary: 'List stored workflow definitions',
+  queryParamSchema: listDynamicWorkflowsQuerySchema,
+  responseSchema: listDynamicWorkflowsResponseSchema,
+  summary: 'List dynamic workflow definitions',
   description: 'Returns workflow definitions persisted to storage. Filterable by status and authorId.',
-  tags: ['Stored Workflows'],
+  tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:read',
   handler: async ({ mastra, status, authorId }) => {
@@ -42,26 +42,26 @@ export const LIST_STORED_WORKFLOWS_ROUTE = createRoute({
       const result = await store.list({ status: status ?? 'active', authorId });
       return { workflows: result.definitions, total: result.total };
     } catch (error) {
-      return handleError(error, 'Error listing stored workflows');
+      return handleError(error, 'Error listing dynamic workflows');
     }
   },
 });
 
 /**
- * GET /stored/workflows/:storedWorkflowId — get one stored workflow.
+ * GET /stored/workflows/:dynamicWorkflowId — get one dynamic workflow.
  */
-export const GET_STORED_WORKFLOW_ROUTE = createRoute({
+export const GET_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   method: 'GET',
-  path: '/stored/workflows/:storedWorkflowId',
+  path: '/stored/workflows/:dynamicWorkflowId',
   responseType: 'json',
-  pathParamSchema: storedWorkflowIdPathParams,
-  responseSchema: getStoredWorkflowResponseSchema,
-  summary: 'Get a stored workflow definition by id',
+  pathParamSchema: dynamicWorkflowIdPathParams,
+  responseSchema: getDynamicWorkflowResponseSchema,
+  summary: 'Get a dynamic workflow definition by id',
   description: 'Returns a single workflow definition persisted to storage.',
-  tags: ['Stored Workflows'],
+  tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:read',
-  handler: async ({ mastra, storedWorkflowId }) => {
+  handler: async ({ mastra, dynamicWorkflowId }) => {
     try {
       const storage = mastra.getStorage();
       if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
@@ -69,11 +69,11 @@ export const GET_STORED_WORKFLOW_ROUTE = createRoute({
       const store = await storage.getStore('workflowDefinitions');
       if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
 
-      const def = await store.get(storedWorkflowId);
-      if (!def) throw new HTTPException(404, { message: `Stored workflow "${storedWorkflowId}" not found` });
+      const def = await store.get(dynamicWorkflowId);
+      if (!def) throw new HTTPException(404, { message: `Dynamic workflow "${dynamicWorkflowId}" not found` });
       return def;
     } catch (error) {
-      return handleError(error, 'Error getting stored workflow');
+      return handleError(error, 'Error getting dynamic workflow');
     }
   },
 });
@@ -82,21 +82,21 @@ export const GET_STORED_WORKFLOW_ROUTE = createRoute({
  * POST /stored/workflows — upsert a static workflow definition and live-register
  * it on the Mastra instance.
  *
- * Calls `mastra.addStoredWorkflow(def)` which persists the row + rehydrates a
+ * Calls `mastra.addDynamicWorkflow(def)` which persists the row + rehydrates a
  * runnable workflow + registers it via `mastra.addWorkflow(workflow, id)`.
  * After this returns, `GET /workflows/:id` and `POST /workflows/:id/run` work
  * immediately — no server restart needed.
  */
-export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
+export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/workflows',
   responseType: 'json',
-  bodySchema: upsertStoredWorkflowBodySchema,
-  responseSchema: upsertStoredWorkflowResponseSchema,
-  summary: 'Upsert a stored workflow definition and live-register it',
+  bodySchema: upsertDynamicWorkflowBodySchema,
+  responseSchema: upsertDynamicWorkflowResponseSchema,
+  summary: 'Upsert a dynamic workflow definition and live-register it',
   description:
     'Persists a static workflow definition and live-registers it on the running Mastra instance. Idempotent — same id updates in place.',
-  tags: ['Stored Workflows'],
+  tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
   handler: async ({
@@ -122,44 +122,44 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
       // from the graphs, not from the order the client sent them in.
       const bundle = [...(dependencies ?? []), def];
       // The Zod schema output is structurally compatible with
-      // StoredWorkflowGraph but TS can't prove every arm:
+      // DynamicWorkflowGraph but TS can't prove every arm:
       //   - sleepUntil.date is an ISO string on the wire, Date on the
       //     runtime type; the rehydrator parses it via `new Date(...)`.
       //   - conditional/loop's `serializedConditions`/`serializedCondition`
       //     debug labels are emitted by the fluent builder at rehydration
       //     time; clients don't send them.
-      // `addStoredWorkflows` runs a full registry pre-flight before
+      // `addDynamicWorkflows` runs a full registry pre-flight before
       // rehydration; the cast documents this boundary.
-      await mastra.addStoredWorkflows(bundle as Parameters<Mastra['addStoredWorkflows']>[0]);
+      await mastra.addDynamicWorkflows(bundle as Parameters<Mastra['addDynamicWorkflows']>[0]);
       return {
         ok: true as const,
         id: def.id,
         ...(dependencies?.length ? { dependencyIds: dependencies.map(dependency => dependency.id) } : {}),
       };
     } catch (error) {
-      return handleError(error, 'Error upserting stored workflow');
+      return handleError(error, 'Error upserting dynamic workflow');
     }
   },
 });
 
 /**
- * DELETE /stored/workflows/:storedWorkflowId — delete a stored workflow.
+ * DELETE /stored/workflows/:dynamicWorkflowId — delete a dynamic workflow.
  *
  * Removes the row from storage AND un-registers the live Workflow instance so
  * a subsequent POST with the same id starts from a clean slate. Idempotent.
  */
-export const DELETE_STORED_WORKFLOW_ROUTE = createRoute({
+export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/stored/workflows/:storedWorkflowId',
+  path: '/stored/workflows/:dynamicWorkflowId',
   responseType: 'json',
-  pathParamSchema: storedWorkflowIdPathParams,
-  responseSchema: deleteStoredWorkflowResponseSchema,
-  summary: 'Delete a stored workflow definition',
-  description: 'Removes a stored workflow definition and unregisters the live workflow instance. Idempotent.',
-  tags: ['Stored Workflows'],
+  pathParamSchema: dynamicWorkflowIdPathParams,
+  responseSchema: deleteDynamicWorkflowResponseSchema,
+  summary: 'Delete a dynamic workflow definition',
+  description: 'Removes a dynamic workflow definition and unregisters the live workflow instance. Idempotent.',
+  tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
-  handler: async ({ mastra, storedWorkflowId }) => {
+  handler: async ({ mastra, dynamicWorkflowId }) => {
     try {
       const storage = mastra.getStorage();
       if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
@@ -167,11 +167,11 @@ export const DELETE_STORED_WORKFLOW_ROUTE = createRoute({
       const store = await storage.getStore('workflowDefinitions');
       if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
 
-      await store.delete(storedWorkflowId);
-      (mastra as Mastra).removeWorkflow(storedWorkflowId);
-      return { success: true as const, message: `Workflow ${storedWorkflowId} deleted` };
+      await store.delete(dynamicWorkflowId);
+      (mastra as Mastra).removeWorkflow(dynamicWorkflowId);
+      return { success: true as const, message: `Workflow ${dynamicWorkflowId} deleted` };
     } catch (error) {
-      return handleError(error, 'Error deleting stored workflow');
+      return handleError(error, 'Error deleting dynamic workflow');
     }
   },
 });

@@ -1204,6 +1204,16 @@
       "source": "/reference/workflows/stored-workflow-definition",
       "destination": "/reference/workflows/dynamic-workflow-definition",
       "permanent": true
+    },
+    {
+      "source": "/reference/core/addStoredWorkflow",
+      "destination": "/reference/core/addDynamicWorkflow",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/addStoredWorkflows",
+      "destination": "/reference/core/addDynamicWorkflows",
+      "permanent": true
     }
   ]
 }

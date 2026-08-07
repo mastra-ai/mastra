@@ -1,5 +1,5 @@
 /**
- * Rehydrating stored workflows must not silently drop schema constraints.
+ * Rehydrating dynamic workflows must not silently drop schema constraints.
  * Guard the MVP subset by asserting we hard-crash on keywords the converter
  * does not understand — otherwise unsupported schemas would degrade to
  * `z.any()` and let malformed data flow through execution.
@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import type { z } from 'zod';
 
-import { jsonSchemaToZod, validateStorableJsonSchema } from '../stored';
+import { jsonSchemaToZod, validateStorableJsonSchema } from '../dynamic';
 
 describe('jsonSchemaToZod', () => {
   it('round-trips supported primitive + object shapes', () => {

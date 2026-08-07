@@ -1,10 +1,10 @@
 /**
- * The one stored-workflow validation domain.
+ * The one dynamic-workflow validation domain.
  *
- * `validateStoredWorkflow` is the collect-mode core every surface shares:
+ * `validateDynamicWorkflow` is the collect-mode core every surface shares:
  * structure, JSON-Schema keywords, registry references, and schema-flow
  * analysis, each emitting `{ code, path, message }` issues. UIs consume the
- * array; the save path throws via `assertValidStoredWorkflow`.
+ * array; the save path throws via `assertValidDynamicWorkflow`.
  */
 import { validateWorkflowRefs } from './refs';
 import { addWorkflowValidationRepairActions } from './repair-actions';
@@ -38,7 +38,7 @@ export type { SchemaCompatibility } from './schema-utils';
  * run for kinds present in the index, and schema-flow compatibility only
  * proves mismatches where schemas are known.
  */
-export function validateStoredWorkflow(
+export function validateDynamicWorkflow(
   def: WorkflowValidationInput,
   index: WorkflowRegistryIndex = {},
 ): WorkflowValidationIssue[] {
@@ -58,10 +58,10 @@ export function validateStoredWorkflow(
   );
 }
 
-/** Throwing presentation of {@link validateStoredWorkflow} for the save path. */
-export function assertValidStoredWorkflow(def: WorkflowValidationInput, index: WorkflowRegistryIndex = {}): void {
-  const issues = validateStoredWorkflow(def, index);
+/** Throwing presentation of {@link validateDynamicWorkflow} for the save path. */
+export function assertValidDynamicWorkflow(def: WorkflowValidationInput, index: WorkflowRegistryIndex = {}): void {
+  const issues = validateDynamicWorkflow(def, index);
   if (issues.length === 0) return;
   const details = issues.map(issue => `- [${issue.code}] ${issue.path}: ${issue.message}`).join('\n');
-  throw new Error(`Stored workflow "${def.id}" failed validation with ${issues.length} issue(s):\n${details}`);
+  throw new Error(`Dynamic workflow "${def.id}" failed validation with ${issues.length} issue(s):\n${details}`);
 }

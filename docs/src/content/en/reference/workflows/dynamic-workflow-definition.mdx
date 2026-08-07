@@ -13,7 +13,7 @@ Dynamic workflows are in beta. Breaking changes may occur without a major versio
 
 :::
 
-A dynamic workflow definition is a JSON-compatible `StoredWorkflowGraph` accepted by [`Mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow), the stored-workflow server routes, and the Client SDK workflows API.
+A dynamic workflow definition is a JSON-compatible `DynamicWorkflowGraph` accepted by [`Mastra.addDynamicWorkflow()`](/reference/core/addDynamicWorkflow), the stored-workflow server routes, and the Client SDK workflows API.
 
 See [Dynamic workflows](/docs/workflows/dynamic-workflows) for a complete setup and usage example.
 
@@ -296,6 +296,6 @@ Validation errors include a dotted path, such as `graph.2.steps.0`, that identif
 ## Related
 
 - [Use dynamic workflows](/docs/workflows/dynamic-workflows)
-- [`Mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow)
-- [`Mastra.addStoredWorkflows()`](/reference/core/addStoredWorkflows)
+- [`Mastra.addDynamicWorkflow()`](/reference/core/addDynamicWorkflow)
+- [`Mastra.addDynamicWorkflows()`](/reference/core/addDynamicWorkflows)
 - [Client SDK workflows API](/reference/client-js/workflows)

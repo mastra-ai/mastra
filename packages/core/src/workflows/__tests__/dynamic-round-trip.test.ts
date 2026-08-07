@@ -1,11 +1,11 @@
 /**
- * Round-trip tests for the serialize/rehydrate pipeline in `workflows/stored`:
+ * Round-trip tests for the serialize/rehydrate pipeline in `workflows/dynamic`:
  * live workflow → toStorableGraph → JSON → rehydrateWorkflow → run.
  *
  * Covers the storable static subset (tool/agent/mapping/parallel/foreach/
  * sleep/sleepUntil), agent step options + structuredOutput schemas, declarative
  * predicates on conditional/loop entries, nested workflow references, and the
- * persistence paths (`Mastra.addStoredWorkflow`, boot-time rehydration).
+ * persistence paths (`Mastra.addDynamicWorkflow`, boot-time rehydration).
  * Closure-valued options and closure predicates must hard-fail at serialize
  * time — silent loss would ship broken workflows unnoticed.
  */
@@ -17,7 +17,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
-import { rehydrateWorkflow, toStorableGraph } from '../stored';
+import { rehydrateWorkflow, toStorableGraph } from '../dynamic';
 import type { SerializedStepFlowEntry } from '../types';
 import { createStepFromTool } from '../workflow';
 
@@ -273,7 +273,7 @@ describe('storage round-trip', () => {
     // The stored graph schema reuses SerializedSingleStepEntry, which includes
     // the generic step descriptor ({ type: 'step', step: { id } }) — a bare-id
     // reference that doesn't declare agent vs. tool and resolves late against
-    // the live Mastra instance (see stored/validate/refs.ts). Rehydration must
+    // the live Mastra instance (see dynamic/validate/refs.ts). Rehydration must
     // wrap the resolved tool with createStepFromTool — casting the raw Tool
     // would hand its execute() step-shaped params ({ inputData, ... }) instead
     // of the tool's input, silently producing garbage output.
@@ -334,7 +334,7 @@ describe('storage round-trip', () => {
       storage: new InMemoryStore({ id: 'nested-intrinsic-id' }),
     });
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'outer-intrinsic-wf',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
@@ -355,7 +355,7 @@ describe('storage round-trip', () => {
       storage: new InMemoryStore({ id: 'nested-registration-key' }),
     });
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'outer-key-wf',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
@@ -380,7 +380,7 @@ describe('storage round-trip', () => {
       storage: new InMemoryStore({ id: 'agent-text-envelope' }),
     });
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'agent-envelope-wf',
       inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
       outputSchema: { type: 'object', properties: { response: { type: 'string' } }, required: ['response'] },
@@ -411,7 +411,7 @@ describe('storage round-trip', () => {
     // The declared call-site id is what the portable definition addresses, so
     // it must survive rehydration even when it differs from the nested
     // workflow's own intrinsic id.
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'outer-wf',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
@@ -435,10 +435,10 @@ describe('storage round-trip', () => {
     expect((result as any).result).toEqual({ value: 3 });
   });
 
-  it('addStoredWorkflow persists + live-registers; loadStoredWorkflows brings it back on a fresh boot', async () => {
+  it('addDynamicWorkflow persists + live-registers; loadDynamicWorkflows brings it back on a fresh boot', async () => {
     const storage = new InMemoryStore({ id: 'fresh-store' });
 
-    // First process: build, save via addStoredWorkflow, run.
+    // First process: build, save via addDynamicWorkflow, run.
     {
       const mastra = new Mastra({
         logger: false,
@@ -446,7 +446,7 @@ describe('storage round-trip', () => {
         storage,
       });
       const stored = toStorableGraph(buildOriginalWorkflow().stepGraph);
-      await mastra.addStoredWorkflow({
+      await mastra.addDynamicWorkflow({
         id: 'cli-built-wf',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
         outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
@@ -1255,7 +1255,7 @@ describe('nested-workflow round-trip', () => {
       tools: { 'plus-one': plusOneTool as any },
     });
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'outer-nested-child',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
@@ -1276,14 +1276,14 @@ describe('nested-workflow round-trip', () => {
     expect((result as any).result).toEqual({ value: 6 });
   });
 
-  it('addStoredWorkflow rejects self-referencing (cycle)', async () => {
+  it('addDynamicWorkflow rejects self-referencing (cycle)', async () => {
     const mastra = new Mastra({
       storage: new InMemoryStore(),
       tools: { 'plus-one': plusOneTool as any },
     });
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         id: 'self-cycle',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
         outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
@@ -1295,14 +1295,14 @@ describe('nested-workflow round-trip', () => {
     ).rejects.toThrow(/refers to itself/);
   });
 
-  it('addStoredWorkflow rejects missing nested workflow reference', async () => {
+  it('addDynamicWorkflow rejects missing nested workflow reference', async () => {
     const mastra = new Mastra({
       storage: new InMemoryStore(),
       tools: { 'plus-one': plusOneTool as any },
     });
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         id: 'has-missing',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
         outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
@@ -1394,20 +1394,20 @@ describe('nested-workflow round-trip', () => {
     expect(loop.loopType).toBe('dountil');
   });
 
-  it('out-of-order boot: addStoredWorkflow accepts an already-registered nested ref after another stored def', async () => {
-    // First register a stored workflow with no deps.
+  it('out-of-order boot: addDynamicWorkflow accepts an already-registered nested ref after another stored def', async () => {
+    // First register a dynamic workflow with no deps.
     const mastra = new Mastra({
       storage: new InMemoryStore(),
       tools: { 'plus-one': plusOneTool as any, 'double-tool': timesTwoTool as any },
     });
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'leaf-stored',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       graph: [{ type: 'tool', id: 'plus', toolId: 'plus-one' }],
     } as any);
-    // Then a second stored workflow referencing the first.
-    await mastra.addStoredWorkflow({
+    // Then a second dynamic workflow referencing the first.
+    await mastra.addDynamicWorkflow({
       id: 'root-stored',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
@@ -1427,7 +1427,7 @@ describe('nested-workflow round-trip', () => {
     }
   });
 
-  it('addStoredWorkflow accepts + registers a nested reference to an already-registered workflow', async () => {
+  it('addDynamicWorkflow accepts + registers a nested reference to an already-registered workflow', async () => {
     const inner = makeInnerWorkflow('inner-persist');
     const mastra = new Mastra({
       storage: new InMemoryStore(),
@@ -1435,7 +1435,7 @@ describe('nested-workflow round-trip', () => {
       tools: { 'plus-one': plusOneTool as any, 'double-tool': timesTwoTool as any },
     });
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'outer-persist',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } } },

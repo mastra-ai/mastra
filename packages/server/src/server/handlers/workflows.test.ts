@@ -243,7 +243,7 @@ describe('vNext Workflow Handlers', () => {
       expect(result['reusable-workflow']?.origin).toBe('code');
     });
 
-    it("should stamp origin: 'stored' for workflows registered via addStoredWorkflow", async () => {
+    it("should stamp origin: 'dynamic' for workflows registered via addDynamicWorkflow", async () => {
       const echoTool = createTool({
         id: 'echo',
         description: 'echoes input',
@@ -258,7 +258,7 @@ describe('vNext Workflow Handlers', () => {
         storage: new MockStore(),
       });
 
-      await mastraForStored.addStoredWorkflow({
+      await mastraForStored.addDynamicWorkflow({
         id: 'stored-only',
         inputSchema: { type: 'object', properties: {}, required: [] },
         outputSchema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'] },
@@ -268,7 +268,7 @@ describe('vNext Workflow Handlers', () => {
       const result = await LIST_WORKFLOWS_ROUTE.handler({
         ...createTestServerContext({ mastra: mastraForStored }),
       });
-      expect(result['stored-only']?.origin).toBe('stored');
+      expect(result['stored-only']?.origin).toBe('dynamic');
       // Code-defined workflows keep their 'code' origin in the same response.
       expect(result['test-workflow']?.origin).toBe('code');
     });

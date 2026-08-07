@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkflowRegistryIndex, WorkflowValidationInput } from './index';
-import { assertValidStoredWorkflow, validateStoredWorkflow } from './index';
+import { assertValidDynamicWorkflow, validateDynamicWorkflow } from './index';
 
 const emptyObjectSchema = { type: 'object', properties: {} };
 
@@ -15,16 +15,16 @@ function def(overrides: Partial<WorkflowValidationInput>): WorkflowValidationInp
   };
 }
 
-describe('validateStoredWorkflow', () => {
+describe('validateDynamicWorkflow', () => {
   describe('structure', () => {
     it('flags an empty graph', () => {
-      expect(validateStoredWorkflow(def({ graph: [] }))).toEqual([
+      expect(validateDynamicWorkflow(def({ graph: [] }))).toEqual([
         expect.objectContaining({ code: 'empty-graph', path: 'graph' }),
       ]);
     });
 
     it('flags missing and duplicated step ids, including container children', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [
             { type: 'tool', id: 'dup', toolId: 'a' },
@@ -42,7 +42,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('rejects a mapping inside a container with exactly one issue', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [
             {
@@ -59,7 +59,7 @@ describe('validateStoredWorkflow', () => {
       // A registry key or intrinsic workflow id may differ from the call-site id;
       // rehydration runs the nested workflow under the declared id, so this is a
       // legal (and unavoidable) shape rather than a validation error.
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({ graph: [{ type: 'workflow', id: 'local-child', workflowId: 'shared-child' }] }),
         { workflows: { 'shared-child': {} } },
       );
@@ -67,7 +67,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('rejects self-referencing nested workflows even when the registry contains the id', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({ id: 'wf-self', graph: [{ type: 'workflow', id: 'wf-self', workflowId: 'wf-self' }] }),
         { workflows: { 'wf-self': {} } },
       );
@@ -82,19 +82,19 @@ describe('validateStoredWorkflow', () => {
 
     it('requires declarative predicates on conditional entries and keeps them aligned', () => {
       const child = { type: 'tool', id: 't1', toolId: 'a' } as const;
-      const missing = validateStoredWorkflow(def({ graph: [{ type: 'conditional', steps: [child] } as any] }));
+      const missing = validateDynamicWorkflow(def({ graph: [{ type: 'conditional', steps: [child] } as any] }));
       expect(missing).toEqual([
         expect.objectContaining({ code: 'invalid-conditional', message: expect.stringContaining('declarative') }),
       ]);
 
-      const misaligned = validateStoredWorkflow(
+      const misaligned = validateDynamicWorkflow(
         def({ graph: [{ type: 'conditional', steps: [child], predicates: [] } as any] }),
       );
       expect(misaligned).toEqual([
         expect.objectContaining({ code: 'invalid-conditional', message: expect.stringContaining('aligned') }),
       ]);
 
-      const nullSlot = validateStoredWorkflow(
+      const nullSlot = validateDynamicWorkflow(
         def({ graph: [{ type: 'conditional', steps: [child], predicates: [null] } as any] }),
       );
       expect(nullSlot).toEqual([
@@ -103,7 +103,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('requires a declarative predicate on loop entries', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [{ type: 'loop', step: { type: 'tool', id: 'body', toolId: 'a' }, loopType: 'dountil' } as any],
         }),
@@ -112,7 +112,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('rejects non-positive foreach concurrency', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: { type: 'array', items: emptyObjectSchema },
           graph: [{ type: 'foreach', step: { type: 'tool', id: 'body', toolId: 'a' }, opts: { concurrency: 0 } }],
@@ -124,7 +124,7 @@ describe('validateStoredWorkflow', () => {
 
   describe('schemas', () => {
     it('flags unsupported JSON Schema keywords on top-level and agent schemas', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: { oneOf: [{ type: 'string' }] },
           graph: [{ type: 'agent', id: 'a1', agentId: 'writer', outputSchema: { not: { type: 'null' } } }],
@@ -147,14 +147,14 @@ describe('validateStoredWorkflow', () => {
     ] as const;
 
     it('skips reference checks for kinds absent from the index', () => {
-      expect(validateStoredWorkflow(def({ graph: [...graph] }))).toEqual([]);
+      expect(validateDynamicWorkflow(def({ graph: [...graph] }))).toEqual([]);
       // Only agents indexed: tool + workflow refs stay unchecked.
-      expect(validateStoredWorkflow(def({ graph: [...graph] }), { agents: { writer: {} } })).toEqual([]);
+      expect(validateDynamicWorkflow(def({ graph: [...graph] }), { agents: { writer: {} } })).toEqual([]);
     });
 
     it('flags unresolved references with per-kind messages', () => {
       const index: WorkflowRegistryIndex = { agents: {}, tools: {}, workflows: {} };
-      const issues = validateStoredWorkflow(def({ graph: [...graph] }), index);
+      const issues = validateDynamicWorkflow(def({ graph: [...graph] }), index);
       expect(issues).toEqual([
         expect.objectContaining({
           code: 'missing-reference',
@@ -175,7 +175,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('suggests swapping the entry type when an id is registered under the other kind', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [
             { type: 'agent', id: 'a1', agentId: 'lookup' },
@@ -211,7 +211,7 @@ describe('validateStoredWorkflow', () => {
     };
 
     it('accepts canonical mappings from init data and preceding step results', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema,
           outputSchema: { type: 'object', properties: { customerId: { type: 'string' } }, required: ['customerId'] },
@@ -235,7 +235,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('rejects noncanonical paths and step references that are missing or not preceding', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema,
           graph: [
@@ -268,7 +268,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('validates template placeholders with the runtime template parser', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [
             { type: 'tool', id: 'first', toolId: 'a' },
@@ -299,7 +299,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('rejects Handlebars-style placeholders that the runtime would emit literally', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [
             {
@@ -323,7 +323,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('treats an unstructured agent as returning { text } so invented output paths are rejected', () => {
-      const invented = validateStoredWorkflow(
+      const invented = validateDynamicWorkflow(
         def({
           graph: [
             { type: 'agent', id: 'ask-support', agentId: 'support-agent' },
@@ -343,7 +343,7 @@ describe('validateStoredWorkflow', () => {
         }),
       ]);
 
-      const canonical = validateStoredWorkflow(
+      const canonical = validateDynamicWorkflow(
         def({
           graph: [
             { type: 'agent', id: 'ask-support', agentId: 'support-agent' },
@@ -359,7 +359,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('allows mappings and templates to reference a preceding code-step descriptor', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [
             { type: 'step', step: { id: 'code-step' } },
@@ -378,7 +378,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('flags a step whose input cannot accept the preceding output', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
           graph: [{ type: 'tool', id: 't1', toolId: 'lookupCustomer' }],
@@ -406,7 +406,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('assumes agents accept { prompt } unless the registry says otherwise', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: { type: 'object', properties: { other: { type: 'string' } }, required: ['other'] },
           graph: [{ type: 'agent', id: 'a1', agentId: 'writer' }],
@@ -417,7 +417,7 @@ describe('validateStoredWorkflow', () => {
 
     it('checks foreach bodies against the item schema and rejects non-array input', () => {
       const arrayIn = { type: 'array', items: lookupTool.inputSchema };
-      const ok = validateStoredWorkflow(
+      const ok = validateDynamicWorkflow(
         def({
           inputSchema: arrayIn,
           outputSchema: {},
@@ -429,7 +429,7 @@ describe('validateStoredWorkflow', () => {
       );
       expect(ok).toEqual([]);
 
-      const nonArray = validateStoredWorkflow(
+      const nonArray = validateDynamicWorkflow(
         def({
           inputSchema: emptyObjectSchema,
           graph: [
@@ -467,7 +467,7 @@ describe('validateStoredWorkflow', () => {
           required: ['value'],
         },
       };
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           graph: [
             {
@@ -507,7 +507,7 @@ describe('validateStoredWorkflow', () => {
         required: ['value'],
       };
       const childTool = { inputSchema: itemSchema, outputSchema: itemSchema };
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: { type: 'array', items: itemSchema },
           graph: [
@@ -536,7 +536,7 @@ describe('validateStoredWorkflow', () => {
         required: ['value'],
       };
       const childTool = { inputSchema: itemSchema, outputSchema: itemSchema };
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: itemSchema,
           graph: [
@@ -561,7 +561,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('flags loop bodies whose output cannot feed the next iteration', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: lookupTool.inputSchema,
           graph: [
@@ -590,7 +590,7 @@ describe('validateStoredWorkflow', () => {
         properties: { priority: { type: 'string' } },
         required: ['priority'],
       };
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema,
           graph: [
@@ -637,7 +637,7 @@ describe('validateStoredWorkflow', () => {
         properties: { customerId: { type: 'string' } },
         required: ['customerId'],
       };
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema,
           graph: [
@@ -669,7 +669,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('accepts a whole-number constant flowing into a declared number field', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: { type: 'object', properties: {} },
           outputSchema: {
@@ -694,7 +694,7 @@ describe('validateStoredWorkflow', () => {
     });
 
     it('flags a workflow output schema the final step cannot satisfy', () => {
-      const issues = validateStoredWorkflow(
+      const issues = validateDynamicWorkflow(
         def({
           inputSchema: lookupTool.inputSchema,
           outputSchema: { type: 'object', properties: { other: { type: 'string' } }, required: ['other'] },
@@ -707,14 +707,14 @@ describe('validateStoredWorkflow', () => {
   });
 });
 
-describe('assertValidStoredWorkflow', () => {
+describe('assertValidDynamicWorkflow', () => {
   it('passes silently for a valid definition', () => {
-    expect(() => assertValidStoredWorkflow(def({ graph: [{ type: 'tool', id: 't1', toolId: 'a' }] }))).not.toThrow();
+    expect(() => assertValidDynamicWorkflow(def({ graph: [{ type: 'tool', id: 't1', toolId: 'a' }] }))).not.toThrow();
   });
 
   it('throws one aggregate error listing every issue', () => {
     expect(() =>
-      assertValidStoredWorkflow(
+      assertValidDynamicWorkflow(
         def({
           id: 'wf-bad',
           graph: [
@@ -725,7 +725,7 @@ describe('assertValidStoredWorkflow', () => {
         { agents: {}, workflows: {} },
       ),
     ).toThrow(
-      /Stored workflow "wf-bad" failed validation with 2 issue\(s\):[\s\S]*\[missing-reference\] graph\.0\.agentId[\s\S]*\[missing-reference\] graph\.1\.workflowId/,
+      /Dynamic workflow "wf-bad" failed validation with 2 issue\(s\):[\s\S]*\[missing-reference\] graph\.0\.agentId[\s\S]*\[missing-reference\] graph\.1\.workflowId/,
     );
   });
 });

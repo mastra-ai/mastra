@@ -1,11 +1,11 @@
 ---
-title: "Reference: Mastra.addStoredWorkflows() | Core"
-description: "Documentation for the `Mastra.addStoredWorkflows()` method, which validates, persists, and live-registers a bundle of dynamic workflow definitions."
+title: "Reference: Mastra.addDynamicWorkflows() | Core"
+description: "Documentation for the `Mastra.addDynamicWorkflows()` method, which validates, persists, and live-registers a bundle of dynamic workflow definitions."
 packages:
   - "@mastra/core"
 ---
 
-# Mastra.addStoredWorkflows()
+# Mastra.addDynamicWorkflows()
 
 :::experimental
 
@@ -13,16 +13,16 @@ Dynamic workflows are in beta. Breaking changes may occur without a major versio
 
 :::
 
-The `.addStoredWorkflows()` method adds a bundle of dynamic workflow definitions that may reference each other. The typical case is a root workflow plus helper workflows it nests, where none of the definitions exist yet.
+The `.addDynamicWorkflows()` method adds a bundle of dynamic workflow definitions that may reference each other. The typical case is a root workflow plus helper workflows it nests, where none of the definitions exist yet.
 
 The whole bundle is validated up front. Members are then registered in dependency order, so a helper is always in place before the workflow that nests it.
 
-[`addStoredWorkflow()`](/reference/core/addStoredWorkflow) is the single-member case.
+[`addDynamicWorkflow()`](/reference/core/addDynamicWorkflow) is the single-member case.
 
 ## Usage example
 
 ```typescript
-await mastra.addStoredWorkflows([
+await mastra.addDynamicWorkflows([
   helperDefinition, // nested by the root — order in the array doesn't matter
   rootDefinition, // graph contains { type: 'workflow', workflowId: helperDefinition.id }
 ])
@@ -34,7 +34,7 @@ await mastra.addStoredWorkflows([
   content={[
   {
     name: 'defs',
-    type: 'readonly StoredWorkflowGraph[]',
+    type: 'readonly DynamicWorkflowGraph[]',
     description:
       'The workflow definitions to add. Nested-workflow references may resolve against the live registries or against other members of the same bundle.',
   },
@@ -53,6 +53,6 @@ A promise that resolves once every member is validated, registered, and persiste
 
 ## Related
 
-- [Mastra.addStoredWorkflow()](/reference/core/addStoredWorkflow): Add a single definition
+- [Mastra.addDynamicWorkflow()](/reference/core/addDynamicWorkflow): Add a single definition
 - [Dynamic workflows](/docs/workflows/dynamic-workflows): Set up and use dynamic workflows
 - [Dynamic workflow definition](/reference/workflows/dynamic-workflow-definition): Definition fields and graph entries

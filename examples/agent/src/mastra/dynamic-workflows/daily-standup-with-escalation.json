@@ -2,7 +2,7 @@
   "id": "daily-standup-with-escalation",
   "description": "Sub-workflow: produce a team standup digest AND a tech-lead escalation message. Invoked by `daily-standup-digest` when the standup contains blockers.",
   "metadata": {
-    "seededFrom": "examples/agent/src/mastra/stored-workflows/daily-standup-with-escalation.json",
+    "seededFrom": "examples/agent/src/mastra/dynamic-workflows/daily-standup-with-escalation.json",
     "role": "sub-workflow of daily-standup-digest (truthy branch)"
   },
   "inputSchema": {

@@ -55,7 +55,7 @@ const mastra = new Mastra({
   tools: { 'create-greeting': greetingTool },
 })
 
-await mastra.addStoredWorkflow({
+await mastra.addDynamicWorkflow({
   id: 'greeting-workflow',
   description: 'Create a greeting for the supplied name',
   inputSchema: {
@@ -92,7 +92,7 @@ if (result.status === 'success') {
 }
 ```
 
-The workflow prints `Hello, Ada!`. Calling [`addStoredWorkflow()`](/reference/core/addStoredWorkflow) validates the definition before it changes storage or the live workflow registry.
+The workflow prints `Hello, Ada!`. Calling [`addDynamicWorkflow()`](/reference/core/addDynamicWorkflow) validates the definition before it changes storage or the live workflow registry.
 
 The definition uses JSON Schema because it must survive a JSON round trip. The `graph` describes which registered components to invoke and how data moves between them. See the [dynamic workflow definition reference](/reference/workflows/dynamic-workflow-definition) for every field and graph entry.
 
@@ -102,7 +102,7 @@ A definition can come from any source that produces JSON. For example, an API ro
 
 ```typescript
 const definition = await request.json()
-await mastra.addStoredWorkflow(definition)
+await mastra.addDynamicWorkflow(definition)
 ```
 
 ### Register dependencies first
@@ -116,17 +116,17 @@ Use a `mapping` entry when one step's output doesn't match the next step's input
 Add a new definition with the same `id` to replace the persisted definition and live registration:
 
 ```typescript
-await mastra.addStoredWorkflow(updatedDefinition)
+await mastra.addDynamicWorkflow(updatedDefinition)
 ```
 
 New runs use the updated graph. Runs that already started continue with their original graph.
 
 ### Add nested workflows together
 
-When a root workflow references helper workflows that aren't registered yet, add the full set with [`addStoredWorkflows()`](/reference/core/addStoredWorkflows):
+When a root workflow references helper workflows that aren't registered yet, add the full set with [`addDynamicWorkflows()`](/reference/core/addDynamicWorkflows):
 
 ```typescript
-await mastra.addStoredWorkflows([rootDefinition, helperDefinition])
+await mastra.addDynamicWorkflows([rootDefinition, helperDefinition])
 ```
 
 Mastra validates the bundle as a unit and determines the registration order from the dependencies. If validation fails, none of the definitions are registered.
@@ -135,7 +135,7 @@ Mastra validates the bundle as a unit and determines the registration order from
 
 Applications don't need direct access to the `Mastra` instance to manage dynamic workflows. Use one of these interfaces:
 
-- [Client SDK workflows API](/reference/client-js/workflows): Call `upsertStoredWorkflow()` from a JavaScript or TypeScript client.
+- [Client SDK workflows API](/reference/client-js/workflows): Call `upsertDynamicWorkflow()` from a JavaScript or TypeScript client.
 - [Server routes](/reference/server/routes): Send definitions to `POST /api/stored/workflows`.
 
 On authenticated servers, dynamic-workflow management requires the `stored-workflows:read` and `stored-workflows:write` permissions. Running the registered workflow requires `workflows:execute`.
@@ -144,12 +144,12 @@ On authenticated servers, dynamic-workflow management requires the `stored-workf
 
 Stored definitions use the `workflowDefinitions` storage domain. On startup, Mastra loads active definitions from storage and registers them in dependency order.
 
-Without a storage adapter that supports this domain, `addStoredWorkflow()` still registers the workflow in memory, but the definition is lost when the process restarts. See the [storage reference](/reference/storage/overview) for adapter support.
+Without a storage adapter that supports this domain, `addDynamicWorkflow()` still registers the workflow in memory, but the definition is lost when the process restarts. See the [storage reference](/reference/storage/overview) for adapter support.
 
 ## Related
 
 - [Dynamic workflow definition](/reference/workflows/dynamic-workflow-definition)
-- [`Mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow)
-- [`Mastra.addStoredWorkflows()`](/reference/core/addStoredWorkflows)
+- [`Mastra.addDynamicWorkflow()`](/reference/core/addDynamicWorkflow)
+- [`Mastra.addDynamicWorkflows()`](/reference/core/addDynamicWorkflows)
 - [Client SDK workflows API](/reference/client-js/workflows)
 - [Server routes](/reference/server/routes)

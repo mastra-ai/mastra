@@ -1,11 +1,11 @@
 /**
- * Two-sided contract for stored workflows and unsupported JSON Schema
+ * Two-sided contract for dynamic workflows and unsupported JSON Schema
  * keywords:
  *
- *   Save path (`Mastra.addStoredWorkflow`) is STRICT — throws before touching
+ *   Save path (`Mastra.addDynamicWorkflow`) is STRICT — throws before touching
  *   storage or registry. The author is right there and can simplify.
  *
- *   Boot path (`#loadStoredWorkflows`, exercised via `startWorkers()`) is
+ *   Boot path (`#loadDynamicWorkflows`, exercised via `startWorkers()`) is
  *   LENIENT — degrades the offending schema to `z.any()`, emits a warning,
  *   and keeps registering the workflow so one bad pre-existing row can't
  *   take down startup for every other workflow.
@@ -41,7 +41,7 @@ function stubAgent(id: string) {
   });
 }
 
-describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema keywords', () => {
+describe('Mastra.addDynamicWorkflow — save path is strict on unsupported schema keywords', () => {
   it('accepts a workflow whose schemas are all supported', async () => {
     const storage = new InMemoryStore({ id: 'clean-schemas' });
     const mastra = new Mastra({
@@ -51,7 +51,7 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
     });
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         id: 'clean-wf',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
         outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
@@ -82,7 +82,7 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
       requestContext: new Map([['tenantId', 'tenant-1']]),
     };
 
-    await expect(mastra.addStoredWorkflow(definitionWithRuntimeContext)).resolves.toBeUndefined();
+    await expect(mastra.addDynamicWorkflow(definitionWithRuntimeContext)).resolves.toBeUndefined();
     expect(mastra.getWorkflow('request-context-wf')).toBeDefined();
   });
 
@@ -95,7 +95,7 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
     });
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         id: 'oneof-wf',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
         outputSchema: { oneOf: [{ type: 'string' }, { type: 'number' }] } as any,
@@ -117,7 +117,7 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
     });
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         id: 'nested-anyof-wf',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
         outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
@@ -154,12 +154,12 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
       graph: [{ type: 'tool' as const, id: 'passthrough-tool', toolId: 'passthrough-tool' }],
     };
 
-    await mastra.addStoredWorkflow(definition);
+    await mastra.addDynamicWorkflow(definition);
     const previousWorkflow = mastra.getWorkflow('atomic-wf');
     const store = await storage.getStore('workflowDefinitions');
     vi.spyOn(store!, 'upsert').mockRejectedValueOnce(new Error('durable write failed'));
 
-    await expect(mastra.addStoredWorkflow({ ...definition, description: 'replacement' })).rejects.toThrow(
+    await expect(mastra.addDynamicWorkflow({ ...definition, description: 'replacement' })).rejects.toThrow(
       'durable write failed',
     );
     expect(mastra.getWorkflow('atomic-wf')).toBe(previousWorkflow);
@@ -174,7 +174,7 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
     });
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         id: 'no-trace-wf',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
         outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
@@ -206,11 +206,11 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
       graph: [{ type: 'tool' as const, id: 'passthrough-tool', toolId: 'passthrough-tool' }],
     };
 
-    await mastra.addStoredWorkflow(original);
+    await mastra.addDynamicWorkflow(original);
     const previousWorkflow = mastra.getWorkflow('replace-wf');
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         ...original,
         description: 'broken replacement',
         // Unknown tool id — the replacement must be rejected wholesale.
@@ -228,7 +228,7 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
 
   it('treats empty registries as known-empty: every reference kind is rejected on a bare Mastra', async () => {
     // No agents, tools, or workflows registered. The registry index built by
-    // addStoredWorkflow must supply all three kinds as known-empty maps —
+    // addDynamicWorkflow must supply all three kinds as known-empty maps —
     // never omit a kind (which would silently skip its reference checks).
     const mastra = new Mastra({ logger: false, storage: new InMemoryStore({ id: 'known-empty' }) });
     const base = {
@@ -237,21 +237,21 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
     };
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         ...base,
         id: 'ghost-agent-wf',
         graph: [{ type: 'agent', id: 'a1', agentId: 'ghost-agent' }],
       }),
     ).rejects.toThrow(/not a registered agent/);
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         ...base,
         id: 'ghost-tool-wf',
         graph: [{ type: 'tool', id: 't1', toolId: 'ghost-tool' }],
       }),
     ).rejects.toThrow(/not a registered tool/);
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         ...base,
         id: 'ghost-workflow-wf',
         graph: [{ type: 'workflow', id: 'ghost-child', workflowId: 'ghost-child' }],
@@ -268,7 +268,7 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
     });
 
     await expect(
-      mastra.addStoredWorkflow({
+      mastra.addDynamicWorkflow({
         id: 'invalid-executable-wf',
         inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
         outputSchema: { type: 'object' },
@@ -296,7 +296,7 @@ describe('Mastra boot load — lenient on unsupported schema keywords', () => {
   it('degrades unsupported top-level outputSchema to z.any(), warns, and still registers the workflow', async () => {
     const storage = new InMemoryStore({ id: 'boot-lenient' });
 
-    // Seed a bad row directly into storage (bypassing addStoredWorkflow so we
+    // Seed a bad row directly into storage (bypassing addDynamicWorkflow so we
     // simulate a definition saved by a prior version that predated stricter
     // save-path validation).
     const store = await storage.getStore('workflowDefinitions');

@@ -4,7 +4,7 @@ import { z } from 'zod/v4';
 // Serialized graph — discriminated union mirroring core's SerializedStepFlowEntry.
 // Duplicated locally rather than imported from @mastra/core/workflows because
 // this file's peer-dependency floor predates that export. Structurally
-// compatible with `Mastra.addStoredWorkflow`'s input; the handler casts once
+// compatible with `Mastra.addDynamicWorkflow`'s input; the handler casts once
 // to bridge the remaining wire-vs-runtime divergences (sleepUntil.date as
 // ISO string, fluent-builder-only debug labels) that the core rehydrator
 // handles at runtime.
@@ -115,7 +115,7 @@ const graphEntrySchema = z.discriminatedUnion('type', [
   }),
   z
     .object({
-      // Declarative-only conditional. Inbound stored workflows must ship a
+      // Declarative-only conditional. Inbound dynamic workflows must ship a
       // `predicates` array aligned with `steps`; closure-based branches are not
       // accepted over the wire (they'd be arbitrary JS strings we can't
       // safely rehydrate).
@@ -141,20 +141,20 @@ const graphEntrySchema = z.discriminatedUnion('type', [
 // Path params
 // ============================================================================
 
-export const storedWorkflowIdPathParams = z.object({
-  storedWorkflowId: z.string().describe('Unique identifier for the stored workflow definition'),
+export const dynamicWorkflowIdPathParams = z.object({
+  dynamicWorkflowId: z.string().describe('Unique identifier for the dynamic workflow definition'),
 });
 
 // ============================================================================
 // Query params
 // ============================================================================
 
-export const listStoredWorkflowsQuerySchema = z.object({
+export const listDynamicWorkflowsQuerySchema = z.object({
   status: z
     .enum(['active', 'archived'])
     .optional()
-    .describe('Filter stored workflows by status (defaults to active when omitted by the handler)'),
-  authorId: z.string().optional().describe('Filter stored workflows by author identifier'),
+    .describe('Filter dynamic workflows by status (defaults to active when omitted by the handler)'),
+  authorId: z.string().optional().describe('Filter dynamic workflows by author identifier'),
 });
 
 // ============================================================================
@@ -163,9 +163,9 @@ export const listStoredWorkflowsQuerySchema = z.object({
 
 /**
  * One static workflow definition on the wire. Matches the input shape of
- * `mastra.addStoredWorkflow()`.
+ * `mastra.addDynamicWorkflow()`.
  */
-export const storedWorkflowDefinitionBodySchema = z.object({
+export const dynamicWorkflowDefinitionBodySchema = z.object({
   id: z.string().describe('Workflow id — kebab-case, descriptive'),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -186,17 +186,17 @@ export const storedWorkflowDefinitionBodySchema = z.object({
  * Body for `POST /stored/workflows` — upsert a static workflow definition,
  * optionally together with the helper workflows it nests.
  */
-export const upsertStoredWorkflowBodySchema = storedWorkflowDefinitionBodySchema.extend({
+export const upsertDynamicWorkflowBodySchema = dynamicWorkflowDefinitionBodySchema.extend({
   // Deliberately a FLAT list rather than a recursive tree: helpers are peers
   // of each other, hydration order is derived from the graphs, and a
   // self-referential Zod schema would not survive OpenAPI generation.
   dependencies: z
-    .array(storedWorkflowDefinitionBodySchema)
+    .array(dynamicWorkflowDefinitionBodySchema)
     .optional()
     .describe(
       'Helper workflow definitions this workflow nests. Saved with it as one unit — the whole set is validated together, ' +
         'hydrated in derived dependency order, and rejected together, so a failed save never leaves orphaned helpers behind. ' +
-        'Each helper becomes an ordinary stored workflow in its own right.',
+        'Each helper becomes an ordinary dynamic workflow in its own right.',
     ),
 });
 
@@ -205,9 +205,9 @@ export const upsertStoredWorkflowBodySchema = storedWorkflowDefinitionBodySchema
 // ============================================================================
 
 /**
- * Shape returned for any single stored workflow row.
+ * Shape returned for any single dynamic workflow row.
  */
-export const storedWorkflowResponseSchema = z.object({
+export const dynamicWorkflowResponseSchema = z.object({
   id: z.string(),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -223,14 +223,14 @@ export const storedWorkflowResponseSchema = z.object({
   updatedAt: z.union([z.date(), z.string()]),
 });
 
-export const listStoredWorkflowsResponseSchema = z.object({
-  workflows: z.array(storedWorkflowResponseSchema),
+export const listDynamicWorkflowsResponseSchema = z.object({
+  workflows: z.array(dynamicWorkflowResponseSchema),
   total: z.number(),
 });
 
-export const getStoredWorkflowResponseSchema = storedWorkflowResponseSchema;
+export const getDynamicWorkflowResponseSchema = dynamicWorkflowResponseSchema;
 
-export const upsertStoredWorkflowResponseSchema = z.object({
+export const upsertDynamicWorkflowResponseSchema = z.object({
   ok: z.literal(true),
   id: z.string(),
   dependencyIds: z
@@ -239,7 +239,7 @@ export const upsertStoredWorkflowResponseSchema = z.object({
     .describe('Ids of the helper workflows saved alongside this one. Present only when dependencies were supplied.'),
 });
 
-export const deleteStoredWorkflowResponseSchema = z.object({
+export const deleteDynamicWorkflowResponseSchema = z.object({
   success: z.literal(true),
   message: z.string(),
 });

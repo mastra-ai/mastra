@@ -195,9 +195,9 @@ Dynamic workflow definitions (beta) are workflows expressed as JSON, persisted t
 | Method | Path | Description |
 | - | - | - |
 | `GET` | `/api/stored/workflows` | List dynamic workflow definitions, filterable by `status` and `authorId` |
-| `GET` | `/api/stored/workflows/:storedWorkflowId` | Get a dynamic workflow definition by ID |
+| `GET` | `/api/stored/workflows/:dynamicWorkflowId` | Get a dynamic workflow definition by ID |
 | `POST` | `/api/stored/workflows` | Upsert a definition (plus optional helper `dependencies`) and live-register it |
-| `DELETE` | `/api/stored/workflows/:storedWorkflowId` | Delete a stored definition and unregister the live workflow |
+| `DELETE` | `/api/stored/workflows/:dynamicWorkflowId` | Delete a stored definition and unregister the live workflow |
 
 On authenticated servers, the read routes require the `stored-workflows:read` permission and the write routes require `stored-workflows:write`. Registered dynamic workflows are executed through the ordinary `/api/workflows/:workflowId` routes above.
 

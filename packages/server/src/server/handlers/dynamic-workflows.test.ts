@@ -8,24 +8,24 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
-import { upsertStoredWorkflowBodySchema } from '../schemas/stored-workflows';
+import { upsertDynamicWorkflowBodySchema } from '../schemas/dynamic-workflows';
 import type { ServerContext } from '../server-adapter';
 import {
-  DELETE_STORED_WORKFLOW_ROUTE,
-  GET_STORED_WORKFLOW_ROUTE,
-  LIST_STORED_WORKFLOWS_ROUTE,
-  UPSERT_STORED_WORKFLOW_ROUTE,
-} from './stored-workflows';
+  DELETE_DYNAMIC_WORKFLOW_ROUTE,
+  GET_DYNAMIC_WORKFLOW_ROUTE,
+  LIST_DYNAMIC_WORKFLOWS_ROUTE,
+  UPSERT_DYNAMIC_WORKFLOW_ROUTE,
+} from './dynamic-workflows';
 
-describe('stored workflow route permissions', () => {
+describe('dynamic workflow route permissions', () => {
   it('requires read access for list and detail routes', () => {
-    expect(LIST_STORED_WORKFLOWS_ROUTE.requiresPermission).toBe('stored-workflows:read');
-    expect(GET_STORED_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:read');
+    expect(LIST_DYNAMIC_WORKFLOWS_ROUTE.requiresPermission).toBe('stored-workflows:read');
+    expect(GET_DYNAMIC_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:read');
   });
 
   it('requires write access for upsert and delete routes', () => {
-    expect(UPSERT_STORED_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:write');
-    expect(DELETE_STORED_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:write');
+    expect(UPSERT_DYNAMIC_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:write');
+    expect(DELETE_DYNAMIC_WORKFLOW_ROUTE.requiresPermission).toBe('stored-workflows:write');
   });
 });
 
@@ -111,16 +111,16 @@ const baseSchemas = {
 // Tests
 // =============================================================================
 
-describe('Stored Workflows handlers', () => {
+describe('Dynamic Workflows handlers', () => {
   let mastra: ReturnType<typeof buildMastra>;
 
   beforeEach(() => {
     mastra = buildMastra();
   });
 
-  describe('LIST_STORED_WORKFLOWS_ROUTE', () => {
+  describe('LIST_DYNAMIC_WORKFLOWS_ROUTE', () => {
     it('returns empty when no workflows are stored', async () => {
-      const result = await LIST_STORED_WORKFLOWS_ROUTE.handler({
+      const result = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
         ...ctx(mastra),
         status: undefined,
         authorId: undefined,
@@ -128,8 +128,8 @@ describe('Stored Workflows handlers', () => {
       expect(result).toEqual({ workflows: [], total: 0 });
     });
 
-    it('returns stored workflows after upsert', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+    it('returns dynamic workflows after upsert', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-a',
         description: undefined,
@@ -139,7 +139,7 @@ describe('Stored Workflows handlers', () => {
         ...baseSchemas,
         graph: toolOnlyGraph(),
       });
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-b',
         description: undefined,
@@ -149,7 +149,7 @@ describe('Stored Workflows handlers', () => {
         ...baseSchemas,
         graph: toolOnlyGraph(),
       });
-      const result = await LIST_STORED_WORKFLOWS_ROUTE.handler({
+      const result = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
         ...ctx(mastra),
         status: undefined,
         authorId: undefined,
@@ -159,18 +159,18 @@ describe('Stored Workflows handlers', () => {
     });
   });
 
-  describe('GET_STORED_WORKFLOW_ROUTE', () => {
+  describe('GET_DYNAMIC_WORKFLOW_ROUTE', () => {
     it('returns 404 when the workflow is missing', async () => {
       await expect(
-        GET_STORED_WORKFLOW_ROUTE.handler({
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
-          storedWorkflowId: 'nope',
+          dynamicWorkflowId: 'nope',
         }),
       ).rejects.toBeInstanceOf(HTTPException);
     });
 
-    it('returns the stored workflow row after upsert', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+    it('returns the dynamic workflow row after upsert', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-get',
         description: undefined,
@@ -180,18 +180,18 @@ describe('Stored Workflows handlers', () => {
         ...baseSchemas,
         graph: toolOnlyGraph(),
       });
-      const row = await GET_STORED_WORKFLOW_ROUTE.handler({
+      const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
-        storedWorkflowId: 'wf-get',
+        dynamicWorkflowId: 'wf-get',
       });
       expect(row.id).toBe('wf-get');
       expect(row.status).toBe('active');
     });
   });
 
-  describe('UPSERT_STORED_WORKFLOW_ROUTE', () => {
+  describe('UPSERT_DYNAMIC_WORKFLOW_ROUTE', () => {
     it('happy path — tool + mapping graph is live-registered and runnable', async () => {
-      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      const result = await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-happy',
         description: undefined,
@@ -222,7 +222,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('agent step with outputSchema round-trips onto the live workflow', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-agent-schema',
         description: undefined,
@@ -252,7 +252,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('foreach(agent) round-trips inner agent step', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-foreach-agent',
         description: undefined,
@@ -280,7 +280,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('scalar ${stepResults.<id>} template with no subpath resolves at run time', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-scalar-template',
         description: undefined,
@@ -309,7 +309,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('loop(dountil) with a declarative predicate round-trips and terminates', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-loop-predicate',
         description: undefined,
@@ -353,7 +353,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('conditional with declarative predicates fires only the truthy branch', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-cond-predicate',
         description: undefined,
@@ -414,7 +414,7 @@ describe('Stored Workflows handlers', () => {
       // Guards against regressions in how `params.state` is threaded into
       // `PredicateContext.state` at runtime. No other test in this suite
       // exercises the `state` root end-to-end via HTTP.
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-state-predicate',
         description: undefined,
@@ -460,8 +460,8 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('nested workflow reference — parent POST after child is registered runs end-to-end', async () => {
-      // Child stored workflow: single tool that echoes its input.
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      // Child dynamic workflow: single tool that echoes its input.
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-child',
         description: undefined,
@@ -473,12 +473,12 @@ describe('Stored Workflows handlers', () => {
         graph: [{ type: 'tool', id: 'echo', toolId: 'echo-tool' }],
       });
 
-      // Parent stored workflow: calls the child via a `workflow` entry and
+      // Parent dynamic workflow: calls the child via a `workflow` entry and
       // wraps its output. Exercises: schema acceptance of the `workflow`
       // variant on POST, pre-flight ref validation, rehydration through
       // `mastra.getWorkflow(workflowId)`, and end-to-end run through the
       // nested workflow.
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-parent',
         description: undefined,
@@ -514,7 +514,7 @@ describe('Stored Workflows handlers', () => {
 
     it('nested workflow reference — POST rejects when the nested workflowId is not registered', async () => {
       await expect(
-        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
           id: 'wf-parent-bad',
           description: undefined,
@@ -529,7 +529,7 @@ describe('Stored Workflows handlers', () => {
 
     it('rejects an unregistered agentId with a specific error', async () => {
       await expect(
-        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
           id: 'wf-bad-agent',
           description: undefined,
@@ -544,7 +544,7 @@ describe('Stored Workflows handlers', () => {
 
     it('rejects a tool id classified as an agent with the swap hint', async () => {
       await expect(
-        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
           id: 'wf-mis-classified',
           description: undefined,
@@ -562,7 +562,7 @@ describe('Stored Workflows handlers', () => {
 
     it('rejects a schema-incompatible graph at save time (schema-flow runs on POST)', async () => {
       await expect(
-        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
           id: 'wf-schema-clash',
           description: undefined,
@@ -581,7 +581,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('re-POST with the same id replaces the live registration', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-replace',
         description: undefined,
@@ -604,7 +604,7 @@ describe('Stored Workflows handlers', () => {
       expect((firstResult as any).result.echoed).toBe('A=x');
 
       // Second POST replaces the live registration.
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-replace',
         description: undefined,
@@ -628,9 +628,9 @@ describe('Stored Workflows handlers', () => {
     });
   });
 
-  describe('DELETE_STORED_WORKFLOW_ROUTE', () => {
+  describe('DELETE_DYNAMIC_WORKFLOW_ROUTE', () => {
     it('removes the workflow from storage AND unregisters the live instance', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-del',
         description: undefined,
@@ -642,9 +642,9 @@ describe('Stored Workflows handlers', () => {
       });
       expect(mastra.getWorkflow('wf-del')).toBeDefined();
 
-      const result = await DELETE_STORED_WORKFLOW_ROUTE.handler({
+      const result = await DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
-        storedWorkflowId: 'wf-del',
+        dynamicWorkflowId: 'wf-del',
       });
       expect(result.success).toBe(true);
 
@@ -653,29 +653,29 @@ describe('Stored Workflows handlers', () => {
 
       // Storage row must be gone (subsequent GET returns 404).
       await expect(
-        GET_STORED_WORKFLOW_ROUTE.handler({
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
-          storedWorkflowId: 'wf-del',
+          dynamicWorkflowId: 'wf-del',
         }),
       ).rejects.toBeInstanceOf(HTTPException);
     });
 
     it('is idempotent on a missing id', async () => {
-      const result = await DELETE_STORED_WORKFLOW_ROUTE.handler({
+      const result = await DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
-        storedWorkflowId: 'never-existed',
+        dynamicWorkflowId: 'never-existed',
       });
       expect(result.success).toBe(true);
     });
   });
 
   // The route framework validates the request body against
-  // `upsertStoredWorkflowBodySchema` before the handler runs. These tests
+  // `upsertDynamicWorkflowBodySchema` before the handler runs. These tests
   // exercise the schema directly to prove malformed conditional/loop payloads
   // are rejected at the HTTP boundary — closure-based `serializedConditions`
   // strings, unknown predicate operators, and loop entries missing a
-  // `predicate` must never reach `Mastra.addStoredWorkflow`.
-  describe('upsertStoredWorkflowBodySchema — predicate rejection', () => {
+  // `predicate` must never reach `Mastra.addDynamicWorkflow`.
+  describe('upsertDynamicWorkflowBodySchema — predicate rejection', () => {
     const validBody = {
       id: 'wf-reject',
       inputSchema: objectWith({ value: stringSchema }, ['value']),
@@ -683,7 +683,7 @@ describe('Stored Workflows handlers', () => {
     };
 
     it('rejects legacy closure-based serializedConditions on a conditional entry', () => {
-      const result = upsertStoredWorkflowBodySchema.safeParse({
+      const result = upsertDynamicWorkflowBodySchema.safeParse({
         ...validBody,
         graph: [
           {
@@ -699,7 +699,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('rejects a conditional entry whose predicates/steps lengths differ', () => {
-      const result = upsertStoredWorkflowBodySchema.safeParse({
+      const result = upsertDynamicWorkflowBodySchema.safeParse({
         ...validBody,
         graph: [
           {
@@ -718,7 +718,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('rejects a conditional entry with an unknown predicate op', () => {
-      const result = upsertStoredWorkflowBodySchema.safeParse({
+      const result = upsertDynamicWorkflowBodySchema.safeParse({
         ...validBody,
         graph: [
           {
@@ -732,7 +732,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('rejects a loop entry missing a predicate', () => {
-      const result = upsertStoredWorkflowBodySchema.safeParse({
+      const result = upsertDynamicWorkflowBodySchema.safeParse({
         ...validBody,
         graph: [
           {
@@ -746,7 +746,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('accepts a well-formed loop entry with a declarative predicate', () => {
-      const result = upsertStoredWorkflowBodySchema.safeParse({
+      const result = upsertDynamicWorkflowBodySchema.safeParse({
         ...validBody,
         graph: [
           {
@@ -765,7 +765,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('accepts a well-formed conditional entry with declarative predicates', () => {
-      const result = upsertStoredWorkflowBodySchema.safeParse({
+      const result = upsertDynamicWorkflowBodySchema.safeParse({
         ...validBody,
         graph: [
           {
@@ -791,7 +791,7 @@ describe('Stored Workflows handlers', () => {
   // saved on its own — the ref pre-flight rejects it. `dependencies` lets a
   // client send the helpers alongside the root so the whole set is validated,
   // hydrated in dependency order, and registered (or rejected) as one unit.
-  describe('UPSERT_STORED_WORKFLOW_ROUTE — helper dependencies', () => {
+  describe('UPSERT_DYNAMIC_WORKFLOW_ROUTE — helper dependencies', () => {
     /** Root that nests two helpers and merges their outputs. */
     const fanoutRoot = {
       id: 'wf-fanout',
@@ -839,7 +839,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('saves helpers with the root, registers all of them live, and reports their ids', async () => {
-      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      const result = await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         ...fanoutRoot,
         dependencies: [echoHelper('echo-first', 'first'), echoHelper('echo-second', 'second')],
@@ -858,21 +858,21 @@ describe('Stored Workflows handlers', () => {
       expect((res as any).result.merged).toBe('ada+grace');
     });
 
-    it('persists each helper as an ordinary stored workflow, retrievable on its own', async () => {
-      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+    it('persists each helper as an ordinary dynamic workflow, retrievable on its own', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         ...fanoutRoot,
         dependencies: [echoHelper('echo-first', 'first'), echoHelper('echo-second', 'second')],
       });
 
-      const helper = await GET_STORED_WORKFLOW_ROUTE.handler({
+      const helper = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
-        storedWorkflowId: 'echo-first',
+        dynamicWorkflowId: 'echo-first',
       });
       expect(helper.id).toBe('echo-first');
       expect(helper.description).toBe('Echo first');
 
-      const listed = await LIST_STORED_WORKFLOWS_ROUTE.handler({
+      const listed = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
         ...ctx(mastra),
         status: undefined,
         authorId: undefined,
@@ -881,7 +881,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('order the client sends helpers in does not matter — hydration order is derived', async () => {
-      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      const result = await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         ...fanoutRoot,
         // Reversed relative to graph order.
@@ -896,7 +896,7 @@ describe('Stored Workflows handlers', () => {
 
     it('rejects the whole bundle when the root is invalid — no helper is left behind', async () => {
       await expect(
-        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
           ...fanoutRoot,
           graph: [
@@ -909,13 +909,13 @@ describe('Stored Workflows handlers', () => {
 
       expect(() => mastra.getWorkflow('echo-first')).toThrow();
       await expect(
-        GET_STORED_WORKFLOW_ROUTE.handler({ ...ctx(mastra), storedWorkflowId: 'echo-first' }),
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({ ...ctx(mastra), dynamicWorkflowId: 'echo-first' }),
       ).rejects.toBeInstanceOf(HTTPException);
     });
 
     it('rejects the whole bundle when a helper is invalid — the root is not saved either', async () => {
       await expect(
-        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
           ...ctx(mastra),
           ...fanoutRoot,
           dependencies: [
@@ -931,12 +931,12 @@ describe('Stored Workflows handlers', () => {
       expect(() => mastra.getWorkflow('wf-fanout')).toThrow();
       expect(() => mastra.getWorkflow('echo-first')).toThrow();
       await expect(
-        GET_STORED_WORKFLOW_ROUTE.handler({ ...ctx(mastra), storedWorkflowId: 'wf-fanout' }),
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({ ...ctx(mastra), dynamicWorkflowId: 'wf-fanout' }),
       ).rejects.toBeInstanceOf(HTTPException);
     });
 
     it('omitting dependencies leaves the single-workflow response shape untouched', async () => {
-      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      const result = await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-solo',
         description: undefined,
@@ -952,7 +952,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('an empty dependencies array behaves exactly like omitting it', async () => {
-      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+      const result = await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
         id: 'wf-solo-empty',
         description: undefined,
@@ -968,7 +968,7 @@ describe('Stored Workflows handlers', () => {
     });
 
     it('the body schema accepts a flat dependencies list of full definitions', () => {
-      const parsed = upsertStoredWorkflowBodySchema.safeParse({
+      const parsed = upsertDynamicWorkflowBodySchema.safeParse({
         ...fanoutRoot,
         dependencies: [echoHelper('echo-first', 'first')],
       });

@@ -1,12 +1,12 @@
 /**
- * `Mastra.addStoredWorkflows` — saving a root workflow together with the
+ * `Mastra.addDynamicWorkflows` — saving a root workflow together with the
  * helper workflows it nests, none of which exist yet.
  *
  * The contract that matters is all-or-nothing: a bundle either registers
  * every member or registers none of them. Partial application would leave
  * orphaned helper workflows in the registry that the author never approved,
  * which is the whole reason this primitive exists rather than callers looping
- * over `addStoredWorkflow`.
+ * over `addDynamicWorkflow`.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -81,12 +81,12 @@ function createMastra(id: string) {
   });
 }
 
-describe('Mastra.addStoredWorkflows', () => {
+describe('Mastra.addDynamicWorkflows', () => {
   it('registers a root together with the helpers it nests, which do not exist yet', async () => {
     const mastra = createMastra('bundle-happy');
 
     await expect(
-      mastra.addStoredWorkflows([
+      mastra.addDynamicWorkflows([
         helperDefinition('lookup-first-customer', 'email1'),
         helperDefinition('lookup-second-customer', 'email2'),
         rootDefinition,
@@ -103,7 +103,7 @@ describe('Mastra.addStoredWorkflows', () => {
 
     // Root first — hydrating it before its helpers would fail to resolve them.
     await expect(
-      mastra.addStoredWorkflows([
+      mastra.addDynamicWorkflows([
         rootDefinition,
         helperDefinition('lookup-second-customer', 'email2'),
         helperDefinition('lookup-first-customer', 'email1'),
@@ -116,7 +116,7 @@ describe('Mastra.addStoredWorkflows', () => {
   it('runs the bundled root end to end, routing each branch to its own email', async () => {
     const mastra = createMastra('bundle-runnable');
 
-    await mastra.addStoredWorkflows([
+    await mastra.addDynamicWorkflows([
       helperDefinition('lookup-first-customer', 'email1'),
       helperDefinition('lookup-second-customer', 'email2'),
       rootDefinition,
@@ -138,7 +138,7 @@ describe('Mastra.addStoredWorkflows', () => {
     const mastra = createMastra('bundle-invalid-member');
 
     await expect(
-      mastra.addStoredWorkflows([
+      mastra.addDynamicWorkflows([
         helperDefinition('lookup-first-customer', 'email1'),
         {
           ...helperDefinition('lookup-second-customer', 'email2'),
@@ -165,7 +165,7 @@ describe('Mastra.addStoredWorkflows', () => {
     });
 
     await expect(
-      mastra.addStoredWorkflows([cyclic('cycle-a', 'cycle-b'), cyclic('cycle-b', 'cycle-a')]),
+      mastra.addDynamicWorkflows([cyclic('cycle-a', 'cycle-b'), cyclic('cycle-b', 'cycle-a')]),
     ).rejects.toThrow(/circular nested-workflow dependency among: cycle-a, cycle-b/);
 
     expect(() => mastra.getWorkflow('cycle-a')).toThrow();
@@ -176,7 +176,7 @@ describe('Mastra.addStoredWorkflows', () => {
     const mastra = createMastra('bundle-duplicate');
 
     await expect(
-      mastra.addStoredWorkflows([
+      mastra.addDynamicWorkflows([
         helperDefinition('lookup-first-customer', 'email1'),
         helperDefinition('lookup-first-customer', 'email2'),
       ]),
@@ -205,7 +205,7 @@ describe('Mastra.addStoredWorkflows', () => {
     }) as typeof store.upsert;
 
     await expect(
-      mastra.addStoredWorkflows([
+      mastra.addDynamicWorkflows([
         helperDefinition('lookup-first-customer', 'email1'),
         helperDefinition('lookup-second-customer', 'email2'),
         rootDefinition,
@@ -222,7 +222,7 @@ describe('Mastra.addStoredWorkflows', () => {
     const storage = new InMemoryStore({ id: 'bundle-rollback-existing' });
     const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
 
-    await mastra.addStoredWorkflows([helperDefinition('lookup-first-customer', 'email1')]);
+    await mastra.addDynamicWorkflows([helperDefinition('lookup-first-customer', 'email1')]);
     const original = mastra.getWorkflow('lookup-first-customer');
 
     const store = (await storage.getStore('workflowDefinitions'))!;
@@ -231,7 +231,7 @@ describe('Mastra.addStoredWorkflows', () => {
     }) as typeof store.upsert;
 
     await expect(
-      mastra.addStoredWorkflows([
+      mastra.addDynamicWorkflows([
         helperDefinition('lookup-first-customer', 'email2'),
         helperDefinition('lookup-second-customer', 'email2'),
       ]),
@@ -247,7 +247,7 @@ describe('Mastra.addStoredWorkflows', () => {
     const storage = new InMemoryStore({ id: 'bundle-persistence' });
     const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
 
-    await mastra.addStoredWorkflows([
+    await mastra.addDynamicWorkflows([
       helperDefinition('lookup-first-customer', 'email1'),
       helperDefinition('lookup-second-customer', 'email2'),
       rootDefinition,
@@ -264,6 +264,6 @@ describe('Mastra.addStoredWorkflows', () => {
 
   it('is a no-op for an empty bundle', async () => {
     const mastra = createMastra('bundle-empty');
-    await expect(mastra.addStoredWorkflows([])).resolves.toBeUndefined();
+    await expect(mastra.addDynamicWorkflows([])).resolves.toBeUndefined();
   });
 });

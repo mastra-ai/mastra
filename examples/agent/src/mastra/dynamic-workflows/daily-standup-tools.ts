@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 /**
- * Deterministic first step of the `daily-standup-digest` stored workflow.
+ * Deterministic first step of the `daily-standup-digest` dynamic workflow.
  * Builds one `{ prompt }` per author from the raw standup notes so the next
  * step (`foreach(normalizerAgent)`) can iterate over an array of agent-ready
  * inputs. Foreach reads the previous step's output directly and agent steps

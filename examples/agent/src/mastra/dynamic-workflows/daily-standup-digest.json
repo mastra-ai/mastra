@@ -1,14 +1,14 @@
 {
   "id": "daily-standup-digest",
-  "description": "Turn raw standup notes into a team-wide markdown digest. Routes to one of two nested stored workflows based on whether the day's notes contain blockers. Seeded at boot from a JSON WorkflowDefinition; survives process restarts via WorkflowDefinitionsStorage.",
+  "description": "Turn raw standup notes into a team-wide markdown digest. Routes to one of two nested dynamic workflows based on whether the day's notes contain blockers. Seeded at boot from a JSON WorkflowDefinition; survives process restarts via WorkflowDefinitionsStorage.",
   "metadata": {
-    "seededFrom": "examples/agent/src/mastra/stored-workflows/daily-standup-digest.json",
+    "seededFrom": "examples/agent/src/mastra/dynamic-workflows/daily-standup-digest.json",
     "demonstrates": [
       "declarative tool / agent / mapping / foreach / conditional / workflow entries",
       "three-scope templates (initData, inputData, stepResults)",
       "foreach(agent) round-trip through storage",
       "conditional with declarative predicates",
-      "nested stored workflows as first-class step type",
+      "nested dynamic workflows as first-class step type",
       "Studio picks up a workflow that was never registered via createWorkflow()"
     ]
   },

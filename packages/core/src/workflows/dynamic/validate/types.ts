@@ -1,10 +1,10 @@
 /**
- * Shared vocabulary for the one stored-workflow validation domain.
+ * Shared vocabulary for the one dynamic-workflow validation domain.
  *
  * Every validation surface (Mastra save path, builder preflight, Studio draft
  * UI) speaks in `WorkflowValidationIssue`s produced by the collect-mode core
  * in `./index`. Throwing behavior is a presentation concern layered on top
- * (`assertValidStoredWorkflow`), not a separate rule set.
+ * (`assertValidDynamicWorkflow`), not a separate rule set.
  */
 import type { Predicate } from '../../predicate';
 import type { SerializedSingleStepEntry, SerializedStepFlowEntry } from '../../types';
@@ -112,7 +112,7 @@ export type ValidatableStepFlowEntry =
 
 /**
  * The definition shape validation operates on — the common structural core of
- * `StoredWorkflowGraph` (persistence) and `WorkflowBuilderDefinition`
+ * `DynamicWorkflowGraph` (persistence) and `WorkflowBuilderDefinition`
  * (authoring wire shape).
  */
 export interface WorkflowValidationInput {

@@ -2,7 +2,7 @@
   "id": "daily-standup-plain",
   "description": "Sub-workflow: produce a plain team standup digest (no escalation). Invoked by `daily-standup-digest` when there are no blockers.",
   "metadata": {
-    "seededFrom": "examples/agent/src/mastra/stored-workflows/daily-standup-plain.json",
+    "seededFrom": "examples/agent/src/mastra/dynamic-workflows/daily-standup-plain.json",
     "role": "sub-workflow of daily-standup-digest (falsy branch)"
   },
   "inputSchema": {

@@ -1,5 +1,5 @@
 /**
- * Stored-workflow persistence round-trip:
+ * Dynamic-workflow persistence round-trip:
  *
  *   build → toStorableGraph(stepFlow) → validate → persist → rehydrateWorkflow → addWorkflow
  *

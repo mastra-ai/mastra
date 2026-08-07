@@ -23,7 +23,7 @@ import type { JsonSchema, JsonSchemaToZodOptions } from './json-schema-to-zod';
 import { parseMapConfig } from './mapping-config';
 
 /** JSON shape persisted to WorkflowDefinitionsStorage. */
-export interface StoredWorkflowGraph {
+export interface DynamicWorkflowGraph {
   id: string;
   description?: string;
   metadata?: Record<string, unknown>;
@@ -53,7 +53,7 @@ export interface RehydratedWorkflow {
 export type RehydrateWorkflowOptions = JsonSchemaToZodOptions;
 
 export async function rehydrateWorkflow(
-  def: StoredWorkflowGraph,
+  def: DynamicWorkflowGraph,
   mastra: Mastra,
   opts?: RehydrateWorkflowOptions,
 ): Promise<RehydratedWorkflow> {
@@ -76,7 +76,7 @@ export async function rehydrateWorkflow(
     applyGraphEntry(wf, entry, mastra, opts);
   }
   const built: any = wf.commit();
-  built.origin = 'stored';
+  built.origin = 'dynamic';
   return { workflow: built };
 }
 
@@ -260,7 +260,7 @@ function rehydrateSingleEntry(
       const agent = tryGetAgentById(mastra, entry.agentId);
       if (!agent) {
         throw new Error(
-          `Stored workflow references agent "${entry.agentId}" which is not registered on this Mastra instance.`,
+          `Dynamic workflow references agent "${entry.agentId}" which is not registered on this Mastra instance.`,
         );
       }
       return {
@@ -275,7 +275,7 @@ function rehydrateSingleEntry(
       const tool = mastra.getTool?.(entry.toolId);
       if (!tool) {
         throw new Error(
-          `Stored workflow references tool "${entry.toolId}" which is not registered on this Mastra instance.`,
+          `Dynamic workflow references tool "${entry.toolId}" which is not registered on this Mastra instance.`,
         );
       }
       return { type: 'tool', id: entry.id, toolId: entry.toolId, tool, options: rebuildToolOptions(entry) };
@@ -294,7 +294,7 @@ function rehydrateSingleEntry(
         return { type: 'step', step: createStepFromTool(tool as any) as unknown as Step };
       }
       throw new Error(
-        `Stored workflow references step "${id}" which is not registered as an agent or tool on this Mastra instance.`,
+        `Dynamic workflow references step "${id}" which is not registered as an agent or tool on this Mastra instance.`,
       );
     }
     case 'workflow': {
@@ -398,7 +398,7 @@ function assertWorkflowExists(mastra: Mastra, workflowId: string): any {
   const wf = tryGetWorkflowById(mastra, workflowId);
   if (!wf) {
     throw new Error(
-      `Stored workflow references nested workflow "${workflowId}" which is not registered on this Mastra instance.`,
+      `Dynamic workflow references nested workflow "${workflowId}" which is not registered on this Mastra instance.`,
     );
   }
   return wf;

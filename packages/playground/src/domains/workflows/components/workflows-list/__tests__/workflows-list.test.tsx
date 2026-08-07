@@ -45,26 +45,26 @@ function renderList(workflows: Record<string, GetWorkflowResponse>) {
 afterEach(() => cleanup());
 
 describe('WorkflowsList', () => {
-  it("renders a Stored badge only for workflows with origin: 'stored'", () => {
+  it("renders a Dynamic badge only for workflows with origin: 'dynamic'", () => {
     renderList({
       'code-wf': makeWorkflow({ name: 'Code Workflow', origin: 'code' }),
-      'stored-wf': makeWorkflow({ name: 'Stored Workflow', origin: 'stored' }),
+      'dynamic-wf': makeWorkflow({ name: 'Dynamic Workflow', origin: 'dynamic' }),
       'legacy-wf': makeWorkflow({ name: 'Legacy Workflow' }), // no origin (older server)
     });
 
     // All three workflow names render.
     expect(screen.getByText('Code Workflow')).not.toBeNull();
-    expect(screen.getByText('Stored Workflow')).not.toBeNull();
+    expect(screen.getByText('Dynamic Workflow')).not.toBeNull();
     expect(screen.getByText('Legacy Workflow')).not.toBeNull();
 
-    // Only one Stored badge in the whole list.
-    const storedBadges = screen.getAllByText('Stored');
-    expect(storedBadges).toHaveLength(1);
+    // Only one Dynamic badge in the whole list.
+    const dynamicBadges = screen.getAllByText('Dynamic');
+    expect(dynamicBadges).toHaveLength(1);
 
-    // The Stored badge sits next to the stored workflow, not the code one.
-    const storedRow = screen.getByText('Stored Workflow').closest('span');
-    expect(storedRow?.textContent).toContain('Stored');
+    // The Dynamic badge sits next to the dynamic workflow, not the code one.
+    const dynamicRow = screen.getByText('Dynamic Workflow').closest('span');
+    expect(dynamicRow?.textContent).toContain('Dynamic');
     const codeRow = screen.getByText('Code Workflow').closest('span');
-    expect(codeRow?.textContent).not.toContain('Stored');
+    expect(codeRow?.textContent).not.toContain('Dynamic');
   });
 });

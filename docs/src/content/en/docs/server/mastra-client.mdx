@@ -62,13 +62,13 @@ The Mastra Client SDK exposes all resources served by the Mastra Server.
 
 ## Create and run dynamic workflows
 
-Use `upsertStoredWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition, registers it with the running Mastra instance, and makes it available through the standard workflow execution API.
+Use `upsertDynamicWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition, registers it with the running Mastra instance, and makes it available through the standard workflow execution API.
 
 The following example shows the full lifecycle of a mapping workflow, from creation and inspection through execution and deletion:
 
 ```typescript title="lib/dynamic-workflow.ts"
 import { MastraClient } from '@mastra/client-js'
-import type { UpsertStoredWorkflowParams } from '@mastra/client-js'
+import type { UpsertDynamicWorkflowParams } from '@mastra/client-js'
 
 const client = new MastraClient({
   baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
@@ -96,12 +96,12 @@ const definition = {
       }),
     },
   ],
-} satisfies UpsertStoredWorkflowParams
+} satisfies UpsertDynamicWorkflowParams
 
-await client.upsertStoredWorkflow(definition)
+await client.upsertDynamicWorkflow(definition)
 
-const storedWorkflow = client.getStoredWorkflow(definition.id)
-const storedDefinition = await storedWorkflow.details()
+const dynamicWorkflow = client.getDynamicWorkflow(definition.id)
+const storedDefinition = await dynamicWorkflow.details()
 
 const workflow = client.getWorkflow(storedDefinition.id)
 const run = await workflow.createRun()
@@ -109,10 +109,10 @@ const result = await run.startAsync({ inputData: { name: 'Ada' } })
 
 console.log(result)
 
-await storedWorkflow.delete()
+await dynamicWorkflow.delete()
 ```
 
-Use `listStoredWorkflows()` to list persisted definitions. Calling `upsertStoredWorkflow()` again with the same `id` replaces the stored definition and live workflow registration.
+Use `listDynamicWorkflows()` to list persisted definitions. Calling `upsertDynamicWorkflow()` again with the same `id` replaces the stored definition and live workflow registration.
 
 :::warning
 

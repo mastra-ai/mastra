@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 
 /**
- * Agents used by the `daily-standup-digest` stored workflow and its two
+ * Agents used by the `daily-standup-digest` dynamic workflow and its two
  * nested sub-workflows.
  *
  * These live here (not under `src/mastra/agents/`) because they exist only to
