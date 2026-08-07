@@ -68,9 +68,9 @@
 
   /* Nextra text colors - Light mode */
   --mastra-text-primary: #080808;
-  --mastra-text-secondary: #252525;
-  --mastra-text-tertiary: #5f5f5f;
-  --mastra-text-quaternary: #7f7e7e;
+  --mastra-text-secondary: #141414;
+  --mastra-text-tertiary: #494949;
+  --mastra-text-quaternary: #737272;
   --mastra-text-muted: #8f8f8f;
   --mastra-text-muted-2: #929292;
 
@@ -156,7 +156,7 @@
 
   /* Menu/Sidebar */
   --doc-sidebar-width: 280px;
-  --ifm-menu-color: var(--mastra-text-secondary);
+  --ifm-menu-color: var(--mastra-text-tertiary);
   --ifm-menu-color-active: var(--mastra-text-primary);
   --ifm-menu-link-sublist-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16px" height="16px" viewBox="0 0 24 24"><path fill="rgba(95,95,95,1)" d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"></path></svg>');
 
@@ -191,9 +191,9 @@
 
   /* Nextra text colors - Dark mode */
   --mastra-text-primary: #ffffff;
-  --mastra-text-secondary: #dfdfdf;
-  --mastra-text-tertiary: #939393;
-  --mastra-text-quaternary: #707070;
+  --mastra-text-secondary: #e6e6e6;
+  --mastra-text-tertiary: #9d9d9d;
+  --mastra-text-quaternary: #787878;
 
   /* Nextra surface colors - Dark mode */
   --mastra-surface-1: hsla(0, 0%, 8%, 1);
@@ -231,7 +231,7 @@
   --ifm-navbar-link-hover-color: var(--mastra-text-primary);
 
   /* Menu/Sidebar */
-  --ifm-menu-color: var(--mastra-text-secondary);
+  --ifm-menu-color: var(--mastra-text-tertiary);
   --ifm-menu-color-active: var(--mastra-text-primary);
 }
 
@@ -683,6 +683,10 @@ input[type='search']::-ms-clear {
   margin-top: 1rem !important;
 }
 
+.sidebar-group-name > .menu__list {
+  padding-left: 0;
+}
+
 .sidebar-group-name > .menu__list-item-collapsible {
   &:hover {
     background: transparent;
@@ -693,7 +697,7 @@ input[type='search']::-ms-clear {
   text-transform: uppercase;
   letter-spacing: 0.025em;
   font-size: 0.7rem;
-  color: var(--mastra-text-tertiary);
+  color: var(--mastra-text-quaternary);
 }
 
 h2:has(code) {
