@@ -665,6 +665,12 @@ input[type='search']::-ms-clear {
   }
 }
 
+.menu__link span[class*='linkLabel'] {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
 .menu__list-item-collapsible {
   border-radius: 0.5rem;
 }
