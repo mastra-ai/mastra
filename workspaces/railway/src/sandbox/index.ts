@@ -342,28 +342,14 @@ export class RailwaySandbox extends MastraSandbox {
    * to invoke concurrently with `executeCommand`, `restart`, or `stop`.
    */
   async captureCheckpoint(): Promise<CaptureCheckpointResult> {
-    const checkpointName = this._checkpointName;
-    if (!checkpointName) {
-      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
-    }
-
-    const sandbox = this._sandbox;
-    if (!sandbox) {
-      return { status: 'skipped', reason: 'sandbox-not-running' };
-    }
-
-    if (this._checkpointRefreshInFlight) {
-      await this._checkpointRefreshInFlight;
-      return { status: 'coalesced', checkpointName };
-    }
-
-  async captureCheckpoint(): Promise<CaptureCheckpointResult> {
     const sandbox = this._sandbox;
     if (!sandbox || sandbox.status !== 'RUNNING') {
       return { status: 'skipped', reason: 'sandbox-not-running' };
     }
 
-    return this._captureCheckpoint(sandbox);
+    await this._checkpointSandbox(sandbox);
+
+    return { status: 'captured', checkpointName: this._checkpointName! };
   }
 
   private async _checkpointSandbox(sandbox: Sandbox): Promise<void> {
@@ -615,23 +601,16 @@ export class RailwaySandbox extends MastraSandbox {
     args: string[] = [],
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
-  private _startInFlight: Promise<void> | null = null;
+    const status = this._sandbox?.status;
 
-  private async _ensureRunning(): Promise<void> {
-    if (this._sandbox?.status === 'RUNNING') {
-      return;
-    }
-    if (!this._checkpointName) {
-      throw new SandboxNotReadyError(this.id);
-    }
-    this._startInFlight ??= (async () => {
+    if (status !== 'RUNNING') {
+      if (!this._checkpointName) {
+        throw new SandboxNotReadyError(this.id);
+      }
+
       this._sandbox = null;
       await this.start();
-    })().finally(() => {
-      this._startInFlight = null;
-    });
-    await this._startInFlight;
-  }
+    }
 
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
     const timeout = options.timeout ?? this._timeout;
