@@ -101,9 +101,9 @@ const definition = {
 await client.upsertDynamicWorkflow(definition)
 
 const dynamicWorkflow = client.getDynamicWorkflow(definition.id)
-const storedDefinition = await dynamicWorkflow.details()
+const dynamicDefinition = await dynamicWorkflow.details()
 
-const workflow = client.getWorkflow(storedDefinition.id)
+const workflow = client.getWorkflow(dynamicDefinition.id)
 const run = await workflow.createRun()
 const result = await run.startAsync({ inputData: { name: 'Ada' } })
 

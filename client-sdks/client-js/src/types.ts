@@ -965,7 +965,7 @@ export type GetScorerResponse = MastraScorerEntry & {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
-  source: 'code' | 'dynamic';
+  source: 'code' | 'stored';
 };
 
 export interface GetScorersResponse {

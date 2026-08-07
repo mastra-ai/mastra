@@ -1394,29 +1394,29 @@ describe('nested-workflow round-trip', () => {
     expect(loop.loopType).toBe('dountil');
   });
 
-  it('out-of-order boot: addDynamicWorkflow accepts an already-registered nested ref after another stored def', async () => {
+  it('out-of-order boot: addDynamicWorkflow accepts an already-registered nested ref after another dynamic def', async () => {
     // First register a dynamic workflow with no deps.
     const mastra = new Mastra({
       storage: new InMemoryStore(),
       tools: { 'plus-one': plusOneTool as any, 'double-tool': timesTwoTool as any },
     });
     await mastra.addDynamicWorkflow({
-      id: 'leaf-stored',
+      id: 'leaf-dynamic',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       graph: [{ type: 'tool', id: 'plus', toolId: 'plus-one' }],
     } as any);
     // Then a second dynamic workflow referencing the first.
     await mastra.addDynamicWorkflow({
-      id: 'root-stored',
+      id: 'root-dynamic',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
       graph: [
-        { type: 'workflow', id: 'leaf-stored', workflowId: 'leaf-stored' },
+        { type: 'workflow', id: 'leaf-dynamic', workflowId: 'leaf-dynamic' },
         { type: 'tool', id: 'double', toolId: 'double-tool' },
       ],
     } as any);
-    const root = (mastra as any).getWorkflow('root-stored');
+    const root = (mastra as any).getWorkflow('root-dynamic');
     expect(root).toBeDefined();
     const run = await root.createRun();
     const result = await run.start({ inputData: { value: 4 } });

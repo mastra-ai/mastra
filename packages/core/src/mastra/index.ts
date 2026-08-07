@@ -4635,7 +4635,7 @@ export class Mastra<
    *
    * Reads `workflow.origin`, which is set to `'dynamic'` by `rehydrateWorkflow`
    * at construction time and defaults to `'code'` otherwise. Used by the HTTP
-   * layer to surface a visual distinction (e.g. a "Stored" badge in Studio).
+   * layer to surface a visual distinction (e.g. a "Dynamic" badge in Studio).
    */
   public getWorkflowOrigin(keyOrId: string): 'code' | 'dynamic' | undefined {
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
