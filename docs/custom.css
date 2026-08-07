@@ -1196,7 +1196,7 @@ article p {
     }
   }
 
-  li[data-contextual-sidebar='true'] > .menu__list-item-collapsible > .menu__link::after {
+  li[data-contextual-sidebar='true'] > .menu__link::after {
     content: '';
     flex: 0 0 1.25rem;
     height: 1.25rem;

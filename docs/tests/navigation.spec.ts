@@ -230,7 +230,7 @@ function visibleSidebarPane(page: Page, pane: 'root' | 'contextual') {
 
 function contextualTopLevelLinks(pane: Locator) {
   return pane.locator(
-    ':scope > ul[data-sidebar-panel="contextual"] > li > a.menu__link, :scope > ul[data-sidebar-panel="contextual"] > li > .menu__list-item-collapsible > a.menu__link',
+    'ul[data-sidebar-panel="contextual"] > li > a.menu__link, ul[data-sidebar-panel="contextual"] > li > .menu__list-item-collapsible > a.menu__link',
   )
 }
 
@@ -269,6 +269,36 @@ async function openMobileSidebar(page: Page) {
 }
 
 test.describe('Contextual sidebar', () => {
+  test('desktop: contextual root links share the standard link hover layer', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
+
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    const rootPane = visibleSidebarPane(page, 'root')
+    const standardLink = rootPane.getByRole('link', { name: 'Subagents', exact: true })
+    const contextualLink = rootPane.getByRole('link', { name: 'Sandbox', exact: true })
+
+    await standardLink.hover()
+    const standardHover = await standardLink.evaluate(link => ({
+      backgroundColor: getComputedStyle(link).backgroundColor,
+      transition: getComputedStyle(link).transition,
+    }))
+
+    await contextualLink.hover()
+    const contextualHover = await contextualLink.evaluate(link => ({
+      backgroundColor: getComputedStyle(link).backgroundColor,
+      transition: getComputedStyle(link).transition,
+      chevronContent: getComputedStyle(link, '::after').content,
+      parentTagName: link.parentElement?.tagName,
+    }))
+
+    expect(contextualHover).toMatchObject({
+      backgroundColor: standardHover.backgroundColor,
+      transition: standardHover.transition,
+      parentTagName: 'LI',
+    })
+    expect(contextualHover.chevronContent).not.toBe('none')
+  })
+
   test('desktop: navigates child links and restores root focus on Back', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
     const getErrors = trackJsErrors(page)
@@ -330,7 +360,16 @@ test.describe('Contextual sidebar', () => {
 
     const urlBeforeBack = page.url()
     await backButton.focus()
-    await backButton.press('Enter')
+    const exitTransition = await backButton.evaluate(button => {
+      const panel = button.closest<HTMLElement>('[data-sidebar-panel-container="contextual"]')
+      button.click()
+      return {
+        animationName: panel ? getComputedStyle(panel).animationName : 'none',
+        isConnected: panel?.isConnected ?? false,
+      }
+    })
+    expect(exitTransition.isConnected).toBe(true)
+    expect(exitTransition.animationName).not.toBe('none')
     const restoredRootPane = visibleSidebarPane(page, 'root')
     await expect(restoredRootPane).toBeVisible()
     await expect(page).toHaveURL(urlBeforeBack)
