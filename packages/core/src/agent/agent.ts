@@ -88,7 +88,7 @@ import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
-import type { AgentSkillsInput, SkillInput } from '../skills/types';
+import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
@@ -238,7 +238,12 @@ const createSubAgentInputSchema = () =>
       .describe(
         'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
       ),
-    maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+    maxSteps: z
+      .number()
+      .or(z.string().transform(Number))
+      .pipe(z.number().int().min(3))
+      .nullish()
+      .describe('Maximum number of execution steps for the sub-agent (integer, minimum 3)'),
     // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
     // to return a proper llm response
   });
@@ -267,7 +272,9 @@ type SubAgentToolSchemas = {
   outputSchema: StandardSchemaWithJSON<SubAgentToolOutput>;
 };
 
-type SubAgentToolInput = z.infer<ReturnType<typeof createSubAgentInputSchema>>;
+type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchema>>, 'maxSteps'> & {
+  maxSteps?: number | null;
+};
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type ModelFallbacks = {
@@ -556,6 +563,8 @@ export class Agent<
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skills?: AgentSkillsInput<TRequestContext>;
   #skillsFormat?: SkillFormat;
+  // Per-request memoization so one resolver call serves both context injection and tool creation.
+  #resolvedSkillsByRequest = new WeakMap<RequestContext<TRequestContext>, Promise<SkillInput[]>>();
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
@@ -1290,7 +1299,7 @@ export class Agent<
     if (this.#skills) {
       let resolvedInputs: SkillInput[];
       if (typeof this.#skills === 'function') {
-        resolvedInputs = await this.#skills({ requestContext: rc as RequestContext<TRequestContext> });
+        resolvedInputs = await this.#resolveDynamicSkills(this.#skills, rc as RequestContext<TRequestContext>);
       } else {
         resolvedInputs = this.#skills;
       }
@@ -1310,6 +1319,27 @@ export class Agent<
     }
 
     return agentSkills || workspaceSkills;
+  }
+
+  /**
+   * Runs a dynamic skills resolver once per request, sharing the result with the
+   * other resolution sites. Rejections aren't cached so a later site can retry.
+   * @internal
+   */
+  #resolveDynamicSkills(
+    resolver: AgentSkillsResolver<TRequestContext>,
+    requestContext: RequestContext<TRequestContext>,
+  ): Promise<SkillInput[]> {
+    const pending = this.#resolvedSkillsByRequest.get(requestContext);
+    if (pending) return pending;
+
+    const resolution = Promise.resolve(resolver({ requestContext })).catch(error => {
+      this.#resolvedSkillsByRequest.delete(requestContext);
+      throw error;
+    });
+
+    this.#resolvedSkillsByRequest.set(requestContext, resolution);
+    return resolution;
   }
 
   /**
@@ -4639,7 +4669,7 @@ export class Agent<
       const outputSchema = createSubAgentOutputSchema();
 
       this.#subAgentToolSchemas = {
-        inputSchema: toStandardSchema(inputSchema),
+        inputSchema: toStandardSchema(inputSchema) as StandardSchemaWithJSON<SubAgentToolInput>,
         outputSchema: toStandardSchema(outputSchema),
       };
     }
@@ -5205,27 +5235,27 @@ export class Agent<
                     if (chunk.type.startsWith('data-')) {
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
-                      if (chunk.type === 'data-tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'data-tool-call-suspended') {
-                        suspendedPayload = chunk.data.suspendPayload;
-                        resumeSchema = chunk.data.resumeSchema;
-                      }
                     } else {
                       await context.writer.write(chunk);
-                      if (chunk.type === 'tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'tool-call-suspended') {
-                        suspendedPayload = chunk.payload.suspendPayload;
-                        resumeSchema = chunk.payload.resumeSchema;
-                      }
                     }
+                  }
+
+                  if (chunk.type === 'data-tool-call-approval') {
+                    requireToolApproval = (chunk as any).data ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: (chunk as any).data ?? {},
+                    };
+                  } else if (chunk.type === 'data-tool-call-suspended') {
+                    suspendedPayload = chunk.data.suspendPayload;
+                    resumeSchema = chunk.data.resumeSchema;
+                  } else if (chunk.type === 'tool-call-approval') {
+                    requireToolApproval = chunk.payload ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: chunk.payload ?? {},
+                    };
+                  } else if (chunk.type === 'tool-call-suspended') {
+                    suspendedPayload = chunk.payload.suspendPayload;
+                    resumeSchema = chunk.payload.resumeSchema;
                   }
                 }
 
@@ -6173,6 +6203,7 @@ export class Agent<
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
+          mastra: this.#mastra ?? this.#ephemeralMastra,
           scorerId: scorerObject.scorer.id,
           scorerObject: scorerObject,
           runId,
@@ -6479,6 +6510,18 @@ export class Agent<
     );
   }
 
+  /**
+   * Ensures `toolCallId` is suspended in a snapshot for this run, and returns the
+   * snapshot that contains that suspension.
+   *
+   * Immediate auto-approvals (AgentController `allow` policy) can resume the next
+   * sequential tool call before the new suspended snapshot replaces the previous
+   * one. Polling only for `status === "suspended"` can therefore hand back a stale
+   * prior snapshot. Returning the matching snapshot keeps resume hydration aligned
+   * with the tool call being approved.
+   *
+   * @internal
+   */
   async #validateSuspendedToolCallTarget({
     snapshot,
     toolCallId,
@@ -6489,13 +6532,14 @@ export class Agent<
     toolCallId: string | undefined;
     runId: string;
     method: string;
-  }) {
-    if (toolCallId === undefined) return;
+  }): Promise<WorkflowRunState> {
+    if (toolCallId === undefined) return snapshot;
 
     const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
       this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
 
-    let isSuspended = isTargetSuspended(snapshot);
+    let resumeSnapshot = snapshot;
+    let isSuspended = isTargetSuspended(resumeSnapshot);
     if (!isSuspended) {
       // A resume stream can expose the next suspension just before its snapshot is
       // persisted. Briefly poll after authorization so an immediate response to
@@ -6506,7 +6550,10 @@ export class Agent<
       while (!isSuspended && workflowsStore && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 25));
         const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
-        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+        if (latestSnapshot && isTargetSuspended(latestSnapshot)) {
+          resumeSnapshot = latestSnapshot;
+          isSuspended = true;
+        }
       }
     }
 
@@ -6524,6 +6571,8 @@ export class Agent<
         },
       });
     }
+
+    return resumeSnapshot;
   }
 
   /**
@@ -8458,7 +8507,7 @@ export class Agent<
       snapshotMemoryInfo,
       actor,
     });
-    await this.#validateSuspendedToolCallTarget({
+    const resumeSnapshot = await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: streamOptions?.toolCallId,
       runId,
@@ -8512,7 +8561,7 @@ export class Agent<
       messages: [],
       resumeContext: {
         resumeData,
-        snapshot: existingSnapshot,
+        snapshot: resumeSnapshot,
       },
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
@@ -8623,7 +8672,7 @@ export class Agent<
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
       actor,
     });
-    await this.#validateSuspendedToolCallTarget({
+    const resumeSnapshot = await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: options?.toolCallId,
       runId,
@@ -8670,7 +8719,7 @@ export class Agent<
       messages: [],
       resumeContext: {
         resumeData,
-        snapshot: existingSnapshot,
+        snapshot: resumeSnapshot,
       },
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override

@@ -155,6 +155,7 @@ function buildSupervisor(subAgent: Agent) {
 
 interface ApprovalSeen {
   toolCallId: string;
+  toolName: string;
   argsText: string;
 }
 
@@ -165,6 +166,7 @@ async function collectApprovals(stream: any): Promise<ApprovalSeen[]> {
       const p: any = (chunk as any).payload ?? {};
       approvals.push({
         toolCallId: String(p.toolCallId ?? ''),
+        toolName: String(p.toolName ?? ''),
         argsText: JSON.stringify(p.args ?? p.input ?? {}),
       });
     }
@@ -190,11 +192,13 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
 
     const approvals = await collectApprovals(stream);
 
-    // Emission is correct: two approvals, one per order, with distinct ids.
-    expect(approvals.length).toBe(2);
+    // Keep the outer delegation ids for targeted resume, but disclose the inner
+    // approval target so the user sees the actual action and arguments.
+    expect(approvals).toHaveLength(2);
+    expect(approvals.every(a => a.toolName === 'process-order')).toBe(true);
     expect(approvals.some(a => a.argsText.includes(ORDER_A))).toBe(true);
     expect(approvals.some(a => a.argsText.includes(ORDER_B))).toBe(true);
-    expect(new Set(approvals.map(a => a.toolCallId)).size).toBe(2);
+    expect(new Set(approvals.map(a => a.toolCallId))).toEqual(new Set(['sup-tc-A', 'sup-tc-B']));
   });
 
   it('rejects a targeted approval when that tool call is not actually suspended', async () => {
@@ -247,10 +251,10 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     const [{ toolCalls }] = (await supervisor.listSuspendedRuns()).runs;
     const suspendedToolCallIds = toolCalls.map(toolCall => toolCall.toolCallId).sort();
     expect(suspendedToolCallIds).toEqual(['sup-tc-A', 'sup-tc-B']);
-    for (const toolCall of toolCalls) {
-      expect(toolCall.toolName).toBe('agent-subAgent');
-      expect(toolCall.requiresApproval).toBe(true);
-    }
+    expect(toolCalls.every(toolCall => toolCall.toolName === 'process-order')).toBe(true);
+    expect(toolCalls.some(toolCall => JSON.stringify(toolCall.args).includes(ORDER_A))).toBe(true);
+    expect(toolCalls.some(toolCall => JSON.stringify(toolCall.args).includes(ORDER_B))).toBe(true);
+    expect(toolCalls.every(toolCall => toolCall.requiresApproval)).toBe(true);
   });
 
   it('approving the delegations OUT OF ORDER (B first) processes both orders correctly', async () => {
@@ -320,7 +324,17 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
 
     // First instance: emit the two approvals, then discard the instance entirely.
     let approvals: ApprovalSeen[];
-    const persistedTargets = new Map<string, { runId: string; delegatedRunId?: string }>();
+    const persistedTargets = new Map<
+      string,
+      {
+        runId: string;
+        delegatedRunId?: string;
+        toolName?: string;
+        args?: unknown;
+        parentToolName?: string;
+        parentArgs?: unknown;
+      }
+    >();
     {
       const supervisor = buildSupervisorAgent(storage);
       const stream = await supervisor.stream('Process both orders in parallel.', {
@@ -341,6 +355,10 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
         const pending = (metadata?.pendingToolApprovals ?? {}) as Record<string, unknown>;
         for (const entry of Object.values(pending) as Array<{
           toolCallId?: string;
+          toolName?: string;
+          args?: unknown;
+          parentToolName?: string;
+          parentArgs?: unknown;
           runId?: string;
           delegatedRunId?: string;
         }>) {
@@ -348,6 +366,10 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
             persistedTargets.set(entry.toolCallId, {
               runId: entry.runId,
               delegatedRunId: entry.delegatedRunId,
+              toolName: entry.toolName,
+              args: entry.args,
+              parentToolName: entry.parentToolName,
+              parentArgs: entry.parentArgs,
             });
           }
         }
@@ -355,6 +377,16 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
 
       expect([...persistedTargets.keys()].sort()).toEqual(approvals.map(approval => approval.toolCallId).sort());
       expect([...persistedTargets.values()].every(target => target.runId === stream.runId)).toBe(true);
+      expect([...persistedTargets.values()].every(target => target.toolName === 'process-order')).toBe(true);
+      expect([...persistedTargets.values()].every(target => target.parentToolName === 'agent-subAgent')).toBe(true);
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.args).includes(ORDER_A))).toBe(true);
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.args).includes(ORDER_B))).toBe(true);
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.parentArgs).includes(ORDER_A))).toBe(
+        true,
+      );
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.parentArgs).includes(ORDER_B))).toBe(
+        true,
+      );
       const delegatedRunIds = [...persistedTargets.values()].map(target => target.delegatedRunId);
       expect(delegatedRunIds.every(Boolean)).toBe(true);
       expect(new Set(delegatedRunIds).size).toBe(2);

@@ -142,6 +142,8 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
   sandbox?: MastraFactorySandboxConfig;
+  /** Background Factory dispatcher configuration. */
+  dispatcher?: MastraFactoryDispatcherConfig;
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -199,6 +201,15 @@ export interface MastraFactorySandboxConfig {
    * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
    */
   maxSandboxes?: number;
+}
+
+/**
+ * Per-process cap on concurrent background Factory dispatches. Omitted means
+ * the dispatcher default; this is a local replica budget, not a global queue
+ * limit shared across deployments.
+ */
+export interface MastraFactoryDispatcherConfig {
+  maxInFlight?: number;
 }
 
 const CONTROLLER_ID = 'code';
@@ -723,6 +734,7 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                maxInFlight: this.#config.dispatcher?.maxInFlight,
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
