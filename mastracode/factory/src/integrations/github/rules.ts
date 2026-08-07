@@ -85,6 +85,22 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   return undefined;
 }
 
+/**
+ * Canonical source keys (`github-issue:N`, `github-pr:N`) do not identify a
+ * repository, so a project linked to several repositories could bind repo A's
+ * event to repo B's same-numbered card. The card's intake-stamped URL is
+ * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
+ * cards. A card with neither signal cannot be attributed by number alone.
+ */
+function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
+  const url = item.externalSource?.url;
+  if (url) {
+    const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
+    if (match) return match[1] === repositoryFullName;
+  }
+  return item.metadata?.githubRepositoryId === repositoryId;
+}
+
 function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
   return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
 }
@@ -221,6 +237,7 @@ export class GithubRules {
       project.orgId,
       project.factoryProjectId,
       repositoryId,
+      repositoryName,
       issueNumber,
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
@@ -378,6 +395,7 @@ export class GithubRules {
     orgId: string,
     projectId: string,
     repositoryId: number,
+    repositoryFullName: string,
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
     pullRequestHeadBranch: string | undefined,
@@ -387,13 +405,20 @@ export class GithubRules {
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
       return (
-        items.find(item => item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber)) ??
-        items.find(item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'issue', issueNumber))
+        items.find(
+          item =>
+            item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) &&
+            cardBelongsToRepository(item, repositoryId, repositoryFullName),
+        ) ?? items.find(item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'issue', issueNumber))
       );
     }
     if (pullRequestNumber) {
       return (
-        items.find(item => item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber)) ??
+        items.find(
+          item =>
+            item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber) &&
+            cardBelongsToRepository(item, repositoryId, repositoryFullName),
+        ) ??
         items.find(
           item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber),
         ) ??
@@ -516,8 +541,10 @@ function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileR
 
 /**
  * Extracts the issue number a work item tracks, but only when the item
- * belongs to the given repository — same repository-pinning contract as
- * {@link reconcilablePullRequestNumber}.
+ * belongs to the given repository. Stricter than
+ * {@link reconcilablePullRequestNumber}: a canonical key with no URL is only
+ * trusted when the intake-stamped `githubRepositoryId` confirms the
+ * repository, because the sweep initiates closes on its own.
  */
 function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'issue') return undefined;
@@ -531,7 +558,11 @@ function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileReposit
   const legacy = /^github:(\d+):issue:(\d+)$/.exec(externalId);
   if (legacy) return Number(legacy[1]) === repository.id ? Number(legacy[2]) : undefined;
   const canonical = /^github-issue:(\d+)$/.exec(externalId);
-  return canonical ? Number(canonical[1]) : undefined;
+  if (!canonical) return undefined;
+  // Canonical keys carry no repository; only the intake-stamped repository id
+  // can attribute a URL-less card, and guessing would let a multi-repo
+  // project close repo B's card because repo A's same-numbered issue closed.
+  return item.metadata?.githubRepositoryId === repository.id ? Number(canonical[1]) : undefined;
 }
 
 export function reconciledIssueClosedEvent(

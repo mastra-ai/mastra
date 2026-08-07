@@ -251,6 +251,42 @@ describe('GithubRules', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
   });
 
+  it('never binds a close to another linked repository card with the same issue number', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // Same canonical key (`github-issue:42`) but the card tracks other/repo#42.
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/other/repo/issues/42',
+        },
+        title: 'Issue 42 (other repo)',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { githubRepositoryId: 999 },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    // acme/repo#42 closing must not move the other/repo#42 card.
+    await expect(service.ingest(issueClosed('delivery-closed-cross-repo', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
+  });
+
   it('commits nothing when the closed issue card is already off the board', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     await workItems.upsert({
@@ -1116,7 +1152,7 @@ describe('createGithubPullRequestReconciler', () => {
 
   async function createIssueCard(
     context: Awaited<ReturnType<typeof setup>>,
-    input: { number: number; stages?: string[] },
+    input: { number: number; stages?: string[]; url?: string | null; metadata?: Record<string, unknown> },
   ) {
     return context.workItems.upsert({
       orgId: 'org-1',
@@ -1127,12 +1163,12 @@ describe('createGithubPullRequestReconciler', () => {
           integrationId: 'github',
           type: 'issue',
           externalId: `github-issue:${input.number}`,
-          url: `https://github.com/acme/repo/issues/${input.number}`,
+          url: input.url === null ? undefined : (input.url ?? `https://github.com/acme/repo/issues/${input.number}`),
         },
         title: `Issue ${input.number}`,
         stages: input.stages ?? ['planning'],
         sessions: {},
-        metadata: {},
+        metadata: input.metadata ?? {},
       },
     });
   }
@@ -1525,6 +1561,29 @@ describe('createGithubPullRequestReconciler', () => {
       expect.objectContaining({
         workItemId: card.item.id,
         decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'canceled' }),
+      }),
+    ]);
+  });
+
+  it('only trusts URL-less canonical issue cards whose stamped repository matches', async () => {
+    const context = await setup('read');
+    // Card intaken from this repository: URL lost, but repository id stamped.
+    const ours = await createIssueCard(context, { number: 42, url: null, metadata: { githubRepositoryId: 10 } });
+    // Same number in another linked repository: must never be swept here.
+    await createIssueCard(context, { number: 43, url: null, metadata: { githubRepositoryId: 999 } });
+    // No repository signal at all: ambiguous, so the sweep must not guess.
+    await createIssueCard(context, { number: 44, url: null });
+    const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
+    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
+    expect(fetchIssue).toHaveBeenCalledTimes(1);
+    expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: ours.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
   });

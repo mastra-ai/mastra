@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Reconcile Work board cards with closed GitHub issues. The rules engine now handles the `issues` `closed` webhook (moving the card to Done, or Canceled for `not_planned`/`duplicate` closes), and the periodic GitHub reconcile sweep also checks issue-backed cards so closes missed while a deployment was unreachable are replayed through the same ingress.
+Work board cards now follow their GitHub issue when it closes: closing an issue moves its card to Done (or to Canceled when the issue was closed as `not_planned` or `duplicate`), and a card whose issue closed while the deployment was unreachable is caught up automatically by the periodic reconcile sweep. Previously these cards stayed on the board until moved by hand.
