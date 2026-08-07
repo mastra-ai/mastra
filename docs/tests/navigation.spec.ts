@@ -408,10 +408,30 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
 
     await page.reload()
-    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
-    await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+    const directContextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(directContextualPane).toBeVisible()
+    await expect
+      .poll(() =>
+        directContextualPane
+          .locator('ul[data-sidebar-panel="contextual"]')
+          .evaluate(element => getComputedStyle(element).animationName),
+      )
+      .toBe('none')
+    await directContextualPane.getByRole('button', { name: 'Back to global sidebar' }).click()
+    const directRootPane = visibleSidebarPane(page, 'root')
+    await expect(directRootPane).toBeVisible()
     await expect(page).toHaveURL(overviewHref!)
+
+    await (await expectContextualCategoryRootLink(directRootPane)).click()
+    const reenteredContextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(reenteredContextualPane).toBeVisible()
+    await expect
+      .poll(() =>
+        reenteredContextualPane
+          .locator('ul[data-sidebar-panel="contextual"]')
+          .evaluate(element => getComputedStyle(element).animationName),
+      )
+      .not.toBe('none')
 
     await page.goto(childHref, { waitUntil: 'domcontentloaded' })
     const directChildPane = visibleSidebarPane(page, 'contextual')

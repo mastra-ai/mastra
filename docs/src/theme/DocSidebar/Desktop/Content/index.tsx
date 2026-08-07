@@ -33,6 +33,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const contextualSidebar = resolveSidebar(sidebar)
   const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
   const previousPaneKey = useRef(paneKey)
+  const shouldAnimateContextualEntry = previousPaneKey.current === 'root' && paneKey !== 'root'
 
   useLayoutEffect(() => {
     if (previousPaneKey.current !== paneKey) {
@@ -111,7 +112,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
             onItemClick={() => activateSidebar(contextualSidebar.state)}
             paneClassName={styles.pane}
             entryAnimationClassName={styles.contextualPane}
-            animateEntry={contextualSidebar.state.phase === 'pending'}
+            animateEntry={shouldAnimateContextualEntry}
           />
         )}
       </nav>
