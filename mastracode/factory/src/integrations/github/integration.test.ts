@@ -578,6 +578,7 @@ describe('GithubIntegration merge reconciler', () => {
       merged: true,
       assignees: [],
       requestedReviewers: [],
+      labels: [],
       headBranch: 'feat/intake',
       baseBranch: 'main',
       author: 'ada',
@@ -596,5 +597,26 @@ describe('GithubIntegration merge reconciler', () => {
     await expect(
       github.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('GithubIntegration workers', () => {
+  it('registers a single reconcile worker that folds PR and issue sweeps', () => {
+    const github = new GithubIntegration(validConfig());
+    const context = {
+      controller: {},
+      storage: {
+        generic: {},
+        sourceControl: {
+          projectRepositories: { listConfiguredExternalKeys: async () => [], listByExternalRepository: async () => [] },
+          repositories: { findByExternalId: async () => null },
+        },
+        projects: { listAll: async () => [] },
+        intake: {},
+      },
+      rules: { config: {}, workItems: {} },
+    } as any;
+
+    expect(github.workers(context).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
   });
 });

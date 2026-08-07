@@ -91,9 +91,10 @@ export type SchedulerConfig = {
    * small number of consecutive misses (see `missesBeforeDelete`).
    *
    * Wired up by `SchedulerWorker` from `mastra.getWorkflowById(...)` and
-   * `mastra.getAgentById(...)`.
+   * `mastra.getAgentById(...)`, with an editor fallback for stored agents
+   * that have not been hydrated into the registry yet.
    */
-  isTargetReady?: (target: ScheduleTarget) => boolean;
+  isTargetReady?: (target: ScheduleTarget) => boolean | Promise<boolean>;
   /**
    * Number of consecutive ticks a schedule's target workflow may be missing
    * before the scheduler deletes the row. Defaults to 3 (≈30s with the

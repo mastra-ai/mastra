@@ -238,7 +238,12 @@ const createSubAgentInputSchema = () =>
       .describe(
         'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
       ),
-    maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+    maxSteps: z
+      .number()
+      .or(z.string().transform(Number))
+      .pipe(z.number().int().min(3))
+      .nullish()
+      .describe('Maximum number of execution steps for the sub-agent (integer, minimum 3)'),
     // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
     // to return a proper llm response
   });
@@ -267,7 +272,9 @@ type SubAgentToolSchemas = {
   outputSchema: StandardSchemaWithJSON<SubAgentToolOutput>;
 };
 
-type SubAgentToolInput = z.infer<ReturnType<typeof createSubAgentInputSchema>>;
+type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchema>>, 'maxSteps'> & {
+  maxSteps?: number | null;
+};
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type ModelFallbacks = {
@@ -4662,7 +4669,7 @@ export class Agent<
       const outputSchema = createSubAgentOutputSchema();
 
       this.#subAgentToolSchemas = {
-        inputSchema: toStandardSchema(inputSchema),
+        inputSchema: toStandardSchema(inputSchema) as StandardSchemaWithJSON<SubAgentToolInput>,
         outputSchema: toStandardSchema(outputSchema),
       };
     }
@@ -5228,27 +5235,27 @@ export class Agent<
                     if (chunk.type.startsWith('data-')) {
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
-                      if (chunk.type === 'data-tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'data-tool-call-suspended') {
-                        suspendedPayload = chunk.data.suspendPayload;
-                        resumeSchema = chunk.data.resumeSchema;
-                      }
                     } else {
                       await context.writer.write(chunk);
-                      if (chunk.type === 'tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'tool-call-suspended') {
-                        suspendedPayload = chunk.payload.suspendPayload;
-                        resumeSchema = chunk.payload.resumeSchema;
-                      }
                     }
+                  }
+
+                  if (chunk.type === 'data-tool-call-approval') {
+                    requireToolApproval = (chunk as any).data ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: (chunk as any).data ?? {},
+                    };
+                  } else if (chunk.type === 'data-tool-call-suspended') {
+                    suspendedPayload = chunk.data.suspendPayload;
+                    resumeSchema = chunk.data.resumeSchema;
+                  } else if (chunk.type === 'tool-call-approval') {
+                    requireToolApproval = chunk.payload ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: chunk.payload ?? {},
+                    };
+                  } else if (chunk.type === 'tool-call-suspended') {
+                    suspendedPayload = chunk.payload.suspendPayload;
+                    resumeSchema = chunk.payload.resumeSchema;
                   }
                 }
 
@@ -6196,6 +6203,7 @@ export class Agent<
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
+          mastra: this.#mastra ?? this.#ephemeralMastra,
           scorerId: scorerObject.scorer.id,
           scorerObject: scorerObject,
           runId,
