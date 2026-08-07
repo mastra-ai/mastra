@@ -77,7 +77,7 @@ describe('SignalsOverviewPage', () => {
     it('links to incoming traces', () => {
       render(<SignalsOverviewPage />);
 
-      expect(screen.getByRole('link', { name: 'View incoming traces' }).getAttribute('href')).toBe('/observability');
+      expect(screen.getByRole('link', { name: 'View incoming traces' }).getAttribute('href')).toBe('/traces');
     });
   });
 });

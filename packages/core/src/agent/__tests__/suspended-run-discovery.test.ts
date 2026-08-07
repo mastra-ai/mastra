@@ -196,6 +196,40 @@ function createSuspendedSetup({
   return { agent, mastra, storage };
 }
 
+function createToolSuspensionSetup({
+  storage,
+  toolCallOnFirstCall,
+  onResume,
+}: {
+  storage: InMemoryStore;
+  toolCallOnFirstCall: boolean;
+  onResume: (resumeData: { name: string }) => void;
+}) {
+  const askUserTool = createTool({
+    id: 'Ask user tool',
+    description: 'Asks the user for the name',
+    inputSchema: z.object({ name: z.string() }),
+    suspendSchema: z.object({ question: z.string() }),
+    resumeSchema: z.object({ name: z.string() }),
+    execute: async (_input, context) => {
+      if (!context?.agent?.resumeData) {
+        return await context?.agent?.suspend({ question: 'Which user?' });
+      }
+      onResume(context.agent.resumeData);
+      return { name: context.agent.resumeData.name, email: 'dero@mail.com' };
+    },
+  });
+  const agent = new Agent({
+    id: 'suspending-agent',
+    name: 'Suspending Agent',
+    instructions: 'You find users.',
+    model: createMockModel({ toolName: 'askUserTool', toolCallOnFirstCall }),
+    tools: { askUserTool },
+  });
+  const mastra = new Mastra({ agents: { agent }, logger: false, storage });
+  return { agent, mastra };
+}
+
 async function suspendRun(agent: Agent, threadId: string, resourceId: string) {
   const stream = await agent.stream('Find the user with name - Dero Israel', {
     requireToolApproval: true,
@@ -759,6 +793,69 @@ describe('suspended-run discovery', () => {
     }, 30000);
   });
 
+  describe('agent.sendStreamResume() storage fallback', () => {
+    it('resumes a tool-suspended run after a simulated restart', async () => {
+      const storage = new InMemoryStore();
+      const resumedTool = vi.fn();
+      const { agent } = createToolSuspensionSetup({ storage, toolCallOnFirstCall: true, onResume: resumedTool });
+      const stream = await agent.stream('Find the user', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      let toolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') {
+          toolCallId = chunk.payload.toolCallId;
+        }
+      }
+      expect(toolCallId).toBeTruthy();
+
+      const { agent: restartedAgent, mastra } = createToolSuspensionSetup({
+        storage,
+        toolCallOnFirstCall: false,
+        onResume: resumedTool,
+      });
+      expect(restartedAgent.getActiveThreadRunId({ threadId: 'thread-1', resourceId: 'resource-1' })).toBeUndefined();
+      expect((await restartedAgent.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' })).runs).toEqual(
+        [expect.objectContaining({ runId: stream.runId })],
+      );
+
+      const result = await restartedAgent.sendStreamResume({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        runId: stream.runId,
+        toolCallId,
+        resumeData: { name: 'Dero Israel' },
+      });
+      expect(result).toEqual({ accepted: true, runId: stream.runId, toolCallId });
+
+      const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+      await vi.waitFor(
+        async () => {
+          expect(resumedTool).toHaveBeenCalledWith({ name: 'Dero Israel' });
+          expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
+        },
+        { timeout: 10000 },
+      );
+    }, 30000);
+
+    it('rejects a toolCallId that does not belong to the stored run', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+
+      await expect(
+        restartedAgent.sendStreamResume({
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          runId,
+          toolCallId: 'wrong-tool-call',
+          resumeData: { approved: true },
+        }),
+      ).rejects.toMatchObject({ id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN' });
+    }, 30000);
+  });
+
   describe('agent.sendToolApproval() storage fallback', () => {
     it('approves a suspended run after a simulated restart (in-memory state lost)', async () => {
       const storage = new InMemoryStore();
@@ -793,34 +890,8 @@ describe('suspended-run discovery', () => {
 
     it('matches a suspend()-parked run by toolCallId after a simulated restart', async () => {
       const resumedTool = vi.fn();
-      const makeAskUserAgent = (toolCallOnFirstCall: boolean) => {
-        const askUserTool = createTool({
-          id: 'Ask user tool',
-          description: 'Asks the user for the name',
-          inputSchema: z.object({ name: z.string() }),
-          suspendSchema: z.object({ question: z.string() }),
-          resumeSchema: z.object({ name: z.string() }),
-          execute: async (_input, context) => {
-            if (!context?.agent?.resumeData) {
-              return await context?.agent?.suspend({ question: 'Which user?' });
-            }
-            resumedTool(context.agent.resumeData);
-            return { name: context.agent.resumeData.name, email: 'dero@mail.com' };
-          },
-        });
-        const agent = new Agent({
-          id: 'suspending-agent',
-          name: 'Suspending Agent',
-          instructions: 'You find users.',
-          model: createMockModel({ toolName: 'askUserTool', toolCallOnFirstCall }),
-          tools: { askUserTool },
-        });
-        const mastra = new Mastra({ agents: { agent }, logger: false, storage });
-        return { agent, mastra };
-      };
-
       const storage = new InMemoryStore();
-      const { agent } = makeAskUserAgent(true);
+      const { agent } = createToolSuspensionSetup({ storage, toolCallOnFirstCall: true, onResume: resumedTool });
       const stream = await agent.stream('Find the user', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
@@ -834,7 +905,11 @@ describe('suspended-run discovery', () => {
 
       // Fresh process: the run must be resolved from storage, and the id taken
       // from the tool-call-suspended chunk has to match the discovered run.
-      const { agent: restartedAgent, mastra } = makeAskUserAgent(false);
+      const { agent: restartedAgent, mastra } = createToolSuspensionSetup({
+        storage,
+        toolCallOnFirstCall: false,
+        onResume: resumedTool,
+      });
       expect(restartedAgent.getActiveThreadRunId({ threadId: 'thread-1', resourceId: 'resource-1' })).toBeUndefined();
 
       const result = await restartedAgent.sendToolApproval({
