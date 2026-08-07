@@ -1579,7 +1579,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
     default:
       // Exhaustiveness check: any new `ChunkType` variant must be added above.
-      return assertExhaustive(chunk, result);
+      return assertExhaustive(chunk as never, result);
   }
 };
 
