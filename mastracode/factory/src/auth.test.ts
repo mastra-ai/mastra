@@ -145,6 +145,48 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.json()).toEqual({ error: 'unauthorized' });
   });
 
+  // The mastra core adapter marks these routes with `requiresAuth: false` via
+  // `createPublicRoute()` (see packages/server/src/server/handlers/auth.ts).
+  // The factory gate runs as Hono `use()` middleware — before route matching —
+  // so it cannot read that per-route metadata. It must explicitly pass through
+  // the same public routes, or the SPA sign-in flow (which fetches
+  // `/api/auth/capabilities` before login) receives a 401 and cannot render.
+  it('lets unauthenticated requests reach the public core auth routes exposed under /api/auth', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const cases: Array<{ path: string; method: 'GET' | 'POST' }> = [
+      { path: '/api/auth/capabilities', method: 'GET' },
+      { path: '/api/auth/me', method: 'GET' },
+      { path: '/api/auth/sso/login', method: 'GET' },
+      { path: '/api/auth/sso/callback', method: 'GET' },
+      { path: '/api/auth/logout', method: 'POST' },
+      { path: '/api/auth/refresh', method: 'POST' },
+      { path: '/api/auth/credentials/sign-in', method: 'POST' },
+      { path: '/api/auth/credentials/sign-up', method: 'POST' },
+    ];
+    for (const { path, method } of cases) {
+      const res = await app.request(path, { method, headers: { Accept: 'application/json' } });
+      expect(res.status, `${method} ${path}`).toBe(200);
+      expect(await res.text(), `${method} ${path}`).toBe('ok');
+    }
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('still protects unrelated /api/auth-prefixed paths that are not public core routes', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    // Guard the whitelist against becoming a blanket `/api/auth` pass:
+    // routes such as `/api/auth/roles/:roleId/permissions` are protected in
+    // core (no `createPublicRoute`) and must stay behind the gate here too.
+    const res = await app.request('/api/auth/roles/admin/permissions', {
+      headers: { Accept: 'application/json' },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+  });
+
   it('lets unauthenticated GitHub webhook deliveries reach the route handler', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();

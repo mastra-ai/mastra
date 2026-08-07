@@ -686,6 +686,35 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
 const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
 
 /**
+ * Core auth routes declared with `createPublicRoute()` in
+ * `@mastra/server` (see `packages/server/src/server/handlers/auth.ts`), served
+ * under the mastra adapter's `/api` prefix. They set `requiresAuth: false`
+ * because the SPA needs to reach them before a session exists — capabilities
+ * discovery, SSO start/callback, credentials sign-in/up, logout, refresh, and
+ * the "who am I" probe.
+ *
+ * This gate is Hono `use()` middleware, so it runs before route matching and
+ * cannot read per-route `requiresAuth` metadata. Without an explicit
+ * allowlist the gate returns 401 on `/api/auth/capabilities`, the SPA sign-in
+ * page cannot render, and the user is stuck at "unauthorized".
+ *
+ * Kept as a small, hand-maintained allowlist keyed to `(method, path)` — the
+ * long-term fix is for the gate to consult the same public-route metadata
+ * mastra core uses (`canAccessPublicly`), but that requires reading the
+ * adapter's route table from middleware and is out of scope here.
+ */
+const PUBLIC_CORE_AUTH_ROUTES = new Set<string>([
+  'GET /api/auth/capabilities',
+  'GET /api/auth/me',
+  'GET /api/auth/sso/login',
+  'GET /api/auth/sso/callback',
+  'POST /api/auth/logout',
+  'POST /api/auth/refresh',
+  'POST /api/auth/credentials/sign-in',
+  'POST /api/auth/credentials/sign-up',
+]);
+
+/**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
@@ -730,6 +759,11 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path === '/manifest.webmanifest' ||
       path === '/mastra.svg'
     ) {
+      return next();
+    }
+    // Mastra core's public auth routes (see PUBLIC_CORE_AUTH_ROUTES above)
+    // need to be reachable before a session exists.
+    if (PUBLIC_CORE_AUTH_ROUTES.has(`${c.req.method} ${path}`)) {
       return next();
     }
 
