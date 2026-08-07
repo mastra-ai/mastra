@@ -53,6 +53,7 @@ import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
 import { loginPreservesModelPackScenario } from './login-preserves-model-pack.js';
 import { loginSeedsOmDefaultScenario } from './login-seeds-om-default.js';
+import { mcpDisableEnableScenario } from './mcp-disable-enable.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
 import { mcpOauthAuthenticateScenario } from './mcp-oauth-authenticate.js';
@@ -69,6 +70,7 @@ import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flo
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
+import { notifyInputRequestHookScenario } from './notify-input-request-hook.js';
 import { omAttachmentObservationScenario } from './om-attachment-observation.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
@@ -221,6 +223,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'login-preserves-model-pack': loginPreservesModelPackScenario,
   'login-seeds-om-default': loginSeedsOmDefaultScenario,
   'modal-and-shell': modalAndShellScenario,
+  'mcp-disable-enable': mcpDisableEnableScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
   'mcp-oauth-authenticate': mcpOauthAuthenticateScenario,
@@ -236,6 +239,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-inbox-reload': notificationInboxReloadScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
+  'notify-input-request-hook': notifyInputRequestHookScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,

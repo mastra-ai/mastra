@@ -29,7 +29,13 @@ class ProtocolOutputError extends Error {
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 type Target = { type: 'agent' | 'workflow'; id: string };
-type Correlation = { experimentId: string; jobId: string; attempt: number; idempotencyKey: string };
+type Correlation = {
+  protocolVersion: typeof EXPERIMENT_WORKER_PROTOCOL_VERSION;
+  experimentId: string;
+  jobId: string;
+  attempt: number;
+  idempotencyKey: string;
+};
 
 type DatasetToolMock = {
   toolId: string;
@@ -124,6 +130,7 @@ type RunExperiment = (
     unmockedToolPolicy: 'deny';
     requestContext?: Record<string, JsonValue>;
     metadata: Record<string, unknown>;
+    persistence: { experiments: 'none'; scores: 'none' };
     experimentId: string;
     onEvent: (event: ExperimentEvent) => Promise<void>;
   },
@@ -144,6 +151,7 @@ export interface ExperimentWorkerDependencies {
   stdin?: NodeJS.ReadableStream;
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
+  workerId?: string;
   createEventId?: () => string;
   now?: () => Date;
 }
@@ -313,6 +321,7 @@ export async function runExperimentWorker({
   stdin = process.stdin,
   stdout = process.stdout,
   stderr = process.stderr,
+  workerId = randomUUID(),
   createEventId = randomUUID,
   now = () => new Date(),
 }: ExperimentWorkerDependencies): Promise<number> {
@@ -505,9 +514,8 @@ export async function runExperimentWorker({
     let runError: Error | undefined;
     let runErrorRetryable = false;
     await writeEvent('accepted', {
-      protocolVersion: build.protocolVersion,
-      datasetCanonicalizationVersion: build.datasetCanonicalizationVersion,
-      buildId: build.buildId,
+      workerId,
+      negotiatedProtocolVersion: request.protocolVersion,
     });
     heartbeat = setInterval(() => {
       void writeEvent('heartbeat', {}).catch(error => abortForProtocolFailure(String(error)));
@@ -559,6 +567,7 @@ export async function runExperimentWorker({
             policies: packet.policies,
             requestedAt: packet.requestedAt,
           },
+          persistence: { experiments: 'none', scores: 'none' },
           experimentId: request.experimentId,
           onEvent: async event => {
             if (event.type === 'experiment.run.started') await writeEvent('run-started', { semanticEvent: event });
@@ -672,6 +681,7 @@ export async function runExperimentWorker({
       }
       const request = value as RunRequest;
       correlation = {
+        protocolVersion: request.protocolVersion,
         experimentId: request.experimentId,
         jobId: request.jobId,
         attempt: request.attempt,

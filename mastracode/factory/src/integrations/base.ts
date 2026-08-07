@@ -35,6 +35,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -100,6 +101,11 @@ export interface IntegrationContext {
     sourceControlOwner?: SourceControlStorageHandle;
     /** Factory projects domain — e.g. resolving a project's default model. */
     projects: FactoryProjectsStorage;
+    /**
+     * Observational-memory settings domain, so a session an integration starts
+     * adopts the same memory configuration the web kickoff applies.
+     */
+    memorySettings: MemorySettingsStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
     /**

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -42,6 +42,7 @@ describe('ExperimentBundler', () => {
     expect((bundler as unknown as { outputDir: string }).outputDir).toBe('.');
     expect(entry).toContain("import('@mastra/core/datasets')");
     expect(entry).toContain("import('#mastra')");
+    expect(entry).toContain("#mastra does not provide an export named 'mastra'");
     expect(entry).toContain('import { runExperimentWorker }');
     expect(entry).not.toContain('file://');
     expect(entry).toContain('await runExperimentWorker({');
@@ -50,6 +51,70 @@ describe('ExperimentBundler', () => {
     expect(entry).toContain('process.stdout.end(resolve)');
     expect(entry).toContain('setTimeout(resolve, 5_000)');
     expect(entry).toContain('process.exit(exitCode)');
+  });
+
+  it('installs explicitly configured externals that static analysis cannot observe', async () => {
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+      externals: ['execa', 'existing-package'],
+      dynamicPackages: ['existing-package', 'dynamic-package'],
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    const options = await (new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', '/output');
+
+    expect(options).toEqual({
+      externals: ['execa', 'existing-package'],
+      dynamicPackages: ['existing-package', 'dynamic-package', 'execa'],
+    });
+  });
+
+  it('does not treat externals true as an explicit runtime dependency list', async () => {
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+      externals: true,
+      dynamicPackages: ['dynamic-package'],
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    const options = await (new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', '/output');
+
+    expect(options).toEqual({ externals: true, dynamicPackages: ['dynamic-package'] });
+  });
+
+  it('removes pnpm install metadata that embeds build-machine paths', async () => {
+    const { removePnpmInstallMetadata } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const nodeModules = join(output, 'node_modules');
+    const packageRoot = join(nodeModules, 'dependency');
+    await mkdir(join(nodeModules, '.bin'), { recursive: true });
+    await mkdir(join(nodeModules, '.pnpm'), { recursive: true });
+    await mkdir(join(packageRoot, 'node_modules', '.bin'), { recursive: true });
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(join(packageRoot, 'cli.js'), 'export default true;');
+    await symlink(join(packageRoot, 'cli.js'), join(nodeModules, '.bin', 'dependency'));
+    await symlink(join(packageRoot, 'cli.js'), join(packageRoot, 'node_modules', '.bin', 'dependency'));
+    await writeFile(join(nodeModules, '.modules.yaml'), `virtualStoreDir: ${output}/node_modules/.pnpm\n`);
+    await writeFile(join(nodeModules, '.pnpm-workspace-state-v1.json'), JSON.stringify({ root: output }));
+    await writeFile(join(output, 'preflight-local-paths.json'), '[]');
+    await writeFile(join(output, 'preflight-metadata.json'), '{"version":1,"localPaths":[],"userEnvRefs":[]}');
+    await writeFile(join(packageRoot, 'index.js'), 'export default true;');
+
+    await removePnpmInstallMetadata(output);
+
+    for (const name of ['.pnpm', '.modules.yaml', '.pnpm-workspace-state-v1.json']) {
+      await expect(readFile(join(nodeModules, name), 'utf8')).rejects.toMatchObject({
+        code: expect.stringMatching(/EISDIR|ENOENT/),
+      });
+    }
+    await expect(readlink(join(nodeModules, '.bin', 'dependency'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readlink(join(packageRoot, 'node_modules', '.bin', 'dependency'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    for (const name of ['preflight-local-paths.json', 'preflight-metadata.json']) {
+      await expect(readFile(join(output, name), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+    await expect(readFile(join(packageRoot, 'index.js'), 'utf8')).resolves.toBe('export default true;');
   });
 
   it('resolves the runtime from the packaged CLI layout', async () => {
@@ -65,11 +130,16 @@ describe('ExperimentBundler', () => {
   it('writes a machine-readable artifact manifest with file digests', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    await mkdir(join(output, '.build'), { recursive: true });
+    await writeFile(join(output, '.build', 'module-resolve-map.json'), JSON.stringify({ entry: output }));
     await writeFile(join(output, 'index.mjs'), 'console.error("worker");');
     await writeFile(join(output, 'package.json'), '{"type":"module"}');
 
     await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
 
+    await expect(readFile(join(output, '.build', 'module-resolve-map.json'), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
     expect(manifest).toMatchObject({
       artifactVersion: 1,
@@ -89,8 +159,84 @@ describe('ExperimentBundler', () => {
     expect(manifest.artifact).toEqual({
       digestAlgorithm: 'sha256',
       contentDigest: expectedContentDigest,
-      excludes: ['experiment-worker-manifest.json'],
+      excludes: ['experiment-worker-manifest.json', 'node_modules'],
     });
+  });
+
+  it('excludes node_modules from file digests and content digest', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const packageStore = await createTemporaryDirectory('mastra-experiment-package-store-');
+    await mkdir(join(output, 'node_modules'));
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await writeFile(join(packageStore, 'package.json'), '{"name":"linked-package"}');
+    await symlink(packageStore, join(output, 'node_modules', 'linked-package'));
+
+    const bundler = new ExperimentBundler();
+    await bundler.writeArtifactManifest(output, '1.2.3');
+    const firstManifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+
+    await writeFile(join(packageStore, 'package.json'), '{"name":"changed-linked-package"}');
+    await writeFile(join(output, 'node_modules', 'installed-package.json'), '{"changed":true}');
+    await bundler.writeArtifactManifest(output, '1.2.3');
+    const secondManifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+
+    expect(firstManifest.files).toEqual([
+      { path: 'index.mjs', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { path: 'package.json', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
+    ]);
+    expect(secondManifest.files).toEqual(firstManifest.files);
+    expect(secondManifest.artifact.contentDigest).toBe(firstManifest.artifact.contentDigest);
+  });
+
+  it('hashes relative symlink targets outside excluded directories without traversing them', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const linkedDirectory = join(output, 'linked-directory-target');
+    await mkdir(linkedDirectory);
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await writeFile(join(linkedDirectory, 'nested.txt'), 'not traversed');
+    await symlink('linked-directory-target', join(output, 'linked-directory'));
+
+    await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
+
+    const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+    expect(manifest.files).toContainEqual({
+      path: 'linked-directory',
+      type: 'symlink',
+      target: 'linked-directory-target',
+      sha256: createHash('sha256').update('linked-directory-target').digest('hex'),
+    });
+    expect(manifest.files).toContainEqual(expect.objectContaining({ path: 'linked-directory-target/nested.txt' }));
+  });
+
+  it('rejects absolute symlink targets in relocatable artifacts', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const linkedDirectory = await createTemporaryDirectory('mastra-experiment-linked-directory-');
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await symlink(linkedDirectory, join(output, 'linked-directory'));
+
+    await expect(new ExperimentBundler().writeArtifactManifest(output, '1.2.3')).rejects.toThrow(
+      'Experiment worker artifacts cannot contain absolute symlinks: linked-directory',
+    );
+  });
+
+  it('rejects relative symlink targets that escape relocatable artifacts', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const publicDirectory = join(output, 'public');
+    await mkdir(publicDirectory);
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    await symlink('../../outside', join(publicDirectory, 'link'));
+
+    await expect(new ExperimentBundler().writeArtifactManifest(output, '1.2.3')).rejects.toThrow(
+      'Experiment worker artifacts cannot contain escaping symlinks: public/link',
+    );
   });
 
   it('excludes only the root artifact manifest from digests', async () => {

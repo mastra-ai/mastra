@@ -23,6 +23,35 @@ import type { SandboxNetworkIsolation, SandboxTemplate } from 'railway';
 import { shellQuote } from '../utils/shell-quote';
 import { LOG_PREFIX, RailwayProcessManager } from './process-manager';
 
+/**
+ * Safety margin subtracted from the sandbox's idle timeout when scheduling the
+ * pre-reap checkpoint refresh. Sized to comfortably exceed Cloud Run cold-start
+ * / recycle windows so a scale event during the refresh doesn't cause the timer
+ * to lose the race with Railway's idle destroy. If a caller reduces the idle
+ * timeout below this margin, the refresh falls back to the 1-second floor and
+ * fires almost immediately after start — surfacing the misconfiguration rather
+ * than silently skipping the refresh.
+ */
+const CHECKPOINT_REFRESH_MARGIN_MS = 180_000;
+
+// =============================================================================
+// Public capture result
+// =============================================================================
+
+/**
+ * Outcome of a {@link RailwaySandbox.captureCheckpoint} call.
+ *
+ * `captured` and `coalesced` both represent a successful capture the caller can
+ * persist against — they carry the checkpoint name inline so callers don't have
+ * to reach back into the sandbox instance to learn what they just wrote.
+ * `skipped` carries a machine-readable reason so the set stays extensible
+ * without another breaking change.
+ */
+export type CaptureCheckpointResult =
+  | { status: 'captured'; checkpointName: string }
+  | { status: 'coalesced'; checkpointName: string }
+  | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
+
 // =============================================================================
 // Railway Sandbox Options
 // =============================================================================
@@ -321,7 +350,7 @@ export class RailwaySandbox extends MastraSandbox {
 
     this._cancelCheckpointRefresh();
 
-    const delayMs = Math.max(1_000, idleTimeoutMinutes * 60_000 - 10_000);
+    const delayMs = Math.max(1_000, idleTimeoutMinutes * 60_000 - CHECKPOINT_REFRESH_MARGIN_MS);
     this._checkpointRefreshTimer = setTimeout(() => {
       this._checkpointRefreshTimer = null;
       const sandbox = this._sandbox;
