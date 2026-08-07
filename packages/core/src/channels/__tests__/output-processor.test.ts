@@ -995,6 +995,56 @@ describe('ChatChannelOutputProcessor', () => {
       expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
     });
 
+    it('streaming toolDisplay fn returning empty { markdown } posts nothing', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
+    });
+
+    it('streaming toolDisplay fn returning whitespace-only { markdown } posts nothing', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '  \n\t ' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
+    });
+
     it('toolDisplay fn returning non-empty { markdown } posts it through unchanged', async () => {
       const { channels, calls, chatThread } = makeChannels({
         streaming: false,

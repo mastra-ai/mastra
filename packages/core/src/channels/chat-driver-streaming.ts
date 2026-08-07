@@ -289,6 +289,16 @@ export async function runStreamingDriver({
    * chunk reopen a fresh session. Used for `'cards'`/`'text'` tool events
    * and `ToolDisplayFn` `{ kind: 'post' }` returns.
    */
+  /**
+   * Skip blank tool posts so a fn that intentionally returns "" or an empty
+   * `{ markdown }` doesn't post or edit in an empty platform message.
+   * Mirrors the static driver's guard in `renderToolEvent`.
+   */
+  const isBlankToolMessage = (message: PostableMessage): boolean => {
+    if (typeof message === 'string') return message.length === 0;
+    return 'markdown' in message && message.markdown.trim().length === 0;
+  };
+
   const postOutOfBand = async (message: PostableMessage): Promise<string | undefined> => {
     await closeSession();
     try {
@@ -323,7 +333,8 @@ export async function runStreamingDriver({
         return { posted: false };
       }
       // kind === 'post'
-      const id = result.message != null ? await postOutOfBand(result.message) : undefined;
+      const id =
+        result.message != null && !isBlankToolMessage(result.message) ? await postOutOfBand(result.message) : undefined;
       return { posted: true, messageId: id };
     }
     if (rendersToolsInPlan || toolDisplay === 'hidden') {
@@ -585,7 +596,8 @@ export async function runStreamingDriver({
             pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null) await editOrPost(messageId, result.message);
+          if (result.message != null && !isBlankToolMessage(result.message))
+            await editOrPost(messageId, result.message);
           continue;
         }
         const message = renderBuiltInToolEvent(
@@ -657,7 +669,8 @@ export async function runStreamingDriver({
             pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null) await editOrPost(messageId, result.message);
+          if (result.message != null && !isBlankToolMessage(result.message))
+            await editOrPost(messageId, result.message);
           continue;
         }
         const message = renderBuiltInToolEvent(
