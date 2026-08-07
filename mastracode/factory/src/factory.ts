@@ -650,6 +650,9 @@ export class MastraFactory {
                       requestContext,
                       storage: workItemsStorage,
                       transitionService,
+                      // Heals crash-resumed sessions: recovered addresses re-seed
+                      // projectRepositoryId/baseRef from the source session record.
+                      sessions: sourceControlStorage.forIntegration('github').sessions,
                     }),
                   );
                 }
