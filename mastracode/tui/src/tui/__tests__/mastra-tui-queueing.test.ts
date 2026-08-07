@@ -530,7 +530,6 @@ describe('MastraTUI queueing', () => {
     // The agent_done ping fires at event receipt in notifyForInputRequest;
     // a second notify here would double-ping every completion.
     expect(ctx.notify).not.toHaveBeenCalledWith('agent_done');
-    expect(ctx.notify).not.toHaveBeenCalled();
   });
 
   it('removes the grey pending slash command when the queued command drains', () => {

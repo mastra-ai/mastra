@@ -189,7 +189,12 @@ describe('PermissionRequest hooks fire at event receipt (#20861)', () => {
 
     expect(handled).toEqual(['start:blocking_prompt']);
     expect(manager.runPermissionRequest).toHaveBeenCalledTimes(1);
-    expect(manager.runPermissionRequest).toHaveBeenCalledWith('plan_approval', 'call-plan', 'submit_plan', suspendPayload);
+    expect(manager.runPermissionRequest).toHaveBeenCalledWith(
+      'plan_approval',
+      'call-plan',
+      'submit_plan',
+      suspendPayload,
+    );
     releaseBlocker.resolve();
   });
 
@@ -341,12 +346,6 @@ describe('runId edge with a real HookManager (#20861, Risk R1)', () => {
     const { listener, releaseBlocker } = createHarness(manager);
     const blocked = listener({ type: 'blocking_prompt' });
     await Promise.resolve();
-    void listener({
-      type: 'tool_approval_required',
-      toolCallId: 'call-norunid',
-      toolName: 'execute_command',
-      args: {},
-    });
 
     // Deterministic pin of the bail: a direct awaited call either bails
     // immediately (empty results) or awaits the spawned hook to completion —

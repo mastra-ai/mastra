@@ -259,6 +259,9 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
     expect(handled).toEqual(['start:blocking_prompt']);
     expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
     expect(mocks.sendNotification).toHaveBeenCalledWith('agent_done', expect.objectContaining({ mode: 'off' }));
+    // Reason only, no message — parity with the old queued call shape; the
+    // default 'Agent finished' text comes from reasonToMessage in notify.ts.
+    expect(mocks.sendNotification.mock.calls[0]?.[1]?.message).toBeUndefined();
 
     releaseBlocker.resolve();
     await blocked;
