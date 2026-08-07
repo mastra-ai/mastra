@@ -16,8 +16,8 @@ export type { InlineLinkEntry } from './inline-media';
 /**
  * Message content that can be posted to a channel.
  *
- * - `string` - posted as literal plain text (the adapter does not interpret
- *   markdown in it).
+ * - `string` - posted as-is; standard markdown is not converted, though the
+ *   platform may still apply its own dialect (e.g. Slack mrkdwn).
  * - `CardElement` - rendered as a rich card (e.g. Slack Block Kit).
  * - `{ markdown: string }` - converted by the adapter to its platform format
  *   (e.g. Slack `markdown_text`); adapters without native markdown rendering
