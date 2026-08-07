@@ -1839,7 +1839,7 @@ describe('Factory session routes', () => {
     expect(session.title).toBeNull();
   });
 
-  it('truncates titles to 80 characters and stores blank titles as null', async () => {
+  it('truncates titles to 80 code points and stores blank titles as null', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
     const long = await postJson(app, '/web/github/projects/p1/sessions', {
@@ -1850,9 +1850,19 @@ describe('Factory session routes', () => {
       sessionId: '00000000-0000-4000-8000-000000000002',
       title: ' \n\t ',
     });
+    const atCap = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      title: `${'x'.repeat(79)}🙂`,
+    });
+    const pastCap = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000004',
+      title: `${'x'.repeat(80)}🙂`,
+    });
 
     expect((await long.json()).session.title).toBe('x'.repeat(79));
     expect((await blank.json()).session.title).toBeNull();
+    expect((await atCap.json()).session.title).toBe(`${'x'.repeat(79)}🙂`);
+    expect((await pastCap.json()).session.title).toBe('x'.repeat(80));
   });
 
   it.each([
