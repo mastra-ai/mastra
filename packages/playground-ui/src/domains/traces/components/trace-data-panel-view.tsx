@@ -118,14 +118,6 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  // Scroll the selected span into view within the timeline, which only exists
-  // once the trace has loaded.
-  useEffect(() => {
-    if (isLoading || !selectedSpanId || !contentRef.current) return;
-    const el = contentRef.current.querySelector(`[data-span-id="${selectedSpanId}"]`);
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [selectedSpanId, isLoading]);
-
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? [], anchorSpanId), [spans, anchorSpanId]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
@@ -135,6 +127,17 @@ export function TraceDataPanelView({
       setExpandedSpanIds(getAllSpanIds(hierarchicalSpans));
     }
   }, [hierarchicalSpans]);
+
+  // A nested span only reaches the DOM once expansion opens its ancestors, a
+  // commit after the trace loads -- hence the retry on `expandedSpanIds`.
+  const scrolledToSpanRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (isLoading || !selectedSpanId || scrolledToSpanRef.current === selectedSpanId) return;
+    const el = contentRef.current?.querySelector(`[data-span-id="${selectedSpanId}"]`);
+    if (!el) return;
+    scrolledToSpanRef.current = selectedSpanId;
+    el.scrollIntoView({ block: 'nearest' });
+  }, [selectedSpanId, isLoading, expandedSpanIds]);
 
   const rootSpan = useMemo(
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),

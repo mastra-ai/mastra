@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
-import { rootSpanFixture } from './fixtures/trace-data-panel-view';
+import { nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
 
 const baseProps: TraceDataPanelViewProps = {
   traceId: 'trace-1',
@@ -68,6 +68,13 @@ describe('TraceDataPanelView — span selected from the URL', () => {
       rerender(<TraceDataPanelView {...baseProps} spans={rootSpanFixture} isLoading={false} initialSpanId="root" />);
 
       expect(scrollIntoView).toHaveBeenCalled();
+    });
+
+    it('scrolls a nested span into view once its parent expands', () => {
+      const { rerender } = render(<TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="child" />);
+      rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} isLoading={false} initialSpanId="child" />);
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
     });
   });
 
