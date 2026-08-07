@@ -403,6 +403,7 @@ export class MastraFactory {
       modelPacks: modelPacksStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,

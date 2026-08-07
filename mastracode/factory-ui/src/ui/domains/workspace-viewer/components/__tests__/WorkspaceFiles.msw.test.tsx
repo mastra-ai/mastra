@@ -10,7 +10,7 @@ import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 
-const LIST_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
+const LIST_URL = `${TEST_BASE_URL}/web/workspace/files`;
 const WORKSPACE = 'session-1';
 
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
@@ -35,15 +35,15 @@ afterEach(() => {
 });
 
 function renderPanel() {
-  const listedRoots: string[] = [];
+  const listRequests: Array<{ workspacePath: string | null; threadId: string | null }> = [];
   server.use(
     http.get(LIST_URL, ({ request }) => {
-      listedRoots.push(new URL(request.url).searchParams.get('root') ?? '');
+      const url = new URL(request.url);
+      listRequests.push({ workspacePath: url.searchParams.get('workspacePath'), threadId: url.searchParams.get('threadId') });
       return HttpResponse.json({
         workspacePath: WORKSPACE,
-        root: '.artifacts',
-        rootPath: `${WORKSPACE}/.artifacts`,
-        entries: [],
+        threadId: 'thread-1',
+        files: [],
       });
     }),
   );
@@ -64,7 +64,7 @@ function renderPanel() {
     </MemoryRouter>,
   );
 
-  return { listedRoots };
+  return { listRequests };
 }
 
 describe('WorkspaceFiles', () => {
@@ -72,18 +72,19 @@ describe('WorkspaceFiles', () => {
     it('leaves the card closed and off the network until the header toggle asks for it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
-      const { listedRoots } = renderPanel();
+      const { listRequests } = renderPanel();
 
       const card = await screen.findByTestId('workspace-files-card');
       const toggle = screen.getByRole('button', { name: 'Workspace files' });
       expect(card).toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'false');
-      expect(listedRoots).toEqual([]);
+      expect(listRequests).toEqual([]);
 
       await user.click(toggle);
 
       expect(card).not.toHaveAttribute('inert');
-      await waitFor(() => expect(listedRoots).toEqual(['.artifacts']));
+      expect(await screen.findByRole('tab', { name: 'Files' })).toBeInTheDocument();
+      await waitFor(() => expect(listRequests).toEqual([{ workspacePath: WORKSPACE, threadId: 'thread-1' }]));
     });
   });
 
@@ -94,11 +95,11 @@ describe('WorkspaceFiles', () => {
       renderPanel();
 
       expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Artifacts' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Files' })).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
 
-      expect(await screen.findByRole('button', { name: 'Artifacts' })).toBeInTheDocument();
+      expect(await screen.findByRole('tab', { name: 'Files' })).toBeInTheDocument();
     });
   });
 });

@@ -4,7 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../e2e/ui/render';
-import { useArtifactListing, useDirectoryListing, useWorkspaceFile, useWorkspaceRenderedListing } from '../use-fs';
+import {
+  useArtifactListing,
+  useDirectoryListing,
+  useWorkspaceFile,
+  useWorkspaceFiles,
+  useWorkspaceRenderedListing,
+} from '../use-fs';
 import { listing } from './fixtures/fs';
 
 const URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -113,7 +119,9 @@ describe('useArtifactListing', () => {
 });
 
 const WORKSPACE_RENDERED_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
+const WORKSPACE_FILES_URL = `${TEST_BASE_URL}/web/workspace/files`;
 const WORKSPACE_FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
+const THREAD = 'thread-1';
 
 describe('useWorkspaceRenderedListing', () => {
   it('does not fetch until workspace path and root are available', () => {
@@ -165,6 +173,34 @@ describe('useWorkspaceRenderedListing', () => {
   });
 });
 
+describe('useWorkspaceFiles', () => {
+  describe('when a workspace and thread are available', () => {
+    it('requests the persisted file list for that exact scope', async () => {
+      let seenWorkspacePath: string | null = null;
+      let seenThreadId: string | null = null;
+      server.use(
+        http.get(WORKSPACE_FILES_URL, ({ request }) => {
+          const url = new global.URL(request.url);
+          seenWorkspacePath = url.searchParams.get('workspacePath');
+          seenThreadId = url.searchParams.get('threadId');
+          return HttpResponse.json({
+            workspacePath: seenWorkspacePath,
+            threadId: seenThreadId,
+            files: [{ path: 'src/agent.ts', filename: 'agent.ts' }],
+          });
+        }),
+      );
+
+      const { result } = renderHookWithProviders(() => useWorkspaceFiles('session-1', THREAD));
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(seenWorkspacePath).toBe('session-1');
+      expect(seenThreadId).toBe(THREAD);
+      expect(result.current.data?.files).toEqual([{ path: 'src/agent.ts', filename: 'agent.ts' }]);
+    });
+  });
+});
+
 describe('useWorkspaceFile', () => {
   it('does not fetch when disabled', () => {
     let called = false;
@@ -184,7 +220,7 @@ describe('useWorkspaceFile', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useWorkspaceFile('/home/user/project', '.artifacts/file.md', { enabled: false }),
+      useWorkspaceFile('/home/user/project', '.artifacts/file.md', THREAD, { enabled: false }),
     );
 
     expect(result.current.fetchStatus).toBe('idle');
@@ -212,7 +248,7 @@ describe('useWorkspaceFile', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md'),
+      useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md', THREAD),
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
