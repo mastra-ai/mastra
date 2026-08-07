@@ -1,5 +1,17 @@
 # @mastra/schema-compat
 
+## 1.3.6-alpha.1
+
+### Patch Changes
+
+- Fixed tool execute-time input validation for Zod tools on Anthropic Claude 3.5 Haiku. The compat layer now skips string min/max checks that were removed from the model-facing JSON Schema, while preserving refinements, defaults, and other validation semantics. ([#19701](https://github.com/mastra-ai/mastra/pull/19701))
+
+## 1.3.6-alpha.0
+
+### Patch Changes
+
+- Fix supervisor agent tool schemas for Gemini via OpenRouter. Properties with no Gemini-compatible type — most commonly `z.any()`, which serializes to an empty schema — are now rewritten into a permissive `anyOf` instead of being dropped. This resolves the misleading `required[N]: property is not defined` error when using Gemini models through OpenRouter as a supervisor agent (fixes #17325), while keeping fields the model is expected to fill (such as `resumeData` for tool suspend/resume) present in the tool contract. ([#17386](https://github.com/mastra-ai/mastra/pull/17386))
+
 ## 1.3.5
 
 ### Patch Changes

@@ -15,6 +15,7 @@ export class InMemoryTaskStore {
   private store: Map<string, Task> = new Map();
   private versions: Map<string, number> = new Map();
   private listeners: Map<string, Set<(update: { task: Task; version: number }) => void>> = new Map();
+  private abortControllers: Map<string, AbortController> = new Map();
   public activeCancellations = new Set<string>();
 
   private getKey(agentId: string, taskId: string) {
@@ -49,15 +50,23 @@ export class InMemoryTaskStore {
     agentId,
     data,
     expectedVersion,
+    skipIfCanceled = false,
   }: {
     agentId: string;
     data: Task;
     expectedVersion?: number;
-  }): Promise<void> {
+    skipIfCanceled?: boolean;
+  }): Promise<Task> {
     // Store copies to prevent internal mutation if caller reuses objects
     const key = this.getKey(agentId, data.id);
     if (!data.id) {
       throw new Error('Task ID is required');
+    }
+
+    const existingTask = this.store.get(key);
+
+    if (skipIfCanceled && existingTask?.status.state === 'canceled' && data.status.state !== 'canceled') {
+      return { ...existingTask };
     }
 
     const currentVersion = this.versions.get(key) ?? 0;
@@ -77,10 +86,39 @@ export class InMemoryTaskStore {
         listener({ task: { ...storedTask }, version: nextVersion });
       }
     }
+
+    return { ...storedTask };
   }
 
   getVersion({ agentId, taskId }: { agentId: string; taskId: string }): number {
     return this.versions.get(this.getKey(agentId, taskId)) ?? 0;
+  }
+
+  registerAbortController({
+    agentId,
+    taskId,
+    controller,
+  }: {
+    agentId: string;
+    taskId: string;
+    controller: AbortController;
+  }): () => void {
+    const key = this.getKey(agentId, taskId);
+    this.abortControllers.set(key, controller);
+
+    return () => {
+      if (this.abortControllers.get(key) === controller) {
+        this.abortControllers.delete(key);
+      }
+    };
+  }
+
+  abortTask({ agentId, taskId, reason }: { agentId: string; taskId: string; reason?: unknown }): void {
+    const controller = this.abortControllers.get(this.getKey(agentId, taskId));
+
+    if (controller && !controller.signal.aborted) {
+      controller.abort(reason);
+    }
   }
 
   async waitForNextUpdate({

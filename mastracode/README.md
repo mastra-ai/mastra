@@ -37,14 +37,10 @@ pnpm --dir mastracode/web dev
 
 Open `http://localhost:5873`.
 
-For UI work with hot module replacement, run these in separate terminals:
-
-```shell
-pnpm --dir mastracode/web api
-```
+For UI work with hot module replacement, run the API and the Vite dev server together:
 
 ```shell
 pnpm --filter ./mastracode/factory-ui web
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. To run them in separate terminals instead, use `pnpm --filter ./mastracode/factory-ui web:api` and `pnpm --filter ./mastracode/factory-ui dev`.
