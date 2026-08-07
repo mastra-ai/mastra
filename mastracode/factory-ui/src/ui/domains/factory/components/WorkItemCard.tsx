@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ArrowUpRight,
-  CircleDot,
   EllipsisVertical,
   Link2,
   MessageSquare,
@@ -30,7 +29,7 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, PullRequestStatusIcon, SOURCE_ICONS } from './BoardIcons';
+import { BoardStageIcon, PullRequestStatusIcon, SourceIcon } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
 import { WorkItemActivity } from './WorkItemActivity';
 
@@ -83,10 +82,6 @@ export function WorkItemCard({
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? {
-    icon: CircleDot,
-    className: 'text-icon3',
-  };
   const evaluating = evaluatingStage !== undefined;
   const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -200,11 +195,7 @@ export function WorkItemCard({
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
           <div className="flex min-w-0 items-center gap-1.5">
-            {item.source === 'github-pr' ? (
-              <PullRequestStatusIcon item={item} />
-            ) : (
-              <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
-            )}
+            {item.source === 'github-pr' ? <PullRequestStatusIcon item={item} /> : <SourceIcon source={item.source} />}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />
             </span>
