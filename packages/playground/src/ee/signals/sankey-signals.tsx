@@ -219,7 +219,6 @@ function FlowCard({
     >
       <CardContent className="px-0 py-2 sm:py-3">
         <Sankey
-          key={chartColumns.map(column => column.id).join(':')}
           data={records}
           columns={chartColumns}
           columnOrder={chartColumns.map(column => column.id)}
@@ -231,6 +230,7 @@ function FlowCard({
           getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
         >
           <SankeyChart
+            animateLayoutChanges
             height={height ?? 'clamp(340px, 42vw, 460px)'}
             margin={{ top: 64, right: 32, bottom: 24, left: 32 }}
             onNodeClick={onNodeClick}
@@ -596,8 +596,6 @@ export function SankeySignals({
               These filters are unavailable for snapshots with more than 2,000 traces. Clear the filters above or choose
               another snapshot.
             </section>
-          ) : drillStack.length > 0 && pathsQuery.isPending ? (
-            <SignalsFrameLoadingSkeleton />
           ) : isDrilledEmpty ? (
             <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
               These filters have no matching traces in the selected snapshot. Clear a filter above to return to the

@@ -10,6 +10,7 @@ import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 beforeEach(() => {
@@ -57,6 +58,7 @@ function Example({
   visibleColumnIds,
   onVisibleColumnIdsChange,
   getColumnHue,
+  animateLayoutChanges,
 }: {
   onCurveClick?: (selection: unknown) => void;
   onNodeClick?: (selection: unknown) => void;
@@ -66,6 +68,7 @@ function Example({
   visibleColumnIds?: Array<string>;
   onVisibleColumnIdsChange?: (columnIds: Array<string>) => void;
   getColumnHue?: (column: (typeof columns)[number]) => number;
+  animateLayoutChanges?: boolean;
 }) {
   return (
     <Sankey
@@ -76,9 +79,15 @@ function Example({
       visibleColumnIds={visibleColumnIds}
       onVisibleColumnIdsChange={onVisibleColumnIdsChange}
       getColumnHue={getColumnHue}
+      getRecordLayoutWeight={animateLayoutChanges ? () => 1 : undefined}
     >
       <TestControls />
-      <SankeyChart onCurveClick={onCurveClick} onNodeClick={onNodeClick} isNodeClickable={isNodeClickable} />
+      <SankeyChart
+        animateLayoutChanges={animateLayoutChanges}
+        onCurveClick={onCurveClick}
+        onNodeClick={onNodeClick}
+        isNodeClickable={isNodeClickable}
+      />
     </Sankey>
   );
 }
@@ -613,6 +622,72 @@ describe('SankeyChart', () => {
     await waitFor(() =>
       expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull(),
     );
+  });
+
+  describe('when reduced motion is preferred', () => {
+    it('updates the layout without geometry animations', async () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: query === '(prefers-reduced-motion: reduce)',
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => true,
+        })),
+      );
+      const { container } = render(<Example animateLayoutChanges />);
+      await screen.findAllByText('Region');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
+
+      await screen.findByRole('button', { name: 'Show Region' });
+      expect(container.querySelector('animate[attributeName="d"]')).toBeNull();
+      expect(container.querySelector('animateTransform[attributeName="transform"]')).toBeNull();
+    });
+  });
+
+  describe('when animated layout changes are enabled', () => {
+    it('moves ribbons from their previous geometry when a column is hidden', async () => {
+      const { container } = render(<Example animateLayoutChanges />);
+      await screen.findAllByText('Region');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
+
+      await waitFor(() => {
+        const ribbonAnimation = container.querySelector('path animate[attributeName="d"]');
+        expect(ribbonAnimation?.getAttribute('from')).not.toBe(ribbonAnimation?.getAttribute('to'));
+      });
+    });
+
+    it('moves remaining nodes into their new positions when a column is hidden', async () => {
+      const { container } = render(<Example animateLayoutChanges />);
+      await screen.findAllByText('Region');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Hide Channel' }));
+
+      await waitFor(() => {
+        const nodeAnimation = container.querySelector('g animateTransform[attributeName="transform"]');
+        expect(nodeAnimation?.getAttribute('from')).not.toBe(nodeAnimation?.getAttribute('to'));
+      });
+    });
+
+    it('moves ribbons back into place when a column is restored', async () => {
+      const { container } = render(<Example animateLayoutChanges />);
+      await screen.findAllByText('Region');
+      fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
+      await waitFor(() => expect(container.querySelector('path animate[attributeName="d"]')).not.toBeNull());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show Region' }));
+
+      await waitFor(() => {
+        const ribbonAnimation = container.querySelector('path animate[attributeName="d"]');
+        expect(ribbonAnimation?.getAttribute('from')).not.toBe(ribbonAnimation?.getAttribute('to'));
+      });
+    });
   });
 
   it('reports the next visible columns from controlled user-land controls', () => {

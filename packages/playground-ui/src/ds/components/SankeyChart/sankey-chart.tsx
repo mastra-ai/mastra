@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
@@ -9,7 +9,16 @@ import {
   SANKEY_NODE_WIDTH,
   truncateSankeyLabel,
 } from './sankey-chart-utils';
-import type { SankeyChartCurveSelection, SankeyChartNodeSelection, SankeyLabelWidths } from './sankey-chart-utils';
+import type {
+  FixedSankeyGeometry,
+  FixedSankeyLinkGeometry,
+  FixedSankeyNodeGeometry,
+  SankeyChartCurveSelection,
+  SankeyChartGraph,
+  SankeyChartLink,
+  SankeyChartNodeSelection,
+  SankeyLabelWidths,
+} from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
@@ -20,6 +29,17 @@ const NODE_LABEL_FONT_SIZE = 11;
 const COLUMN_LABEL_FONT_SIZE = 12;
 // pre-measurement cap, kept so wide charts read unchanged
 const NODE_LABEL_MAX_CHARACTERS = 23;
+const LAYOUT_ANIMATION_DURATION = '260ms';
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+type PreviousSankeyLayout = {
+  key: string;
+  graph: SankeyChartGraph;
+  geometry: FixedSankeyGeometry;
+};
 
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
@@ -28,6 +48,7 @@ export type SankeyChartProps = {
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
   onNodeClick?: (selection: SankeyChartNodeSelection) => void;
   isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
+  animateLayoutChanges?: boolean;
 };
 
 export function SankeyChart({
@@ -37,6 +58,7 @@ export function SankeyChart({
   onCurveClick,
   onNodeClick,
   isNodeClickable,
+  animateLayoutChanges = false,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
@@ -45,6 +67,20 @@ export function SankeyChart({
     margin,
     usesFixedGeometry,
   });
+  const layoutKey = enabledColumns.map(column => column.id).join(':');
+  const previousLayoutRef = useRef<PreviousSankeyLayout | undefined>(undefined);
+  const previousLayout = previousLayoutRef.current;
+  const shouldAnimateLayout = Boolean(
+    animateLayoutChanges &&
+    fixedGeometry &&
+    previousLayout &&
+    previousLayout.key !== layoutKey &&
+    !prefersReducedMotion(),
+  );
+  useEffect(() => {
+    if (!fixedGeometry) return;
+    previousLayoutRef.current = { key: layoutKey, graph, geometry: fixedGeometry };
+  }, [fixedGeometry, graph, layoutKey]);
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
@@ -76,6 +112,7 @@ export function SankeyChart({
             initialDimension={{ width: 800, height: typeof height === 'number' ? height : 320 }}
           >
             <RechartsSankey
+              key={layoutKey}
               data={graph}
               nodeWidth={SANKEY_NODE_WIDTH}
               nodePadding={56}
@@ -86,6 +123,10 @@ export function SankeyChart({
                   ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
                   : false;
                 const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
+                const animationFrom =
+                  shouldAnimateLayout && node && previousLayout
+                    ? previousLayout.geometry.nodes.get(node.id)
+                    : undefined;
                 const selection = node ? getSankeyChartNodeSelection(node) : undefined;
                 const clickable = Boolean(
                   onNodeClick && selection && (isNodeClickable === undefined || isNodeClickable(selection)),
@@ -93,6 +134,7 @@ export function SankeyChart({
                 return (
                   <SankeyNode
                     {...props}
+                    animationFrom={animationFrom}
                     x={nodeGeometry?.x ?? props.x}
                     y={nodeGeometry?.y ?? props.y}
                     height={nodeGeometry?.height ?? props.height}
@@ -121,9 +163,14 @@ export function SankeyChart({
                 const sourceX = linkGeometry?.sourceX ?? props.sourceX;
                 const targetX = linkGeometry?.targetX ?? props.targetX;
                 const fixedControlX = linkGeometry ? (sourceX + targetX) / 2 : undefined;
+                const animationFrom =
+                  shouldAnimateLayout && link && linkGeometry && previousLayout
+                    ? getPreviousLinkGeometry(link, linkGeometry, previousLayout)
+                    : undefined;
                 return (
                   <SankeyLink
                     {...props}
+                    animationFrom={animationFrom}
                     sourceX={sourceX}
                     targetX={targetX}
                     sourceControlX={fixedControlX ?? props.sourceControlX}
@@ -174,6 +221,7 @@ type SankeyLinkRendererProps = {
 };
 
 type SankeyNodeProps = SankeyNodeRendererProps & {
+  animationFrom?: FixedSankeyNodeGeometry;
   hueMap: Record<string, number>;
   columnLabel?: string;
   label?: string;
@@ -191,6 +239,7 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
 };
 
 function SankeyNode({
+  animationFrom,
   x,
   y,
   width,
@@ -240,6 +289,8 @@ function SankeyNode({
     columnTotal > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / columnTotal) * 100) : 0;
   const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
   const visibleY = y + (height - visibleHeight) / 2;
+  const animationOffset = animationFrom ? { x: animationFrom.x - x, y: animationFrom.y - y } : undefined;
+  const hasNodeMotion = animationOffset && (animationOffset.x !== 0 || animationOffset.y !== 0);
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const hue = hueMap[name] ?? 0;
@@ -271,6 +322,19 @@ function SankeyNode({
           fontSize={COLUMN_LABEL_FONT_SIZE}
           fontWeight={600}
         >
+          {hasNodeMotion ? (
+            <animate
+              attributeName="x"
+              begin="0s"
+              calcMode="spline"
+              dur={LAYOUT_ANIMATION_DURATION}
+              fill="freeze"
+              from={labelX + animationOffset.x}
+              keySplines="0.2 0.8 0.2 1"
+              keyTimes="0;1"
+              to={labelX}
+            />
+          ) : null}
           {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
           {visibleColumnLabel}
         </text>
@@ -303,6 +367,20 @@ function SankeyNode({
         style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
       >
+        {hasNodeMotion ? (
+          <animateTransform
+            attributeName="transform"
+            begin="0s"
+            calcMode="spline"
+            dur={LAYOUT_ANIMATION_DURATION}
+            fill="freeze"
+            from={`${animationOffset.x} ${animationOffset.y}`}
+            keySplines="0.2 0.8 0.2 1"
+            keyTimes="0;1"
+            to="0 0"
+            type="translate"
+          />
+        ) : null}
         {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
         {description ? null : <title>{displayLabel}</title>}
         <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
@@ -350,7 +428,63 @@ function scaleSankeyDimension(size: number, displayValue: number | undefined, la
   return size * Math.min(Math.max(displayValue / layoutValue, 0), 1);
 }
 
+function getPreviousLinkGeometry(
+  link: SankeyChartLink,
+  currentGeometry: FixedSankeyLinkGeometry,
+  previousLayout: PreviousSankeyLayout,
+): FixedSankeyLinkGeometry | undefined {
+  const previousLinkGeometry = previousLayout.geometry.links.get(link.id);
+  if (previousLinkGeometry) return previousLinkGeometry;
+
+  const previousSource = previousLayout.geometry.nodes.get(link.sourceNode.id);
+  const previousTarget = previousLayout.geometry.nodes.get(link.targetNode.id);
+  if (!previousSource && !previousTarget) return undefined;
+
+  const sourceX = previousSource
+    ? previousSource.x + SANKEY_NODE_WIDTH
+    : (previousTarget?.x ?? currentGeometry.sourceX);
+  const targetX = previousTarget?.x ?? sourceX;
+  const sourceY = previousSource?.centerY ?? previousTarget?.centerY ?? currentGeometry.sourceY;
+  const targetY = previousTarget?.centerY ?? sourceY;
+
+  return {
+    sourceX,
+    targetX,
+    sourceY,
+    targetY,
+    sourceWidth: currentGeometry.sourceWidth,
+    targetWidth: currentGeometry.targetWidth,
+  };
+}
+
+type SankeyLinkPathGeometry = FixedSankeyLinkGeometry & {
+  sourceControlX: number;
+  targetControlX: number;
+};
+
+function buildSankeyLinkPath({
+  sourceX,
+  targetX,
+  sourceY,
+  targetY,
+  sourceControlX,
+  targetControlX,
+  sourceWidth,
+  targetWidth,
+}: SankeyLinkPathGeometry) {
+  const sourceHalfWidth = sourceWidth / 2;
+  const targetHalfWidth = targetWidth / 2;
+  return [
+    `M${sourceX},${sourceY - sourceHalfWidth}`,
+    `C${sourceControlX},${sourceY - sourceHalfWidth} ${targetControlX},${targetY - targetHalfWidth} ${targetX},${targetY - targetHalfWidth}`,
+    `L${targetX},${targetY + targetHalfWidth}`,
+    `C${targetControlX},${targetY + targetHalfWidth} ${sourceControlX},${sourceY + sourceHalfWidth} ${sourceX},${sourceY + sourceHalfWidth}`,
+    'Z',
+  ].join(' ');
+}
+
 type SankeyLinkProps = SankeyLinkRendererProps & {
+  animationFrom?: FixedSankeyLinkGeometry;
   hueMap: Record<string, number>;
   highlighted: boolean;
   displayValue?: number;
@@ -363,6 +497,7 @@ type SankeyLinkProps = SankeyLinkRendererProps & {
 };
 
 function SankeyLink({
+  animationFrom,
   sourceX,
   targetX,
   sourceY,
@@ -383,15 +518,25 @@ function SankeyLink({
   onSelect,
 }: SankeyLinkProps) {
   const visibleWidth = scaleSankeyDimension(linkWidth, displayValue, layoutValue);
-  const sourceHalfWidth = Math.max(0, sourceWidth ?? visibleWidth) / 2;
-  const targetHalfWidth = Math.max(0, targetWidth ?? visibleWidth) / 2;
-  const path = [
-    `M${sourceX},${sourceY - sourceHalfWidth}`,
-    `C${sourceControlX},${sourceY - sourceHalfWidth} ${targetControlX},${targetY - targetHalfWidth} ${targetX},${targetY - targetHalfWidth}`,
-    `L${targetX},${targetY + targetHalfWidth}`,
-    `C${targetControlX},${targetY + targetHalfWidth} ${sourceControlX},${sourceY + sourceHalfWidth} ${sourceX},${sourceY + sourceHalfWidth}`,
-    'Z',
-  ].join(' ');
+  const currentSourceWidth = Math.max(0, sourceWidth ?? visibleWidth);
+  const currentTargetWidth = Math.max(0, targetWidth ?? visibleWidth);
+  const path = buildSankeyLinkPath({
+    sourceX,
+    targetX,
+    sourceY,
+    targetY,
+    sourceControlX,
+    targetControlX,
+    sourceWidth: currentSourceWidth,
+    targetWidth: currentTargetWidth,
+  });
+  const animationFromPath = animationFrom
+    ? buildSankeyLinkPath({
+        ...animationFrom,
+        sourceControlX: (animationFrom.sourceX + animationFrom.targetX) / 2,
+        targetControlX: (animationFrom.sourceX + animationFrom.targetX) / 2,
+      })
+    : undefined;
   const sourceName = String(payload.source.name ?? '');
   const targetName = String(payload.target.name ?? '');
   const gradientId = `sankey-grad-${index}`;
@@ -427,7 +572,21 @@ function SankeyLink({
         onMouseEnter={() => onHoverChange(sourceName)}
         onMouseLeave={() => onHoverChange(undefined)}
         style={{ cursor: clickable ? 'pointer' : undefined, transition: 'fill-opacity 0.18s ease' }}
-      />
+      >
+        {animationFromPath ? (
+          <animate
+            attributeName="d"
+            begin="0s"
+            calcMode="spline"
+            dur={LAYOUT_ANIMATION_DURATION}
+            fill="freeze"
+            from={animationFromPath}
+            keySplines="0.2 0.8 0.2 1"
+            keyTimes="0;1"
+            to={path}
+          />
+        ) : null}
+      </path>
     </g>
   );
 }

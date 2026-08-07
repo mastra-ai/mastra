@@ -461,6 +461,26 @@ describe('SankeySignals drill-in', () => {
       expect(screen.queryByLabelText('Active drill-down filters')).toBeNull();
     });
 
+    it('keeps the current flow mounted while theme paths load for the transition', async () => {
+      useFlowHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, async ({ request }) => {
+          await delay(100);
+          const offset = new URL(request.url).searchParams.get('offset');
+          return HttpResponse.json(offset === '1' ? secondThemePathsResponse : firstThemePathsResponse);
+        }),
+      );
+      renderSignals();
+      const themeNode = await screen.findByLabelText(/Add transcript.+2 traces \(67%\)/);
+
+      fireEvent.click(themeNode);
+
+      expect(await screen.findByText('Loading matching traces…')).not.toBeNull();
+      expect(screen.getByLabelText('Trace signal theme flow')).not.toBeNull();
+      expect(screen.getByLabelText(/Add transcript.+2 traces \(67%\)/)).not.toBeNull();
+      expect(await screen.findByText('Showing 2 of 3 traces that match all filters')).not.toBeNull();
+    });
+
     it('opens the selected theme from an explicit details action', async () => {
       useFlowHandlers();
       renderSignals();
