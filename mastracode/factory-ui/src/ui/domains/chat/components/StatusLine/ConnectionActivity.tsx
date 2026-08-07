@@ -9,9 +9,10 @@ export function ConnectionActivity() {
   const { status } = useChatConnection();
   const { busy } = useChatTranscript();
 
+  // Spinning composer ring is the visible cue; this keeps the state announced.
   if (busy)
     return (
-      <span className={statusItem} role="status" aria-live="polite">
+      <span className="sr-only" role="status" aria-live="polite">
         Working…
       </span>
     );

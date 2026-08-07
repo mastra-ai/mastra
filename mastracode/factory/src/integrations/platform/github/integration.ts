@@ -116,6 +116,8 @@ type GithubPullRequest = {
   head: { ref: string; sha: string };
   base: { ref: string; repo: { id: number; fullName: string } };
   user: GithubActor;
+  assignees?: string[];
+  requestedReviewers?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -187,6 +189,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
+  readonly #slug: string | undefined;
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
   readonly #reconcileEnabled: boolean;
@@ -445,15 +448,23 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   constructor(
     options: {
       runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+      /** GitHub App slug used to recognize Factory's own webhook writes. */
+      slug?: string;
     } = {},
   ) {
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
+    this.#slug = options.slug;
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
     this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
     this.#runIssueTriage = options.runIssueTriage;
+  }
+
+  /** GitHub App slug when the deployment explicitly provides it. */
+  get slug(): string | undefined {
+    return this.#slug;
   }
 
   get storage(): SourceControlStorageHandle {
@@ -723,8 +734,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title?: string;
         html_url?: string;
         state?: string;
+        draft?: boolean;
         merged?: boolean;
         created_at?: string;
+        user?: { login?: string } | null;
+        assignees?: Array<{ login?: string }> | null;
+        requested_reviewers?: Array<{ login?: string }> | null;
         merged_by?: { login?: string } | null;
         head?: { ref?: string };
         base?: { ref?: string };
@@ -736,9 +751,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title: result.title ?? `PR ${input.number}`,
         url: result.html_url ?? `https://github.com/${input.repository}/pull/${input.number}`,
         state: result.state === 'closed' ? 'closed' : 'open',
+        draft: result.draft === true,
         merged: result.merged === true,
+        assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+        requestedReviewers: (result.requested_reviewers ?? []).flatMap(reviewer =>
+          reviewer.login ? [reviewer.login] : [],
+        ),
         headBranch: result.head?.ref ?? '',
         baseBranch: result.base?.ref ?? '',
+        ...(result.user?.login ? { author: result.user.login } : {}),
         ...(result.created_at ? { createdAt: result.created_at } : {}),
         ...(result.merged_by?.login ? { mergedBy: result.merged_by.login } : {}),
       };
@@ -878,7 +899,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ issues: GithubIssue[] }>('GET', `${path}?${query}`);
     return {
       issues: result.issues.map(issue => parseIntakeIssue(sourceId, issue)),
-      nextCursor: result.issues.length === PAGE_SIZE ? String(page + 1) : null,
+      nextCursor: result.issues.length > 0 ? String(page + 1) : null,
     };
   }
 
@@ -1254,6 +1275,7 @@ function parseIntakeIssue(sourceId: string, issue: GithubIssue): IntakeIssue {
     stateType: issue.state,
     priority: null,
     assignee: issue.assignees[0] ?? null,
+    assignees: issue.assignees,
     source: sourceId,
     labels: issue.labels,
     commentCount: issue.commentCount,
@@ -1280,6 +1302,8 @@ function parsePullRequest(pullRequest: GithubPullRequest): PullRequest {
     title: pullRequest.title,
     url: pullRequest.htmlUrl,
     author: pullRequest.user?.login ?? null,
+    assignees: pullRequest.assignees ?? [],
+    requestedReviewers: pullRequest.requestedReviewers ?? [],
     body: pullRequest.body?.trim() ? pullRequest.body : null,
     state: pullRequest.state,
     draft: pullRequest.draft,

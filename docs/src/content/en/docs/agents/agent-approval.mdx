@@ -523,7 +523,7 @@ Suspended runs only survive restarts when your Mastra instance is configured wit
 
 ## Tool approval: Supervisor agents
 
-A [supervisor agent](/docs/agents/supervisor-agents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
+A [supervisor agent](/docs/capabilities/subagents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
 
 1. The supervisor delegates a task to a subagent.
 1. The subagent calls a tool that has `requireApproval: true` or uses `suspend()`.

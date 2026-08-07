@@ -24,10 +24,16 @@ interface FsRoutingWatchOptions {
   preparedEntry: PrepareFsAgentsEntryResult;
 }
 
-function collectInstructionPaths(agents: DiscoveredFsAgent[]): string[] {
+/**
+ * Files whose contents are inlined into the generated fs-agents module rather
+ * than imported by it. Rollup can't see them through the module graph, so the
+ * dev watcher has to register them explicitly or edits won't trigger a rebuild.
+ */
+function collectInlinedPaths(agents: DiscoveredFsAgent[]): string[] {
   return agents.flatMap(agent => [
     ...(agent.instructionsPath ? [agent.instructionsPath] : []),
-    ...collectInstructionPaths(agent.subagents),
+    ...(agent.schedules ?? []).flatMap(schedule => (schedule.kind === 'markdown' ? [schedule.path] : [])),
+    ...collectInlinedPaths(agent.subagents),
   ]);
 }
 
@@ -167,8 +173,8 @@ export class DevBundler extends Bundler {
               }
 
               const agents = await discoverFsAgents(fsRoutingWatchOptions.mastraDir);
-              for (const instructionsPath of collectInstructionPaths(agents)) {
-                this.addWatchFile(resolve(instructionsPath));
+              for (const inlinedPath of collectInlinedPaths(agents)) {
+                this.addWatchFile(resolve(inlinedPath));
               }
 
               const nextEntry = await prepareFsAgentsEntry(
