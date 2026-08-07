@@ -5178,8 +5178,11 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "agentVersion",
+      "description",
       "grouping",
       "maxConcurrency",
+      "metadata",
+      "name",
       "provenance",
       "requestContext",
       "scorerIds",

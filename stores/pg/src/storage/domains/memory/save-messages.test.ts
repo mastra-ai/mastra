@@ -11,6 +11,7 @@ type RecordedQuery = {
 
 class RecordingTxClient implements TxClient {
   queries: RecordedQuery[] = [];
+  sourceMessages: Record<string, any>[] = [];
 
   async none(query: string, values?: QueryValues): Promise<null> {
     this.queries.push({ query, values });
@@ -30,7 +31,7 @@ class RecordingTxClient implements TxClient {
   }
 
   async manyOrNone<T = any>(): Promise<T[]> {
-    throw new Error('not implemented');
+    return this.sourceMessages as T[];
   }
 
   async many<T = any>(): Promise<T[]> {
@@ -50,6 +51,7 @@ class RecordingDbClient implements DbClient {
   readonly $pool = {} as DbClient['$pool'];
   readonly txClient = new RecordingTxClient();
   readonly threads = new Map<string, Record<string, unknown>>();
+  readonly queries: RecordedQuery[] = [];
 
   constructor({
     thread,
@@ -73,8 +75,9 @@ class RecordingDbClient implements DbClient {
     throw new Error('not implemented');
   }
 
-  async none(): Promise<null> {
-    throw new Error('not implemented');
+  async none(query: string, values?: QueryValues): Promise<null> {
+    this.queries.push({ query, values });
+    return null;
   }
 
   async one<T = any>(): Promise<T> {
@@ -90,7 +93,8 @@ class RecordingDbClient implements DbClient {
     throw new Error('not implemented');
   }
 
-  async manyOrNone<T = any>(): Promise<T[]> {
+  async manyOrNone<T = any>(query?: string): Promise<T[]> {
+    if (query?.includes('information_schema.columns')) return [];
     throw new Error('not implemented');
   }
 
@@ -122,6 +126,20 @@ function createMessage(overrides: Partial<MastraDBMessage> = {}): MastraDBMessag
 }
 
 describe('MemoryPG.saveMessages', () => {
+  it('binds UTC strings for both timestamp column variants', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const createdAt = new Date('2025-07-01T12:34:56.789Z');
+
+    await memory.saveMessages({ messages: [createMessage({ id: 'message-1', createdAt })] });
+
+    const [insertQuery, threadUpdateQuery] = client.txClient.queries;
+    expect(insertQuery!.values![3]).toBe(createdAt.toISOString());
+    expect(insertQuery!.values![4]).toBe(createdAt.toISOString());
+    expect(threadUpdateQuery!.values![0]).toMatch(/Z$/);
+    expect(threadUpdateQuery!.values![1]).toBe(threadUpdateQuery!.values![0]);
+  });
+
   it('inserts multiple messages with one multi-row upsert statement', async () => {
     const client = new RecordingDbClient();
     const memory = new MemoryPG({ client });
@@ -161,8 +179,8 @@ describe('MemoryPG.saveMessages', () => {
     expect(insertQuery!.query).not.toContain('$9');
     expect(insertQuery!.values).toHaveLength(8);
     expect(insertQuery!.values![2]).toBe(JSON.stringify({ content: 'second' }));
-    expect(insertQuery!.values![3]).toBe(firstCreatedAt);
-    expect(insertQuery!.values![4]).toBe(firstCreatedAt);
+    expect(insertQuery!.values![3]).toBe(firstCreatedAt.toISOString());
+    expect(insertQuery!.values![4]).toBe(firstCreatedAt.toISOString());
   });
 
   it('chunks message inserts under the Postgres bind parameter limit and updates the thread once', async () => {
@@ -282,5 +300,90 @@ describe('MemoryPG.saveMessages', () => {
       'Thread thread-1 not found',
     );
     expect(client.txClient.queries).toHaveLength(0);
+  });
+});
+
+describe('MemoryPG.saveThread', () => {
+  it('binds UTC strings for both timestamp column variants', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const createdAt = new Date('2025-07-01T12:34:56.789Z');
+    const updatedAt = new Date('2025-07-02T01:02:03.456Z');
+
+    await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Test thread',
+        metadata: {},
+        createdAt,
+        updatedAt,
+      },
+    });
+
+    expect(client.queries).toHaveLength(1);
+    expect(client.queries[0]!.values).toEqual([
+      'thread-1',
+      'resource-1',
+      'Test thread',
+      '{}',
+      createdAt.toISOString(),
+      createdAt.toISOString(),
+      updatedAt.toISOString(),
+      updatedAt.toISOString(),
+    ]);
+  });
+});
+
+describe('MemoryPG.saveResource', () => {
+  it('binds UTC strings for both timestamp column variants', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const createdAt = new Date('2025-07-01T12:34:56.789Z');
+    const updatedAt = new Date('2025-07-02T01:02:03.456Z');
+
+    await memory.saveResource({
+      resource: {
+        id: 'resource-1',
+        workingMemory: 'Test memory',
+        metadata: {},
+        createdAt,
+        updatedAt,
+      },
+    });
+
+    expect(client.queries).toHaveLength(1);
+    expect(client.queries[0]!.values![3]).toBe(createdAt.toISOString());
+    expect(client.queries[0]!.values![4]).toBe(updatedAt.toISOString());
+    expect(client.queries[0]!.values![5]).toBe(createdAt.toISOString());
+    expect(client.queries[0]!.values![6]).toBe(updatedAt.toISOString());
+  });
+});
+
+describe('MemoryPG.cloneThread', () => {
+  it('prefers createdAtZ and binds the UTC string to both timestamp columns', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const legacyCreatedAt = new Date('2025-07-01T07:34:56.789Z');
+    const createdAtZ = new Date('2025-07-01T12:34:56.789Z');
+    client.txClient.sourceMessages.push({
+      id: 'message-1',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      role: 'user',
+      type: 'v2',
+      content: JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'hello' }] }),
+      createdAt: legacyCreatedAt,
+      createdAtZ,
+    });
+
+    const result = await memory.cloneThread({ sourceThreadId: 'thread-1', newThreadId: 'thread-2' });
+
+    const messageInsert = client.txClient.queries[1]!;
+    expect(messageInsert.query).toContain('mastra_messages');
+    expect(messageInsert.values![3]).toBe(createdAtZ.toISOString());
+    expect(messageInsert.values![4]).toBe(createdAtZ.toISOString());
+    expect(messageInsert.values![3]).not.toBe(legacyCreatedAt.toISOString());
+    expect(result.clonedMessages[0]!.createdAt).toEqual(createdAtZ);
   });
 });

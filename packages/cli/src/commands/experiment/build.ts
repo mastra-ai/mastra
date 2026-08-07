@@ -15,7 +15,7 @@ export async function buildExperimentWorker({
   outputDir?: string;
   debug?: boolean;
 }) {
-  const rootDir = root || process.cwd();
+  const rootDir = resolve(root || process.cwd());
   const mastraDir = dir ? (isAbsolute(dir) ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = outputDir
     ? isAbsolute(outputDir)

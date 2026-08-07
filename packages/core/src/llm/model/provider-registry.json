@@ -2350,6 +2350,7 @@
       },
       "deprecatedModels": [
         "claude-3-5-haiku",
+        "claude-opus-4-1",
         "gemini-3-pro",
         "glm-4.6",
         "glm-4.7",
