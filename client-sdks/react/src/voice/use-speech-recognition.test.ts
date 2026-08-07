@@ -366,4 +366,44 @@ describe('useSpeechRecognition (mastra path)', () => {
     await waitFor(() => expect(listenMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current.transcript).toBe('mastra transcript'));
   });
+
+  it('does not discard an in-flight transcription when stop() is called defensively', async () => {
+    // Residual of #19980: after a normal stop, the recorder is gone but
+    // voice.listen() is still in flight. A consumer calling stop() again
+    // (on send, on blur, in a cleanup) must not invalidate the session and
+    // silently discard the transcript.
+    installSpeechRecognition();
+    let resolveListen: ((res: { text: string }) => void) | null = null;
+    listenMock.mockImplementationOnce(
+      () =>
+        new Promise<{ text: string }>(resolve => {
+          resolveListen = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1' }), { wrapper });
+
+    await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => expect(result.current.isListening).toBe(true));
+
+    // Normal stop; the recorder's async onstop fires and transcription begins.
+    act(() => result.current.stop());
+    await act(async () => {
+      onFinishCapture?.(new File(['audio'], 'rec.webm', { type: 'audio/webm' }));
+    });
+    await waitFor(() => expect(listenMock).toHaveBeenCalledTimes(1));
+
+    // Defensive second stop() while listen() is in flight: no recorder, no
+    // in-flight start. It must not bump the session.
+    act(() => result.current.stop());
+
+    await act(async () => {
+      resolveListen?.({ text: 'mastra transcript' });
+    });
+    await waitFor(() => expect(result.current.transcript).toBe('mastra transcript'));
+  });
 });

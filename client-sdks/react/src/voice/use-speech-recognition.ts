@@ -227,18 +227,21 @@ const useMastraSpeechToText = ({
   };
 
   const stop = () => {
-    startInFlightRef.current = false;
     if (recorderRef.current) {
       // An active recording — its session was fixed at start() time and hasn't
       // changed, so its own onstop/handleFinish will complete normally.
       recorderRef.current.stop();
       recorderRef.current = null;
-    } else {
-      // No recorder yet: a start() is still in-flight. Invalidate the session
-      // so that in-flight start's resolution knows to abort (stop the recorder
+    } else if (startInFlightRef.current) {
+      // No recorder yet but a start() is still in-flight. Invalidate the
+      // session so that start's resolution knows to abort (stop the recorder
       // instead of assigning/starting it) rather than silently proceeding.
       sessionRef.current += 1;
     }
+    // Otherwise the hook is idle, or a finished recording's transcription is
+    // still in flight — bumping the session then would silently discard the
+    // transcript (the same failure class as #19980, in a narrower window).
+    startInFlightRef.current = false;
     setState(prev => ({ ...prev, isListening: false }));
   };
 
