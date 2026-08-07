@@ -419,9 +419,12 @@
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
+    "alibaba/qwen3-coder-next",
+    "alibaba/qwen3.5-flash",
     "alibaba/qwen3.6-27b",
     "alibaba/qwen3.7-flash",
     "anthropic/claude-sonnet-4.5",
+    "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro",

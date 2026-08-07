@@ -132,6 +132,7 @@ export function createDurableScorerStep() {
 
           // Call runScorer (fire-and-forget via hooks)
           runScorer({
+            mastra: mastra as Mastra | undefined,
             runId,
             scorerId: scorerKey,
             scorerObject,

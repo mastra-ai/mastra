@@ -33,6 +33,7 @@ export interface PullRequest {
   author: string | null;
   assignees?: string[];
   requestedReviewers?: string[];
+  labels?: string[];
   body: string | null;
   state: PullRequestState;
   draft: boolean;

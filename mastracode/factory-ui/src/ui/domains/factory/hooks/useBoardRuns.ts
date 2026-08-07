@@ -115,17 +115,34 @@ export function useBoardRuns({
   const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
     if (!beginPreparingItem(item.id, 'Preparing run…')) return;
     try {
-      await startRunForItem(item, role);
+      await startRunForItem(item, role, { openExisting: true });
     } finally {
       clearPreparingItem(item.id);
     }
   };
 
-  const startRunForItem = async (item: WorkItem, role: RunAction['role']) => {
+  // Re-run a role's agent even though the card already has a live session for
+  // it — e.g. re-reviewing a Done-lane PR that got new commits. All of an
+  // item's runs share one branch/worktree, so the kickoff lands in the
+  // existing thread as a follow-up instead of minting a parallel session.
+  const restartRun = async (item: WorkItem, role: RunAction['role']) => {
+    if (!beginPreparingItem(item.id, 'Preparing run…')) return;
+    try {
+      await startRunForItem(item, role, { openExisting: false });
+    } finally {
+      clearPreparingItem(item.id);
+    }
+  };
+
+  const startRunForItem = async (
+    item: WorkItem,
+    role: RunAction['role'],
+    { openExisting }: { openExisting: boolean },
+  ) => {
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];
-    if (existingSession && refreshed.paths.has(existingSession.sessionId)) {
+    if (openExisting && existingSession && refreshed.paths.has(existingSession.sessionId)) {
       await openThread(existingSession);
       return;
     }
@@ -197,6 +214,7 @@ export function useBoardRuns({
     preparingForSource: (sourceKey: string): string | undefined => preparingItems[sourceKey],
     openOrCreateSession,
     openOrStartRun,
+    restartRun,
     startCandidateRun,
     triageCandidate: (issue: GithubIssue) => triage.mutate(issue),
   };
