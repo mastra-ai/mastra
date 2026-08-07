@@ -179,18 +179,6 @@ function ThemeFilterBanner({
   );
 }
 
-/** Chart gutter caption: the header band lists signals, the node area lists their themes. */
-function GutterLabel({ children, className }: { children: React.ReactNode; className: string }) {
-  return (
-    <span
-      className={`text-neutral3 absolute left-1/2 -translate-x-1/2 rotate-180 font-mono text-[10px] tracking-[0.18em] ${className}`}
-      style={{ writingMode: 'vertical-rl' }}
-    >
-      {children}
-    </span>
-  );
-}
-
 function FlowCard({
   columns,
   records,
@@ -257,139 +245,146 @@ function FlowCard({
     <Card
       aria-label="Trace signal theme flow"
       as="section"
-      className="min-w-0 overflow-hidden"
+      className="relative min-w-0"
       elevation="elevated"
       title={drillInDisabledReason}
     >
-      <CardContent className="px-0 py-2 sm:py-3">
-        <div className="flex">
-          <div className="border-border1 relative w-9 shrink-0 border-r">
-            <GutterLabel className="top-2">SIGNALS</GutterLabel>
-            <GutterLabel className="top-1/2 mt-4 -translate-y-1/2">THEMES</GutterLabel>
-          </div>
-          <div className="min-w-0 flex-1">
-            <DragDropContext
-              enableDefaultSensors={false}
-              sensors={DRAG_SENSORS}
-              onDragEnd={handleDragEnd}
-              onDragStart={handleDragStart}
-              onDragUpdate={handleDragUpdate}
-            >
-              <Droppable direction="horizontal" droppableId="signal-column-headers">
-                {(provided: DroppableProvided) => (
-                  <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    aria-label="Trace signal column headers"
-                    className="flex items-center gap-1 px-8 pb-1"
-                    role="group"
-                  >
-                    {headerSignalNames.map((signalName, index) => {
-                      const label = formatSignalName(signalName);
-                      let projectedIndex = index;
-                      if (dragProjection) {
-                        const { sourceIndex, destinationIndex } = dragProjection;
-                        if (index === sourceIndex) projectedIndex = destinationIndex;
-                        else if (sourceIndex < destinationIndex && index > sourceIndex && index <= destinationIndex)
-                          projectedIndex = index - 1;
-                        else if (destinationIndex < sourceIndex && index >= destinationIndex && index < sourceIndex)
-                          projectedIndex = index + 1;
-                      }
-                      const offsetPercent =
-                        headerSignalNames.length > 1
-                          ? (projectedIndex / (headerSignalNames.length - 1) - 0.5) * 100
-                          : 0;
-                      const headerAnchor =
-                        projectedIndex === 0
-                          ? 'start'
-                          : projectedIndex === headerSignalNames.length - 1
-                            ? 'end'
-                            : 'middle';
-                      const contentOffsetClass =
-                        headerAnchor === 'start' ? 'translate-x-1/2' : headerAnchor === 'end' ? '-translate-x-1/2' : '';
-                      return (
-                        <Draggable
-                          key={signalName}
-                          draggableId={signalName}
-                          index={index}
-                          isDragDisabled={reorderDisabled}
-                        >
-                          {(dragProvided, dragSnapshot: DraggableStateSnapshot) => (
+      <span
+        aria-hidden="true"
+        className="bg-surface2 text-neutral3 absolute top-0 left-5 -translate-y-1/2 px-2 font-mono text-[10px] tracking-[0.18em]"
+      >
+        SIGNALS
+      </span>
+      <CardContent className="px-0 pt-4 pb-2 sm:pt-5 sm:pb-3">
+        <div aria-label="Signals" role="group">
+          <DragDropContext
+            enableDefaultSensors={false}
+            sensors={DRAG_SENSORS}
+            onDragEnd={handleDragEnd}
+            onDragStart={handleDragStart}
+            onDragUpdate={handleDragUpdate}
+          >
+            <Droppable direction="horizontal" droppableId="signal-column-headers">
+              {(provided: DroppableProvided) => (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  aria-label="Trace signal column headers"
+                  className="flex items-center gap-1 px-8 pb-1"
+                  role="group"
+                >
+                  {headerSignalNames.map((signalName, index) => {
+                    const label = formatSignalName(signalName);
+                    let projectedIndex = index;
+                    if (dragProjection) {
+                      const { sourceIndex, destinationIndex } = dragProjection;
+                      if (index === sourceIndex) projectedIndex = destinationIndex;
+                      else if (sourceIndex < destinationIndex && index > sourceIndex && index <= destinationIndex)
+                        projectedIndex = index - 1;
+                      else if (destinationIndex < sourceIndex && index >= destinationIndex && index < sourceIndex)
+                        projectedIndex = index + 1;
+                    }
+                    const offsetPercent =
+                      headerSignalNames.length > 1 ? (projectedIndex / (headerSignalNames.length - 1) - 0.5) * 100 : 0;
+                    const headerAnchor =
+                      projectedIndex === 0
+                        ? 'start'
+                        : projectedIndex === headerSignalNames.length - 1
+                          ? 'end'
+                          : 'middle';
+                    const contentOffsetClass =
+                      headerAnchor === 'start' ? 'translate-x-1/2' : headerAnchor === 'end' ? '-translate-x-1/2' : '';
+                    return (
+                      <Draggable
+                        key={signalName}
+                        draggableId={signalName}
+                        index={index}
+                        isDragDisabled={reorderDisabled}
+                      >
+                        {(dragProvided, dragSnapshot: DraggableStateSnapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            className="flex min-w-0 flex-1 basis-0 items-center justify-center py-1"
+                            data-dragging={dragSnapshot.isDragging}
+                            style={dragProvided.draggableProps.style}
+                          >
                             <div
-                              ref={dragProvided.innerRef}
-                              {...dragProvided.draggableProps}
-                              className="flex min-w-0 flex-1 basis-0 items-center justify-center py-1"
-                              data-dragging={dragSnapshot.isDragging}
-                              style={dragProvided.draggableProps.style}
+                              className="flex w-full justify-center"
+                              data-testid="signal-column-header-alignment"
+                              style={{ translate: `${offsetPercent}%` }}
                             >
                               <div
-                                className="flex w-full justify-center"
-                                data-testid="signal-column-header-alignment"
-                                style={{ translate: `${offsetPercent}%` }}
+                                className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass} ${
+                                  dragSnapshot.isDragging ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg' : ''
+                                }`}
+                                data-header-anchor={headerAnchor}
+                                data-testid="signal-column-header-content"
                               >
-                                <div
-                                  className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass} ${
-                                    dragSnapshot.isDragging ? 'border-border2 bg-surface4 scale-[1.03] shadow-lg' : ''
-                                  }`}
-                                  data-header-anchor={headerAnchor}
-                                  data-testid="signal-column-header-content"
-                                >
-                                  <Tooltip>
-                                    <TooltipTrigger
-                                      className="cursor-default font-mono text-xs font-semibold tracking-wider"
-                                      data-testid="signal-column-header"
-                                      style={{ color: nodeColor(getSignalHue(signalName)) }}
-                                    >
-                                      {label.toUpperCase()}
-                                    </TooltipTrigger>
-                                    <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
-                                  </Tooltip>
-                                  <div
-                                    {...dragProvided.dragHandleProps}
-                                    aria-disabled={reorderDisabled}
-                                    aria-label={`Reorder ${label}`}
-                                    className={`text-neutral3 hover:text-neutral5 absolute top-1/2 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50 ${
-                                      headerAnchor === 'end' ? 'right-full mr-0.5' : 'left-full ml-0.5'
-                                    }`}
-                                    title={`Drag to reorder the ${label} column`}
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    className="cursor-default font-mono text-xs font-semibold tracking-wider"
+                                    data-testid="signal-column-header"
+                                    style={{ color: nodeColor(getSignalHue(signalName)) }}
                                   >
-                                    <GripVertical aria-hidden="true" className="size-3.5" />
-                                  </div>
+                                    {label.toUpperCase()}
+                                  </TooltipTrigger>
+                                  <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
+                                </Tooltip>
+                                <div
+                                  {...dragProvided.dragHandleProps}
+                                  aria-disabled={reorderDisabled}
+                                  aria-label={`Reorder ${label}`}
+                                  className={`text-neutral3 hover:text-neutral5 absolute top-1/2 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50 ${
+                                    headerAnchor === 'end' ? 'right-full mr-0.5' : 'left-full ml-0.5'
+                                  }`}
+                                  title={`Drag to reorder the ${label} column`}
+                                >
+                                  <GripVertical aria-hidden="true" className="size-3.5" />
                                 </div>
                               </div>
                             </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
-            <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">
-              <Sankey
-                data={records}
-                columns={chartColumns}
-                columnOrder={chartColumns.map(column => column.id)}
-                getColumnHue={column => getSignalHue(column.id)}
-                getRecordNodeId={getSignalRecordNodeId}
-                getRecordNodeLabel={getSignalRecordNodeLabel}
-                getRecordNodeValue={getSignalRecordNodeValue}
-                getRecordWeight={record => Number(record.traceCount)}
-                getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
-              >
-                <SankeyChart
-                  height={height ?? 'clamp(340px, 42vw, 460px)'}
-                  margin={{ top: 40, right: 32, bottom: 24, left: 32 }}
-                  onNodeClick={onNodeClick}
-                  isNodeClickable={isNodeClickable}
-                  hideColumnLabels
-                  geometryTransitionKey={chartColumns.map(column => column.id).join(':')}
-                />
-              </Sankey>
-            </div>
-          </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
+        </div>
+        <div
+          aria-label="Themes"
+          className="text-neutral3 flex items-center gap-2 px-4 py-1 font-mono text-[10px] tracking-[0.18em]"
+          role="separator"
+        >
+          <span aria-hidden="true" className="bg-border1 h-px w-5" />
+          THEMES
+          <span aria-hidden="true" className="bg-border1 h-px flex-1" />
+        </div>
+        <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">
+          <Sankey
+            data={records}
+            columns={chartColumns}
+            columnOrder={chartColumns.map(column => column.id)}
+            getColumnHue={column => getSignalHue(column.id)}
+            getRecordNodeId={getSignalRecordNodeId}
+            getRecordNodeLabel={getSignalRecordNodeLabel}
+            getRecordNodeValue={getSignalRecordNodeValue}
+            getRecordWeight={record => Number(record.traceCount)}
+            getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
+          >
+            <SankeyChart
+              height={height ?? 'clamp(340px, 42vw, 460px)'}
+              margin={{ top: 40, right: 32, bottom: 24, left: 32 }}
+              onNodeClick={onNodeClick}
+              isNodeClickable={isNodeClickable}
+              hideColumnLabels
+              geometryTransitionKey={chartColumns.map(column => column.id).join(':')}
+            />
+          </Sankey>
         </div>
       </CardContent>
     </Card>

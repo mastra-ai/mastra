@@ -570,13 +570,15 @@ describe('SankeySignals', () => {
       expect(screen.queryByTestId('signal-legend-swatch')).toBeNull();
     });
 
-    it('labels the signal and theme bands in the chart gutter', async () => {
+    it('labels signals on the card border and separates themes with a horizontal rule', async () => {
       renderSankeySignals();
 
       const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
-      const signalsLabel = within(chart).getByText('SIGNALS');
-      const themesLabel = within(chart).getByText('THEMES');
-      expect(signalsLabel.compareDocumentPosition(themesLabel) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      const signalHeaders = within(chart).getByRole('group', { name: 'Signals' });
+      const themesRule = within(chart).getByRole('separator', { name: 'Themes' });
+      expect(signalHeaders.compareDocumentPosition(themesRule) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      expect(within(chart).getByText('SIGNALS').style.writingMode).toBe('');
+      expect(within(chart).getByText('THEMES').style.writingMode).toBe('');
     });
 
     it('renders the timeline before the flow, without a distribution rail', async () => {
