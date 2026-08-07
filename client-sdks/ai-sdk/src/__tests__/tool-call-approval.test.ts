@@ -5,7 +5,12 @@ import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it, vi } from 'vitest';
 import { handleChatStream, extractV6NativeApprovals } from '../chat-route';
 import { toAISdkStream, toAISdkV5Stream } from '../convert-streams';
-import { convertMastraChunkToAISDKv5, convertMastraChunkToAISDKv6, APPROVAL_ID_SEPARATOR } from '../helpers';
+import {
+  convertFullStreamChunkToUIMessageStream,
+  convertMastraChunkToAISDKv5,
+  convertMastraChunkToAISDKv6,
+  APPROVAL_ID_SEPARATOR,
+} from '../helpers';
 
 async function collectChunks(stream: ReadableStream) {
   const chunks: any[] = [];
@@ -140,6 +145,44 @@ describe('tool-call-approval chunk conversion (issue #12878)', () => {
       expect(approvalChunk.data.toolName).toBe('myTool');
       expect(approvalChunk.data.args).toEqual({ param: 'value' });
       expect(approvalChunk.data.resumeSchema).toBe('{"type":"object","properties":{"approved":{"type":"boolean"}}}');
+    });
+  });
+});
+
+describe('tool-output-denied chunk conversion (issue #20880)', () => {
+  const chunk = {
+    type: 'tool-output-denied' as const,
+    runId: 'run-123',
+    from: ChunkFrom.AGENT,
+    payload: {
+      toolCallId: 'tooluse_abc123',
+      toolName: 'myTool',
+      args: { param: 'value' },
+      approval: { id: 'approval-1', approved: false as const, reason: 'Not allowed' },
+    },
+  };
+
+  it('converts the Mastra denial to an AI SDK v6 stream part', () => {
+    expect(convertMastraChunkToAISDKv6({ chunk, mode: 'stream' })).toEqual({
+      type: 'tool-output-denied',
+      toolCallId: 'tooluse_abc123',
+      toolName: 'myTool',
+    });
+  });
+
+  it('converts the stream part to an AI SDK UI message chunk', () => {
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: {
+          type: 'tool-output-denied',
+          toolCallId: 'tooluse_abc123',
+          toolName: 'myTool',
+        },
+        onError: String,
+      }),
+    ).toEqual({
+      type: 'tool-output-denied',
+      toolCallId: 'tooluse_abc123',
     });
   });
 });

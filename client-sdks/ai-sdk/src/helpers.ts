@@ -46,6 +46,14 @@ export type OutputChunkType<OUTPUT = undefined> =
   | DataChunkType
   | undefined;
 
+type AISDKToolOutputDenied = {
+  type: 'tool-output-denied';
+  toolCallId: string;
+  toolName: string;
+  providerExecuted?: boolean;
+  dynamic?: boolean;
+};
+
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
@@ -368,12 +376,6 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           : chunk.payload.result,
         // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
       };
-    case 'tool-output-denied':
-      return {
-        type: 'tool-output-denied',
-        toolCallId: chunk.payload.toolCallId,
-        ...(chunk.payload.approval?.reason ? { reason: chunk.payload.approval.reason } : {}),
-      };
     case 'tool-error':
       return {
         type: 'tool-error',
@@ -516,7 +518,15 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
 }: {
   chunk: ChunkType<OUTPUT>;
   mode?: 'generate' | 'stream';
-}): OutputChunkType<OUTPUT> | OutputChunkType<OUTPUT>[] {
+}): OutputChunkType<OUTPUT> | AISDKToolOutputDenied | OutputChunkType<OUTPUT>[] {
+  if (chunk.type === 'tool-output-denied') {
+    return {
+      type: 'tool-output-denied',
+      toolCallId: chunk.payload.toolCallId,
+      toolName: chunk.payload.toolName,
+    };
+  }
+
   if (chunk.type === 'tool-call-approval') {
     const displayTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
     // Emit both the native v6 tool-approval-request AND the legacy data-tool-call-approval
@@ -565,6 +575,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   // tool-output is a custom mastra chunk type used in ToolStream
   part:
     | TextStreamPart<ToolSet>
+    | AISDKToolOutputDenied
     | DataChunkType
     | ToolApprovalRequest
     | { type: 'tool-output'; toolCallId: string; output: any };
@@ -729,6 +740,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         output: part.output,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+      };
+    }
+
+    case 'tool-output-denied': {
+      return {
+        type: 'tool-output-denied',
+        toolCallId: part.toolCallId,
       };
     }
 

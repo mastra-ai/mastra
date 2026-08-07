@@ -726,9 +726,7 @@ export function createDurableToolCallStep() {
                 await emitChunkEvent(pubsub, runId, processed);
               }
             } catch (emitError) {
-              logger?.warn?.(
-                `[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`,
-              );
+              logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
             }
           }
           return {
