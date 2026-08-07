@@ -675,6 +675,10 @@ input[type='search']::-ms-clear {
   border-radius: 0.5rem;
 }
 
+.menu__list-item:not(:first-child) {
+  margin-top: 0.125rem;
+}
+
 .sidebar-group-name {
   margin-top: 1rem !important;
 }
