@@ -336,6 +336,34 @@ describe('RailwaySandbox', () => {
         vi.useRealTimers();
       });
 
+      it('joins an in-flight timer refresh before stopping without capturing twice', async () => {
+        vi.useFakeTimers();
+        let releaseCheckpoint!: () => void;
+        const held = new Promise<{ id: string; key: string; environmentId: string }>(resolve => {
+          releaseCheckpoint = () =>
+            resolve({ id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' });
+        });
+        mockSandbox.checkpoint.mockImplementationOnce(() => held);
+
+        const sandbox = new RailwaySandbox({
+          token: 'tok',
+          checkpointName: 'mastracode-repo-abc123',
+          idleTimeoutMinutes: 5,
+        });
+        await sandbox._start();
+        await vi.advanceTimersByTimeAsync(2 * 60_000);
+
+        const stopPromise = sandbox.stop();
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+
+        releaseCheckpoint();
+        await stopPromise;
+
+        expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+        expect(mockSandbox.destroy).toHaveBeenCalledTimes(1);
+        vi.useRealTimers();
+      });
+
       it('reschedules the safety-net timer relative to the on-demand capture', async () => {
         vi.useFakeTimers();
         mockCheckpoints.mockResolvedValueOnce([

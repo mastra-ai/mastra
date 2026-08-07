@@ -240,24 +240,19 @@ export class RailwaySandbox extends MastraSandbox {
     const createOptions = this._createOptions(clientConfig);
 
     if (this._sandboxId) {
-      try {
-        const sandboxId = this._sandboxId;
-        this._startInFlight ??= (async () => {
+      const sandboxId = this._sandboxId;
+      this._startInFlight ??= (async () => {
+        try {
           this._sandbox = await this._reconnectSandbox(sandboxId, clientConfig);
-        })().finally(() => {
-          this._startInFlight = null;
-        });
-      } catch (error) {
-        if (!(error instanceof SandboxNotFoundError)) {
-          throw error;
-        }
-
-        this._startInFlight ??= (async () => {
+        } catch (error) {
+          if (!(error instanceof SandboxNotFoundError)) {
+            throw error;
+          }
           this._sandbox = await this._createNewSandbox(createOptions);
-        })().finally(() => {
-          this._startInFlight = null;
-        });
-      }
+        }
+      })().finally(() => {
+        this._startInFlight = null;
+      });
     } else {
       this._startInFlight ??= (async () => {
         this._sandbox = await this._createNewSandbox(createOptions);
@@ -363,14 +358,32 @@ export class RailwaySandbox extends MastraSandbox {
    * to invoke concurrently with `executeCommand`, `restart`, or `stop`.
    */
   async captureCheckpoint(): Promise<CaptureCheckpointResult> {
+    const checkpointName = this._checkpointName;
+    if (!checkpointName) {
+      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
+    }
+
     const sandbox = this._sandbox;
-    if (!sandbox || sandbox.status !== 'RUNNING') {
+    if (!sandbox) {
       return { status: 'skipped', reason: 'sandbox-not-running' };
     }
 
-    await this._checkpointSandbox(sandbox);
+    if (this._checkpointRefreshInFlight) {
+      await this._checkpointRefreshInFlight;
+      return { status: 'coalesced', checkpointName };
+    }
 
-    return { status: 'captured', checkpointName: this._checkpointName! };
+    const capture = this._checkpointSandbox(sandbox).finally(() => {
+      if (this._checkpointRefreshInFlight === capture) {
+        this._checkpointRefreshInFlight = null;
+      }
+    });
+    this._checkpointRefreshInFlight = capture;
+
+    await capture;
+    this._scheduleCheckpointRefresh();
+
+    return { status: 'captured', checkpointName };
   }
 
   private async _checkpointSandbox(sandbox: Sandbox): Promise<void> {
@@ -407,7 +420,7 @@ export class RailwaySandbox extends MastraSandbox {
     this._checkpointRefreshTimer = setTimeout(() => {
       this._checkpointRefreshTimer = null;
       const sandbox = this._sandbox;
-      if (!sandbox) {
+      if (!sandbox || this._checkpointRefreshInFlight) {
         return;
       }
 
@@ -438,8 +451,8 @@ export class RailwaySandbox extends MastraSandbox {
    * running or destroyed — so stopping destroys the sandbox but we keep a checkpoint of the filesystem.
    */
   async stop(): Promise<void> {
-    if (this._checkpointName && this._sandbox) {
-      await this._checkpointSandbox(this._sandbox!).catch(error => {
+    if (this._checkpointName) {
+      await this._flushCheckpointRefresh().catch(error => {
         this.logger.warn(`${LOG_PREFIX} Failed to checkpoint Railway sandbox ${this._sandbox?.id}:`, error);
       });
     }
@@ -451,6 +464,7 @@ export class RailwaySandbox extends MastraSandbox {
    * Destroy the Railway sandbox and release its resources including the checkpoint.
    */
   async destroy(): Promise<void> {
+    this._cancelCheckpointRefresh();
     if (this._checkpointName) {
       await this._checkpointRefreshInFlight;
       await Sandbox.deleteCheckpoint(this._checkpointName, this._clientConfig()).catch(error => {
@@ -461,9 +475,22 @@ export class RailwaySandbox extends MastraSandbox {
     await this._teardown();
   }
 
+  private async _flushCheckpointRefresh(): Promise<void> {
+    this._cancelCheckpointRefresh();
+
+    if (this._checkpointRefreshInFlight) {
+      await this._checkpointRefreshInFlight;
+      return;
+    }
+
+    if (this._sandbox) {
+      await this._checkpointSandbox(this._sandbox);
+    }
+  }
+
   private async _teardown(): Promise<void> {
+    this._cancelCheckpointRefresh();
     if (!this._sandbox) {
-      this._cancelCheckpointRefresh();
       return;
     }
     await this._checkpointRefreshInFlight;
