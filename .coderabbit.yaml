@@ -5,7 +5,7 @@ enable_free_tier: true
 reviews:
   slop_detection:
     enabled: true
-    label: "slop"
+    label: 'slop'
   profile: assertive
   request_changes_workflow: false
   high_level_summary: true
