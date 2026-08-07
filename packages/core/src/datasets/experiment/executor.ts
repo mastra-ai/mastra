@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
@@ -6,7 +7,7 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { ScoringData } from '../../llm/model/base.types';
 import type { VersionOverrides } from '../../mastra/types';
 import { resolveObservabilityContext } from '../../observability';
-import { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
@@ -113,6 +114,7 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: {
+    id?: string;
     input: unknown;
     groundTruth?: unknown;
     metadata?: Record<string, unknown>;
@@ -217,7 +219,7 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
  */
 async function executeAgent(
   agent: Agent,
-  item: { input: unknown; groundTruth?: unknown },
+  item: { id?: string; input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
   experimentId?: string,
@@ -237,6 +239,48 @@ async function executeAgent(
 
   // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
   const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
+
+  // A memory-enabled agent given a resourceId (e.g. via MASTRA_RESOURCE_ID_KEY set by
+  // auth middleware or the Studio "Run Experiment" field) but no threadId would throw
+  // AGENT_MEMORY_MISSING_RESOURCE_ID downstream — the runner owns no conversation, so
+  // it injects a fresh thread per item, mirroring the multi-turn evals precedent
+  // (runAgentTurns). When an explicit MASTRA_THREAD_ID_KEY is present we decline to
+  // inject and let the context key resolve downstream; memory-less agents are left
+  // untouched. Truthiness (not null-ness) checks match the downstream `||` resolution
+  // in prepare-memory-step: an empty-string resourceId skipped memory before this fix
+  // and must keep doing so.
+  const contextResourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+  const shouldInjectThread =
+    Boolean(contextResourceId) &&
+    !requestContext?.[MASTRA_THREAD_ID_KEY] &&
+    typeof agent.hasOwnMemory === 'function' &&
+    agent.hasOwnMemory();
+  const memoryOption = shouldInjectThread
+    ? {
+        memory: {
+          thread: {
+            id: randomUUID(),
+            // Tag experimentId (and the item id when known) so a large run's threads
+            // map back to their items without matching transcripts.
+            ...(experimentId || item.id
+              ? {
+                  metadata: {
+                    ...(experimentId ? { experimentId } : {}),
+                    ...(item.id ? { experimentItemId: item.id } : {}),
+                  },
+                }
+              : {}),
+          },
+          resource: String(contextResourceId),
+          // Suppress title generation: these threads are runner bookkeeping, so an
+          // extra title LLM call per item (and per retry) is pure waste (precedent:
+          // ephemeral subagent-delegation threads, issue #18738). lastMessages is
+          // deliberately NOT disabled — it also gates the MessageHistory output
+          // processor, and disabling it would persist every injected thread empty.
+          options: { generateTitle: false },
+        },
+      }
+    : undefined;
 
   // Build a fresh matcher per item run so ordered consumption is deterministic and
   // not leaked across retries. Compose with the agent's configured hooks.
@@ -263,6 +307,7 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(versions ? { versions } : {}),
@@ -273,6 +318,7 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),

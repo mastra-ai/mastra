@@ -105,6 +105,14 @@ export interface DelegationStartContext {
   toolCallId: string;
   /** Messages accumulated so far */
   messages: MastraDBMessage[];
+  /**
+   * The request context the delegated run will receive. Entries are shallowly
+   * copied from the parent run's context, excluding `MastraMemory` and the
+   * reserved thread/resource keys. Mutate it with `requestContext.set()` to add
+   * entries without modifying the parent's context map. Values must be
+   * JSON-serializable to work with durable agents.
+   */
+  requestContext: RequestContext;
 }
 
 /**

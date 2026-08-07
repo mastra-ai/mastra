@@ -581,10 +581,16 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      void _run.start({
-        ...params,
-        requestContext,
-      });
+      // Fire-and-forget: attach .catch so a rejected start (e.g. invalid input
+      // schema) cannot become an unhandledRejection and tear down the process.
+      void _run
+        .start({
+          ...params,
+          requestContext,
+        })
+        .catch(error => {
+          mastra.getLogger().error('Failed to start workflow run', { error, workflowId, runId });
+        });
 
       return { message: 'Workflow run started' };
     } catch (e) {
@@ -896,7 +902,9 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart({ ...params, requestContext });
+      void _run.restart({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to restart workflow run in background', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
