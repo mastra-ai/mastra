@@ -173,12 +173,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     });
     if (accepted.length === 0) return;
     const additions = await Promise.all(
-      accepted.map(async (file): Promise<PendingImage> => ({
-        id: `pending-image-${pendingImageSeq++}`,
-        data: await readFileAsBase64(file),
-        mediaType: file.type,
-        filename: file.name || undefined,
-      })),
+      accepted.map(
+        async (file): Promise<PendingImage> => ({
+          id: `pending-image-${pendingImageSeq++}`,
+          data: await readFileAsBase64(file),
+          mediaType: file.type,
+          filename: file.name || undefined,
+        }),
+      ),
     );
     setImages(prev => [...prev, ...additions]);
   };
