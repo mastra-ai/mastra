@@ -29,6 +29,21 @@ export interface SandboxCommandResult {
 }
 
 /**
+ * Outcome of a {@link MaterializationSandbox.captureCheckpoint} call. Mirrors
+ * the shape exposed by the provider sandboxes ({@link RailwaySandbox} and
+ * {@link PlatformSandbox}) verbatim so the factory-side turn-end hook can log
+ * a uniform discriminant without knowing which provider is underneath.
+ *
+ * `captured` and `coalesced` both mean an upstream capture succeeded and the
+ * checkpoint is safe to recover from; `skipped` carries a machine-readable
+ * reason so the set stays extensible.
+ */
+export type CaptureCheckpointResult =
+  | { status: 'captured'; checkpointName: string }
+  | { status: 'coalesced'; checkpointName: string }
+  | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
+
+/**
  * Minimal live-sandbox surface fleet consumers need: an id, a way to start it,
  * a way to learn the provider's reattach id, and command execution.
  */
@@ -45,6 +60,16 @@ export interface MaterializationSandbox {
   setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
+  /**
+   * Capture the recovery checkpoint on demand. Present when the underlying
+   * provider supports it (`RailwaySandbox`, `PlatformSandbox`); absent for
+   * providers that do not (`LocalSandbox`), so callers must feature-detect.
+   *
+   * Called by the factory-side turn-end hook to make Railway's idle-destroy
+   * race window irrelevant — see the checkpoint scheduling design in the
+   * factory workspace layer.
+   */
+  captureCheckpoint?(): Promise<CaptureCheckpointResult>;
 }
 
 /** Options for building (or reattaching) one sandbox. */
@@ -162,6 +187,13 @@ function toMaterializationSandbox(
   }
   const lifecycle = sandbox as { _start?(): Promise<void>; _stop?(): Promise<void> };
   const environment = { ...initialEnvironment };
+  // Providers that support on-demand checkpoint capture (Railway, Platform)
+  // expose `captureCheckpoint()` as a concrete-class detail — it is not on
+  // the abstract `WorkspaceSandbox` interface. Duck-type here so
+  // LocalSandbox-backed materializations simply omit the method and the
+  // factory-side hook becomes a safe no-op for them.
+  const captureCheckpointFn = (sandbox as { captureCheckpoint?: () => Promise<CaptureCheckpointResult> })
+    .captureCheckpoint;
   return {
     id: sandbox.id,
     start: async () => {
@@ -179,6 +211,7 @@ function toMaterializationSandbox(
     stop: async () => {
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },
+    ...(captureCheckpointFn ? { captureCheckpoint: () => captureCheckpointFn.call(sandbox) } : {}),
   };
 }
 
