@@ -5,6 +5,7 @@ import type { FilesystemFile, FilesystemStorage } from '../storage/domains/files
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 
 const GIT_STATUS_ARGS = ['status', '--porcelain=v1', '-z', '--untracked-files=all'];
+const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
 
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
@@ -60,10 +61,31 @@ export async function captureSessionFilesystem(
       return;
     }
 
+    const artifacts = await sandbox.executeCommand(
+      'sh',
+      ['-c', ARTIFACTS_LIST_COMMAND, 'sh', sourceSession.sandboxWorkdir],
+      { timeout: 30_000 },
+    );
+    if (artifacts.exitCode !== 0) {
+      console.warn('[Factory filesystem capture] Unable to list workspace artifacts.', artifacts.stderr);
+      return;
+    }
+
+    const files = new Map(parseFilesystemCaptureFiles(result.stdout).map(file => [file.path, file]));
+    for (const path of artifacts.stdout.split('\0')) {
+      const normalizedPath = path.replace(/^\.\//, '');
+      if (normalizedPath) {
+        files.set(normalizedPath, {
+          path: normalizedPath,
+          filename: normalizedPath.slice(normalizedPath.lastIndexOf('/') + 1),
+        });
+      }
+    }
+
     await filesystem.replaceFiles({
       resourceId,
       threadId,
-      files: parseFilesystemCaptureFiles(result.stdout),
+      files: [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path)),
     });
   } catch (error) {
     console.warn('[Factory filesystem capture] Unable to persist files.', error);

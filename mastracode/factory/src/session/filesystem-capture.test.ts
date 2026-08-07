@@ -20,8 +20,11 @@ function commandResult(overrides: Partial<{ exitCode: number; stdout: string; st
   };
 }
 
-function createSession(result = commandResult()) {
-  const executeCommand = vi.fn().mockResolvedValue(result);
+function createSession(results = [commandResult(), commandResult()]) {
+  const executeCommand = vi
+    .fn()
+    .mockResolvedValueOnce(results[0] ?? commandResult())
+    .mockResolvedValueOnce(results[1] ?? commandResult());
   const listeners: AgentControllerEventListener[] = [];
   const session: FilesystemCaptureSession = {
     identity: { getResourceId: () => 'resource-1' },
@@ -87,28 +90,39 @@ describe('parseFilesystemCaptureFiles', () => {
 });
 
 describe('captureSessionFilesystem', () => {
-  it('captures Git status with the source-control workdir and replaces persisted files', async () => {
-    const { session, executeCommand } = createSession(commandResult({ stdout: ' M src/app.ts\0?? new.txt\0' }));
+  it('captures Git changes and ignored workspace artifacts', async () => {
+    const { session, executeCommand } = createSession([
+      commandResult({ stdout: ' M src/app.ts\0?? new.txt\0' }),
+      commandResult({ stdout: './.artifacts/hello-world.md\0' }),
+    ]);
     const dependencies = createDependencies();
 
     await captureSessionFilesystem(session, dependencies);
 
-    expect(executeCommand).toHaveBeenCalledWith(
+    expect(executeCommand).toHaveBeenNthCalledWith(
+      1,
       'git',
       ['-C', '/worktree', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      { timeout: 30_000 },
+    );
+    expect(executeCommand).toHaveBeenNthCalledWith(
+      2,
+      'sh',
+      ['-c', 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true', 'sh', '/worktree'],
       { timeout: 30_000 },
     );
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
       resourceId: 'resource-1',
       threadId: 'thread-1',
       files: [
+        { path: '.artifacts/hello-world.md', filename: 'hello-world.md' },
         { path: 'new.txt', filename: 'new.txt' },
         { path: 'src/app.ts', filename: 'app.ts' },
       ],
     });
   });
 
-  it('clears persisted files after a successful empty Git status', async () => {
+  it('clears persisted files after successful empty Git and artifact listings', async () => {
     const { session } = createSession();
     const dependencies = createDependencies();
 
@@ -132,7 +146,7 @@ describe('captureSessionFilesystem', () => {
     expect(unavailable.executeCommand).not.toHaveBeenCalled();
     expect(unavailableDependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
 
-    const failed = createSession(commandResult({ exitCode: 1, stderr: 'not a repository' }));
+    const failed = createSession([commandResult({ exitCode: 1, stderr: 'not a repository' })]);
     const failedDependencies = createDependencies();
     await captureSessionFilesystem(failed.session, failedDependencies);
 
