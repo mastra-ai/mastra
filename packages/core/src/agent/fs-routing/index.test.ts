@@ -251,6 +251,63 @@ describe('assembleAgentFromFsEntry', () => {
         }),
       ).toThrow(/but got null/i);
     });
+
+    // Same reasoning as the null case, but this one can't be caught by checking
+    // the value: codegen sets the key only when the file exists, so presence has
+    // to come from the key and an `undefined` export stays a broken file.
+    it('rejects an undefined default export rather than falling back', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: undefined,
+          instructionsMd: 'from md',
+        }),
+      ).toThrow(/but got undefined/i);
+    });
+
+    it('still resolves instructions.md when no instructions.ts was discovered', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'from md',
+      });
+      expect(await agent.getInstructions()).toBe('from md');
+    });
+  });
+
+  // The dynamic config wins over either file, so ignoring the markdown silently
+  // would leave the same blind spot the instructions.ts collision warns about.
+  it('warns when a dynamic config.instructions overrides instructions.md', async () => {
+    const onWarn = vi.fn();
+    const agent = assembleAgentFromFsEntry(
+      {
+        name: 'a',
+        config: { model: 'openai/gpt-4o', instructions: () => 'dynamic config' },
+        instructionsMd: 'from md',
+      },
+      { onWarn },
+    );
+
+    expect(await agent.getInstructions()).toBe('dynamic config');
+    expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('defined in both config.ts and instructions.md'));
+  });
+
+  it('names both files when a dynamic config.instructions overrides each of them', () => {
+    const onWarn = vi.fn();
+    assembleAgentFromFsEntry(
+      {
+        name: 'a',
+        config: { model: 'openai/gpt-4o', instructions: () => 'dynamic config' },
+        instructions: 'from module',
+        instructionsMd: 'from md',
+      },
+      { onWarn },
+    );
+
+    expect(onWarn).toHaveBeenCalledWith(
+      expect.stringContaining('defined in config.ts, instructions.ts, and instructions.md'),
+    );
   });
 
   it('throws when model is missing', () => {

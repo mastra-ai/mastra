@@ -112,7 +112,9 @@ export interface FsAgentEntry {
   /**
    * Default export of `agents/<name>/instructions.ts`, if present. Either an
    * `AgentInstructions` value or a function resolved per request. Unlike
-   * `instructionsMd` this is a live module value, so it can be computed.
+   * `instructionsMd` this is a live module value, so it can be computed. Set the
+   * key only when the file exists: assembly reads presence from the key, so an
+   * `undefined` value is a broken module rather than an absent one.
    */
   instructions?: DynamicArgument<AgentInstructions>;
   /** Raw contents of `instructions.md`, if present. */
@@ -298,7 +300,17 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
     return config;
   }
 
-  const instructions = resolveInstructions(name, config.instructions, instructionsModule, instructionsMd, onWarn);
+  // Presence is the key being set, not the value being defined: codegen emits
+  // `instructions` only when the file exists, so a module that default-exports
+  // `undefined` has to read as a broken file rather than as no file at all.
+  const instructions = resolveInstructions(
+    name,
+    config.instructions,
+    instructionsModule,
+    'instructions' in entry,
+    instructionsMd,
+    onWarn,
+  );
 
   if (!config.model) {
     throw new MastraError({
@@ -397,23 +409,23 @@ function resolveInstructions(
   name: string,
   configInstructions: FsAgentConfig['instructions'],
   instructionsModule: DynamicArgument<AgentInstructions> | undefined,
+  hasModule: boolean,
   instructionsMd: string | undefined,
   onWarn: (message: string) => void,
 ): FsAgentConfig['instructions'] {
   const hasConfigInstructions = configInstructions !== undefined && configInstructions !== null;
-  // `null` counts as present here, unlike `configInstructions`: a bare field left
-  // null in a config object is plausibly unset, but a whole file whose only job
-  // is to export instructions exporting `null` is a mistake worth naming.
-  const hasModule = instructionsModule !== undefined;
   const hasMd = instructionsMd !== undefined;
 
   if (hasConfigInstructions && typeof configInstructions === 'function') {
     // A config already resolving per request stays authoritative, so adding
     // either file later can't silently take the agent's prompt over.
-    if (hasModule) {
-      onWarn(
-        `Agent "${name}": instructions defined in both config.ts and instructions.ts; config.instructions is a function, so it wins.`,
-      );
+    const overridden = [hasModule ? 'instructions.ts' : undefined, hasMd ? 'instructions.md' : undefined].filter(
+      (file): file is string => file !== undefined,
+    );
+    if (overridden.length > 0) {
+      const sources =
+        overridden.length === 1 ? `both config.ts and ${overridden[0]}` : `config.ts, ${overridden.join(', and ')}`;
+      onWarn(`Agent "${name}": instructions defined in ${sources}; config.instructions is a function, so it wins.`);
     }
     return configInstructions;
   }
@@ -450,10 +462,16 @@ function resolveInstructions(
  * value. Anything outside the `AgentInstructions` shapes is silently coerced to
  * an empty prompt downstream, so without this an author who exported the wrong
  * thing gets a mute agent and no clue which file caused it — the error has to
- * name the file while assembly still knows it. (A module with no default export
- * at all never reaches here; the bundler fails first, naming the same file.)
+ * name the file while assembly still knows it. `null` and `undefined` are
+ * rejected the same way rather than reading as "no file here" — the caller
+ * decides presence from the file existing, not from the value. (A module with
+ * no default export at all never reaches here; the bundler fails first, naming
+ * the same file.)
  */
-function assertValidInstructionsModule(name: string, instructions: DynamicArgument<AgentInstructions>): void {
+function assertValidInstructionsModule(
+  name: string,
+  instructions: unknown,
+): asserts instructions is DynamicArgument<AgentInstructions> {
   const isUsable =
     typeof instructions === 'function' ||
     (Array.isArray(instructions)
