@@ -25,7 +25,7 @@ Use a durable agent when any of the following apply:
 - The client may drop and reconnect mid-stream (mobile, spotty networks, long-running calls).
 - The agentic loop may outlive a single HTTP request (background research, multi-step tool use).
 - You need an observe/reconnect API where a second client picks up a stream that a first client started.
-- You want [Inngest-powered execution](/guides/deployment/inngest) with step memoization, retries, and monitoring.
+- You want [Inngest-powered execution](/integrations/deploy/inngest) with step memoization, retries, and monitoring.
 
 For short-lived, request-scoped calls where the client stays connected, a regular `Agent` with `stream()` or `generate()` is simpler.
 
@@ -282,6 +282,6 @@ Mastra doesn't provide a distributed lease or lock yet. In multi-replica deploym
 - [DurableAgent reference](/reference/agents/durable-agent)
 - [`createInngestAgent()` reference](/reference/agents/inngest-agent)
 - [Background tasks](/docs/long-running-agents/background-tasks)
-- [Inngest deployment guide](/guides/deployment/inngest)
+- [Inngest deployment guide](/integrations/deploy/inngest)
 - [Agent overview](/docs/agents/overview)
 - [Worker overview](/docs/deployment/workers)

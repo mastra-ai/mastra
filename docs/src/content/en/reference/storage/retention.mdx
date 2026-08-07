@@ -15,7 +15,7 @@ Storage grows without bound by default. Retention is an opt-in, age-based cleanu
 
 Retention covers **growth tables** only: tables that accumulate rows unbounded as a side effect of normal operation (conversation history, telemetry, job and run records, schedule fire history, event feeds). User-authored artifacts and config (agents, skills, workspaces, prompt blocks, datasets, schedule definitions, channel installations, and so on) grow with user intent and are edited or deleted explicitly, so they're not valid retention keys.
 
-The reference implementations are [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), and [MongoDB](/reference/storage/mongodb). Other adapters keep rows forever until they implement retention.
+The reference implementations are [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), and [MongoDB](/integrations/databases/mongodb). Other adapters keep rows forever until they implement retention.
 
 ## Usage example
 
@@ -318,12 +318,12 @@ Handing that free space back to the OS is a separate concern that Mastra doesn't
 For MongoDB, deleted documents are reused by future insertions. To reclaim disk space, run [`db.runCommand({ compact: "collection_name" })`](https://www.mongodb.com/docs/manual/reference/command/compact/) during a maintenance window.
 
 :::note[libSQL and Turso]
-[Turso Cloud](/reference/storage/libsql) manages storage compaction for you, so there's nothing to reclaim manually. This applies only to self-hosted libSQL files.
+[Turso Cloud](/integrations/databases/libsql) manages storage compaction for you, so there's nothing to reclaim manually. This applies only to self-hosted libSQL files.
 :::
 
 ## Related
 
-- [libSQL storage](/reference/storage/libsql)
-- [PostgreSQL storage](/reference/storage/postgresql)
+- [libSQL storage](/integrations/databases/libsql)
+- [PostgreSQL storage](/integrations/databases/postgresql)
 - [Composite storage](/reference/storage/composite)
 - [Storage overview](/reference/storage/overview)

@@ -55,7 +55,7 @@ export const supportAgent = new Agent({
 ```
 
 :::note
-Notification delivery requires a storage adapter with notification support, such as [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), or [MongoDB](/reference/storage/mongodb). Configure storage on the Mastra instance so `notify()` can store notification records.
+Notification delivery requires a storage adapter with notification support, such as [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), or [MongoDB](/integrations/databases/mongodb). Configure storage on the Mastra instance so `notify()` can store notification records.
 :::
 
 ## Quickstart
@@ -213,20 +213,7 @@ A provider can support more than event ingestion. Add only the capabilities your
 - **Lifecycle hooks:** Override [`start()`](/reference/signals/signal-provider#start) for async setup and [`stop()`](/reference/signals/signal-provider#stop) for cleanup. Call `super.stop()` when overriding `stop()` so the base provider can stop polling and clear its registry.
 - **Processors and tools:** Return processors from [`getInputProcessors()`](/reference/signals/signal-provider#getinputprocessors) or [`getOutputProcessors()`](/reference/signals/signal-provider#getoutputprocessors), and return agent-callable tools from [`getTools()`](/reference/signals/signal-provider#gettools).
 
-The `@mastra/github-signals` package is a production signal provider that watches GitHub pull requests and notifies threads about comments, review state, continuous integration status, and merges. Use it as a reference for polling, durable subscriptions, tools, processors, and lifecycle hooks.
-
-```typescript title="src/mastra/agents/dev-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { GithubSignals } from '@mastra/github-signals'
-
-export const devAgent = new Agent({
-  id: 'dev-agent',
-  name: 'Dev Agent',
-  instructions: 'Help triage pull request activity.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  signals: [new GithubSignals()],
-})
-```
+For a production provider that watches GitHub pull requests, see the [GitHub Channels integration](/integrations/channels/github).
 
 ## Related
 
