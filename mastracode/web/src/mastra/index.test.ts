@@ -23,6 +23,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
   // WORKOS_COOKIE_PASSWORD); each test states its own env on top of this.
   beforeEach(() => {
     for (const name of [
+      'MASTRACODE_AUTH_DISABLED',
       'WORKOS_API_KEY',
       'WORKOS_CLIENT_ID',
       'WORKOS_COOKIE_PASSWORD',
@@ -300,6 +301,10 @@ describe('platform entry (src/mastra/index.ts)', () => {
           // self-hosted deploys have no allowed redirect_uri on platform.mastra.ai.
           expect(location).not.toContain('platform.mastra.ai');
           expect(location).toContain('client_id=client_fake');
+          // WORKOS_REDIRECT_URI is unset here, so this also pins init()'s
+          // derivation of the callback from the deployment's public URL — a
+          // wrong callback still reaches WorkOS but breaks the OAuth return.
+          expect(new URL(location).searchParams.get('redirect_uri')).toBe('http://localhost:5873/auth/callback');
           // The precedence warning belongs to the deferral branch only — a
           // healthy WorkOS boot must not claim its own config is ignored.
           expect(warn.mock.calls.some(call => String(call[0]).includes('ignored'))).toBe(false);
