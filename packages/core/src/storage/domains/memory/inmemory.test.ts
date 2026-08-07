@@ -128,4 +128,25 @@ describe('InMemoryMemory listMessages include resource scope', () => {
 
     expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3']);
   });
+
+  it('treats an empty resourceId in listMessagesByResourceId as a real scope', async () => {
+    // The main query of listMessagesByResourceId compares the resourceId exactly, so an
+    // empty string selects nothing. The include lookup must not be looser than that.
+    const result = await store.listMessagesByResourceId({
+      resourceId: '',
+      include: [{ id: 'a2', withPreviousMessages: 2, withNextMessages: 2 }],
+    });
+
+    expect(result.messages).toEqual([]);
+  });
+
+  it('keeps an empty resourceId in listMessages unscoped, like its main query', async () => {
+    const result = await store.listMessages({
+      threadId: 'thread-b1',
+      resourceId: '',
+      include: [{ id: 'a2', withPreviousMessages: 1, withNextMessages: 1 }],
+    });
+
+    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', 'b1']);
+  });
 });

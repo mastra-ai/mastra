@@ -193,8 +193,10 @@ export class InMemoryMemory extends MemoryStorage {
       messageIds.add(msg.id);
     }
 
-    // Step 2: Add included messages with context (if any), excluding duplicates
-    for (const message of this.resolveIncludedMessages({ include, resourceId: optionalResourceId })) {
+    // Step 2: Add included messages with context (if any), excluding duplicates.
+    // The main filter above treats an empty resourceId as "no resource scope", so the
+    // include lookup is given the same meaning instead of scoping to the empty string.
+    for (const message of this.resolveIncludedMessages({ include, resourceId: optionalResourceId || undefined })) {
       if (messageIds.has(message.id)) continue;
       messages.push(this.parseStoredMessage(message));
       messageIds.add(message.id);
@@ -257,14 +259,17 @@ export class InMemoryMemory extends MemoryStorage {
 
     const resolved: StorageMessageType[] = [];
     const resolvedIds = new Set<string>();
+    const hasResourceScope = resourceId !== undefined;
 
     for (const includeItem of include) {
       const targetMessage = this.db.messages.get(includeItem.id);
       if (!targetMessage) continue;
-      if (resourceId && targetMessage.resourceId !== resourceId) continue;
+      if (hasResourceScope && targetMessage.resourceId !== resourceId) continue;
 
       const contextWindow = Array.from(this.db.messages.values())
-        .filter(msg => msg.thread_id === targetMessage.thread_id && (!resourceId || msg.resourceId === resourceId))
+        .filter(
+          msg => msg.thread_id === targetMessage.thread_id && (!hasResourceScope || msg.resourceId === resourceId),
+        )
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       const targetIndex = contextWindow.findIndex(msg => msg.id === includeItem.id);
