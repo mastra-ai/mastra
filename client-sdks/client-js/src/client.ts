@@ -76,6 +76,7 @@ import {
   Vector,
   BaseResource,
   A2A,
+  A2AV1,
   MCPTool,
   AgentBuilder,
   Conversations,
@@ -820,6 +821,14 @@ export class MastraClient extends BaseResource {
    */
   public getA2A(agentId: string) {
     return new A2A(this.options, agentId);
+  }
+
+  /**
+   * Gets an A2A Protocol v1.0 client for an agent.
+   * @param agentId - ID of the agent to interact with
+   */
+  public getA2AV1(agentId: string) {
+    return new A2AV1(this.options, agentId);
   }
 
   /**
