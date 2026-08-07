@@ -368,7 +368,7 @@ describe('RailwaySandbox', () => {
     });
 
     describe('captureCheckpoint (public, on-demand)', () => {
-      it('captures the checkpoint synchronously and returns "captured"', async () => {
+      it('captures the checkpoint synchronously and returns the captured name', async () => {
         mockCheckpoints.mockResolvedValueOnce([
           { id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' },
         ]);
@@ -380,27 +380,27 @@ describe('RailwaySandbox', () => {
 
         const outcome = await sandbox.captureCheckpoint();
 
-        expect(outcome).toBe('captured');
+        expect(outcome).toEqual({ status: 'captured', checkpointName: 'mastracode-repo-abc123' });
         expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
         expect(mockSandbox.checkpoint).toHaveBeenCalledWith('mastracode-repo-abc123');
       });
 
-      it('returns "skipped" when no checkpointName is configured', async () => {
+      it('returns skipped with a reason when no checkpointName is configured', async () => {
         const sandbox = new RailwaySandbox({ token: 'tok' });
         await sandbox._start();
 
         const outcome = await sandbox.captureCheckpoint();
 
-        expect(outcome).toBe('skipped');
+        expect(outcome).toEqual({ status: 'skipped', reason: 'no-checkpoint-name-configured' });
         expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
       });
 
-      it('returns "skipped" when the sandbox has not been started', async () => {
+      it('returns skipped with a reason when the sandbox has not been started', async () => {
         const sandbox = new RailwaySandbox({ token: 'tok', checkpointName: 'mastracode-repo-abc123' });
 
         const outcome = await sandbox.captureCheckpoint();
 
-        expect(outcome).toBe('skipped');
+        expect(outcome).toEqual({ status: 'skipped', reason: 'sandbox-not-running' });
         expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
       });
 
@@ -437,7 +437,7 @@ describe('RailwaySandbox', () => {
         releaseCheckpoint();
         const outcome = await outcomePromise;
 
-        expect(outcome).toBe('coalesced');
+        expect(outcome).toEqual({ status: 'coalesced', checkpointName: 'mastracode-repo-abc123' });
         expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
 
         vi.useRealTimers();

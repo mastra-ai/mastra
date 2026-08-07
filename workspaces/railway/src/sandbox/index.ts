@@ -35,6 +35,24 @@ import { LOG_PREFIX, RailwayProcessManager } from './process-manager';
 const CHECKPOINT_REFRESH_MARGIN_MS = 180_000;
 
 // =============================================================================
+// Public capture result
+// =============================================================================
+
+/**
+ * Outcome of a {@link RailwaySandbox.captureCheckpoint} call.
+ *
+ * `captured` and `coalesced` both represent a successful capture the caller can
+ * persist against — they carry the checkpoint name inline so callers don't have
+ * to reach back into the sandbox instance to learn what they just wrote.
+ * `skipped` carries a machine-readable reason so the set stays extensible
+ * without another breaking change.
+ */
+export type CaptureCheckpointResult =
+  | { status: 'captured'; checkpointName: string }
+  | { status: 'coalesced'; checkpointName: string }
+  | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
+
+// =============================================================================
 // Railway Sandbox Options
 // =============================================================================
 
@@ -459,28 +477,33 @@ export class RailwaySandbox extends MastraSandbox {
    * pre-teardown — rather than only just before Railway's idle destroy.
    *
    * Coalesces with any in-flight timer-driven refresh: concurrent callers join
-   * the same underlying `Sandbox.checkpoint` call and receive `'coalesced'`.
-   * Returns `'skipped'` when there's nothing to capture (no `checkpointName`
-   * configured or the sandbox isn't running yet). On success, restarts the
-   * idle-timer countdown so the next timer-driven refresh is scheduled from
-   * this capture.
+   * the same underlying `Sandbox.checkpoint` call and receive
+   * `{ status: 'coalesced', checkpointName }`. Both `captured` and `coalesced`
+   * carry the checkpoint name inline so callers can persist a session→
+   * checkpoint binding without a second, non-atomic read against the sandbox.
+   * Returns `{ status: 'skipped', reason }` when there's nothing to capture
+   * (no `checkpointName` configured, or the sandbox isn't running yet).
+   *
+   * On successful capture, restarts the idle-timer countdown so the next
+   * timer-driven refresh is scheduled from this capture.
    *
    * Never captures without a `checkpointName` and never mutates status — safe
    * to invoke concurrently with `executeCommand`, `restart`, or `stop`.
    */
-  async captureCheckpoint(): Promise<'captured' | 'skipped' | 'coalesced'> {
-    if (!this._checkpointName) {
-      return 'skipped';
+  async captureCheckpoint(): Promise<CaptureCheckpointResult> {
+    const checkpointName = this._checkpointName;
+    if (!checkpointName) {
+      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
     }
 
     const sandbox = this._sandbox;
     if (!sandbox) {
-      return 'skipped';
+      return { status: 'skipped', reason: 'sandbox-not-running' };
     }
 
     if (this._checkpointRefreshInFlight) {
       await this._checkpointRefreshInFlight;
-      return 'coalesced';
+      return { status: 'coalesced', checkpointName };
     }
 
     const capture = this._checkpointSandbox(sandbox).finally(() => {
@@ -496,7 +519,7 @@ export class RailwaySandbox extends MastraSandbox {
     // relative to this capture, not the previous one.
     this._scheduleCheckpointRefresh();
 
-    return 'captured';
+    return { status: 'captured', checkpointName };
   }
 
   private isCheckpointUnavailableError(error: unknown): boolean {
