@@ -163,7 +163,18 @@ export abstract class ObservationStrategy {
     }
 
     const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
-    await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
+    // Prefer the live MessageList (markers land on the pending assistant message
+    // before it reaches storage); fall back to the storage scan when no list was
+    // provided or the list contains no assistant message yet.
+    const persisted = await this.persistMarkerToMessage(
+      marker,
+      this.opts.messageList,
+      markerThreadId,
+      this.opts.resourceId,
+    );
+    if (!persisted) {
+      await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
+    }
   }
 
   protected getObservationMarkerConfig(): ObservationMarkerConfig {
@@ -371,14 +382,18 @@ export abstract class ObservationStrategy {
   /**
    * Persist a marker part on the last assistant message in a MessageList
    * AND save the updated message to the DB.
+   *
+   * @returns true when a marker was placed on an assistant message, false when
+   *   no list was provided or the list contains no assistant message (caller
+   *   should fall back to `persistMarkerToStorage`).
    */
   protected async persistMarkerToMessage(
     marker: { type: string; data: unknown },
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
-  ): Promise<void> {
-    if (!messageList) return;
+  ): Promise<boolean> {
+    if (!messageList) return false;
     const allMsgs = messageList.get.all.db();
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
@@ -399,9 +414,10 @@ export abstract class ObservationStrategy {
         } catch (e) {
           omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
         }
-        return;
+        return true;
       }
     }
+    return false;
   }
 
   // ── Abstract phase methods ──────────────────────────────────
