@@ -476,8 +476,14 @@ export class SessionThread {
 
   /** Persist a setting (metadata value) for the active thread. */
   async setSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
-    if (!this.#store || this.#threadId === null) return;
-    await this.#store.setMetadata({ threadId: this.#threadId, key, value });
+    if (this.#threadId === null) return;
+    await this.setSettingOn({ threadId: this.#threadId, key, value });
+  }
+
+  /** Persist a setting to a specific thread, regardless of the current binding. */
+  async setSettingOn({ threadId, key, value }: { threadId: string; key: string; value: unknown }): Promise<void> {
+    if (!this.#store) return;
+    await this.#store.setMetadata({ threadId, key, value });
   }
 
   /** Delete a setting (metadata value) for the active thread. */
@@ -887,18 +893,14 @@ export class SessionThread {
       }
 
       // Restore restart-surviving preferences (thinking level, notifications).
-      // Applied separately so an invalid persisted value fails schema
-      // validation without discarding the mode/model/OM restoration above.
-      const preferenceUpdates: Record<string, unknown> = {};
+      // Applied one key at a time so an invalid persisted value fails schema
+      // validation without discarding the mode/model/OM restoration above or
+      // the other, still-valid preference.
       for (const key of PERSISTED_STATE_KEYS) {
         const value = meta?.[key];
-        if (value !== undefined) {
-          preferenceUpdates[key] = value;
-        }
-      }
-      if (Object.keys(preferenceUpdates).length > 0) {
+        if (value === undefined) continue;
         try {
-          await session.state.set(preferenceUpdates);
+          await session.state.set({ [key]: value } as Record<string, unknown>);
         } catch {
           // Persisted preference no longer valid for the current state schema.
         }
@@ -1942,17 +1944,19 @@ interface SessionStateOptions<TState> {
  * and validated updates emit the same `state_changed` event the AgentController used to
  * emit when it owned state directly.
  */
+type PersistSettingFn = (args: { key: string; value: unknown }) => Promise<void>;
+
 class SessionState<TState = unknown> {
   #state: TState;
   #updateQueue: Promise<void> = Promise.resolve();
   readonly #schema: StandardSchemaWithJSON | undefined;
   readonly #bus: SessionBus;
-  readonly #persistSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
+  readonly #capturePersistSetting: (() => PersistSettingFn | undefined) | undefined;
 
   constructor(
     { initialState, stateSchema }: SessionStateOptions<TState>,
     bus: SessionBus,
-    persistSetting?: (args: { key: string; value: unknown }) => Promise<void>,
+    capturePersistSetting?: () => PersistSettingFn | undefined,
   ) {
     this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.#state = {
@@ -1960,7 +1964,7 @@ class SessionState<TState = unknown> {
       ...(initialState as Record<string, unknown> | undefined),
     } as TState;
     this.#bus = bus;
-    this.#persistSetting = persistSetting;
+    this.#capturePersistSetting = capturePersistSetting;
   }
 
   get(): Readonly<TState> {
@@ -1991,7 +1995,7 @@ class SessionState<TState = unknown> {
     return defaults as Partial<TState>;
   }
 
-  private async apply(updates: Partial<TState>): Promise<void> {
+  private async apply(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
     const changedKeys = Object.keys(updates as Record<string, unknown>);
     const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
 
@@ -2011,12 +2015,12 @@ class SessionState<TState = unknown> {
     // Mirror restart-surviving preferences into thread metadata so they can be
     // restored by `Session.loadMetadata()` after the host process restarts.
     // Persistence failures never fail the in-memory state update.
-    if (this.#persistSetting) {
+    if (persistSetting) {
       const state = this.#state as Record<string, unknown>;
       for (const key of PERSISTED_STATE_KEYS) {
         if (!changedKeys.includes(key)) continue;
         try {
-          await this.#persistSetting({ key, value: state[key] });
+          await persistSetting({ key, value: state[key] });
         } catch {
           // Storage unavailable or write failed — keep the in-memory update.
         }
@@ -2026,7 +2030,10 @@ class SessionState<TState = unknown> {
 
   set(updates: Partial<TState>): Promise<void> {
     const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
-    const run = this.#updateQueue.then(() => this.apply(updateSnapshot));
+    // Captured now, not at apply time: an update queued behind a thread switch
+    // must persist to the thread that was active when the update was requested.
+    const persistSetting = this.#capturePersistSetting?.();
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,
@@ -2035,10 +2042,11 @@ class SessionState<TState = unknown> {
   }
 
   update<TResult>(updater: SessionStateUpdater<TState, TResult>): Promise<TResult> {
+    const persistSetting = this.#capturePersistSetting?.();
     const run = this.#updateQueue.then(async () => {
       const update = await updater(this.get());
       if (update.updates && Object.keys(update.updates as Record<string, unknown>).length > 0) {
-        await this.apply(update.updates);
+        await this.apply(update.updates, persistSetting);
       }
       for (const event of update.events ?? []) {
         this.#bus.emit(event);
@@ -2742,9 +2750,14 @@ export class Session<TState = unknown> {
       clearFollowUps: () => this.followUps.clear(),
     });
     this.#bus.setDisplayState(this.displayState);
-    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus, args =>
-      this.thread.setSetting(args),
-    );
+    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus, () => {
+      // Pin persistence to the thread active when the state update was
+      // requested — a queued preference update must not land in the metadata
+      // of a thread the session switched to in the meantime.
+      const threadId = this.thread.getId();
+      if (threadId === null) return undefined;
+      return args => this.thread.setSettingOn({ threadId, ...args });
+    });
 
     if (!workspace || !(workspace instanceof Workspace)) {
       throw new Error(`A session requires a valid workspace instance.`);

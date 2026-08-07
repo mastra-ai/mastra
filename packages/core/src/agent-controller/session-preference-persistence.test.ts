@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 
-function createController(storage: InMemoryStore, initialState: Record<string, unknown> = {}) {
+function createController(storage: InMemoryStore, initialState: Record<string, unknown> = {}, stateSchema?: unknown) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -16,6 +17,7 @@ function createController(storage: InMemoryStore, initialState: Record<string, u
     id: 'test-controller',
     storage,
     initialState: initialState as any,
+    ...(stateSchema ? { stateSchema: stateSchema as any } : {}),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
 }
@@ -88,5 +90,58 @@ describe('AgentController session preference persistence (thinkingLevel, notific
 
     expect((session.state.get() as any).thinkingLevel).toBe('medium');
     expect((session.state.get() as any).notifications).toBe('both');
+  });
+
+  it('restores each valid preference even when the other stored value is invalid', async () => {
+    const stateSchema = z.object({
+      thinkingLevel: z.enum(['off', 'low', 'medium', 'high']).optional(),
+      notifications: z.enum(['off', 'bell', 'system', 'both']).optional(),
+    });
+    const controller = createController(storage, {}, stateSchema);
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const thread = await session.thread.create();
+
+    // A stale deployment left an invalid thinkingLevel behind; notifications is fine.
+    const memory = await storage.getStore('memory');
+    await memory!.updateThread({
+      id: thread.id,
+      title: 'thread',
+      metadata: { thinkingLevel: 'turbo', notifications: 'bell' },
+    });
+
+    const restarted = createController(storage, {}, stateSchema);
+    await restarted.init();
+    const restartedSession = await restarted.createSession({ id: 'restarted-session', ownerId: 'test-owner' });
+    await restartedSession.thread.switch({ threadId: thread.id });
+
+    // The invalid value is dropped; the valid one still restores.
+    expect((restartedSession.state.get() as any).thinkingLevel).toBeUndefined();
+    expect((restartedSession.state.get() as any).notifications).toBe('bell');
+  });
+
+  it('persists a queued preference update to the thread that was active when it was requested', async () => {
+    const controller = createController(storage);
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadA = await session.thread.create();
+
+    // Jam the update queue so the preference write is still pending when the
+    // session switches threads.
+    void session.state.update(async () => {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      return { updates: {}, result: undefined };
+    });
+    const pending = session.state.set({ thinkingLevel: 'high' } as any);
+
+    const threadB = await session.thread.create();
+    await pending;
+
+    const memory = await storage.getStore('memory');
+    const savedA = await memory?.getThreadById({ threadId: threadA.id });
+    const savedB = await memory?.getThreadById({ threadId: threadB.id });
+    // The write lands on thread A (active at request time), never on thread B.
+    expect(savedA?.metadata?.thinkingLevel).toBe('high');
+    expect(savedB?.metadata?.thinkingLevel).toBeUndefined();
   });
 });
