@@ -118,6 +118,7 @@ import type {
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
+import { slugify } from '../utils/slugify';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow } from '../workflows/create';
@@ -4815,7 +4816,6 @@ export class Agent<
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
-            const slugify = await import(`@sindresorhus/slugify`);
             const subAgentThreadId = inputData.threadId
               ? `${inputData.threadId}-${randomUUID()}`
               : context?.mastra?.generateId({
@@ -4831,7 +4831,7 @@ export class Agent<
                   idType: 'generic',
                   source: 'agent',
                   entityId: agentName,
-                }) || `${slugify.default(this.id)}-${agentName}`;
+                }) || `${slugify(this.id)}-${agentName}`;
 
             // Call onDelegationStart before resolving the sub-agent's runtime
             // config so mutations of the delegated run's context in the hook
