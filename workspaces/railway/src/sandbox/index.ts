@@ -173,6 +173,7 @@ export class RailwaySandbox extends MastraSandbox {
   private _checkpointRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private _checkpointRefreshInFlight: Promise<void> | null = null;
   private _sandboxId?: string;
+  private _startInFlight: Promise<void> | null = null;
 
   private readonly _token?: string;
   private readonly _environmentId?: string;
@@ -240,21 +241,41 @@ export class RailwaySandbox extends MastraSandbox {
 
     if (this._sandboxId) {
       try {
-        this._sandbox = await this._reconnectSandbox(this._sandboxId, clientConfig);
+        const sandboxId = this._sandboxId;
+        this._startInFlight ??= (async () => {
+          this._sandbox = await this._reconnectSandbox(sandboxId, clientConfig);
+        })().finally(() => {
+          this._startInFlight = null;
+        });
       } catch (error) {
         if (!(error instanceof SandboxNotFoundError)) {
           throw error;
         }
 
-        this._sandbox = await this._createNewSandbox(createOptions);
+        this._startInFlight ??= (async () => {
+          this._sandbox = await this._createNewSandbox(createOptions);
+        })().finally(() => {
+          this._startInFlight = null;
+        });
       }
     } else {
-      this._sandbox = await this._createNewSandbox(createOptions);
+      this._startInFlight ??= (async () => {
+        this._sandbox = await this._createNewSandbox(createOptions);
+      })().finally(() => {
+        this._startInFlight = null;
+      });
     }
-    this._sandboxId = this._sandbox.id;
+    await this._startInFlight;
 
-    this._createdAt = this._sandbox.createdAt ? new Date(this._sandbox.createdAt) : new Date();
-    this.logger.debug(`${LOG_PREFIX} Railway sandbox ${this._sandbox.id} ready for logical ID: ${this.id}`);
+    if (!this._sandbox) {
+      throw new Error('Failed to start Railway sandbox');
+    }
+
+    const sandbox = this._sandbox as Sandbox;
+    this._sandboxId = sandbox.id;
+
+    this._createdAt = sandbox.createdAt ? new Date(sandbox.createdAt) : new Date();
+    this.logger.debug(`${LOG_PREFIX} Railway sandbox ${sandbox.id} ready for logical ID: ${this.id}`);
     this._scheduleCheckpointRefresh();
   }
 
