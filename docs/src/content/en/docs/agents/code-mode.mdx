@@ -143,7 +143,7 @@ The generated code for `sales_code` can't call an inventory tool, and the revers
 
 ## Remote sandboxes
 
-By default, code mode uses a transport that writes the program to the host filesystem and runs `node` against it. That works for `LocalSandbox`, which shares the host, but not for remote sandboxes that run in their own micro-VM (such as [E2B](/reference/workspace/e2b-sandbox)), where the host paths don't exist.
+By default, code mode uses a transport that writes the program to the host filesystem and runs `node` against it. That works for `LocalSandbox`, which shares the host, but not for remote sandboxes that run in their own micro-VM (such as [E2B](/integrations/sandboxes/e2b)), where the host paths don't exist.
 
 Remote sandboxes need a transport that writes the program into the sandbox filesystem. For E2B, pass the included `E2BCodeModeTransport` as the second argument to `createCodeMode`:
 
