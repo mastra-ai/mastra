@@ -127,7 +127,7 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
     name: 'seatbeltProfilePath',
     type: 'string',
     description:
-      "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
+      "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used exactly as written: Mastra doesn't add mounted paths to it, so the profile must already allow every path you mount. If the file doesn't exist, a default profile is generated and written to this path, and that generated profile allows mounted paths.",
     isOptional: true,
   },
   {

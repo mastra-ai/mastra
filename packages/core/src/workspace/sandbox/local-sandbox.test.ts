@@ -18,6 +18,33 @@ import {
   generateSeatbeltProfile,
 } from './native-sandbox';
 
+/** Minimal local `WorkspaceFilesystem` stub that mounts `basePath` as a symlink. */
+function makeMockLocalFs(basePath: string, overrides: Partial<WorkspaceFilesystem> = {}): WorkspaceFilesystem {
+  return {
+    id: 'test-local',
+    name: 'MockLocalFilesystem',
+    provider: 'local',
+    getMountConfig: () => ({ type: 'local' as const, basePath }),
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    deleteFile: vi.fn(),
+    listFiles: vi.fn(),
+    stat: vi.fn(),
+    exists: vi.fn(),
+    getInstructions: vi.fn(),
+    init: vi.fn(),
+    ...overrides,
+  } as WorkspaceFilesystem;
+}
+
+/**
+ * The SBPL that `sandbox-exec` runs with.
+ * `buildSeatbeltCommand` emits `['-p', <profile>, 'sh', '-c', <command>]`, so the profile is args[1].
+ */
+function activeSeatbeltProfile(sandbox: LocalSandbox): string {
+  return sandbox.wrapCommandForIsolation('echo hi').args[1]!;
+}
+
 describe('LocalSandbox', () => {
   let tempDir: string;
   let sandbox: LocalSandbox;
@@ -932,6 +959,98 @@ describe('LocalSandbox', () => {
       ).toBe(false);
     });
 
+    it('should keep a user-authored seatbelt profile across mount and unmount', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const customProfile = '(version 1)\n(deny default)\n(allow file-read* (literal "/custom-marker"))\n';
+      const customProfilePath = path.join(tempDir, 'custom.sb');
+      await fs.writeFile(customProfilePath, customProfile, 'utf-8');
+
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-custom-profile-mount-'));
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: customProfilePath },
+      });
+
+      try {
+        await seatbeltSandbox._start();
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toBe(customProfile);
+
+        const mountResult = await seatbeltSandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(mountResult.success).toBe(true);
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toBe(customProfile);
+
+        await seatbeltSandbox.unmount('/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toBe(customProfile);
+      } finally {
+        await seatbeltSandbox._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
+    it('should add mounted paths to a generated seatbelt profile', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-generated-profile-mount-'));
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+      });
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      try {
+        await seatbeltSandbox._start();
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+
+        await seatbeltSandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toContain(realMountTarget);
+
+        await seatbeltSandbox.unmount('/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+      } finally {
+        await seatbeltSandbox._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
+    it('should add mounted paths when seatbeltProfilePath points at a missing file', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // No file exists here yet, so start() generates the default profile and writes it there.
+      // That profile is ours, so it must keep tracking the mount allowlist.
+      const missingProfilePath = path.join(tempDir, 'nested', 'not-yet-written.sb');
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-missing-profile-mount-'));
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: missingProfilePath },
+      });
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      try {
+        await seatbeltSandbox._start();
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+
+        await seatbeltSandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toContain(realMountTarget);
+
+        await seatbeltSandbox.unmount('/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+      } finally {
+        await seatbeltSandbox._destroy();
+        // The configured path belongs to the user, so destroy() must leave the file alone.
+        await expect(fs.access(missingProfilePath)).resolves.toBeUndefined();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
     it('should respect readOnly working directory restriction', async () => {
       if (os.platform() !== 'darwin') {
         return;
@@ -1151,24 +1270,6 @@ describe('LocalSandbox', () => {
   describe.skipIf(os.platform() === 'win32')('mount operations', () => {
     let mountSandbox: LocalSandbox;
     let mountDir: string;
-
-    function makeMockLocalFs(basePath: string, overrides: Partial<WorkspaceFilesystem> = {}): WorkspaceFilesystem {
-      return {
-        id: 'test-local',
-        name: 'MockLocalFilesystem',
-        provider: 'local',
-        getMountConfig: () => ({ type: 'local' as const, basePath }),
-        readFile: vi.fn(),
-        writeFile: vi.fn(),
-        deleteFile: vi.fn(),
-        listFiles: vi.fn(),
-        stat: vi.fn(),
-        exists: vi.fn(),
-        getInstructions: vi.fn(),
-        init: vi.fn(),
-        ...overrides,
-      } as WorkspaceFilesystem;
-    }
 
     beforeEach(async () => {
       mountDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-mount-test-'));
