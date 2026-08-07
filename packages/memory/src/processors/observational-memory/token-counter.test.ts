@@ -1322,7 +1322,9 @@ describe('TokenCounter', () => {
 
     /** Payload tokens of the fixture: the role, the tool name and the JSON arguments. */
     const signatureTokens = (counter: TokenCounter) =>
-      counter.countString('assistant') + counter.countString(TOOL_NAME) + counter.countString(JSON.stringify(TOOL_ARGS));
+      counter.countString('assistant') +
+      counter.countString(TOOL_NAME) +
+      counter.countString(JSON.stringify(TOOL_ARGS));
 
     it('counts a pending approval exactly like the tool call it holds instead of throwing', () => {
       const counter = new TokenCounter();
