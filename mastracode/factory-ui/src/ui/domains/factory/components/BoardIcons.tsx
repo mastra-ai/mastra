@@ -2,18 +2,10 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  CheckCircle2,
-  CircleDot,
-  CircleX,
-  GitMerge,
-  GitPullRequest,
-  GitPullRequestClosed,
-  GitPullRequestDraft,
-} from 'lucide-react';
+import { CheckCircle2, CircleDot, CircleX, GitPullRequest } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
-import type { WorkItem, WorkItemSource } from '../services/workItems';
+import type { WorkItemSource } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
 
@@ -29,26 +21,6 @@ const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVG
 export function SourceIcon({ source, className }: { source: WorkItemSource; className?: string }) {
   const { icon: Icon, className: sourceClassName } = SOURCE_ICONS[source];
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
-}
-
-type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
-
-function pullRequestStatus(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
-  if (item.metadata.merged === true) return 'merged';
-  if (item.metadata.state === 'closed') return 'closed';
-  if (item.metadata.state === 'open') return item.metadata.draft === true ? 'draft' : 'open';
-  if (item.stages.includes('done')) return 'merged';
-  if (item.stages.includes('canceled')) return 'closed';
-  return item.metadata.draft === true ? 'draft' : 'open';
-}
-
-export function PullRequestStatusIcon({ item }: { item: Pick<WorkItem, 'metadata' | 'stages'> }) {
-  const status = pullRequestStatus(item);
-  const label = `${status[0]?.toUpperCase()}${status.slice(1)} pull request`;
-  if (status === 'merged') return <GitMerge size={16} className="shrink-0 text-purple-400" aria-label={label} />;
-  if (status === 'closed') return <GitPullRequestClosed size={16} className="text-error shrink-0" aria-label={label} />;
-  if (status === 'draft') return <GitPullRequestDraft size={16} className="text-icon3 shrink-0" aria-label={label} />;
-  return <GitPullRequest size={16} className="text-accent1 shrink-0" aria-label={label} />;
 }
 
 const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {

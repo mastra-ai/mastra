@@ -1008,6 +1008,31 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return replaceAt(result, messageIndex, withParts(targetMessage, parts));
     }
 
+    case 'tool-output-denied': {
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex];
+      if (!isToolPart(toolPart)) return result;
+
+      parts[toolPartIndex] = {
+        ...toolPart,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          state: 'output-denied',
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args ?? toolPart.toolInvocation.args,
+          approval: chunk.payload.approval,
+        },
+      } as MastraMessagePart;
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+    }
+
     case 'tool-error':
     case 'tool-result':
     case 'background-task-completed':
