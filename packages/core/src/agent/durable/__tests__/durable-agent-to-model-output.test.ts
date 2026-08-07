@@ -231,62 +231,67 @@ describe('DurableAgent toModelOutput parity', () => {
     expect(JSON.stringify(toolResultPart.output)).toContain('the answer is 42');
   });
 
-  it('does not write a modelOutput key into the message list when toModelOutput returns nullish (producer guard)', async () => {
-    // Isolates the producer-side guard in llm-mapping.ts. A nullish toModelOutput
-    // must NOT be persisted as `mastra: { modelOutput: undefined }` on the
-    // tool-invocation part. JSON storage round-trips drop `undefined`, so the bad
-    // key is only observable on the in-memory MessageList (via the run registry);
-    // asserting there is what makes this test go red when the guard is reverted.
-    const toModelOutputSpy = vi.fn(() => undefined);
+  it.each([undefined, null])(
+    'does not write a modelOutput key into the message list when toModelOutput returns %s (producer guard)',
+    async nullishModelOutput => {
+      // Isolates the producer-side guard in llm-mapping.ts. A nullish toModelOutput
+      // must NOT be persisted on the tool-invocation part. JSON storage round-trips
+      // drop `undefined`, so the bad key is only observable on the in-memory
+      // MessageList (via the run registry); asserting there is what makes this test
+      // go red when the guard is reverted.
+      const toModelOutputSpy = vi.fn(() => nullishModelOutput);
 
-    const testTool = createTool({
-      id: 'text-tool',
-      description: 'A tool that only maps media results',
-      inputSchema: z.object({ path: z.string() }),
-      outputSchema: z.object({ contents: z.string() }),
-      execute: async () => ({ contents: 'the answer is 42' }),
-      toModelOutput: toModelOutputSpy,
-    });
+      const testTool = createTool({
+        id: 'text-tool',
+        description: 'A tool that only maps media results',
+        inputSchema: z.object({ path: z.string() }),
+        outputSchema: z.object({ contents: z.string() }),
+        execute: async () => ({ contents: 'the answer is 42' }),
+        toModelOutput: toModelOutputSpy,
+      });
 
-    const model = createToolCallingModel('text-tool', { path: 'data.txt' });
+      const model = createToolCallingModel('text-tool', { path: 'data.txt' });
 
-    const storage = new InMemoryStore();
-    const baseAgent = new Agent({
-      name: 'text-agent',
-      instructions: 'You are a test agent.',
-      model,
-      tools: { 'text-tool': testTool },
-    });
+      const storage = new InMemoryStore();
+      const baseAgent = new Agent({
+        name: 'text-agent',
+        instructions: 'You are a test agent.',
+        model,
+        tools: { 'text-tool': testTool },
+      });
 
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, cleanupTimeoutMs: 0 });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, cleanupTimeoutMs: 0 });
 
-    new Mastra({
-      agents: { 'text-agent': durableAgent as any },
-      storage,
-    });
+      new Mastra({
+        agents: { 'text-agent': durableAgent as any },
+        storage,
+      });
 
-    const threadId = 'thread-producer-guard';
-    const resourceId = 'resource-producer-guard';
-    const result = await durableAgent.stream('Read data.txt', {
-      memory: { thread: threadId, resource: resourceId },
-    });
+      const threadId = 'thread-producer-guard';
+      const resourceId = 'resource-producer-guard';
+      const result = await durableAgent.stream('Read data.txt', {
+        memory: { thread: threadId, resource: resourceId },
+      });
 
-    for await (const _ of result.fullStream) {
-      // drain
-    }
+      for await (const _ of result.fullStream) {
+        // drain
+      }
 
-    const entry = globalRunRegistry.get(result.runId);
-    const messageList = entry?.messageList;
-    expect(messageList).toBeDefined();
-    const messages = messageList!.get.all.db();
-    const invocation = messages
-      .filter((m: any) => m.role === 'assistant' && m.content?.format === 2)
-      .flatMap((m: any) => m.content.parts)
-      .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'result');
+      expect(toModelOutputSpy).toHaveBeenCalledTimes(1);
 
-    expect(invocation).toBeDefined();
-    // Producer guard: a nullish modelOutput must not be written as a key at all.
-    const mastraMeta = (invocation as any)?.providerMetadata?.mastra ?? {};
-    expect(Object.hasOwn(mastraMeta, 'modelOutput')).toBe(false);
-  });
+      const entry = globalRunRegistry.get(result.runId);
+      const messageList = entry?.messageList;
+      expect(messageList).toBeDefined();
+      const messages = messageList!.get.all.db();
+      const invocation = messages
+        .filter(message => message.role === 'assistant' && message.content.format === 2)
+        .flatMap(message => message.content.parts)
+        .find(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result');
+
+      expect(invocation).toBeDefined();
+      // Producer guard: a nullish modelOutput must not be written as a key at all.
+      const mastraMetadata = invocation?.providerMetadata?.mastra ?? {};
+      expect(Object.hasOwn(mastraMetadata, 'modelOutput')).toBe(false);
+    },
+  );
 });
