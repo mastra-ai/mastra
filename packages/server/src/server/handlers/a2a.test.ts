@@ -1933,6 +1933,8 @@ describe('A2A Handler', () => {
         message: { messageId, taskId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
       };
 
+      await seedTask(mockTaskStore, taskId);
+
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockImplementation is not available on the Agent class
       mockAgent.stream.mockImplementation((_messages, options) => {
