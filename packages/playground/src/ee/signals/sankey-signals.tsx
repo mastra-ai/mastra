@@ -107,7 +107,7 @@ function DrillFilterBanner({
   selections: ThemeSelection[];
   filteredTraceCount?: number;
   totalTraceCount: number;
-  onViewDetails: (selection: ThemeSelection) => void;
+  onViewDetails?: (selection: ThemeSelection) => void;
   onRemove: (signalName: TraceSignalName) => void;
   onClearAll: () => void;
 }) {
@@ -162,7 +162,7 @@ function DrillFilterBanner({
               {label}
               <X aria-hidden="true" className="size-3.5" />
             </button>
-            {isLatestSelection ? (
+            {isLatestSelection && onViewDetails ? (
               <Button
                 aria-label={`View details for ${label}`}
                 onClick={() => onViewDetails(selection)}
@@ -578,7 +578,9 @@ export function SankeySignals({
           />
           <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
             {drillStack.length > 0
-              ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}`
+              ? pathsQuery.data
+                ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}`
+                : `Filtering… · ${snapshotSummaryLabel(snapshot, currentFlow)}`
               : snapshotSummaryLabel(snapshot, flow)}
           </p>
           {drillStack.length > 0 ? (
@@ -586,7 +588,7 @@ export function SankeySignals({
               selections={drillStack}
               filteredTraceCount={pathsQuery.data ? flow.snapshot.traceCount : undefined}
               totalTraceCount={currentFlow.snapshot.traceCount}
-              onViewDetails={openSelectionDetails}
+              onViewDetails={pathsQuery.data ? openSelectionDetails : undefined}
               onRemove={signalName => setDrillStack(current => current.filter(item => item.signalName !== signalName))}
               onClearAll={() => setDrillStack([])}
             />

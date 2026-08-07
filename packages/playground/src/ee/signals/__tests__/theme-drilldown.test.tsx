@@ -446,8 +446,8 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(themeNode);
 
       const banner = await screen.findByLabelText('Active drill-down filters');
-      expect(within(banner).getByRole('button', { name: 'View details for Goal · Add transcript' })).not.toBeNull();
       expect(await within(banner).findByText('Showing 2 of 3 traces that match all filters')).not.toBeNull();
+      expect(within(banner).getByRole('button', { name: 'View details for Goal · Add transcript' })).not.toBeNull();
       await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
       expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
       expect(within(screen.getByLabelText('Trace signal stage legend')).queryByText('Goal')).toBeNull();
@@ -476,9 +476,13 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(themeNode);
 
       expect(await screen.findByText('Loading matching traces…')).not.toBeNull();
+      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtering… · ');
       expect(screen.getByLabelText('Trace signal theme flow')).not.toBeNull();
       expect(screen.getByLabelText(/Add transcript.+2 traces \(67%\)/)).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'View details for Goal · Add transcript' })).toBeNull();
       expect(await screen.findByText('Showing 2 of 3 traces that match all filters')).not.toBeNull();
+      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
+      expect(screen.getByRole('button', { name: 'View details for Goal · Add transcript' })).not.toBeNull();
     });
 
     it('opens the selected theme from an explicit details action', async () => {
@@ -486,8 +490,9 @@ describe('SankeySignals drill-in', () => {
       renderSignals();
       fireEvent.click(await screen.findByLabelText(/Add transcript.+2 traces \(67%\)/));
 
+      const banner = await screen.findByLabelText('Active drill-down filters');
       fireEvent.click(
-        within(await screen.findByLabelText('Active drill-down filters')).getByRole('button', {
+        await within(banner).findByRole('button', {
           name: 'View details for Goal · Add transcript',
         }),
       );
@@ -591,8 +596,8 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(noiseNode);
 
       const banner = await screen.findByLabelText('Active drill-down filters');
-      expect(within(banner).getByRole('button', { name: 'View details for Behavior · Noise' })).not.toBeNull();
       expect(await within(banner).findByText('Showing 2 of 3 traces that match all filters')).not.toBeNull();
+      expect(within(banner).getByRole('button', { name: 'View details for Behavior · Noise' })).not.toBeNull();
       expect(within(screen.getByLabelText('Trace signal stage legend')).queryByText('Behavior')).toBeNull();
       expect(screen.queryByRole('dialog', { name: 'Noise' })).toBeNull();
     });
@@ -686,7 +691,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+1 trace \(50%\)/ }));
 
       const banner = await screen.findByLabelText('Active drill-down filters');
-      fireEvent.click(within(banner).getByRole('button', { name: 'View details for Goal · Add transcript' }));
+      fireEvent.click(await within(banner).findByRole('button', { name: 'View details for Goal · Add transcript' }));
 
       const dialog = await screen.findByRole('dialog', { name: 'Add transcript' });
       expect(
@@ -733,7 +738,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(noiseNodes[0]!);
 
       const banner = await screen.findByLabelText('Active drill-down filters');
-      fireEvent.click(within(banner).getByRole('button', { name: 'View details for Behavior · Noise' }));
+      fireEvent.click(await within(banner).findByRole('button', { name: 'View details for Behavior · Noise' }));
 
       const dialog = await screen.findByRole('dialog', { name: 'Noise' });
       expect(

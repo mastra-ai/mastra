@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeyChart } from './sankey-chart';
 import type { SankeyChartNodeSelection } from './sankey-chart-utils';
@@ -46,6 +47,21 @@ function TestControls() {
         Move second column first
       </button>
     </div>
+  );
+}
+
+function AnimatedDataChangeExample() {
+  const [isFiltered, setIsFiltered] = useState(false);
+  const filteredData = isFiltered ? data.slice(0, 2) : data;
+  const visibleColumnIds = isFiltered ? ['region', 'outcome'] : ['channel', 'region', 'outcome'];
+
+  return (
+    <Sankey data={filteredData} columns={columns} visibleColumnIds={visibleColumnIds} getRecordLayoutWeight={() => 1}>
+      <button type="button" onClick={() => setIsFiltered(true)}>
+        Filter data
+      </button>
+      <SankeyChart animateLayoutChanges />
+    </Sankey>
   );
 }
 
@@ -673,6 +689,20 @@ describe('SankeyChart', () => {
         const nodeAnimation = container.querySelector('g animateTransform[attributeName="transform"]');
         expect(nodeAnimation?.getAttribute('from')).not.toBe(nodeAnimation?.getAttribute('to'));
       });
+    });
+
+    it('keeps changing node dimensions aligned with animated ribbons', async () => {
+      render(<AnimatedDataChangeExample />);
+      await screen.findByLabelText('EU: 2 traces (50%)');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Filter data' }));
+
+      const euNode = await screen.findByLabelText('EU: 2 traces (100%)');
+      const yAnimation = euNode.querySelector('rect animate[attributeName="y"]');
+      const heightAnimation = euNode.querySelector('rect animate[attributeName="height"]');
+      expect(yAnimation?.getAttribute('from')).not.toBe(yAnimation?.getAttribute('to'));
+      expect(heightAnimation?.getAttribute('from')).not.toBe(heightAnimation?.getAttribute('to'));
+      expect(euNode.querySelector('animateTransform')?.getAttribute('from')).toMatch(/\s0$/);
     });
 
     it('moves ribbons back into place when a column is restored', async () => {

@@ -12,7 +12,6 @@ import {
 import type {
   FixedSankeyGeometry,
   FixedSankeyLinkGeometry,
-  FixedSankeyNodeGeometry,
   SankeyChartCurveSelection,
   SankeyChartGraph,
   SankeyChartLink,
@@ -81,6 +80,7 @@ export function SankeyChart({
     if (!fixedGeometry) return;
     previousLayoutRef.current = { key: layoutKey, graph, geometry: fixedGeometry };
   }, [fixedGeometry, graph, layoutKey]);
+  const previousNodeWeights = previousLayout ? getSankeyChartNodeWeights(previousLayout.graph) : undefined;
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
@@ -123,9 +123,29 @@ export function SankeyChart({
                   ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
                   : false;
                 const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
-                const animationFrom =
+                const previousNodeGeometry =
                   shouldAnimateLayout && node && previousLayout
                     ? previousLayout.geometry.nodes.get(node.id)
+                    : undefined;
+                const previousNode =
+                  previousNodeGeometry && previousLayout
+                    ? previousLayout.graph.nodes.find(candidate => candidate.id === node?.id)
+                    : undefined;
+                const previousVisibleHeight = previousNodeGeometry
+                  ? scaleSankeyDimension(
+                      previousNodeGeometry.height,
+                      previousNode?.displayValue,
+                      previousNode ? previousNodeWeights?.get(previousNode.id) : undefined,
+                    )
+                  : undefined;
+                const animationFrom =
+                  previousNodeGeometry && previousVisibleHeight !== undefined
+                    ? {
+                        x: previousNodeGeometry.x,
+                        y: previousNodeGeometry.y,
+                        visibleY: previousNodeGeometry.y + (previousNodeGeometry.height - previousVisibleHeight) / 2,
+                        visibleHeight: previousVisibleHeight,
+                      }
                     : undefined;
                 const selection = node ? getSankeyChartNodeSelection(node) : undefined;
                 const clickable = Boolean(
@@ -220,8 +240,15 @@ type SankeyLinkRendererProps = {
   payload: { source: { name?: string | number }; target: { name?: string | number } };
 };
 
+type SankeyNodeAnimationGeometry = {
+  x: number;
+  y: number;
+  visibleY: number;
+  visibleHeight: number;
+};
+
 type SankeyNodeProps = SankeyNodeRendererProps & {
-  animationFrom?: FixedSankeyNodeGeometry;
+  animationFrom?: SankeyNodeAnimationGeometry;
   hueMap: Record<string, number>;
   columnLabel?: string;
   label?: string;
@@ -289,8 +316,11 @@ function SankeyNode({
     columnTotal > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / columnTotal) * 100) : 0;
   const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
   const visibleY = y + (height - visibleHeight) / 2;
-  const animationOffset = animationFrom ? { x: animationFrom.x - x, y: animationFrom.y - y } : undefined;
-  const hasNodeMotion = animationOffset && (animationOffset.x !== 0 || animationOffset.y !== 0);
+  const animationOffsetX = animationFrom ? animationFrom.x - x : undefined;
+  const hasHorizontalMotion = animationOffsetX !== undefined && animationOffsetX !== 0;
+  const hasVerticalMotion =
+    animationFrom && (animationFrom.visibleY !== visibleY || animationFrom.visibleHeight !== visibleHeight);
+  const hasLabelMotion = animationFrom && animationFrom.y !== y;
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const hue = hueMap[name] ?? 0;
@@ -322,14 +352,14 @@ function SankeyNode({
           fontSize={COLUMN_LABEL_FONT_SIZE}
           fontWeight={600}
         >
-          {hasNodeMotion ? (
+          {hasHorizontalMotion ? (
             <animate
               attributeName="x"
               begin="0s"
               calcMode="spline"
               dur={LAYOUT_ANIMATION_DURATION}
               fill="freeze"
-              from={labelX + animationOffset.x}
+              from={labelX + animationOffsetX}
               keySplines="0.2 0.8 0.2 1"
               keyTimes="0;1"
               to={labelX}
@@ -367,14 +397,14 @@ function SankeyNode({
         style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
       >
-        {hasNodeMotion ? (
+        {hasHorizontalMotion ? (
           <animateTransform
             attributeName="transform"
             begin="0s"
             calcMode="spline"
             dur={LAYOUT_ANIMATION_DURATION}
             fill="freeze"
-            from={`${animationOffset.x} ${animationOffset.y}`}
+            from={`${animationOffsetX} 0`}
             keySplines="0.2 0.8 0.2 1"
             keyTimes="0;1"
             to="0 0"
@@ -383,7 +413,34 @@ function SankeyNode({
         ) : null}
         {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
         {description ? null : <title>{displayLabel}</title>}
-        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
+        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)}>
+          {hasVerticalMotion ? (
+            <>
+              <animate
+                attributeName="y"
+                begin="0s"
+                calcMode="spline"
+                dur={LAYOUT_ANIMATION_DURATION}
+                fill="freeze"
+                from={animationFrom.visibleY}
+                keySplines="0.2 0.8 0.2 1"
+                keyTimes="0;1"
+                to={visibleY}
+              />
+              <animate
+                attributeName="height"
+                begin="0s"
+                calcMode="spline"
+                dur={LAYOUT_ANIMATION_DURATION}
+                fill="freeze"
+                from={animationFrom.visibleHeight}
+                keySplines="0.2 0.8 0.2 1"
+                keyTimes="0;1"
+                to={visibleHeight}
+              />
+            </>
+          ) : null}
+        </rect>
         <text
           x={labelX}
           y={y - 24}
@@ -392,9 +449,35 @@ function SankeyNode({
           fontSize={NODE_LABEL_FONT_SIZE}
           fontFamily="var(--font-mono)"
         >
+          {hasLabelMotion ? (
+            <animate
+              attributeName="y"
+              begin="0s"
+              calcMode="spline"
+              dur={LAYOUT_ANIMATION_DURATION}
+              fill="freeze"
+              from={animationFrom.y - 24}
+              keySplines="0.2 0.8 0.2 1"
+              keyTimes="0;1"
+              to={y - 24}
+            />
+          ) : null}
           {visibleLabel}
         </text>
         <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
+          {hasLabelMotion ? (
+            <animate
+              attributeName="y"
+              begin="0s"
+              calcMode="spline"
+              dur={LAYOUT_ANIMATION_DURATION}
+              fill="freeze"
+              from={animationFrom.y - 8}
+              keySplines="0.2 0.8 0.2 1"
+              keyTimes="0;1"
+              to={y - 8}
+            />
+          ) : null}
           {value} ({percentage}%)
         </text>
       </g>
