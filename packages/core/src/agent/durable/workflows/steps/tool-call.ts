@@ -506,13 +506,16 @@ export function createDurableToolCallStep() {
         resumeSchema?: string;
         suspendPayload?: unknown;
         delegatedRunId?: string;
+        approvalToolName?: string;
+        approvalArgs?: unknown;
       }) => {
         if (!messageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,
-          toolName,
-          args,
+          toolName: opts.approvalToolName ?? toolName,
+          args: opts.approvalArgs ?? args,
+          ...(opts.approvalToolName ? { parentToolName: toolName, parentArgs: args } : {}),
           type: opts.type,
           // `runId` is the outer resumable durable run. When a delegated
           // sub-agent/workflow suspends, its inner suspended run is preserved
@@ -590,7 +593,7 @@ export function createDurableToolCallStep() {
           return (
             !!meta?.[metadataKey]?.[toolCallId] ||
             Object.values(meta?.[metadataKey] ?? {}).some(
-              (e: any) => e?.toolCallId === toolCallId || e?.toolName === toolName,
+              (e: any) => e?.toolCallId === toolCallId || e?.parentToolName === toolName || e?.toolName === toolName,
             )
           );
         });
@@ -605,7 +608,9 @@ export function createDurableToolCallStep() {
         const key = entries[toolCallId]
           ? toolCallId
           : (Object.keys(entries).find(k => entries[k]?.toolCallId === toolCallId) ??
-            Object.keys(entries).find(k => entries[k]?.toolName === toolName) ??
+            Object.keys(entries).find(
+              k => entries[k]?.parentToolName === toolName || entries[k]?.toolName === toolName,
+            ) ??
             (entries[toolName] ? toolName : undefined));
         if (key) {
           delete entries[key];
@@ -918,7 +923,12 @@ export function createDurableToolCallStep() {
             }
 
             // Add approval metadata to message before persisting
-            addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema, delegatedRunId });
+            addToolMetadata({
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+              delegatedRunId,
+              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
+            });
 
             await doFlush();
 

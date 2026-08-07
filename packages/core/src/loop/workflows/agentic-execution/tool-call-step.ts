@@ -51,6 +51,8 @@ type AddToolMetadataOptions = {
   toolCallId: string;
   toolName: string;
   args: unknown;
+  parentToolName?: string;
+  parentArgs?: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
   metadata?: Record<string, unknown>;
@@ -154,6 +156,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         toolCallId,
         toolName,
         args,
+        parentToolName,
+        parentArgs,
         suspendPayload,
         resumeSchema,
         type,
@@ -186,6 +190,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           toolCallId,
           toolName,
           args: transformedArgs,
+          ...(parentToolName ? { parentToolName, parentArgs } : {}),
           type,
           // Store the OUTER (resumable) runId so clients can resume after page refresh or
           // server restart via `resumeStream({ runId, toolCallId })`. For delegated sub-agent /
@@ -267,7 +272,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (entries[toolCallId]) return toolCallId;
           const byCallId = Object.keys(entries).find(key => entries[key]?.toolCallId === toolCallId);
           if (byCallId) return byCallId;
-          const byName = Object.keys(entries).find(key => entries[key]?.toolName === toolName);
+          const byName = Object.keys(entries).find(
+            key => entries[key]?.parentToolName === toolName || entries[key]?.toolName === toolName,
+          );
           if (byName) return byName;
           return entries[toolName] ? toolName : undefined;
         };
@@ -737,6 +744,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: approvalToolName,
                 args: approvalArgs,
+                ...(approvalToolName !== inputData.toolName || approvalArgs !== inputData.args
+                  ? { parentToolName: inputData.toolName, parentArgs: inputData.args }
+                  : {}),
                 type: 'approval',
                 suspendedToolRunId: options.runId,
                 resumeSchema: JSON.stringify(

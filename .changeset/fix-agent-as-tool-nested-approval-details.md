@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix agent-as-tool streaming wrapper discarding nested tool approval details (#20934)
+Fixed nested agent-as-tool approvals so users see the inner tool and arguments while resumes retain the parent delegation identity (#20934).
