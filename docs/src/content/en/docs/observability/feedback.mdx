@@ -44,7 +44,10 @@ await mastra.observability.addFeedback({
 Feedback is usually collected against a message a user has already read, so you need the `traceId` for that message. Assistant messages carry it in `content.metadata`, both in the stream result and when the message is recalled later from memory:
 
 ```typescript title="src/mastra/message-trace.ts"
-const { messages } = await memory.recall({ threadId, perPage: false })
+const agent = mastra.getAgent('weatherAgent')
+const memory = await agent.getMemory()
+
+const { messages } = await memory!.recall({ threadId, perPage: false })
 
 const message = messages.find(m => m.id === messageId)
 const traceId = message?.content.metadata?.traceId

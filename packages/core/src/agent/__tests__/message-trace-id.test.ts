@@ -1,7 +1,10 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { MockMemory } from '../../memory/mock';
+import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
 
 /**
  * Regression test for #19891.
@@ -13,6 +16,10 @@ import { Agent } from '../agent';
  *
  * The assistant message's `content.metadata` — which already carries modelId
  * and provider — now also carries the traceId of the run that produced it.
+ *
+ * Two execution paths build that metadata and both are covered here: the
+ * regular Agent loop (llm-execution-step.ts `buildResponseModelMetadata`) and
+ * the durable agent's mirror of it (durable/workflows/steps/llm-execution.ts).
  */
 
 const TRACE_ID = 'trace-id-for-message';
@@ -177,4 +184,75 @@ describe('assistant message trace correlation (#19891)', () => {
       expect(msg.content.metadata?.modelId).toBe('mock-model-id');
     }
   });
+});
+
+/**
+ * The durable agent builds its own response metadata rather than calling
+ * `buildResponseModelMetadata`, so the regular-loop tests above cannot cover it.
+ * A caller reading messages back has no idea which path produced them, so the
+ * traceId has to be there either way.
+ */
+describe('durable agent trace correlation (#19891)', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  async function runDurableAgent(threadId: string, agentId: string) {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+
+    const baseAgent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'test',
+      model: createModel(),
+      memory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const { cleanup } = await durableAgent.stream('hello', {
+      memory: { thread: threadId, resource: 'user-1' },
+    });
+
+    // Poll until the durable flush lands — a fixed sleep is timing-dependent
+    // under CI load (same shape as durable-agent-suspend-metadata.test.ts).
+    const store = await storage.getStore('memory');
+    let assistant: any;
+    for (let i = 0; i < 100 && !assistant; i++) {
+      const { messages } = await store!.listMessages({ threadId } as never);
+      assistant = messages.find((m: any) => m.role === 'assistant' && m.content?.metadata?.modelId);
+      if (!assistant) await new Promise(r => setTimeout(r, 100));
+    }
+    cleanup();
+
+    return assistant;
+  }
+
+  it('persists the traceId in assistant message content.metadata on the durable path', async () => {
+    const spy = await mockTracedSpans();
+
+    try {
+      const assistant = await runDurableAgent('thread-durable-trace-id', 'durable-trace-id-agent');
+
+      expect(assistant).toBeDefined();
+      expect(assistant.content.metadata?.traceId).toBe(TRACE_ID);
+      expect(assistant.content.metadata?.modelId).toBe('mock-model-id');
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('omits traceId when the durable run is not traced', async () => {
+    const assistant = await runDurableAgent('thread-durable-untraced', 'durable-untraced-agent');
+
+    expect(assistant).toBeDefined();
+    expect(assistant.content.metadata?.traceId).toBeUndefined();
+    expect(assistant.content.metadata?.modelId).toBe('mock-model-id');
+  }, 30000);
 });
