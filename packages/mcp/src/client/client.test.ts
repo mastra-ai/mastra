@@ -1057,6 +1057,76 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       value: JSON.stringify(fullResult),
     });
   });
+
+  it('should return authored content text in toModelOutput when structuredContent is a scalar', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'number' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 0,
+      content: [{ type: 'text', text: 'count is zero' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'count is zero',
+    });
+  });
+
+  it('should return authored content text in toModelOutput when structuredContent is null', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'nullable_tool',
+          description: 'Returns null structured output',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'null' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: null,
+      content: [{ type: 'text', text: 'no data available' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['nullable_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'no data available',
+    });
+  });
 });
 
 describe('MastraMCPClient - tools without outputSchema preserve envelope', () => {

@@ -136,15 +136,38 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 
+const MCP_SCALAR_STRUCTURED_CONTENT = Symbol.for('mastra.mcp.scalarStructuredContent');
+
+function isMcpScalarStructuredWrapper(output: unknown): output is Record<symbol, unknown> {
+  return output !== null && typeof output === 'object' && MCP_SCALAR_STRUCTURED_CONTENT in output;
+}
+
 function attachMcpCallToolContent(structuredContent: unknown, content: unknown): unknown {
-  if (structuredContent !== null && typeof structuredContent === 'object') {
+  if (
+    structuredContent !== null &&
+    typeof structuredContent === 'object' &&
+    !isMcpScalarStructuredWrapper(structuredContent)
+  ) {
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
       value: content,
       enumerable: false,
       configurable: true,
     });
+    return structuredContent;
   }
-  return structuredContent;
+
+  const wrapper = Object.create(null) as Record<symbol, unknown>;
+  Object.defineProperty(wrapper, MCP_SCALAR_STRUCTURED_CONTENT, {
+    value: structuredContent,
+    enumerable: false,
+    configurable: true,
+  });
+  Object.defineProperty(wrapper, MCP_CALL_TOOL_CONTENT, {
+    value: content,
+    enumerable: false,
+    configurable: true,
+  });
+  return wrapper;
 }
 
 function getMcpCallToolContent(output: unknown): unknown {
@@ -152,6 +175,13 @@ function getMcpCallToolContent(output: unknown): unknown {
     return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
   }
   return undefined;
+}
+
+function getMcpStructuredToolOutput(output: unknown): unknown {
+  if (isMcpScalarStructuredWrapper(output)) {
+    return output[MCP_SCALAR_STRUCTURED_CONTENT];
+  }
+  return output;
 }
 
 function createStructuredToolToModelOutput(): (
@@ -162,7 +192,7 @@ function createStructuredToolToModelOutput(): (
     if (modelText !== undefined) {
       return { type: 'text', value: modelText };
     }
-    return { type: 'json', value: output };
+    return { type: 'json', value: getMcpStructuredToolOutput(output) };
   };
 }
 
