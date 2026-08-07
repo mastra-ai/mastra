@@ -133,6 +133,8 @@ export function liveKitConnectionRoute(options: LiveKitConnectionRouteOptions = 
   };
 
   return {
+    // Studio hardcodes this default and the server's /api/system/packages reports its
+    // presence as liveKitConnectionRouteEnabled — change it in lockstep with both.
     path: options.path ?? '/voice/livekit/connection-details',
     method: 'POST',
     requiresAuth: options.requiresAuth,
