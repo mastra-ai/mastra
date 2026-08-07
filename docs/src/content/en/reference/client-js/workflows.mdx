@@ -231,19 +231,19 @@ A workflow run result yields the following:
 ]}
 />
 
-## Stored workflows
+## Dynamic workflows
 
 :::experimental
 
-Stored workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-Stored workflows are workflow definitions expressed as JSON. The server persists each definition and registers it as a runnable workflow. See [Stored workflows](/docs/workflows/stored-workflows) for the definition format.
+Dynamic workflows are workflow definitions expressed as JSON. The server persists each definition and registers it as a runnable workflow. See [Dynamic workflows](/docs/workflows/dynamic-workflows) for the definition format.
 
 ### `listStoredWorkflows()`
 
-List stored workflow definitions, optionally filtered by `status` (`'active' | 'archived'`) and `authorId`:
+List dynamic workflow definitions, optionally filtered by `status` (`'active' | 'archived'`) and `authorId`:
 
 ```typescript
 const { definitions, total } = await mastraClient.listStoredWorkflows({
@@ -253,7 +253,7 @@ const { definitions, total } = await mastraClient.listStoredWorkflows({
 
 ### `upsertStoredWorkflow()`
 
-Create or replace a stored workflow definition. The server validates the definition, persists it, and live-registers it for execution:
+Create or replace a dynamic workflow definition. The server validates the definition, persists it, and live-registers it for execution:
 
 ```typescript
 const stored = await mastraClient.upsertStoredWorkflow({
@@ -295,7 +295,7 @@ console.log(stored.dependencyIds) // ['helper-workflow']
 
 ### `getStoredWorkflow()`
 
-Get a stored workflow instance for definition management. To execute a stored workflow, use `getWorkflow(id).createRun()` like any other workflow:
+Get a dynamic workflow instance for definition management. To execute a dynamic workflow, use `getWorkflow(id).createRun()` like any other workflow:
 
 ```typescript
 const storedWorkflow = mastraClient.getStoredWorkflow('greeting-workflow')
@@ -317,9 +317,9 @@ Delete the stored definition and unregister the live workflow:
 await storedWorkflow.delete()
 ```
 
-### Executing a stored workflow
+### Executing a dynamic workflow
 
-Once registered, a stored workflow runs through the ordinary workflow API:
+Once registered, a dynamic workflow runs through the ordinary workflow API:
 
 ```typescript
 const workflow = mastraClient.getWorkflow('greeting-workflow')

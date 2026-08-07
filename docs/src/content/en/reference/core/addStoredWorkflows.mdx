@@ -1,6 +1,6 @@
 ---
 title: "Reference: Mastra.addStoredWorkflows() | Core"
-description: "Documentation for the `Mastra.addStoredWorkflows()` method, which validates, persists, and live-registers a bundle of stored workflow definitions."
+description: "Documentation for the `Mastra.addStoredWorkflows()` method, which validates, persists, and live-registers a bundle of dynamic workflow definitions."
 packages:
   - "@mastra/core"
 ---
@@ -9,11 +9,11 @@ packages:
 
 :::experimental
 
-Stored workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-The `.addStoredWorkflows()` method adds a bundle of stored workflow definitions that may reference each other. The typical case is a root workflow plus helper workflows it nests, where none of the definitions exist yet.
+The `.addStoredWorkflows()` method adds a bundle of dynamic workflow definitions that may reference each other. The typical case is a root workflow plus helper workflows it nests, where none of the definitions exist yet.
 
 The whole bundle is validated up front. Members are then registered in dependency order, so a helper is always in place before the workflow that nests it.
 
@@ -54,5 +54,5 @@ A promise that resolves once every member is validated, registered, and persiste
 ## Related
 
 - [Mastra.addStoredWorkflow()](/reference/core/addStoredWorkflow): Add a single definition
-- [Stored workflows](/docs/workflows/stored-workflows): Set up and use stored workflows
-- [Stored workflow definition](/reference/workflows/stored-workflow-definition): Definition fields and graph entries
+- [Dynamic workflows](/docs/workflows/dynamic-workflows): Set up and use dynamic workflows
+- [Dynamic workflow definition](/reference/workflows/dynamic-workflow-definition): Definition fields and graph entries

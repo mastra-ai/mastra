@@ -1,21 +1,21 @@
 ---
-title: "Reference: Stored workflow definition | Workflows"
-description: "Reference for the JSON definition format used to persist and register stored workflows."
+title: "Reference: Dynamic workflow definition | Workflows"
+description: "Reference for the JSON definition format used to persist and register dynamic workflows."
 packages:
   - "@mastra/core"
 ---
 
-# Stored workflow definition
+# Dynamic workflow definition
 
 :::experimental
 
-Stored workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-A stored workflow definition is a JSON-compatible `StoredWorkflowGraph` accepted by [`Mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow), the stored-workflow server routes, and the Client SDK workflows API.
+A dynamic workflow definition is a JSON-compatible `StoredWorkflowGraph` accepted by [`Mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow), the stored-workflow server routes, and the Client SDK workflows API.
 
-See [Stored workflows](/docs/workflows/stored-workflows) for a complete setup and usage example.
+See [Dynamic workflows](/docs/workflows/dynamic-workflows) for a complete setup and usage example.
 
 ## Definition fields
 
@@ -295,7 +295,7 @@ Validation errors include a dotted path, such as `graph.2.steps.0`, that identif
 
 ## Related
 
-- [Use stored workflows](/docs/workflows/stored-workflows)
+- [Use dynamic workflows](/docs/workflows/dynamic-workflows)
 - [`Mastra.addStoredWorkflow()`](/reference/core/addStoredWorkflow)
 - [`Mastra.addStoredWorkflows()`](/reference/core/addStoredWorkflows)
 - [Client SDK workflows API](/reference/client-js/workflows)

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Mastra.addStoredWorkflow() | Core"
-description: "Documentation for the `Mastra.addStoredWorkflow()` method, which validates, persists, and live-registers a stored workflow definition."
+description: "Documentation for the `Mastra.addStoredWorkflow()` method, which validates, persists, and live-registers a dynamic workflow definition."
 packages:
   - "@mastra/core"
 ---
@@ -9,13 +9,13 @@ packages:
 
 :::experimental
 
-Stored workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-The `.addStoredWorkflow()` method validates a stored workflow definition and registers it as a live workflow on the instance, persisting it through the `workflowDefinitions` storage domain. Once registered, the workflow runs like any other workflow via [`getWorkflow()`](/reference/core/getWorkflow).
+The `.addStoredWorkflow()` method validates a dynamic workflow definition and registers it as a live workflow on the instance, persisting it through the `workflowDefinitions` storage domain. Once registered, the workflow runs like any other workflow via [`getWorkflow()`](/reference/core/getWorkflow).
 
-See [Stored workflows](/docs/workflows/stored-workflows) for a complete setup example and the [stored workflow definition reference](/reference/workflows/stored-workflow-definition) for the accepted fields and graph entries.
+See [Dynamic workflows](/docs/workflows/dynamic-workflows) for a complete setup example and the [dynamic workflow definition reference](/reference/workflows/dynamic-workflow-definition) for the accepted fields and graph entries.
 
 ## Usage example
 
@@ -76,5 +76,5 @@ A promise that resolves once the definition is validated, registered, and persis
 
 - [Mastra.addStoredWorkflows()](/reference/core/addStoredWorkflows): Add a dependency-ordered bundle of definitions
 - [Mastra.getWorkflow()](/reference/core/getWorkflow): Retrieve a registered workflow
-- [Stored workflows](/docs/workflows/stored-workflows): Set up and use stored workflows
-- [Stored workflow definition](/reference/workflows/stored-workflow-definition): Definition fields and graph entries
+- [Dynamic workflows](/docs/workflows/dynamic-workflows): Set up and use dynamic workflows
+- [Dynamic workflow definition](/reference/workflows/dynamic-workflow-definition): Definition fields and graph entries
