@@ -1770,6 +1770,14 @@ export class TokenCounter {
         return { tokens, overheadDelta, toolResultDelta };
       }
 
+      if (invocation.state === 'output-error') {
+        toolResultDelta++;
+        const errorText = (invocation as { errorText?: unknown }).errorText;
+        const errorMessage = typeof errorText === 'string' ? errorText : 'Tool execution failed';
+        tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorMessage);
+        return { tokens, overheadDelta, toolResultDelta };
+      }
+
       throw new Error(
         `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
       );

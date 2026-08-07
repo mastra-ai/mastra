@@ -333,6 +333,8 @@ provider.stopPolling()
 
 Handle an incoming webhook request. Override to parse the payload and match it to subscriptions. Then emit notification signals. See [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) for a ready-to-use implementation.
 
+Call this method from an application-defined HTTP endpoint after verifying the webhook request.
+
 ```typescript prettier:false
 async handleWebhook(request) {
   const payload = request.body as { repo: string, event: string }
