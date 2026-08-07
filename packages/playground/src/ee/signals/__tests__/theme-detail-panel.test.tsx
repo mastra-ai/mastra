@@ -8,6 +8,7 @@ import { ThemeDetailPanel } from '../theme-detail-panel';
 import {
   fadingThemeHistoryResponse,
   firstThemeExamplesResponse,
+  longThemeHistoryResponse,
   secondThemeExamplesResponse,
   singlePointThemeHistoryResponse,
   themeDetailResponse,
@@ -36,7 +37,7 @@ function usePanelHandlers({
   );
 }
 
-function renderPanel() {
+function renderPanel({ snapshotTotal = 4 }: { snapshotTotal?: number } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
@@ -44,7 +45,7 @@ function renderPanel() {
         entityId="support-agent"
         entityType="agent"
         snapshotId="opaque-snapshot-cursor"
-        snapshotTotal={4}
+        snapshotTotal={snapshotTotal}
         selection={{ signalName: 'goal', themeId: '101', label: 'Add transcript' }}
         onClose={vi.fn()}
       />
@@ -125,6 +126,15 @@ describe('ThemeDetailPanel', () => {
       renderPanel();
 
       expect(await screen.findByText('First seen Jul 8, 2026 · in 2 of 4 snapshots · fading')).not.toBeNull();
+    });
+  });
+
+  describe('when the history spans more snapshots than the selected range', () => {
+    it('never reports more snapshots than the range contains', async () => {
+      usePanelHandlers({ history: longThemeHistoryResponse });
+      renderPanel({ snapshotTotal: 2 });
+
+      expect(await screen.findByText('First seen Jul 8, 2026 · in 2 of 2 snapshots · growing')).not.toBeNull();
     });
   });
 

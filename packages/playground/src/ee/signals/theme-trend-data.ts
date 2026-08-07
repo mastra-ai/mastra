@@ -5,6 +5,14 @@ export type ThemeHistoryPoint = ThemeHistoryResponse['points'][number];
 export type TrendDirection = 'growing' | 'fading' | 'steady';
 
 /**
+ * History points arrive newest-first from the API (`ORDER BY frameId DESC`);
+ * every presentation in the panel reads oldest-first.
+ */
+export function chronologicalHistoryPoints(points: ThemeHistoryPoint[]): ThemeHistoryPoint[] {
+  return [...points].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+}
+
+/**
  * Whether a theme is gaining or losing traction across its history. Prefers
  * the clustering pipeline's trend score on the latest point; falls back to
  * comparing the mean trace count of the first and last thirds of the series.

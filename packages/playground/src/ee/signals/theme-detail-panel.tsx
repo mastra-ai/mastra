@@ -15,7 +15,7 @@ import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
 import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS, traceLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
-import { themeTrendDirection } from './theme-trend-data';
+import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend-data';
 import type { ThemeHistoryPoint } from './theme-trend-data';
 import { TraceInsightView } from './trace-insight-view';
 
@@ -132,6 +132,7 @@ export function ThemeDetailPanel({
   );
   const title = detailQuery.data?.theme?.label ?? selection?.label ?? 'Theme details';
   const signalName = selection?.signalName;
+  const historyPoints = historyQuery.data ? chronologicalHistoryPoints(historyQuery.data.points) : [];
 
   return (
     <Drawer
@@ -238,18 +239,15 @@ export function ThemeDetailPanel({
                       </h2>
                       {historyQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading trend…</p>}
                       {historyQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load the trend.</p>}
-                      {historyQuery.data && historyQuery.data.points.length > 0 && (
+                      {historyPoints.length > 0 && (
                         <>
                           <p className="text-neutral5 mt-3 text-sm">
-                            First seen {formatSnapshotDate(historyQuery.data.points[0].startedAt)} · in{' '}
-                            {historyQuery.data.points.length} of {snapshotTotal} snapshots ·{' '}
-                            {themeTrendDirection(historyQuery.data.points)}
+                            First seen {formatSnapshotDate(historyPoints[0].startedAt)} · in{' '}
+                            {Math.min(historyPoints.length, snapshotTotal)} of {snapshotTotal} snapshots ·{' '}
+                            {themeTrendDirection(historyPoints)}
                           </p>
-                          {historyQuery.data.points.length >= 2 && (
-                            <TrendChart
-                              points={historyQuery.data.points}
-                              color={nodeColor(getSignalHue(signalName ?? 'goal'))}
-                            />
+                          {historyPoints.length >= 2 && (
+                            <TrendChart points={historyPoints} color={nodeColor(getSignalHue(signalName ?? 'goal'))} />
                           )}
                         </>
                       )}

@@ -297,15 +297,9 @@ export const themeHistoryResponse = {
     label: 'Add transcript',
     description: 'Users want to add a transcript to their workspace.',
   },
+  // Newest-first, matching the server's `ORDER BY frameId DESC` — the client
+  // must sort chronologically before presenting the series.
   points: [
-    {
-      snapshotId: 'older-opaque-snapshot-cursor',
-      startedAt: '2026-07-08T00:00:00.000Z',
-      endedAt: '2026-07-15T00:00:00.000Z',
-      state: 'birth',
-      traceCount: 1,
-      coverage: 0.5,
-    },
     {
       snapshotId: 'opaque-snapshot-cursor',
       startedAt: '2026-07-15T00:00:00.000Z',
@@ -314,6 +308,14 @@ export const themeHistoryResponse = {
       traceCount: 2,
       coverage: 2 / 3,
     },
+    {
+      snapshotId: 'older-opaque-snapshot-cursor',
+      startedAt: '2026-07-08T00:00:00.000Z',
+      endedAt: '2026-07-15T00:00:00.000Z',
+      state: 'birth',
+      traceCount: 1,
+      coverage: 0.5,
+    },
   ],
   relationships: [],
 } satisfies ThemeHistoryResponse;
@@ -321,17 +323,32 @@ export const themeHistoryResponse = {
 export const fadingThemeHistoryResponse = {
   ...themeHistoryResponse,
   points: [
-    themeHistoryResponse.points[0],
     {
-      ...themeHistoryResponse.points[1],
+      ...themeHistoryResponse.points[0],
       trend: { popularity: -0.4, signalScore: -0.2, strength: 'strong' },
     },
+    themeHistoryResponse.points[1],
   ],
 } satisfies ThemeHistoryResponse;
 
 export const singlePointThemeHistoryResponse = {
   ...themeHistoryResponse,
-  points: [themeHistoryResponse.points[1]],
+  points: [themeHistoryResponse.points[0]],
+} satisfies ThemeHistoryResponse;
+
+export const longThemeHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [
+    {
+      snapshotId: 'newest-opaque-snapshot-cursor',
+      startedAt: '2026-07-22T00:00:00.000Z',
+      endedAt: '2026-07-29T00:00:00.000Z',
+      state: 'continue',
+      traceCount: 3,
+      coverage: 0.75,
+    },
+    ...themeHistoryResponse.points,
+  ],
 } satisfies ThemeHistoryResponse;
 
 export const firstThemePathsResponse = {
