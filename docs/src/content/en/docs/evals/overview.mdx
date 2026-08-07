@@ -65,7 +65,7 @@ export const evaluatedAgent = new Agent({
 
 ### Adding scorers to workflow steps
 
-You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process. Each scorer receives that step's own input and output, so you can measure where quality changes across a multi-step or RAG workflow instead of only scoring the final answer:
+You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process. Each scorer receives that step's own input and output, so you can measure quality at each step instead of only scoring the final answer:
 
 ```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
