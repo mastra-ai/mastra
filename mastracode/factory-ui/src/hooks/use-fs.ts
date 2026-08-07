@@ -1,5 +1,6 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
 
+import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
@@ -10,6 +11,48 @@ import type {
   WorkspaceFile,
   WorkspaceRenderedListing,
 } from '../api/types';
+
+/** An undefined url means a required param is still missing, so the query stays idle instead of firing a broken request. */
+function getOrSkip<T>(client: ApiClient, url: string | undefined) {
+  if (!url) return skipToken;
+  return () => client.get<T>(url);
+}
+
+function directoryListingUrl(path: string | undefined) {
+  if (!path) return '/web/fs/list';
+  return `/web/fs/list?${new URLSearchParams({ path })}`;
+}
+
+function artifactListingUrl(path: string | undefined) {
+  if (!path) return undefined;
+  return `/web/artifacts/list?${new URLSearchParams({ path })}`;
+}
+
+function workspaceRenderedListingUrl(workspacePath: string | undefined, root: string | undefined) {
+  if (!workspacePath || !root) return undefined;
+  return `/web/workspace/rendered/list?${new URLSearchParams({ workspacePath, root })}`;
+}
+
+function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined) {
+  if (!workspacePath || !path) return undefined;
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
+}
+
+function workspaceChangesUrl(workspacePath: string | undefined) {
+  if (!workspacePath) return undefined;
+  return `/web/workspace/changes?${new URLSearchParams({ workspacePath })}`;
+}
+
+function workspaceDiffUrl(
+  workspacePath: string | undefined,
+  path: string | undefined,
+  previousPath: string | undefined,
+) {
+  if (!workspacePath || !path) return undefined;
+  const params = new URLSearchParams({ workspacePath, path });
+  if (previousPath) params.set('previousPath', previousPath);
+  return `/web/workspace/changes/diff?${params}`;
+}
 
 /**
  * Server-driven directory listing for the project picker (mirrors
@@ -23,10 +66,7 @@ export function useDirectoryListing(path: string | undefined) {
   return useQuery<DirectoryListing>({
     queryKey: queryKeys.fsList(path),
     placeholderData: previousData => previousData,
-    queryFn: () => {
-      const qs = path ? `?path=${encodeURIComponent(path)}` : '';
-      return client.get<DirectoryListing>(`/web/fs/list${qs}`);
-    },
+    queryFn: () => client.get<DirectoryListing>(directoryListingUrl(path)),
   });
 }
 
@@ -34,58 +74,42 @@ export function useArtifactListing(path: string | undefined) {
   const { client } = useApiConfig();
   return useQuery<ArtifactListing>({
     queryKey: queryKeys.artifactsList(path),
-    queryFn: path
-      ? () => client.get<ArtifactListing>(`/web/artifacts/list?path=${encodeURIComponent(path)}`)
-      : skipToken,
+    queryFn: getOrSkip<ArtifactListing>(client, artifactListingUrl(path)),
   });
 }
 
 export function useWorkspaceRenderedListing(
   workspacePath: string | undefined,
   renderedRoot: string | undefined,
-  options: { enabled?: boolean } = {},
+  { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
   return useQuery<WorkspaceRenderedListing>({
     queryKey: queryKeys.workspaceRenderedList(workspacePath, renderedRoot),
-    enabled: options.enabled ?? true,
-    queryFn:
-      workspacePath && renderedRoot
-        ? () =>
-            client.get<WorkspaceRenderedListing>(
-              `/web/workspace/rendered/list?workspacePath=${encodeURIComponent(workspacePath)}&root=${encodeURIComponent(renderedRoot)}`,
-            )
-        : skipToken,
+    enabled,
+    queryFn: getOrSkip<WorkspaceRenderedListing>(client, workspaceRenderedListingUrl(workspacePath, renderedRoot)),
   });
 }
 
 export function useWorkspaceFile(
   workspacePath: string | undefined,
   filePath: string | undefined,
-  options: { enabled?: boolean } = {},
+  { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
   return useQuery<WorkspaceFile>({
     queryKey: queryKeys.workspaceFile(workspacePath, filePath),
-    enabled: options.enabled ?? true,
-    queryFn:
-      workspacePath && filePath
-        ? () =>
-            client.get<WorkspaceFile>(
-              `/web/workspace/file?workspacePath=${encodeURIComponent(workspacePath)}&path=${encodeURIComponent(filePath)}`,
-            )
-        : skipToken,
+    enabled,
+    queryFn: getOrSkip<WorkspaceFile>(client, workspaceFileUrl(workspacePath, filePath)),
   });
 }
 
-export function useWorkspaceChanges(workspacePath: string | undefined, options: { enabled?: boolean } = {}) {
+export function useWorkspaceChanges(workspacePath: string | undefined, { enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
   return useQuery<WorkspaceChanges>({
     queryKey: queryKeys.workspaceChanges(workspacePath),
-    enabled: options.enabled ?? true,
-    queryFn: workspacePath
-      ? () => client.get<WorkspaceChanges>(`/web/workspace/changes?workspacePath=${encodeURIComponent(workspacePath)}`)
-      : skipToken,
+    enabled,
+    queryFn: getOrSkip<WorkspaceChanges>(client, workspaceChangesUrl(workspacePath)),
   });
 }
 
@@ -93,20 +117,12 @@ export function useWorkspaceDiff(
   workspacePath: string | undefined,
   filePath: string | undefined,
   previousFilePath?: string,
-  options: { enabled?: boolean } = {},
+  { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
   return useQuery<WorkspaceDiff>({
     queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
-    enabled: options.enabled ?? true,
-    queryFn:
-      workspacePath && filePath
-        ? () => {
-            const previousPathQuery = previousFilePath ? `&previousPath=${encodeURIComponent(previousFilePath)}` : '';
-            return client.get<WorkspaceDiff>(
-              `/web/workspace/changes/diff?workspacePath=${encodeURIComponent(workspacePath)}&path=${encodeURIComponent(filePath)}${previousPathQuery}`,
-            );
-          }
-        : skipToken,
+    enabled,
+    queryFn: getOrSkip<WorkspaceDiff>(client, workspaceDiffUrl(workspacePath, filePath, previousFilePath)),
   });
 }
