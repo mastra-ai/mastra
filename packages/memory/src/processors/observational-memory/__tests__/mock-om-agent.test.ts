@@ -531,8 +531,11 @@ describe('Mock OM Agent Integration', () => {
     const firstRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
     expect(firstRecord).toBeTruthy();
     expect(firstRecord!.activeObservations).toBeTruthy();
-    // No boundary in first observation
-    expect(firstRecord!.activeObservations).not.toMatch(/--- message boundary/);
+    // Since #16523, observation also fires at step 0 when the threshold is exceeded —
+    // with this suite's very low threshold the first generate can produce multiple
+    // cycles (and boundaries) on its own, so count boundaries instead of expecting none.
+    const boundaryPattern = /--- message boundary \(([^)]+)\) ---/g;
+    const firstBoundaryCount = [...firstRecord!.activeObservations!.matchAll(boundaryPattern)].length;
 
     // Second generate — appends observations with a boundary
     await boundaryAgent.generate('Can you also help me with another task?', { memory: memoryOpts });
@@ -541,10 +544,12 @@ describe('Mock OM Agent Integration', () => {
     const secondRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
     expect(secondRecord).toBeTruthy();
 
-    // Should now contain a message boundary delimiter with a date
-    const boundaryMatch = secondRecord!.activeObservations!.match(/--- message boundary \(([^)]+)\) ---/);
-    expect(boundaryMatch).toBeTruthy();
+    // Appending must have inserted at least one NEW message boundary delimiter with a date
+    const boundaryMatches = [...secondRecord!.activeObservations!.matchAll(boundaryPattern)];
+    expect(boundaryMatches.length).toBeGreaterThan(firstBoundaryCount);
 
+    // The newest boundary belongs to the most recent append
+    const boundaryMatch = boundaryMatches[boundaryMatches.length - 1];
     const boundaryDate = new Date(boundaryMatch![1]!);
     expect(boundaryDate.getTime()).not.toBeNaN();
 

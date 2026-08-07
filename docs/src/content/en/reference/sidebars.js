@@ -703,6 +703,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'tools/ask-user-tool', label: 'askUserTool' },
+        { type: 'doc', id: 'tools/bedrock-kb-tool', label: 'createBedrockKBTool()' },
         {
           type: 'doc',
           id: 'tools/create-code-mode',

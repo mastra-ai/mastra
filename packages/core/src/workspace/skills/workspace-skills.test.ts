@@ -405,6 +405,104 @@ user-invocable: false
     });
   });
 
+  describe('registerLocationAlias()', () => {
+    it('should resolve a registered alias via get() and has()', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      skills.registerLocationAlias('/mnt/bundle/test-skill/SKILL.md', 'skills/test-skill');
+
+      const result = await skills.get('/mnt/bundle/test-skill/SKILL.md');
+      expect(result?.name).toBe('test-skill');
+      expect(await skills.has('/mnt/bundle/test-skill/SKILL.md')).toBe(true);
+    });
+
+    it('should resolve an alias whether or not the /SKILL.md suffix is preserved', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      skills.registerLocationAlias('/mnt/bundle/test-skill/SKILL.md', 'skills/test-skill');
+
+      // Model stripped the suffix from the advertised location
+      expect((await skills.get('/mnt/bundle/test-skill'))?.name).toBe('test-skill');
+
+      // Alias registered without suffix, model appends it
+      skills.registerLocationAlias('/opt/skills/test-skill', 'skills/test-skill');
+      expect((await skills.get('/opt/skills/test-skill/SKILL.md'))?.name).toBe('test-skill');
+    });
+
+    it('should let canonical names and paths win over aliases', async () => {
+      const otherSkillMd = VALID_SKILL_MD.replace('name: test-skill', 'name: other-skill');
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'skills/other-skill/SKILL.md': otherSkillMd,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      // Alias collides with a real skill name — the real skill must win
+      skills.registerLocationAlias('other-skill', 'skills/test-skill');
+      expect((await skills.get('other-skill'))?.name).toBe('other-skill');
+
+      // Alias collides with a real skill path — the real skill must win
+      skills.registerLocationAlias('skills/other-skill', 'skills/test-skill');
+      expect((await skills.get('skills/other-skill'))?.name).toBe('other-skill');
+    });
+
+    it('should return null when an alias points at a path that no longer exists', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      skills.registerLocationAlias('/mnt/bundle/gone/SKILL.md', 'skills/gone');
+
+      expect(await skills.get('/mnt/bundle/gone/SKILL.md')).toBeNull();
+      expect(await skills.has('/mnt/bundle/gone/SKILL.md')).toBe(false);
+    });
+
+    it('should round-trip SkillsProcessor formatLocation overrides back to the skill', async () => {
+      const { SkillsProcessor } = await import('../../processors/processors/skills');
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      const processor = new SkillsProcessor({
+        skills,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+      const addSystem = vi.fn();
+      await processor.processInputStep({ messageList: { addSystem }, tools: {} } as any);
+
+      // The advertised location is the remapped one...
+      const contents = addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('/mnt/bundle/test-skill/SKILL.md');
+
+      // ...and it resolves back to the skill via get() (what the skill/skill_read tools call)
+      const resolved = await skills.get('/mnt/bundle/test-skill/SKILL.md');
+      expect(resolved?.name).toBe('test-skill');
+    });
+  });
+
   describe('refresh()', () => {
     it('should re-discover skills after refresh', async () => {
       const filesystem = createMockFilesystem({

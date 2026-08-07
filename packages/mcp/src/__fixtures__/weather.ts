@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer } from 'node:http';
 import { createTool } from '@mastra/core/tools';
-import type { PromptMessage, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type { PromptMessage, Resource, ResourceTemplateType } from '@modelcontextprotocol/server';
 import { z } from 'zod/v3';
 import { MCPServer } from '../server/server';
 import type { MCPServerResources, MCPServerResourceContent, MCPServerPrompts, MastraPrompt } from '../server/types';
@@ -78,7 +78,7 @@ const weatherResourceDefinitions: Resource[] = [
   },
 ];
 
-const weatherResourceTemplatesDefinitions: ResourceTemplate[] = [
+const weatherResourceTemplatesDefinitions: ResourceTemplateType[] = [
   {
     uriTemplate: 'weather://custom/{city}/{days}',
     name: 'Custom Weather Forecast',

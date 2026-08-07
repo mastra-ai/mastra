@@ -26,7 +26,11 @@ interface PromptBlockPickerDialogProps {
 export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: PromptBlockPickerDialogProps) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const { data, isLoading, isPlaceholderData } = useStoredPromptBlocks({ page, perPage: PROMPT_BLOCKS_PER_PAGE });
+  const { data, isLoading, isPlaceholderData } = useStoredPromptBlocks({
+    page,
+    perPage: PROMPT_BLOCKS_PER_PAGE,
+    status: 'published',
+  });
 
   const blocks = data?.promptBlocks ?? [];
   const hasMore = data?.hasMore ?? false;

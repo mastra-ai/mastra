@@ -16,43 +16,34 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'category',
-      label: 'Start',
-      collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'index',
-          label: 'Get Started',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/develop',
-          label: 'Develop',
-        },
-      ],
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
+    {
+      type: 'doc',
+      id: 'getting-started/develop',
+      label: 'Develop',
     },
     {
       type: 'category',
       label: 'Build',
       collapsed: false,
       collapsible: false,
-      customProps: {
-        displayAsGroup: true,
-      },
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
           label: 'Agents',
+          link: {
+            type: 'doc',
+            id: 'agents/overview',
+          },
+          collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'agents/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'agents/using-tools',
@@ -91,12 +82,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Workflows',
+          link: {
+            type: 'doc',
+            id: 'workflows/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'workflows/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'workflows/workflow-state',
@@ -155,12 +148,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Harness',
+          link: {
+            type: 'doc',
+            id: 'harness/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'harness/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'long-running-agents/durable-agents',
@@ -219,12 +214,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Memory',
+          link: {
+            type: 'doc',
+            id: 'memory/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'memory/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'memory/message-history',
@@ -264,9 +261,7 @@ const sidebars = {
       label: 'Extend',
       collapsible: false,
       collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
@@ -281,12 +276,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Sandbox',
+          link: {
+            type: 'doc',
+            id: 'workspace/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'workspace/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'workspace/filesystem',
@@ -322,6 +319,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Browser',
+          link: {
+            type: 'doc',
+            id: 'browser/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
@@ -341,6 +345,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Connections',
+          link: {
+            type: 'doc',
+            id: 'connections/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
@@ -371,9 +382,7 @@ const sidebars = {
       label: 'Develop / Deploy',
       collapsible: false,
       collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
@@ -383,12 +392,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Studio',
+          link: {
+            type: 'doc',
+            id: 'studio/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'studio/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'studio/deployment',
@@ -414,12 +425,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Server',
+          link: {
+            type: 'doc',
+            id: 'server/mastra-server',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'server/mastra-server',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'server/server-adapters',
@@ -460,6 +473,13 @@ const sidebars = {
         {
           type: 'category',
           label: 'Auth',
+          link: {
+            type: 'doc',
+            id: 'server/auth/index',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
@@ -504,12 +524,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Deployment',
+          link: {
+            type: 'doc',
+            id: 'deployment/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'deployment/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'deployment/mastra-server',
@@ -557,19 +579,19 @@ const sidebars = {
       label: 'Observe',
       collapsible: false,
       collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
           label: 'Traces',
+          link: {
+            type: 'doc',
+            id: 'observability/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'observability/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'observability/tracing/overview',
@@ -628,12 +650,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Metrics',
+          link: {
+            type: 'doc',
+            id: 'observability/metrics/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'observability/metrics/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'observability/metrics/querying',
@@ -644,12 +668,14 @@ const sidebars = {
         {
           type: 'category',
           label: 'Evals',
+          link: {
+            type: 'doc',
+            id: 'evals/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'evals/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'evals/built-in-scorers',
@@ -690,16 +716,18 @@ const sidebars = {
         {
           type: 'category',
           label: 'Datasets',
+          link: {
+            type: 'doc',
+            id: 'datasets/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
-              id: 'datasets/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
               id: 'datasets/running-experiments',
-              label: 'Running Experiments',
+              label: 'Experiments',
             },
           ],
         },
