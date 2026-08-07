@@ -6,7 +6,7 @@ import { useState } from 'react';
 
 export interface TripwireNoticeProps {
   reason: string;
-  tripwire?: Omit<TripwireMetadata, 'reason'>;
+  tripwire?: Pick<TripwireMetadata, 'retry' | 'metadata' | 'processorId'>;
 }
 
 export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
