@@ -4,21 +4,15 @@
     display: flex;
     flex-grow: 1;
     min-height: 0;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    padding-left: 0.5rem;
-    margin-top: 0.5rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
   }
 
   .menu {
     position: relative;
     flex-grow: 1;
     min-height: 0;
-    padding-right: 0.5rem;
-  }
-
-  .menu[data-sidebar-pane='contextual'] {
-    padding: 0 0.5rem !important;
+    padding: 0 1rem !important;
   }
 
   .pane {
@@ -59,13 +53,6 @@
 
   .bottomFadeWithAnnouncementBar {
     bottom: var(--docusaurus-announcement-bar-height);
-  }
-
-  @supports (scrollbar-gutter: stable) {
-    .menu {
-      padding: 0.5rem 0 0.5rem 0.5rem;
-      scrollbar-gutter: stable;
-    }
   }
 
   .menuWithAnnouncementBar {

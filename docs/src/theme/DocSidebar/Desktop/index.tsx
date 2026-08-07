@@ -40,7 +40,7 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
       />
       {hideOnScroll && <Logo tabIndex={-1} className={styles.sidebarLogo} />}
       <Content path={path} sidebar={sidebar} />
-      <footer className="px-4 py-4">
+      <footer className="px-4 pt-2 pb-4">
         <VersionControl />
       </footer>
       {hideable && <CollapseButton onClick={onCollapse} />}
