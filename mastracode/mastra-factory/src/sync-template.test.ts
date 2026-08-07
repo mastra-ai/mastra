@@ -12,6 +12,7 @@ const pkgRoot = path.resolve(here, '..');
 const webRoot = path.resolve(pkgRoot, '../web');
 const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 const TEMPLATE_LINKED_DEPENDENCIES = [
+  '@mastra/auth-workos',
   '@mastra/code-sdk',
   '@mastra/core',
   '@mastra/factory',
@@ -19,7 +20,6 @@ const TEMPLATE_LINKED_DEPENDENCIES = [
   '@mastra/pg',
   '@mastra/platform-workspace',
   '@mastra/redis-streams',
-  '@mastra/slack',
   'mastra',
 ];
 
@@ -112,9 +112,6 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(result.status).toBe(0);
 
     expect(fs.existsSync(path.join(outDir, 'src/mastra/index.ts'))).toBe(true);
-    for (const slackFile of ['integration.ts', 'connect-route.ts', 'slack.ts']) {
-      expect(fs.existsSync(path.join(outDir, 'src/web/channels/slack', slackFile))).toBe(true);
-    }
     expect(fs.existsSync(path.join(outDir, '.env.schema'))).toBe(true);
     expect(fs.existsSync(path.join(outDir, '.env.example'))).toBe(true);
     expect(fs.existsSync(path.join(outDir, 'docker-compose.yml'))).toBe(true);
@@ -133,6 +130,9 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
       'src/ui',
       'src/vite.config.ts',
       'src/mastra/public',
+      // Slack ships inside @mastra/factory; the scaffold imports it rather
+      // than carrying a vendored copy it would have to maintain.
+      'src/web',
     ]) {
       expect(fs.existsSync(path.join(outDir, absentPath)), `${absentPath} must not ship`).toBe(false);
     }
@@ -156,6 +156,7 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     }
 
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
+      '@mastra/auth-workos',
       '@mastra/code-sdk',
       '@mastra/core',
       '@mastra/factory',
@@ -164,8 +165,6 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
       '@mastra/pg',
       '@mastra/platform-workspace',
       '@mastra/redis-streams',
-      '@mastra/slack',
-      'chat',
       'zod',
     ]);
     expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);

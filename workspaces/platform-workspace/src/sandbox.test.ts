@@ -1526,6 +1526,134 @@ describe('PlatformSandbox', () => {
       await expect(sandbox._start()).resolves.toBeUndefined();
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
+
+    it('getInfo() skips the proxy round-trip when the registry has an address for the sandbox', async () => {
+      // The issue this fix targets: workspace-proxy was seeing dozens of
+      // `GET /sandbox/:id` hits per session because `Workspace.getInfo()`
+      // polls unconditionally. When the address registry is populated the
+      // sandbox is provably reachable via the private-net path, so we can
+      // serve `getInfo()` from cached local state and skip the proxy hit
+      // (and the Railway GraphQL + `sandboxExec` awk it triggers on the
+      // proxy side).
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        json({
+          id: 'sbx_1',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          instanceUrl: 'http://[fd12::1]:47000',
+        }),
+      );
+      const { registry } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      const info = await sandbox.getInfo();
+
+      // Only the create call fired; no `GET /sandbox/:id`.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // Info still carries the platform-assigned sandboxId so callers that
+      // persist a reattach id continue to work.
+      expect(info.metadata?.sandboxId).toBe('sbx_1');
+      expect(info.id).toBe('sbx_1');
+    });
+
+    it('getInfo() falls through to the proxy when the registry has no entry for the sandbox', async () => {
+      // No registry entry means we don't know the sandbox is reachable via
+      // private-net, so the proxy remains the source of truth. Preserves the
+      // pre-existing behavior for older proxies / failed discovery.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        // create response has no instanceUrl → registry stays empty
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // getInfo() falls through to `GET /sandbox/:id`
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
+      const { registry } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+      await sandbox.getInfo();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('getInfo() falls through to the proxy when no addressRegistry is configured at all', async () => {
+      // Callers that don't opt into the registry (existing code, non-factory
+      // deployments) must keep the pre-existing proxy behavior for getInfo().
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({
+            id: 'sbx_1',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        )
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        // no addressRegistry
+      });
+      await sandbox._start();
+      await sandbox.getInfo();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
+
+    it('getInfo() falls through to the proxy after the registry entry has been evicted', async () => {
+      // Executes that fail transport evict the registry entry — the next
+      // getInfo() must return to proxy-truth because we no longer have
+      // liveness evidence for this sandbox.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({
+            id: 'sbx_1',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        )
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
+      const { registry } = fakeAddressRegistry();
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      // Simulate an eviction (as _tryExecViaPrivateNetwork would do on
+      // transport failure). The next getInfo() must go to the proxy.
+      registry.delete('sbx_1');
+
+      await sandbox.getInfo();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    });
   });
 
   describe('clone', () => {

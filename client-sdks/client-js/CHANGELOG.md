@@ -1,5 +1,152 @@
 # @mastra/client-js
 
+## 1.39.0-alpha.1
+
+### Minor Changes
+
+- Added experiment provenance and grouping support to the JavaScript client. ([#20645](https://github.com/mastra-ai/mastra/pull/20645))
+
+  ```ts
+  await client.triggerDatasetExperiment({
+    datasetId,
+    targetType: 'agent',
+    targetId: 'agent-1',
+    grouping: { experimentSetId: 'benchmark-1', trialIndex: 0 },
+  });
+  ```
+
+- Added `isKnownAgentControllerEvent` to narrow agent controller stream events. `AgentControllerEvent` includes a forward-compatibility arm whose `type` is `string`, so comparing `event.type` to a literal never narrows the union and payload fields stay `unknown` — consumers had to cast. ([#20800](https://github.com/mastra-ai/mastra/pull/20800))
+
+  **Before**
+
+  ```ts
+  session.subscribe({
+    onEvent: event => {
+      const known = event as KnownAgentControllerEvent;
+      if (known.type === 'message_end') save(known.message);
+    },
+  });
+  ```
+
+  **After**
+
+  ```ts
+  import { isKnownAgentControllerEvent } from '@mastra/client-js';
+
+  session.subscribe({
+    onEvent: event => {
+      if (isKnownAgentControllerEvent(event) && event.type === 'message_end') save(event.message);
+    },
+  });
+  ```
+
+  The guard is kept in sync with the event union at compile time, so a new event type cannot be added without it.
+
+- Added `listTracesLight()` for fetching trace lists without the `input`, `output` and `attributes` blobs. It takes the same filtering, ordering and delta-polling arguments as `listTraces()`, and each row carries a short `inputPreview` instead of the full input. ([#20677](https://github.com/mastra-ai/mastra/pull/20677))
+
+  ```ts
+  // Full payloads — use when you need attributes/input/output
+  const full = await client.listTraces({ pagination: { page: 0, perPage: 25 } });
+
+  // Lightweight rows for list views; fetch the full record when a row is opened
+  const list = await client.listTracesLight({ pagination: { page: 0, perPage: 25 } });
+  list.spans[0].inputPreview; // 'summarize this thread'
+  ```
+
+### Patch Changes
+
+- Preserve experiment name, description, and metadata from HTTP trigger requests. ([#20578](https://github.com/mastra-ai/mastra/pull/20578))
+
+- Updated dependencies [[`e7109ee`](https://github.com/mastra-ai/mastra/commit/e7109ee6f731bacc79c885906f3c7dca8d8f013a), [`772c0c8`](https://github.com/mastra-ai/mastra/commit/772c0c897cec383258de2e6178147f8014767c7b), [`f5a17d9`](https://github.com/mastra-ai/mastra/commit/f5a17d95c19e7d4149996932bd8d1905089f031d), [`578bf2e`](https://github.com/mastra-ai/mastra/commit/578bf2e6a88e9d5b8bf502204e15a95dfbb679ae), [`06b2d87`](https://github.com/mastra-ai/mastra/commit/06b2d87e63bcdd0ed59215c6789692b9b12de376), [`ac01d63`](https://github.com/mastra-ai/mastra/commit/ac01d6355974aec73fdb8781449ed12bac582094), [`a810a05`](https://github.com/mastra-ai/mastra/commit/a810a058f62ad407cfc1701e0be36ae91145d7cf), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`6104347`](https://github.com/mastra-ai/mastra/commit/61043473ba6bfd0a25156824e853e13165562e6c), [`45bfb88`](https://github.com/mastra-ai/mastra/commit/45bfb88fd52f1dd3be20e2a38905777c96499c90), [`e3b9307`](https://github.com/mastra-ai/mastra/commit/e3b9307098daefbfae2a52ae2ef51bc9fc701190), [`d6834c5`](https://github.com/mastra-ai/mastra/commit/d6834c5a7866b16734d23900163c2414ed70d791), [`c52d346`](https://github.com/mastra-ai/mastra/commit/c52d3462ec831a5d95926ecd3d3373f5928ad2e5), [`0023e79`](https://github.com/mastra-ai/mastra/commit/0023e7919431078280abd11c89d1edeae35fcc69), [`c2ad51e`](https://github.com/mastra-ai/mastra/commit/c2ad51e2467f901eecba8c9f4a45e22a50bd7c18), [`3dc97ea`](https://github.com/mastra-ai/mastra/commit/3dc97ea415fad353b48a13095fad1835933cc12a), [`3d01cd3`](https://github.com/mastra-ai/mastra/commit/3d01cd387321b6f9c5cac31d487c84bf51b19c78), [`7bf3086`](https://github.com/mastra-ai/mastra/commit/7bf308663f0115ca74ad20554ade740f06640859), [`a8dd139`](https://github.com/mastra-ai/mastra/commit/a8dd1391a9fe9a6632c25809ef236980afa9a020), [`e5786be`](https://github.com/mastra-ai/mastra/commit/e5786be02bb903073082bd9d6da880ebaacc343f), [`2093fbd`](https://github.com/mastra-ai/mastra/commit/2093fbd53bb744bae19ec89f6d73db9a66fbe8a7), [`e7a5da4`](https://github.com/mastra-ai/mastra/commit/e7a5da4ef8e4dd452d2f232961b4e682a85ffe43), [`7b4393d`](https://github.com/mastra-ai/mastra/commit/7b4393d557411fdcf07b0e30e5acaf7cc85154ae)]:
+  - @mastra/core@1.58.0-alpha.1
+  - @mastra/schema-compat@1.3.6-alpha.0
+
+## 1.38.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`45a9147`](https://github.com/mastra-ai/mastra/commit/45a914741f578754d79d8b7de7b4e4f304d8e14a), [`990611b`](https://github.com/mastra-ai/mastra/commit/990611ba76eb876d86c9c594371ae5f02f94b432), [`ed5d606`](https://github.com/mastra-ai/mastra/commit/ed5d606739c5e3fbdfa9f272df7809aa5ab43b1d)]:
+  - @mastra/core@1.58.0-alpha.0
+
+## 1.38.0
+
+### Minor Changes
+
+- Added typed client support for transient agent signals. Use `transient: true` with `sendSignal()` to deliver non-state context for the current model call without retaining it. ([#18909](https://github.com/mastra-ai/mastra/pull/18909))
+
+  ```typescript
+  await client.getAgent('myAgent').sendSignal({
+    resourceId: 'user-1',
+    threadId: 'thread-1',
+    signal: {
+      type: 'reactive',
+      contents: 'Stay on the current task.',
+      transient: true,
+    },
+  });
+  ```
+
+- Added `toolResult` as a recognized processor phase across the processor server API and the generated client types. Processors that implement `processToolResult` are now detected and surfaced when listing processors, the phase can be targeted when executing a processor, and it is accepted by the processor provider and stored agent schemas. The `@mastra/client-js` route types now include the new phase. ([#16012](https://github.com/mastra-ai/mastra/pull/16012))
+
+### Patch Changes
+
+- Fixed streamed UTF-8 characters being corrupted when their bytes span network chunks. ([#20224](https://github.com/mastra-ai/mastra/pull/20224))
+
+- Added landmark types for trace signal theme snapshots. Querying the theme-snapshots endpoint with `presentation=landmarks` returns a bounded, time-balanced selection of snapshots instead of every snapshot in range. The response types now cover that mode. ([#20710](https://github.com/mastra-ai/mastra/pull/20710))
+
+  ```ts
+  import type { ThemeSnapshotsResponse } from '@mastra/client-js';
+
+  const response: ThemeSnapshotsResponse = await fetch(
+    '/api/learning/entities/my-agent/theme-snapshots?' +
+      'entityType=agent&signalNames=goal,outcome&presentation=landmarks&limit=24',
+  ).then(res => res.json());
+
+  response.totalSnapshots; // full in-range count, larger than the landmark list
+  for (const snapshot of response.snapshots) {
+    snapshot.cutoffAt; // position ticks proportionally on a time axis
+    snapshot.reason; // 'range_start' | 'range_end' | 'time_sample'
+  }
+  ```
+
+- Updated dependencies [[`8d2399b`](https://github.com/mastra-ai/mastra/commit/8d2399b638f8e0945cf2cda0187dbea8dcf0b784), [`c8002da`](https://github.com/mastra-ai/mastra/commit/c8002da7775c468e2965b6ff5f82045450fa8cb9), [`92be47f`](https://github.com/mastra-ai/mastra/commit/92be47fbd26ffccec0e2131ef7c1d9e70dd5ef4a), [`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`810c7e7`](https://github.com/mastra-ai/mastra/commit/810c7e74929989d8b8b5db52cd3af22cd0998af4), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f9f9884`](https://github.com/mastra-ai/mastra/commit/f9f98848ee194dc71a787a709ec430b065cdc41b), [`e0904dc`](https://github.com/mastra-ai/mastra/commit/e0904dc538792e54e1806b70172e5900ac49bff4), [`9672fab`](https://github.com/mastra-ai/mastra/commit/9672fabfbcadb961a35c22a2d6722e077f7b24b9), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`64d6781`](https://github.com/mastra-ai/mastra/commit/64d67814bccddd314f7e09643243821e57cb87b6), [`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`c848e65`](https://github.com/mastra-ai/mastra/commit/c848e655a64ff10331a8ceafafe7f18e70a0f092), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`0494489`](https://github.com/mastra-ai/mastra/commit/049448906e4c3d2d615bbe865b073a0d890ddb7c), [`8d1aeb8`](https://github.com/mastra-ai/mastra/commit/8d1aeb8acf7c20c4bb8e4d8e4bdc6569c83ac561), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`d8fa243`](https://github.com/mastra-ai/mastra/commit/d8fa2430d21113e330c4e676ac65e1235cf44f81), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`f933ba3`](https://github.com/mastra-ai/mastra/commit/f933ba32700e1d0bf143311c1a08f88300b840b6), [`83065bf`](https://github.com/mastra-ai/mastra/commit/83065bfee9e47c3c6f09132a9034501f6cfb69cf), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c), [`01b162f`](https://github.com/mastra-ai/mastra/commit/01b162fe435295881aa7ea55f1759407ad5175ad)]:
+  - @mastra/core@1.57.0
+  - @mastra/schema-compat@1.3.5
+
+## 1.37.1-alpha.2
+
+### Patch Changes
+
+- Fixed streamed UTF-8 characters being corrupted when their bytes span network chunks. ([#20224](https://github.com/mastra-ai/mastra/pull/20224))
+
+- Updated dependencies [[`810c7e7`](https://github.com/mastra-ai/mastra/commit/810c7e74929989d8b8b5db52cd3af22cd0998af4), [`f9f9884`](https://github.com/mastra-ai/mastra/commit/f9f98848ee194dc71a787a709ec430b065cdc41b), [`e0904dc`](https://github.com/mastra-ai/mastra/commit/e0904dc538792e54e1806b70172e5900ac49bff4), [`64d6781`](https://github.com/mastra-ai/mastra/commit/64d67814bccddd314f7e09643243821e57cb87b6), [`c848e65`](https://github.com/mastra-ai/mastra/commit/c848e655a64ff10331a8ceafafe7f18e70a0f092), [`0494489`](https://github.com/mastra-ai/mastra/commit/049448906e4c3d2d615bbe865b073a0d890ddb7c), [`8d1aeb8`](https://github.com/mastra-ai/mastra/commit/8d1aeb8acf7c20c4bb8e4d8e4bdc6569c83ac561), [`83065bf`](https://github.com/mastra-ai/mastra/commit/83065bfee9e47c3c6f09132a9034501f6cfb69cf), [`01b162f`](https://github.com/mastra-ai/mastra/commit/01b162fe435295881aa7ea55f1759407ad5175ad)]:
+  - @mastra/core@1.57.0-alpha.2
+
+## 1.37.1-alpha.1
+
+### Patch Changes
+
+- Added landmark types for trace signal theme snapshots. Querying the theme-snapshots endpoint with `presentation=landmarks` returns a bounded, time-balanced selection of snapshots instead of every snapshot in range. The response types now cover that mode. ([#20710](https://github.com/mastra-ai/mastra/pull/20710))
+
+  ```ts
+  import type { ThemeSnapshotsResponse } from '@mastra/client-js';
+
+  const response: ThemeSnapshotsResponse = await fetch(
+    '/api/learning/entities/my-agent/theme-snapshots?' +
+      'entityType=agent&signalNames=goal,outcome&presentation=landmarks&limit=24',
+  ).then(res => res.json());
+
+  response.totalSnapshots; // full in-range count, larger than the landmark list
+  for (const snapshot of response.snapshots) {
+    snapshot.cutoffAt; // position ticks proportionally on a time axis
+    snapshot.reason; // 'range_start' | 'range_end' | 'time_sample'
+  }
+  ```
+
+- Updated dependencies [[`89200ba`](https://github.com/mastra-ai/mastra/commit/89200bafa05444bb7949b363ce7b743e29867561), [`c950138`](https://github.com/mastra-ai/mastra/commit/c950138e72e4f317a40187e3800588731ab790ce), [`063c8b2`](https://github.com/mastra-ai/mastra/commit/063c8b2eb14e4e5ca021779bc33e8c3c031c8604), [`f4e964c`](https://github.com/mastra-ai/mastra/commit/f4e964cad57057301d6bed5c55bcdd730175b941), [`1f7bbd7`](https://github.com/mastra-ai/mastra/commit/1f7bbd7785a8d230aad02454ecabeb4a0b2cc96f), [`e47ff36`](https://github.com/mastra-ai/mastra/commit/e47ff36945720f4ee4caa09f6e83514d7d188608), [`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4), [`fb9a6ac`](https://github.com/mastra-ai/mastra/commit/fb9a6ac11c9560518742ece60b49d6b062845fd3), [`aa2cec8`](https://github.com/mastra-ai/mastra/commit/aa2cec8501f634d51c2f3ebfb3dd3aa7af8d2ca2), [`2adf8eb`](https://github.com/mastra-ai/mastra/commit/2adf8eb4a70ed2b6cff2dd39281496ea0e025fac), [`8264611`](https://github.com/mastra-ai/mastra/commit/8264611510e421b818bc7395dc2ae4d9c2d518b2), [`44fc98b`](https://github.com/mastra-ai/mastra/commit/44fc98b9d1242aa87a3ab44bdce9e9f12c44d8c9), [`0f2ef41`](https://github.com/mastra-ai/mastra/commit/0f2ef4118da022e4f30dac4e9856cc3a8c97671c)]:
+  - @mastra/core@1.57.0-alpha.1
+  - @mastra/schema-compat@1.3.5-alpha.0
+
 ## 1.37.1-alpha.0
 
 ### Patch Changes

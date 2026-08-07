@@ -146,6 +146,107 @@ describe('CachingPubSub', () => {
       expect(history[0].index).toBe(0);
       expect(history[0].type).toBe('new-first');
     });
+
+    describe('localOnly', () => {
+      // `localOnly` events are never relayed to other instances, so nothing can
+      // replay them from the shared cache. Caching them grows the store without
+      // bound — `workflow.events.v2.*` watch events carry cumulative step results
+      // and run to megabytes each.
+      it('should not cache localOnly events', async () => {
+        const topic = 'workflow.events.v2.run-1';
+
+        await cachingPubsub.publish(
+          topic,
+          { type: 'watch', runId: 'run-1', data: { big: 'payload' } },
+          {
+            localOnly: true,
+          },
+        );
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await cachingPubsub.getHistory(topic)).toHaveLength(0);
+      });
+
+      it('should not allocate an index counter for localOnly events', async () => {
+        const topic = 'workflow.events.v2.run-2';
+
+        await cachingPubsub.publish(topic, { type: 'watch', runId: 'run-2', data: {} }, { localOnly: true });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // A counter key would survive the run and leak forever, since nothing
+        // clears a topic that was never cached.
+        expect(await cache.get(`pubsub:${topic}:counter`)).toBeUndefined();
+      });
+
+      it('should still deliver localOnly events live to subscribers', async () => {
+        const topic = 'local-live-topic';
+        const receivedEvents: Event[] = [];
+
+        await cachingPubsub.subscribe(topic, event => {
+          receivedEvents.push(event);
+        });
+
+        await cachingPubsub.publish(
+          topic,
+          { type: 'watch', runId: 'run-1', data: { foo: 'bar' } },
+          {
+            localOnly: true,
+          },
+        );
+
+        expect(receivedEvents).toHaveLength(1);
+        expect(receivedEvents[0]).toMatchObject({ type: 'watch', runId: 'run-1', data: { foo: 'bar' } });
+        expect(receivedEvents[0].id).toBeDefined();
+        expect(receivedEvents[0].createdAt).toBeInstanceOf(Date);
+        // No index: the event was never assigned one from the counter.
+        expect(receivedEvents[0].index).toBeUndefined();
+      });
+
+      it('should forward the localOnly option to the inner pubsub', async () => {
+        const topic = 'local-forward-topic';
+        const publishSpy = vi.spyOn(innerPubsub, 'publish');
+
+        await cachingPubsub.publish(topic, { type: 'watch', runId: 'run-1', data: {} }, { localOnly: true });
+
+        expect(publishSpy).toHaveBeenCalledWith(topic, expect.objectContaining({ type: 'watch' }), {
+          localOnly: true,
+        });
+      });
+
+      it('should keep cached indices gap-free across interleaved localOnly publishes', async () => {
+        const topic = 'mixed-topic';
+
+        await cachingPubsub.publish(topic, { type: 'cached-first', runId: 'run-1', data: {} });
+        await cachingPubsub.publish(topic, { type: 'local', runId: 'run-1', data: {} }, { localOnly: true });
+        await cachingPubsub.publish(topic, { type: 'cached-second', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const history = await cachingPubsub.getHistory(topic);
+        expect(history.map(event => [event.type, event.index])).toEqual([
+          ['cached-first', 0],
+          ['cached-second', 1],
+        ]);
+      });
+
+      it('should deliver live localOnly events to a replay subscriber without caching them', async () => {
+        const topic = 'replay-mixed-topic';
+        const receivedEvents: Event[] = [];
+
+        await cachingPubsub.publish(topic, { type: 'cached-first', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        await cachingPubsub.subscribeWithReplay(topic, event => {
+          receivedEvents.push(event);
+        });
+
+        await cachingPubsub.publish(topic, { type: 'local', runId: 'run-1', data: {} }, { localOnly: true });
+        await cachingPubsub.publish(topic, { type: 'cached-second', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(receivedEvents.map(event => event.type)).toEqual(['cached-first', 'local', 'cached-second']);
+        expect(await cachingPubsub.getHistory(topic)).toHaveLength(2);
+      });
+    });
   });
 
   describe('subscribe', () => {

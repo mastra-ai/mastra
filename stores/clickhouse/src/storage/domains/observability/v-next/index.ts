@@ -799,7 +799,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     try {
-      return await traceRootsOps.listTracesLight(this.#client, args);
+      return await traceRootsOps.listTracesLight(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

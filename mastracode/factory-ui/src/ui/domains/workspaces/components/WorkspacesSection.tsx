@@ -15,6 +15,7 @@ import { createAgentControllerClient } from '../../chat/services/agentController
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { githubNumberForItem } from '../../factory/boardItems';
 import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
@@ -43,6 +44,7 @@ export function WorkspacesSection() {
   });
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const activityOptions = {
@@ -96,12 +98,13 @@ export function WorkspacesSection() {
         threadId: workItemSession?.threadId,
         pullRequestNumber,
         knownMerged: pullRequest?.metadata.merged === true,
+        pinned: pinnedSessions.has(workspace.sessionId),
       },
     ];
   });
   const latestRows = (review: boolean) => {
-    const sorted = [...rows.filter(row => row.review === review)].sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
+    const sorted = [...rows.filter(row => row.review === review)].sort(
+      (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt),
     );
     const visible = sorted.slice(0, 5);
     for (const pinned of sorted.slice(5).filter(row => row.active || row.running || row.attention)) {
@@ -114,7 +117,10 @@ export function WorkspacesSection() {
       }
       if (replaceIndex >= 0) visible[replaceIndex] = pinned;
     }
-    return { visible: visible.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), all: sorted };
+    return {
+      visible: visible.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt)),
+      all: sorted,
+    };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
@@ -170,6 +176,7 @@ export function WorkspacesSection() {
           pending={pending}
           mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
+          onPinChange={setPinned}
           onDelete={setConfirmDelete}
         />
       )}
@@ -183,6 +190,7 @@ export function WorkspacesSection() {
           pending={pending}
           mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
+          onPinChange={setPinned}
           onDelete={setConfirmDelete}
         />
       )}
@@ -233,6 +241,7 @@ interface FactoryWorkspaceRow {
   threadId?: string;
   pullRequestNumber?: number;
   knownMerged: boolean;
+  pinned: boolean;
 }
 
 function WorkspaceGroup({
@@ -243,6 +252,7 @@ function WorkspaceGroup({
   pending,
   mergedByPath,
   onSelect,
+  onPinChange,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
@@ -252,6 +262,7 @@ function WorkspaceGroup({
   pending: boolean;
   mergedByPath: Record<string, boolean>;
   onSelect: (workspace: FactoryUserSession) => void;
+  onPinChange: (sessionId: string, pinned: boolean) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -278,6 +289,7 @@ function WorkspaceGroup({
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] === true}
             status={workspaceStatus(row)}
+            pinned={row.pinned}
             preview={{
               kind,
               itemLabel: row.itemLabel,
@@ -287,6 +299,7 @@ function WorkspaceGroup({
               updatedAt: row.updatedAt,
             }}
             onSelect={() => onSelect(row.workspace)}
+            onPinChange={pinned => onPinChange(row.workspace.sessionId, pinned)}
             onDelete={() => onDelete(row.workspace)}
           />
         ))}

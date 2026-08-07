@@ -25,6 +25,7 @@ import {
   CANCEL_WORKFLOW_RUN_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
+  TIME_TRAVEL_WORKFLOW_ROUTE,
 } from './workflows';
 
 function createMockWorkflow(name: string) {
@@ -624,6 +625,47 @@ describe('vNext Workflow Handlers', () => {
       expect(result).toEqual({ message: 'Workflow run started' });
     });
 
+    it('should not leave an unhandled rejection when run.start() rejects', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-reject',
+      });
+      await run.start({ inputData: {} });
+
+      // Plain function, not vi.fn(): vitest mocks track settled results by
+      // attaching a handler to returned promises, which would prevent the
+      // rejection from ever being reported as unhandled.
+      const createRunSpy = vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue({
+        start: () => Promise.reject(new Error('invalid workflow input')),
+      } as any);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        const result = await START_WORKFLOW_RUN_ROUTE.handler({
+          mastra: mockMastra,
+          workflowId: 'test-workflow',
+          runId: 'test-run-reject',
+          inputData: { bad: true },
+          tracingOptions,
+        } as any);
+
+        expect(result).toEqual({ message: 'Workflow run started' });
+
+        // Let the rejected promise settle; .catch on the route must swallow it.
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        createRunSpy.mockRestore();
+      }
+    });
+
     it('should preserve resourceId when starting workflow run after server restart', async () => {
       const resourceId = 'user-start-test';
 
@@ -823,6 +865,92 @@ describe('vNext Workflow Handlers', () => {
       const runAfterResume = await freshWorkflow.getWorkflowRunById('test-run-with-resource');
       expect(runAfterResume?.resourceId).toBe(resourceId);
     });
+
+    it('should not leave an unhandled rejection when run.resume() rejects', async () => {
+      const run = await reusableWorkflow.createRun({
+        runId: 'test-run-resume-reject',
+      });
+      await run.start({ inputData: {} });
+
+      // Plain function, not vi.fn(): vitest mocks track settled results by
+      // attaching a handler to returned promises, which would prevent the
+      // rejection from ever being reported as unhandled.
+      const createRunSpy = vi.spyOn(reusableWorkflow, 'createRun').mockResolvedValue({
+        resume: () => Promise.reject(new Error('resume failed')),
+      } as any);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        const result = await RESUME_WORKFLOW_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          workflowId: reusableWorkflow.name,
+          runId: 'test-run-resume-reject',
+          step: 'test-step',
+          resumeData: { test: 'data' },
+          tracingOptions,
+        } as any);
+
+        expect(result).toEqual({ message: 'Workflow run resumed' });
+
+        // Let the rejected promise settle; .catch on the route must swallow it.
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        createRunSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('TIME_TRAVEL_WORKFLOW_ROUTE', () => {
+    it('should not leave an unhandled rejection when run.timeTravel() rejects', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-time-travel-reject',
+      });
+      await run.start({ inputData: {} });
+
+      // Plain function, not vi.fn(): vitest mocks track settled results by
+      // attaching a handler to returned promises, which would prevent the
+      // rejection from ever being reported as unhandled.
+      const createRunSpy = vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue({
+        timeTravel: () => Promise.reject(new Error('time travel failed')),
+      } as any);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        const result = await TIME_TRAVEL_WORKFLOW_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          workflowId: 'test-workflow',
+          runId: 'test-run-time-travel-reject',
+          step: 'test-step',
+          inputData: {},
+          tracingOptions,
+        } as any);
+
+        expect(result).toEqual({ message: 'Workflow run time travel started' });
+
+        // Let the rejected promise settle; .catch on the route must swallow it.
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        createRunSpy.mockRestore();
+      }
+    });
   });
 
   describe('RESUME_STREAM_WORKFLOW_ROUTE', () => {
@@ -995,6 +1123,47 @@ describe('vNext Workflow Handlers', () => {
       // Verify resourceId is stored
       const storedRun = await mockWorkflow.getWorkflowRunById('test-run-stream-resource');
       expect(storedRun?.resourceId).toBe(resourceId);
+    });
+
+    it('should return 409 when the run already finished', async () => {
+      vi.spyOn(mockWorkflow, 'getWorkflowRunById').mockResolvedValue({
+        runId: 'test-run-finished',
+        workflowName: 'test-workflow',
+        status: 'success',
+        resourceId: undefined,
+      } as any);
+
+      const createRunSpy = vi.spyOn(mockWorkflow, 'createRun');
+
+      await expect(
+        STREAM_WORKFLOW_ROUTE.handler({
+          mastra: mockMastra,
+          workflowId: 'test-workflow',
+          runId: 'test-run-finished',
+          inputData: {},
+        } as any),
+      ).rejects.toMatchObject({ status: 409 });
+
+      // The run is never re-created, so it can never be re-executed.
+      expect(createRunSpy).not.toHaveBeenCalled();
+    });
+
+    it('should still stream when the stored run is not finished', async () => {
+      vi.spyOn(mockWorkflow, 'getWorkflowRunById').mockResolvedValue({
+        runId: 'test-run-suspended',
+        workflowName: 'test-workflow',
+        status: 'suspended',
+        resourceId: undefined,
+      } as any);
+
+      const stream = await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-suspended',
+        inputData: {},
+      } as any);
+
+      expect(stream).toBeDefined();
     });
   });
 

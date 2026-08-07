@@ -1,5 +1,44 @@
 # create-factory
 
+## 0.1.7-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+- Updated dependencies [[`697d059`](https://github.com/mastra-ai/mastra/commit/697d05953049bf6d09e89646c137b76f8ed472ad), [`12de4fe`](https://github.com/mastra-ai/mastra/commit/12de4fed92b18007a007d82b1f342a15798e2d5b), [`e7109ee`](https://github.com/mastra-ai/mastra/commit/e7109ee6f731bacc79c885906f3c7dca8d8f013a), [`2d48b60`](https://github.com/mastra-ai/mastra/commit/2d48b605cdb05f5f9f9b34b06ca7d72092ec2289), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`f012dcf`](https://github.com/mastra-ai/mastra/commit/f012dcf74f37c83366c53e4fa253c4f667904e1b), [`e5786be`](https://github.com/mastra-ai/mastra/commit/e5786be02bb903073082bd9d6da880ebaacc343f), [`12de4fe`](https://github.com/mastra-ai/mastra/commit/12de4fed92b18007a007d82b1f342a15798e2d5b)]:
+  - mastra@1.23.1-alpha.1
+
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- Use the same PostHog analytics as create-mastra in the create-factory CLI, including the MASTRA_TELEMETRY_DISABLED opt-out and shared anonymous distinct id. ([#20073](https://github.com/mastra-ai/mastra/pull/20073))
+
+- Updated dependencies [[`ed5d606`](https://github.com/mastra-ai/mastra/commit/ed5d606739c5e3fbdfa9f272df7809aa5ab43b1d)]:
+  - mastra@1.23.1-alpha.0
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [[`f40aacf`](https://github.com/mastra-ai/mastra/commit/f40aacfee798c10d34e727fdf70337d4b50410cf)]:
+  - mastra@1.23.0
+
+## 0.1.6-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.23.0-alpha.2
+
+## 0.1.6-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f40aacf`](https://github.com/mastra-ai/mastra/commit/f40aacfee798c10d34e727fdf70337d4b50410cf)]:
+  - mastra@1.23.0-alpha.1
+
 ## 0.1.6-alpha.0
 
 ### Patch Changes

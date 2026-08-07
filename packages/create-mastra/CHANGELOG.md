@@ -1,5 +1,28 @@
 # create-mastra
 
+## 1.23.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+
+## 1.23.1-alpha.0
+
+## 1.23.0
+
+### Patch Changes
+
+- Fixed prerelease project creation to keep using the running create-mastra release channel when npm dist-tags have not finished updating. ([#20723](https://github.com/mastra-ai/mastra/pull/20723))
+
+## 1.23.0-alpha.2
+
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Fixed prerelease project creation to keep using the running create-mastra release channel when npm dist-tags have not finished updating. ([#20723](https://github.com/mastra-ai/mastra/pull/20723))
+
 ## 1.22.1-alpha.0
 
 ## 1.22.0

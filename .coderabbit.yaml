@@ -3,7 +3,10 @@ tone_instructions: ''
 early_access: false
 enable_free_tier: true
 reviews:
-  profile: chill
+  slop_detection:
+    enabled: true
+    label: 'slop'
+  profile: assertive
   request_changes_workflow: false
   high_level_summary: true
   high_level_summary_instructions: |
