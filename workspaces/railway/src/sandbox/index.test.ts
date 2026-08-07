@@ -240,7 +240,7 @@ describe('RailwaySandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
-    it('refreshes checkpoints at the Railway sandbox idle-timeout deadline', async () => {
+    it('refreshes checkpoints at the one-second floor when idle timeout is below the safety margin', async () => {
       vi.useFakeTimers();
       const checkpointSandbox = { ...mockSandbox, idleTimeoutMinutes: 1 };
       mockCreate.mockResolvedValueOnce(checkpointSandbox);
@@ -249,7 +249,7 @@ describe('RailwaySandbox', () => {
       await sandbox._start();
 
       expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(49_999);
+      await vi.advanceTimersByTimeAsync(999);
       expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);

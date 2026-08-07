@@ -342,32 +342,50 @@ export class RailwaySandbox extends MastraSandbox {
    * to invoke concurrently with `executeCommand`, `restart`, or `stop`.
    */
   async captureCheckpoint(): Promise<CaptureCheckpointResult> {
+    const checkpointName = this._checkpointName;
+    if (!checkpointName) {
+      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
+    }
+
     const sandbox = this._sandbox;
     if (!sandbox) {
       return { status: 'skipped', reason: 'sandbox-not-running' };
     }
 
-    return this._captureCheckpoint(sandbox);
+    if (this._checkpointRefreshInFlight) {
+      await this._checkpointRefreshInFlight;
+      return { status: 'coalesced', checkpointName };
+    }
+
+    const capture = this._checkpointSandbox(sandbox).finally(() => {
+      if (this._checkpointRefreshInFlight === capture) {
+        this._checkpointRefreshInFlight = null;
+      }
+    });
+    this._checkpointRefreshInFlight = capture;
+
+    await capture;
+    this._scheduleCheckpointRefresh();
+
+    return { status: 'captured', checkpointName };
   }
 
-  private async _captureCheckpoint(sandbox: Sandbox): Promise<CaptureCheckpointResult> {
+  private async _checkpointSandbox(sandbox: Sandbox): Promise<void> {
     if (!this._checkpointName) {
-      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
+      return;
     }
 
     this.logger.debug(`${LOG_PREFIX} Capturing Railway sandbox checkpoint ${this._checkpointName} for: ${this.id}`);
 
     const checkpoints = await Sandbox.checkpoints(this._clientConfig());
-    const checkpoinAlreadyExists = checkpoints.some(checkpoint => checkpoint.key === this._checkpointName);
+    const checkpointAlreadyExists = checkpoints.some(checkpoint => checkpoint.key === this._checkpointName);
 
-    // remove first, so we can re-create a checkpoint with the same name
-    if (checkpoinAlreadyExists) {
-      await Sandbox.deleteCheckpoint(this._checkpointName!, this._clientConfig());
+    // Remove first so we can re-create a checkpoint with the same name.
+    if (checkpointAlreadyExists) {
+      await Sandbox.deleteCheckpoint(this._checkpointName, this._clientConfig());
     }
 
     await sandbox.checkpoint(this._checkpointName);
-
-    return { status: 'captured', checkpointName: this._checkpointName };
   }
 
   private _scheduleCheckpointRefresh(): void {
@@ -375,7 +393,7 @@ export class RailwaySandbox extends MastraSandbox {
       return;
     }
 
-    const idleTimeoutMinutes = this._sandbox.idleTimeoutMinutes;
+    const idleTimeoutMinutes = this._idleTimeoutMinutes ?? this._sandbox.idleTimeoutMinutes;
     if (!idleTimeoutMinutes) {
       return;
     }
@@ -396,7 +414,7 @@ export class RailwaySandbox extends MastraSandbox {
         }
       });
       this._checkpointRefreshInFlight = refresh;
-      this._checkpointRefreshInFlight.catch(error => {
+      refresh.catch(error => {
         this.logger.warn(`${LOG_PREFIX} Failed to refresh Railway sandbox checkpoint ${this._checkpointName}:`, error);
       });
     }, delayMs);
