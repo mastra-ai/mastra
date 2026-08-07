@@ -343,14 +343,26 @@ describe('runId edge with a real HookManager (#20861, Risk R1)', () => {
     expect(manager.getRunId()).toBeUndefined();
 
     // Drive the real listener with the real manager: setRunId never called.
+    const spy = vi.spyOn(manager, 'runPermissionRequest');
     const { listener, releaseBlocker } = createHarness(manager);
     const blocked = listener({ type: 'blocking_prompt' });
     await Promise.resolve();
 
-    // Deterministic pin of the bail: a direct awaited call either bails
-    // immediately (empty results) or awaits the spawned hook to completion —
-    // in which case the marker would exist by the time the await resolves.
-    const result = await manager.runPermissionRequest('tool_approval', 'call-norunid', 'execute_command', {});
+    // The receipt-time path itself reaches the real manager with the right
+    // arguments even though the queue is blocked...
+    void listener({
+      type: 'tool_approval_required',
+      toolCallId: 'call-norunid',
+      toolName: 'execute_command',
+      args: {},
+    });
+    expect(spy).toHaveBeenCalledWith('tool_approval', 'call-norunid', 'execute_command', {});
+
+    // ...and the bail is deterministic: awaiting that dispatch's own result
+    // either returns empty immediately or awaits the spawned hook to
+    // completion — in which case the marker would exist by the time the
+    // await resolves.
+    const result = await spy.mock.results[0]!.value;
     expect(result.results).toEqual([]);
     expect(existsSync(marker)).toBe(false);
 
