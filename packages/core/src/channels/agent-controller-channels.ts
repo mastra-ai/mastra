@@ -12,8 +12,45 @@ import type { RequestContext } from '../request-context';
 import { AgentChannels } from './agent-channels';
 import type { ChannelConfig } from './types';
 
-/** Configuration for {@link AgentControllerChannels}. Same shape as agent channels. */
-export type AgentControllerChannelsConfig = ChannelConfig;
+/** Context passed to {@link AgentControllerChannelsConfig.onSessionStart}. */
+export interface ChannelSessionStartContext {
+  /**
+   * The controller session, already bound to `thread`. Bound before the hook
+   * runs on purpose: session settings persist to the bound thread's metadata,
+   * so a hook that writes settings must not race the thread switch.
+   */
+  session: Session<any>;
+  /** The mapped Mastra thread the session is bound to. */
+  thread: Pick<StorageThreadType, 'id' | 'resourceId'>;
+  /** Request context of the message that started the session, when there is one. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * Configure a session the first time a channel thread reaches it, before the
+ * inbound message is dispatched.
+ *
+ * The seam exists because a host can name a session (`resolveResourceId`) but
+ * never receives the `Session` object — it is created here, inside the channel
+ * machinery. Without this hook a host that resolves its own resourceIds can
+ * only ever configure sessions the web UI created, and channel-created sessions
+ * silently run on the SDK's built-in defaults.
+ *
+ * Errors are logged and swallowed: configuration is best-effort and must not
+ * drop the message that triggered it.
+ */
+export type ChannelSessionStart = (ctx: ChannelSessionStartContext) => void | Promise<void>;
+
+/** Configuration for {@link AgentControllerChannels}. */
+export interface AgentControllerChannelsConfig extends ChannelConfig {
+  /**
+   * Called once per session per process, after the session is bound to its
+   * thread and before the first message dispatches. Concurrent messages on a
+   * new session wait for the hook to settle rather than dispatching on an
+   * unconfigured session. See {@link ChannelSessionStart}.
+   */
+  onSessionStart?: ChannelSessionStart;
+}
 
 /**
  * Runs an AgentController inside chat channels (Slack, Discord, ...).
@@ -42,6 +79,24 @@ export class AgentControllerChannels extends AgentChannels {
    * server scope.
    */
   private autoApproveResourceIds = new Set<string>();
+
+  /** See {@link AgentControllerChannelsConfig.onSessionStart}. */
+  private readonly onSessionStart: ChannelSessionStart | undefined;
+
+  /**
+   * One start-hook invocation per session resourceId. A map of promises rather
+   * than a set of ids: concurrent messages on a new thread must all WAIT for
+   * the hook, not just skip it, or the losers dispatch on an unconfigured
+   * session. In-memory, matching the v1 scope where sessions themselves don't
+   * survive a restart: a session rebuilt after a restart is a new session and
+   * gets configured again.
+   */
+  private sessionStartRuns = new Map<string, Promise<void>>();
+
+  constructor(config: AgentControllerChannelsConfig) {
+    super(config);
+    this.onSessionStart = config.onSessionStart;
+  }
 
   /** @internal Called by AgentController's constructor to bind itself. */
   __setController(controller: AgentController<any>): void {
@@ -236,7 +291,41 @@ export class AgentControllerChannels extends AgentChannels {
     if (session.thread.getId() !== thread.id) {
       await session.thread.switch({ threadId: thread.id });
     }
+    await this.runSessionStartHook(session, thread, requestContext);
     return session;
+  }
+
+  /**
+   * Run the configured session-start hook at most once per session. Fires after
+   * the thread binding above, so a hook that persists session settings writes
+   * them to the thread the session actually ends up on.
+   */
+  private async runSessionStartHook(
+    session: Session<any>,
+    thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
+    requestContext?: RequestContext,
+  ): Promise<void> {
+    const onSessionStart = this.onSessionStart;
+    if (!onSessionStart) return;
+    // Memoize before the first await: two messages arriving together on a new
+    // thread both reach this point. The first starts the hook; every later
+    // caller awaits the same run, so no message dispatches before the session
+    // is configured.
+    let run = this.sessionStartRuns.get(thread.resourceId);
+    if (!run) {
+      run = (async () => {
+        try {
+          await onSessionStart({ session, thread, requestContext });
+        } catch (error) {
+          // Best-effort by contract: a session that couldn't be configured
+          // still answers the message, on whatever defaults it was created
+          // with.
+          this.log('error', `Channel session-start hook failed for resourceId=${thread.resourceId}: ${error}`);
+        }
+      })();
+      this.sessionStartRuns.set(thread.resourceId, run);
+    }
+    await run;
   }
 
   private requireController(): AgentController<any> {

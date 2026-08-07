@@ -48,7 +48,7 @@ import type { GithubIssueTriageInput, GithubIssueTriageResult } from '../../gith
 import { runGithubIssueTriage } from '../../github/issue-triage.js';
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
-import type { ReconcilePullRequestState } from '../../github/rules.js';
+import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -116,6 +116,8 @@ type GithubPullRequest = {
   head: { ref: string; sha: string };
   base: { ref: string; repo: { id: number; fullName: string } };
   user: GithubActor;
+  assignees?: string[];
+  requestedReviewers?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -703,7 +705,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
         reconcileFactoryState: this.#reconcileEnabled
-          ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+          ? attachGithubReconciler(
+              this,
+              ctx,
+              input => this.fetchPullRequestState(input),
+              input => this.fetchIssueState(input),
+            )
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
@@ -732,8 +739,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title?: string;
         html_url?: string;
         state?: string;
+        draft?: boolean;
         merged?: boolean;
         created_at?: string;
+        user?: { login?: string } | null;
+        assignees?: Array<{ login?: string }> | null;
+        requested_reviewers?: Array<{ login?: string }> | null;
         merged_by?: { login?: string } | null;
         head?: { ref?: string };
         base?: { ref?: string };
@@ -745,11 +756,64 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         title: result.title ?? `PR ${input.number}`,
         url: result.html_url ?? `https://github.com/${input.repository}/pull/${input.number}`,
         state: result.state === 'closed' ? 'closed' : 'open',
+        draft: result.draft === true,
         merged: result.merged === true,
+        assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+        requestedReviewers: (result.requested_reviewers ?? []).flatMap(reviewer =>
+          reviewer.login ? [reviewer.login] : [],
+        ),
         headBranch: result.head?.ref ?? '',
         baseBranch: result.base?.ref ?? '',
+        ...(result.user?.login ? { author: result.user.login } : {}),
         ...(result.created_at ? { createdAt: result.created_at } : {}),
         ...(result.merged_by?.login ? { mergedBy: result.merged_by.login } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Reads live issue state through the Platform GitHub proxy for the
+   * reconciler. Returns undefined when the issue cannot be resolved (missing,
+   * is actually a PR, proxy error) so a sweep never fabricates a close.
+   */
+  async fetchIssueState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcileIssueState | undefined> {
+    let repository: { owner: string; repo: string };
+    try {
+      repository = splitRepository(input.repository);
+    } catch {
+      return undefined;
+    }
+    try {
+      const result = await this.#client.request<{
+        title?: string;
+        html_url?: string;
+        state?: string;
+        state_reason?: string | null;
+        created_at?: string;
+        updated_at?: string;
+        user?: { login?: string } | null;
+        assignees?: Array<{ login?: string }> | null;
+        pull_request?: unknown;
+      }>(
+        'GET',
+        `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/issues/${input.number}`,
+      );
+      if (result.pull_request) return undefined;
+      return {
+        title: result.title ?? `Issue ${input.number}`,
+        url: result.html_url ?? `https://github.com/${input.repository}/issues/${input.number}`,
+        state: result.state === 'closed' ? 'closed' : 'open',
+        ...(result.state_reason ? { stateReason: result.state_reason } : {}),
+        assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+        ...(result.user?.login ? { author: result.user.login } : {}),
+        ...(result.created_at ? { createdAt: result.created_at } : {}),
+        ...(result.updated_at ? { updatedAt: result.updated_at } : {}),
       };
     } catch {
       return undefined;
@@ -1263,6 +1327,7 @@ function parseIntakeIssue(sourceId: string, issue: GithubIssue): IntakeIssue {
     stateType: issue.state,
     priority: null,
     assignee: issue.assignees[0] ?? null,
+    assignees: issue.assignees,
     source: sourceId,
     labels: issue.labels,
     commentCount: issue.commentCount,
@@ -1289,6 +1354,8 @@ function parsePullRequest(pullRequest: GithubPullRequest): PullRequest {
     title: pullRequest.title,
     url: pullRequest.htmlUrl,
     author: pullRequest.user?.login ?? null,
+    assignees: pullRequest.assignees ?? [],
+    requestedReviewers: pullRequest.requestedReviewers ?? [],
     body: pullRequest.body?.trim() ? pullRequest.body : null,
     state: pullRequest.state,
     draft: pullRequest.draft,

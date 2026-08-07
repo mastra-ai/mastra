@@ -28,7 +28,8 @@ import {
   useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
-import { matchCommands } from '../services/commands';
+import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { commandRequiresReadySession, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
@@ -84,7 +85,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset } = useChatTranscript();
+  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
@@ -100,6 +101,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+
+  const preparingThreadId = usePreparingThreadId();
 
   const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -220,7 +223,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     const text = draft.trim();
     if (!text && images.length === 0) return;
     updateDraft('');
-    void handleInput(text);
+    void handleInput(text).catch(error => {
+      clearPending();
+      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
+    });
   };
 
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -282,9 +288,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    // commands act on a live session, unlike a message the controller can hold
+    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
+      updateDraft(text);
+      pushNotice('Commands run once the session is ready.');
+      return;
+    }
     if (await runComposerCommand(text)) return;
     // Steering is text-only; attached images stay pending until the next send.
-    if (busy) {
+    if (busy && !preparingThreadId) {
       await steer(text);
       return;
     }
@@ -299,7 +311,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   }
 
-  const disabled = status !== 'ready';
+  // the controller holds a message until the workspace is ready, so preparing sessions stay usable
+  const disabled = status !== 'ready' && !preparingThreadId;
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
@@ -357,7 +370,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onChange={e => updateDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
             onPaste={onPaste}
-            placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
+            placeholder={busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…'}
             disabled={disabled}
             maxHeight={composerVariantMaxHeight[variant]}
             className={cn(composerVariantClass[variant], 'text-[15px]')}
@@ -386,7 +399,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {busy && (
+              {busy && !preparingThreadId && (
                 <Button
                   type="button"
                   variant="outline"

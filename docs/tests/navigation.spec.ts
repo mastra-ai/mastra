@@ -279,10 +279,38 @@ test.describe('Contextual sidebar', () => {
     const overviewHref = await agentsLink.getAttribute('href')
     expect(overviewHref).toBeTruthy()
 
+    await page.evaluate(() => {
+      const navigation = document.querySelector('nav[aria-label="Docs sidebar"]')
+      if (!navigation) throw new Error('Expected the desktop sidebar navigation')
+
+      const observer = new MutationObserver(() => {
+        const rootPanel = navigation.querySelector('ul[data-sidebar-panel="root"]')
+        const contextualPanel = navigation.querySelector('ul[data-sidebar-panel="contextual"]')
+        if (!rootPanel || !contextualPanel || document.documentElement.dataset.sidebarTransitionSample) return
+
+        requestAnimationFrame(() => {
+          document.documentElement.dataset.sidebarTransitionSample = JSON.stringify({
+            visibility: getComputedStyle(rootPanel).visibility,
+            activeAnimations: rootPanel.getAnimations().length,
+          })
+          observer.disconnect()
+        })
+      })
+      observer.observe(navigation, { attributes: true, childList: true, subtree: true })
+    })
+
     await agentsLink.click()
     await expect(page).toHaveURL(overviewHref!)
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const sample = document.documentElement.dataset.sidebarTransitionSample
+          return sample ? JSON.parse(sample) : undefined
+        }),
+      )
+      .toEqual({ visibility: 'hidden', activeAnimations: 0 })
     const backButton = contextualPane.getByRole('button', { name: 'Back to global sidebar' })
     await expect(backButton).toHaveText('Agents')
     await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
@@ -349,6 +377,7 @@ test.describe('Contextual sidebar', () => {
     await expect(restoredRootPane).toBeVisible()
     await expect.poll(() => restoredRootPane.evaluate(element => element.scrollTop)).toBe(0)
 
+    await page.setViewportSize({ width: 1200, height: 480 })
     await page.goto('/docs/observability/overview', { waitUntil: 'domcontentloaded' })
     const shortContextualPane = visibleSidebarPane(page, 'contextual')
     await expect(shortContextualPane).toBeVisible()
@@ -356,6 +385,51 @@ test.describe('Contextual sidebar', () => {
       await shortContextualPane.evaluate(element => element.scrollHeight > element.clientHeight + 1),
       'A short contextual pane should not inherit overflow from the hidden root pane',
     ).toBe(false)
+  })
+
+  test('desktop: keeps version control aligned and visible inside the sidebar scrollport', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
+    await page.setViewportSize({ width: 1200, height: 360 })
+
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    const rootPane = visibleSidebarPane(page, 'root')
+    const versionControl = rootPane.getByRole('button', { name: 'Change version' })
+
+    await expect(versionControl).toBeVisible()
+    const alignment = await rootPane.evaluate(element => {
+      const list = element.querySelector('ul[data-sidebar-panel="root"]')
+      const button = element.querySelector('button[aria-label="Change version"]')
+      if (!(list instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+        throw new Error('Expected the root sidebar list and version control')
+      }
+
+      const navigationRect = element.getBoundingClientRect()
+      const listRect = list.getBoundingClientRect()
+      const buttonRect = button.getBoundingClientRect()
+      return {
+        listLeft: listRect.left - buttonRect.left,
+        listRight: listRect.right - buttonRect.right,
+        outerLeft: buttonRect.left - navigationRect.left,
+        outerRight: navigationRect.right - buttonRect.right,
+      }
+    })
+    expect(Math.abs(alignment.listLeft)).toBeLessThan(1)
+    expect(Math.abs(alignment.listRight)).toBeLessThan(1)
+    expect(alignment.outerLeft).toBeCloseTo(16, 0)
+    expect(alignment.outerRight).toBeCloseTo(16, 0)
+
+    const initialBottom = await versionControl.evaluate(element => element.getBoundingClientRect().bottom)
+    await rootPane.evaluate(element => {
+      element.scrollTop = element.scrollHeight / 2
+    })
+    await expect.poll(() => rootPane.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+    await expect(versionControl).toBeVisible()
+    await expect
+      .poll(() => versionControl.evaluate(element => element.getBoundingClientRect().bottom))
+      .toBeCloseTo(initialBottom, 0)
   })
 
   test('desktop: body links switch to the destination contextual sidebar', async ({ page, isMobile }) => {
@@ -408,10 +482,30 @@ test.describe('Contextual sidebar', () => {
     await expect(visibleSidebarPane(page, 'root')).toBeVisible()
 
     await page.reload()
-    await expect(visibleSidebarPane(page, 'contextual')).toBeVisible()
-    await visibleSidebarPane(page, 'contextual').getByRole('button', { name: 'Back to global sidebar' }).click()
-    await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+    const directContextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(directContextualPane).toBeVisible()
+    await expect
+      .poll(() =>
+        directContextualPane
+          .locator('ul[data-sidebar-panel="contextual"]')
+          .evaluate(element => getComputedStyle(element).animationName),
+      )
+      .toBe('none')
+    await directContextualPane.getByRole('button', { name: 'Back to global sidebar' }).click()
+    const directRootPane = visibleSidebarPane(page, 'root')
+    await expect(directRootPane).toBeVisible()
     await expect(page).toHaveURL(overviewHref!)
+
+    await (await expectContextualCategoryRootLink(directRootPane)).click()
+    const reenteredContextualPane = visibleSidebarPane(page, 'contextual')
+    await expect(reenteredContextualPane).toBeVisible()
+    await expect
+      .poll(() =>
+        reenteredContextualPane
+          .locator('ul[data-sidebar-panel="contextual"]')
+          .evaluate(element => getComputedStyle(element).animationName),
+      )
+      .not.toBe('none')
 
     await page.goto(childHref, { waitUntil: 'domcontentloaded' })
     const directChildPane = visibleSidebarPane(page, 'contextual')

@@ -12,6 +12,7 @@ export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
   'issueEdited',
+  'issueClosed',
   'issueCommentCreated',
   'issueCommentEdited',
   'issueCommentDeleted',
@@ -101,7 +102,17 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   deliveryId: string;
   factory: { createdAt: string };
   repository: { id: number; fullName: string };
-  issue?: { number: number; title: string; url: string; createdAt?: string; updatedAt?: string };
+  issue?: {
+    number: number;
+    title: string;
+    url: string;
+    createdAt?: string;
+    updatedAt?: string;
+    assignees?: string[];
+    state?: 'open' | 'closed';
+    /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
+    stateReason?: string;
+  };
   issueChange?: { title: boolean; body: boolean };
   issueComment?: {
     id: number;
@@ -118,10 +129,15 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     url: string;
     createdAt?: string;
     state: 'open' | 'closed';
+    draft: boolean;
     merged: boolean;
+    assignees?: string[];
+    requestedReviewers?: string[];
     headBranch: string;
     baseBranch: string;
   };
+  /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
+  reviewRequest?: { reviewer: string; factoryReviewer: boolean };
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
@@ -138,6 +154,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     stateType: string;
     priorityLabel: string;
     assignee: string | null;
+    creator: string | null;
     team: string | null;
     labels: readonly string[];
     createdAt: string;
