@@ -2,6 +2,7 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
@@ -37,7 +38,6 @@ import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { GithubIcon } from '../ui/icons';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 
 /**
@@ -66,7 +66,7 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
         <EmptyState
           as="h2"
-          iconSlot={<GithubIcon size={40} className="text-icon3" />}
+          iconSlot={<GithubIcon className="text-icon3 size-10" />}
           titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
           descriptionSlot={
             review

@@ -25,8 +25,7 @@ function shouldRetryEmptyStructuredObject(
   extractors: readonly Extractor<any>[],
 ): boolean {
   return (
-    Object.keys(object).length === 0 &&
-    extractors.some(extractor => extractor.retryStructuredExtractionOnEmptyObject)
+    Object.keys(object).length === 0 && extractors.some(extractor => extractor.retryStructuredExtractionOnEmptyObject)
   );
 }
 

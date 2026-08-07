@@ -39,11 +39,15 @@ export function useArtifactListing(path: string | undefined) {
   });
 }
 
-export function useWorkspaceRenderedListing(workspacePath: string | undefined, renderedRoot: string | undefined) {
+export function useWorkspaceRenderedListing(
+  workspacePath: string | undefined,
+  renderedRoot: string | undefined,
+  options: { enabled?: boolean } = {},
+) {
   const { client } = useApiConfig();
   return useQuery<WorkspaceRenderedListing>({
     queryKey: queryKeys.workspaceRenderedList(workspacePath, renderedRoot),
-    enabled: Boolean(workspacePath && renderedRoot),
+    enabled: Boolean(workspacePath && renderedRoot && (options.enabled ?? true)),
     queryFn: () =>
       client.get<WorkspaceRenderedListing>(
         `/web/workspace/rendered/list?workspacePath=${encodeURIComponent(workspacePath ?? '')}&root=${encodeURIComponent(renderedRoot ?? '')}`,

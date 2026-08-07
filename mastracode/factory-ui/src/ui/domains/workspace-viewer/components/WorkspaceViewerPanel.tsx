@@ -11,21 +11,42 @@ interface WorkspaceViewerPanelProps {
   renderedPaths: RenderedWorkspacePath[];
   /** Fires when the file viewer opens or closes, so a floating host can widen its surface. */
   onExpandedChange?: (expanded: boolean) => void;
+  /** Listing wakes the session's sandbox — a host that keeps the panel mounted off-screen passes `false`. */
+  visible?: boolean;
 }
 
-export function WorkspaceViewerPanel({ workspacePath, renderedPaths, ...props }: WorkspaceViewerPanelProps) {
+export function WorkspaceViewerPanel({
+  workspacePath,
+  renderedPaths,
+  visible = true,
+  ...props
+}: WorkspaceViewerPanelProps) {
   const resetKey = [workspacePath, ...renderedPaths.map(path => `${path.id}:${path.root}`)].join('|');
 
   return (
-    <WorkspaceViewerPanelReset key={resetKey} workspacePath={workspacePath} renderedPaths={renderedPaths} {...props} />
+    <WorkspaceViewerPanelReset
+      key={resetKey}
+      workspacePath={workspacePath}
+      renderedPaths={renderedPaths}
+      visible={visible}
+      {...props}
+    />
   );
 }
 
-function WorkspaceViewerPanelReset(props: WorkspaceViewerPanelProps) {
+type MountedPanelProps = Omit<WorkspaceViewerPanelProps, 'visible'> & { visible: boolean };
+
+function WorkspaceViewerPanelReset(props: MountedPanelProps) {
   const [view, setView] = useState<'files' | 'changes'>('files');
 
   if (view === 'changes') {
-    return <WorkspaceChangesPanel workspacePath={props.workspacePath} onShowFiles={() => setView('files')} />;
+    return (
+      <WorkspaceChangesPanel
+        workspacePath={props.workspacePath}
+        visible={props.visible}
+        onShowFiles={() => setView('files')}
+      />
+    );
   }
 
   return <WorkspaceViewerPanelInner {...props} onShowChanges={() => setView('changes')} />;
@@ -36,15 +57,16 @@ function WorkspaceViewerPanelInner({
   renderedPaths,
   onExpandedChange,
   onShowChanges,
-}: WorkspaceViewerPanelProps & { onShowChanges: () => void }) {
+  visible,
+}: MountedPanelProps & { onShowChanges: () => void }) {
   const [selectedRenderedPathId, setSelectedRenderedPathId] = useState(renderedPaths[0]?.id ?? '');
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [viewerOpen, setViewerOpenState] = useState(false);
 
   const selectedRenderedPath = renderedPaths.find(path => path.id === selectedRenderedPathId) ?? renderedPaths[0];
   const selectedFileRequestPath = selectedFilePath ? `${selectedRenderedPath?.root}/${selectedFilePath}` : undefined;
-  const listing = useWorkspaceRenderedListing(workspacePath, selectedRenderedPath?.root);
-  const file = useWorkspaceFile(workspacePath, selectedFileRequestPath, { enabled: viewerOpen });
+  const listing = useWorkspaceRenderedListing(workspacePath, selectedRenderedPath?.root, { enabled: visible });
+  const file = useWorkspaceFile(workspacePath, selectedFileRequestPath, { enabled: visible && viewerOpen });
   const selectedFile = file.data?.path === selectedFileRequestPath ? file.data : undefined;
 
   if (!selectedRenderedPath) return null;
