@@ -13,7 +13,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/github';
 import { WorkspacesSection } from '../WorkspacesSection';
@@ -88,7 +88,7 @@ describe('Deleting a workspace', () => {
     onTestFinished(() => server.events.removeListener('request:start', recordThreadRequest));
 
     const user = userEvent.setup();
-    renderSection();
+    const { client } = renderSection();
 
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20474' }));
@@ -99,6 +99,9 @@ describe('Deleting a workspace', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(deletedSessions).toEqual([sessionId]));
+    // Let the mutation's success-side cache work settle before asserting the
+    // thread store was never touched.
+    await waitForMutationsIdle(client);
     expect(threadRequests).toEqual([]);
   });
 });
