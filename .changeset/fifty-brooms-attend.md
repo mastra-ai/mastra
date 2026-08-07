@@ -25,4 +25,4 @@ node .mastra/output/voice-worker.mjs start # worker
 
 Dependencies imported only by an extra entry are analyzed too, so they land in the generated `package.json` and resolve at runtime.
 
-Entry names may contain `/` to nest the output, but cannot be `index` or start with `tools/`.
+Entry names may contain `/` to nest the output, but cannot be `index` (the server bundle), `tools` (the tool aggregator), or start with `tools/` (tool bundles).
