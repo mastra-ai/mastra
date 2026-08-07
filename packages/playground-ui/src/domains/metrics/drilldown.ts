@@ -142,7 +142,7 @@ export function buildTracesDrilldownUrl({
   customRange,
   dashboardFilter,
   scope,
-  tracesBasePath = '/observability',
+  tracesBasePath = '/traces',
 }: BuildArgs): string {
   const params = new URLSearchParams();
   params.set(TRACE_LIST_MODE_PARAM, 'branches');

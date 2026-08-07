@@ -142,10 +142,10 @@ test.describe('Trace detail page', () => {
       await expectCurrentBreadcrumb(page, 'trace');
     });
 
-    test('has breadcrumb link pointing back to observability', async ({ page }) => {
+    test('has breadcrumb link pointing back to the traces list', async ({ page }) => {
       await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
 
     test('has Traces documentation link', async ({ page }) => {
@@ -160,11 +160,11 @@ test.describe('Trace detail page', () => {
   });
 
   test.describe('when the Traces breadcrumb is clicked', () => {
-    test('navigates to observability', async ({ page }) => {
+    test('navigates to the traces list', async ({ page }) => {
       await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
       await page.getByLabel('Breadcrumb').getByRole('link', { name: 'Traces' }).click();
-      await expect(page).toHaveURL(/\/observability$/);
+      await expect(page).toHaveURL(/\/traces$/);
       await expectCurrentBreadcrumb(page, 'Traces');
     });
   });
@@ -175,7 +175,7 @@ test.describe('Trace detail page', () => {
 
       // Page shell still renders - the panels themselves depend on server data that may not exist.
       await expectCurrentBreadcrumb(page, 'trace');
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 
@@ -195,7 +195,7 @@ test.describe('Trace detail page', () => {
       await page.goto(`/traces/${LONG_TRACE_ID}`);
       await expect(page.getByRole('button', { name: 'tool call 60', exact: true })).toBeAttached();
       await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Traces' }).click();
-      await expect(page).toHaveURL(/\/observability$/);
+      await expect(page).toHaveURL(/\/traces$/);
       await page.evaluate(url => {
         window.history.pushState(null, '', url);
         window.dispatchEvent(new PopStateEvent('popstate'));
@@ -255,7 +255,7 @@ test.describe('Trace detail page', () => {
 
       await expect(page.getByText('Session Expired')).toBeVisible();
       // Shared top area still renders in the error state.
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 
@@ -266,7 +266,7 @@ test.describe('Trace detail page', () => {
 
       await expect(page.getByText('Permission Denied')).toBeVisible();
       await expect(page.getByText(/You don't have permission to access traces/)).toBeVisible();
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 
@@ -278,7 +278,7 @@ test.describe('Trace detail page', () => {
       await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
       await expect(page.getByText('Failed to load trace')).toBeVisible();
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 });

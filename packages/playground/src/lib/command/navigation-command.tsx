@@ -61,7 +61,7 @@ function getRouteBadge(sectionTitle?: string) {
 }
 
 function getObservabilityEntityPath(entity: string) {
-  return `/observability?entity=${encodeURIComponent(entity)}`;
+  return `/traces?entity=${encodeURIComponent(entity)}`;
 }
 
 type NavigationSection = {
@@ -355,12 +355,12 @@ const ObservabilityResults = ({
     <>
       <CommandGroup heading="Observability">
         <CommandPaletteItem
-          value="observability traces telemetry signals /observability"
-          onSelect={() => handleSelect('/observability')}
+          value="observability traces telemetry signals /traces"
+          onSelect={() => handleSelect('/traces')}
           icon={<EyeIcon />}
           title="Traces"
           subtitle="Runtime traces"
-          path="/observability"
+          path="/traces"
           badge="Signal"
         />
         <CommandPaletteItem
