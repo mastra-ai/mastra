@@ -130,11 +130,11 @@ export function BoardRelevanceFilters({
               onChange={event => setLabelSearch(event.target.value)}
               placeholder="Search labels..."
               aria-label="Search labels"
-              className="w-full rounded-md border border-border-1 bg-surface-3 px-2 py-1 text-xs outline-none focus:border-border-2"
+              className="border-border-1 bg-surface-3 focus:border-border-2 w-full rounded-md border px-2 py-1 text-xs outline-none"
             />
           </div>
           {visibleLabels.length === 0 && (
-            <div className="px-3 py-1.5 text-xs text-icon3">
+            <div className="text-icon3 px-3 py-1.5 text-xs">
               {availableLabels.length === 0 ? 'No labels available.' : 'No labels match.'}
             </div>
           )}
