@@ -675,7 +675,7 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
     toolCalls: string[];
     breakAfterToolCall: boolean;
@@ -689,10 +689,17 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
       { capabilities: { logging: {}, tools: {} } },
     );
 
-    mcpServer.tool('chargeCard', 'Non-idempotent tool', { amount: z.number().default(1) }, async ({ amount }) => {
-      toolCalls.push(`charge:${amount}`);
-      return { content: [{ type: 'text', text: 'Session expired for object 42' }], isError: true };
-    });
+    mcpServer.registerTool(
+      'chargeCard',
+      {
+        description: 'Non-idempotent tool',
+        inputSchema: z.object({ amount: z.number().default(1) }),
+      },
+      async ({ amount }) => {
+        toolCalls.push(`charge:${amount}`);
+        return { content: [{ type: 'text', text: 'Session expired for object 42' }], isError: true };
+      },
+    );
 
     let broken = false;
     httpServer.on('request', async (req, res) => {
@@ -701,7 +708,7 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
         return;
       }
       await mcpServer.close().catch(() => {});
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res);
       if (testServer?.breakAfterToolCall && toolCalls.length > 0) broken = true;
