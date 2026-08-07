@@ -139,7 +139,7 @@ export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 function attachMcpCallToolContent(
   structuredContent: unknown,
   content: unknown,
-  scalarMcpContentByResult: Map<unknown, unknown>,
+  scalarMcpContentQueue: unknown[],
 ): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
@@ -150,11 +150,11 @@ function attachMcpCallToolContent(
     return structuredContent;
   }
 
-  scalarMcpContentByResult.set(structuredContent, content);
+  scalarMcpContentQueue.push(content);
   return structuredContent;
 }
 
-function getMcpCallToolContent(output: unknown, scalarMcpContentByResult: Map<unknown, unknown>): unknown {
+function getMcpCallToolContent(output: unknown, scalarMcpContentQueue: unknown[]): unknown {
   if (output !== null && typeof output === 'object') {
     const attached = (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
     if (attached !== undefined) {
@@ -162,20 +162,18 @@ function getMcpCallToolContent(output: unknown, scalarMcpContentByResult: Map<un
     }
   }
 
-  if (scalarMcpContentByResult.has(output)) {
-    const content = scalarMcpContentByResult.get(output);
-    scalarMcpContentByResult.delete(output);
-    return content;
+  if (scalarMcpContentQueue.length > 0) {
+    return scalarMcpContentQueue.shift();
   }
 
   return undefined;
 }
 
 function createStructuredToolToModelOutput(
-  scalarMcpContentByResult: Map<unknown, unknown>,
+  scalarMcpContentQueue: unknown[],
 ): (output: unknown) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
   return output => {
-    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output, scalarMcpContentByResult));
+    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output, scalarMcpContentQueue));
     if (modelText !== undefined) {
       return { type: 'text', value: modelText };
     }
@@ -1271,7 +1269,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
-        const scalarMcpContentByResult = new Map<unknown, unknown>();
+        const scalarMcpContentQueue: unknown[] = [];
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1291,7 +1289,7 @@ export class InternalMastraMCPClient extends MastraBase {
             forwardInstructions: this.forwardInstructions,
             instructionsMaxLength: this.instructionsMaxLength,
           },
-          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput(scalarMcpContentByResult) } : {}),
+          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput(scalarMcpContentQueue) } : {}),
           execute: async (
             input: any,
             context?: {
@@ -1346,7 +1344,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
-                  return attachMcpCallToolContent(res.structuredContent, res.content, scalarMcpContentByResult);
+                  return attachMcpCallToolContent(res.structuredContent, res.content, scalarMcpContentQueue);
                 }
 
                 return res;

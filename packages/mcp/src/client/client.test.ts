@@ -1129,6 +1129,49 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       value: 'no data available',
     });
   });
+
+  it('should map authored content to the matching scalar invocation when the same value is returned twice', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'number' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'first zero' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'second zero' }],
+        isError: false,
+      });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+
+    const first = await tool.execute?.({ query: 'first' });
+    const second = await tool.execute?.({ query: 'second' });
+
+    expect(first).toBe(0);
+    expect(second).toBe(0);
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'text', value: 'first zero' });
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'text', value: 'second zero' });
+  });
 });
 
 describe('MastraMCPClient - tools without outputSchema preserve envelope', () => {
