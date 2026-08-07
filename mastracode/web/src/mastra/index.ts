@@ -291,6 +291,11 @@ export const factory = new MastraFactory({
     // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
   },
+  // Per-replica cap on concurrent Factory background dispatches. Unset means
+  // the dispatcher default; invalid and non-positive values are ignored.
+  dispatcher: {
+    maxInFlight: positiveInt(process.env.MASTRACODE_DISPATCH_MAX_IN_FLIGHT),
+  },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB (and
   // pg pool) for all users, separated by `resourceId` scoping. Unset (bare
