@@ -406,10 +406,16 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   const hasOpenAI = Object.values(pack.models).some(modelId => modelId.startsWith('openai/'));
   const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
-  const effectiveThinking = sessionOverride ?? resolveDefaultThinkingLevel(s, currentModeId).level;
-  if (hasOpenAI && effectiveThinking === 'off') {
-    // Bump the global default so OpenAI models don't silently run without
-    // reasoning. Resolution is request-time, so no session override is needed.
+  const defaultThinking = resolveDefaultThinkingLevel(s, currentModeId);
+  const effectiveThinking = sessionOverride ?? defaultThinking.level;
+  if (
+    hasOpenAI &&
+    sessionOverride === undefined &&
+    defaultThinking.source === 'global' &&
+    defaultThinking.level === 'off'
+  ) {
+    // Bump the active global fallback so OpenAI models don't silently run
+    // without reasoning, while preserving explicit session and mode defaults.
     s.preferences.thinkingLevel = 'low';
   } else if (currentModeModel?.startsWith('openai/') && effectiveThinking === 'max') {
     // OpenAI API-key models do not accept the Codex-only `max` effort.
