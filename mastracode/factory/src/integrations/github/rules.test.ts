@@ -1588,6 +1588,36 @@ describe('createGithubPullRequestReconciler', () => {
     ]);
   });
 
+  it('sweeps cards whose URL predates a repository rename via the stamped repository id', async () => {
+    const context = await setup('read');
+    // Renamed repository: the card URL still carries the old owner/name, but
+    // the intake-stamped repository id is stable and confirms ownership.
+    const renamed = await createIssueCard(context, {
+      number: 42,
+      url: 'https://github.com/acme/old-name/issues/42',
+      metadata: { githubRepositoryId: 10 },
+    });
+    // Genuinely foreign card: URL and stamped id both point elsewhere.
+    await createIssueCard(context, {
+      number: 43,
+      url: 'https://github.com/acme/other/issues/43',
+      metadata: { githubRepositoryId: 999 },
+    });
+    const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
+    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
+    expect(fetchIssue).toHaveBeenCalledTimes(1);
+    expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: renamed.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
+      }),
+    ]);
+  });
+
   it('skips terminal issue cards and commits nothing for issues still open', async () => {
     const context = await setup('read');
     await createIssueCard(context, { number: 41, stages: ['done'] });

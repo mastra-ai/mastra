@@ -96,8 +96,10 @@ function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, reposi
   const url = item.externalSource?.url;
   if (url) {
     const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
-    if (match) return match[1] === repositoryFullName;
+    if (match && match[1] === repositoryFullName) return true;
   }
+  // A renamed repository leaves the old owner/name in the card URL, so a URL
+  // mismatch still defers to the stable intake-stamped repository id.
   return item.metadata?.githubRepositoryId === repositoryId;
 }
 
@@ -552,7 +554,10 @@ function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileReposit
   if (url) {
     const match = /^https?:\/\/[^/]+\/(.+)\/issues\/(\d+)(?:[/?#]|$)/.exec(url);
     if (!match) return undefined;
-    return match[1] === repository.fullName ? Number(match[2]) : undefined;
+    // A renamed repository leaves the old owner/name in the card URL, so a
+    // URL mismatch still defers to the stable intake-stamped repository id.
+    const belongs = match[1] === repository.fullName || item.metadata?.githubRepositoryId === repository.id;
+    return belongs ? Number(match[2]) : undefined;
   }
   const externalId = item.externalSource.externalId;
   const legacy = /^github:(\d+):issue:(\d+)$/.exec(externalId);
