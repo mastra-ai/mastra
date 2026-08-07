@@ -713,7 +713,18 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, deniedChunk as ChunkType);
+              const processed = await processChunkThroughOutputProcessors(
+                deniedChunk as ChunkType,
+                registryEntry,
+                pubsub,
+                runId,
+                initData.agentId,
+                logger,
+                messageList,
+              );
+              if (processed) {
+                await emitChunkEvent(pubsub, runId, processed);
+              }
             } catch (emitError) {
               logger?.warn?.(
                 `[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`,
