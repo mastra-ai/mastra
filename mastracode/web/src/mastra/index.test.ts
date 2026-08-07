@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
+import type * as factoryModule from '@mastra/factory';
 import { resolveFactoryGithubRule } from '@mastra/factory/rules/resolve';
+
+const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
+vi.mock('@mastra/factory', async importOriginal => {
+  const actual = await importOriginal<typeof factoryModule>();
+  class TrackedMastraFactory extends actual.MastraFactory {
+    constructor(config: ConstructorParameters<typeof actual.MastraFactory>[0]) {
+      super(config);
+      factoryConfigs.push(config);
+    }
+  }
+  return { ...actual, MastraFactory: TrackedMastraFactory };
+});
 
 /**
  * Smoke test for the platform-deployable entry (`src/mastra/index.ts`).
@@ -29,9 +42,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'WORKOS_COOKIE_PASSWORD',
       'MASTRA_SHARED_API_URL',
       'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');
     }
+    factoryConfigs.length = 0;
     vi.resetModules();
   });
 
@@ -56,6 +71,14 @@ describe('platform entry (src/mastra/index.ts)', () => {
     const apiRoutes = server?.apiRoutes ?? [];
     const paths = apiRoutes.map(r => r.path);
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
+  });
+
+  it('forwards the dispatcher concurrency environment setting to the factory', { timeout: 60_000 }, async () => {
+    vi.stubEnv('MASTRACODE_DISPATCH_MAX_IN_FLIGHT', '7');
+    await import('./index.js');
+
+    expect(factoryConfigs).toHaveLength(1);
+    expect(factoryConfigs[0]?.dispatcher).toEqual({ maxInFlight: 7 });
   });
 
   it('uses the production Factory rules to retriage linked issue updates without moving their stage', async () => {
