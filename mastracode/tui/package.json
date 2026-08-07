@@ -82,6 +82,7 @@
     "render-smoke:install": "node scripts/install-render-smoke-settings.mjs",
     "render-smoke:server": "node scripts/render-smoke-server.mjs",
     "render-smoke:uninstall": "node scripts/uninstall-render-smoke-settings.mjs",
+    "repro:render-churn": "node --expose-gc scripts/repro-render-churn.mjs",
     "test": "vitest",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
