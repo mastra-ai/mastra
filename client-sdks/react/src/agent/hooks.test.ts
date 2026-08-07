@@ -288,6 +288,45 @@ describe('useChat forwards clientTools', () => {
     expect(result.current.isAwaitingToolApproval).toBe(true);
   });
 
+  it('does not enter awaiting-approval state on a generic tool suspension', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-suspend',
+        from: 'AGENT',
+        payload: { messageId: 'msg-suspend' },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-suspend',
+        from: 'AGENT',
+        payload: { toolName: 'askUserTool', toolCallId: 'tool-call-suspend-1', args: { question: 'city?' } },
+      },
+      {
+        type: 'tool-call-suspended',
+        runId: 'run-suspend',
+        from: 'AGENT',
+        payload: { toolName: 'askUserTool', toolCallId: 'tool-call-suspend-1', args: { question: 'city?' } },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.isRunning).toBe(false));
+    // A generic runtime suspend() leaves the composer free to send a follow-up that auto-resumes.
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+  });
+
   it('sends a new message for server-side queueing while waiting for subscription tool approval', async () => {
     nextSubscribeChunks = [
       {
@@ -609,6 +648,44 @@ describe('useChat forwards clientTools', () => {
       });
     });
     expect(result.current.isAwaitingToolApproval).toBe(true);
+  });
+
+  it('does not treat persisted generic suspendedTools as pending approvals on initial load', async () => {
+    const initialMessages = [
+      {
+        id: 'msg-reload-suspend',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [],
+          metadata: {
+            suspendedTools: {
+              'tool-call-reload-suspend': {
+                runId: 'run-reload-suspend',
+                toolCallId: 'tool-call-reload-suspend',
+                toolName: 'askUserTool',
+                args: { question: 'city?' },
+              },
+            },
+          },
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages.length).toBeGreaterThan(0));
+    expect(result.current.isAwaitingToolApproval).toBe(false);
   });
 
   it('drops already-completed pendingToolApprovals from requireApprovalMetadata on initial load', async () => {
