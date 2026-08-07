@@ -1210,6 +1210,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
   readonly #permissionCache = new Map<string, { permission: GithubPermission; expiresAt: number }>();
+  /**
+   * Bumped on `stop()`. An in-flight `#pollThread` captures the value at entry
+   * and abandons sync, persistence, and notification side effects once it goes
+   * stale, so a stopped provider cannot write thread metadata or notify after
+   * shutdown even if a poll was already executing when `stop()` ran.
+   */
+  #pollGeneration = 0;
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
   #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
@@ -1346,6 +1353,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   stopAllPolling(): void {
     for (const state of this.#polling.values()) clearInterval(state.timer);
     this.#polling.clear();
+  }
+
+  /**
+   * Shutdown hook. Per-thread polling lives in this provider's own timer map, not in the base
+   * class's single timer, so the inherited `stop()` would leave those intervals running: a
+   * provider that has been shut down would keep polling GitHub and keep notifying through the
+   * agent it was still connected to.
+   */
+  override stop(): void {
+    super.stop();
+    this.#pollGeneration += 1;
+    this.stopAllPolling();
   }
 
   async pollThreadNow(input: GithubPollingThread): Promise<number> {
@@ -1588,9 +1607,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
     if (state) state.running = true;
     this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: true });
+    const generation = this.#pollGeneration;
+    const stopped = () => generation !== this.#pollGeneration;
 
     try {
       const { threadStore, loadedThread } = await this.#loadThread(input);
+      if (stopped()) return 0;
       const githubMetadata = getGithubMetadata(loadedThread.metadata);
       if (githubMetadata.subscriptions.length === 0) {
         this.stopPollingForThread(input);
@@ -1600,6 +1622,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       const now = new Date().toISOString();
       const subscriptions: GithubPRSubscription[] = [];
       for (const subscription of githubMetadata.subscriptions) {
+        if (stopped()) return 0;
         const syncInput = {
           owner: subscription.owner,
           repo: subscription.repo,
@@ -1677,6 +1700,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
                 subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
         let shouldKeepSubscription = true;
         if (changed && snapshot) {
+          if (stopped()) return 0;
           const notifications = await this.#sendActivityNotifications({
             polling: input,
             subscription,
@@ -1698,6 +1722,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         if (shouldKeepSubscription) subscriptions.push(nextSubscription);
       }
 
+      if (stopped()) return 0;
       await threadStore.saveThread({
         thread: {
           ...loadedThread,
