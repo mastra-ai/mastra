@@ -2687,9 +2687,14 @@ export class DurableAgent<
   }
 
   /**
-   * Clear retained pubsub state for a run's topic (cached history and, for
+   * Clear retained pubsub state for a run's topics (cached history and, for
    * persistent transports, the underlying stream). Fire-and-forget: the
    * `clearTopic` contract is best-effort and non-throwing.
+   *
+   * Clears both the agent stream topic and `workflow.events.v2.<runId>`. The
+   * durable agentic loop runs on the default workflow engine, so the evented
+   * engine's terminal topic cleanup never runs for these runs — without this,
+   * CachingPubSub permanently orphans a no-TTL counter key per completed run.
    *
    * Unlike the evented workflow engine's per-run topic cleanup, this needs no
    * restart guard: cleanup timers arm only on terminal outcomes
@@ -2700,6 +2705,7 @@ export class DurableAgent<
    */
   #clearPubsubTopic(runId: string): void {
     void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+    void this.pubsub.clearTopic(`workflow.events.v2.${runId}`);
   }
 
   /**
