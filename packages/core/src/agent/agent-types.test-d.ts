@@ -291,18 +291,28 @@ describe('Agent Type Tests', () => {
     // the fix these object literals fail excess-property checking.
     const agent = new Agent({ id: 'a', name: 'A', model: {} as any, instructions: 'hi' });
 
-    it('accepts `model` on approveToolCall / declineToolCall (stream)', () => {
+    it('accepts `model` and `reason` on approveToolCall / declineToolCall (stream)', () => {
       const approve: Parameters<typeof agent.approveToolCall>[0] = { runId: 'r', model: {} as any };
-      const decline: Parameters<typeof agent.declineToolCall>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCall>[0] = {
+        runId: 'r',
+        reason: 'rejection reason',
+        model: {} as any,
+      };
       assertType<string>(approve.runId);
       assertType<string>(decline.runId);
+      assertType<string | undefined>(decline.reason);
     });
 
-    it('accepts `model` on approveToolCallGenerate / declineToolCallGenerate (generate)', () => {
+    it('accepts `model` and `reason` on approveToolCallGenerate / declineToolCallGenerate (generate)', () => {
       const approve: Parameters<typeof agent.approveToolCallGenerate>[0] = { runId: 'r', model: {} as any };
-      const decline: Parameters<typeof agent.declineToolCallGenerate>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCallGenerate>[0] = {
+        runId: 'r',
+        reason: 'rejection reason',
+        model: {} as any,
+      };
       assertType<string>(approve.runId);
       assertType<string>(decline.runId);
+      assertType<string | undefined>(decline.reason);
     });
   });
 });

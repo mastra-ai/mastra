@@ -559,6 +559,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               .describe(
                 'Controls if the tool call is approved or not, should be true when approved and false when declined',
               ),
+            reason: z.string().optional().describe('Reason for declining the tool call'),
           }),
         );
 
@@ -628,7 +629,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 approval: {
                   id: inputData.toolCallId,
                   approved: false,
-                  reason: 'Tool call was not approved by the user',
+                  reason: resumeData.reason || 'Tool call was not approved by the user',
                 },
                 ...inputData,
               };
@@ -699,19 +700,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     toolCallId: inputData.toolCallId,
                     toolName: inputData.toolName,
                     args: inputData.args,
-                    resumeSchema: JSON.stringify(
-                      standardSchemaToJSONSchema(
-                        toStandardSchema(
-                          z.object({
-                            approved: z
-                              .boolean()
-                              .describe(
-                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                              ),
-                          }),
-                        ),
-                      ),
-                    ),
+                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                   },
                 },
                 'approval',
@@ -729,19 +718,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 type: 'approval',
                 suspendedToolRunId: options.runId,
-                resumeSchema: JSON.stringify(
-                  standardSchemaToJSONSchema(
-                    toStandardSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                      }),
-                    ),
-                  ),
-                ),
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                 metadata: approvalChunk.metadata,
               });
 

@@ -70,6 +70,15 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
     .optional(),
 });
 
+const APPROVAL_RESUME_SCHEMA = JSON.stringify({
+  type: 'object',
+  properties: {
+    approved: { type: 'boolean' },
+    reason: { type: 'string' },
+  },
+  required: ['approved'],
+});
+
 /**
  * Flush messages to memory before suspending.
  * Mirrors the base Agent's flushMessagesBeforeSuspension() to ensure
@@ -618,13 +627,7 @@ export function createDurableToolCallStep() {
       };
 
       if (requiresApproval && !resumeData) {
-        const resumeSchema = JSON.stringify({
-          type: 'object',
-          properties: {
-            approved: { type: 'boolean' },
-          },
-          required: ['approved'],
-        });
+        const resumeSchema = APPROVAL_RESUME_SCHEMA;
 
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
@@ -696,7 +699,7 @@ export function createDurableToolCallStep() {
             approval: {
               id: toolCallId,
               approved: false,
-              reason: 'Tool call was not approved by the user',
+              reason: (resumeData as { reason?: string }).reason || 'Tool call was not approved by the user',
             },
           };
         }
@@ -839,13 +842,7 @@ export function createDurableToolCallStep() {
               : undefined;
           if (suspendOptions?.requireToolApproval) {
             // Tool is requesting approval during execution
-            const approvalResumeSchema = JSON.stringify({
-              type: 'object',
-              properties: {
-                approved: { type: 'boolean' },
-              },
-              required: ['approved'],
-            });
+            const approvalResumeSchema = APPROVAL_RESUME_SCHEMA;
 
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
