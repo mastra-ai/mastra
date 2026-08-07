@@ -30,6 +30,17 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
   return itemNumber;
 }
 
+export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
+
+export function pullRequestStatusForItem(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
+  if (item.metadata.merged === true) return 'merged';
+  if (item.metadata.state === 'closed') return 'closed';
+  if (item.metadata.state === 'open') return item.metadata.draft === true ? 'draft' : 'open';
+  if (item.stages.includes('done')) return 'merged';
+  if (item.stages.includes('canceled')) return 'closed';
+  return item.metadata.draft === true ? 'draft' : 'open';
+}
+
 export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
   const itemNumber = githubNumberForItem(item);
   if (itemNumber === undefined) return;
