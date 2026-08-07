@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
+import type { MCPToolExecutionContext } from '../../../tools';
 import { LocalSandbox, Workspace } from '../../../workspace';
 import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
@@ -388,7 +389,7 @@ describe('DurableAgent', () => {
   });
 
   describe('globalRunRegistry', () => {
-    it('should populate globalRunRegistry in prepare() for consistency with stream()', async () => {
+    it('stores in-process execution context in globalRunRegistry during prepare()', async () => {
       const mockModel = new MockLanguageModelV2({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
@@ -407,8 +408,17 @@ describe('DurableAgent', () => {
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const mcp: MCPToolExecutionContext = {
+        extra: {
+          signal: new AbortController().signal,
+          requestId: 'request-1',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        },
+        elicitation: { sendRequest: vi.fn() },
+      };
 
-      const result = await durableAgent.prepare('Hello!');
+      const result = await durableAgent.prepare('Hello!', { mcp });
 
       // globalRunRegistry should have the entry (matching stream() behavior)
       expect(globalRunRegistry.has(result.runId)).toBe(true);
@@ -416,6 +426,8 @@ describe('DurableAgent', () => {
       const entry = globalRunRegistry.get(result.runId);
       expect(entry).toBeDefined();
       expect(entry!.model).toBeDefined();
+      expect(entry!.mcp).toBe(mcp);
+      expect(result.workflowInput.options).not.toHaveProperty('mcp');
 
       // Cleanup
       globalRunRegistry.delete(result.runId);
