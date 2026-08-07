@@ -4,6 +4,7 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '@mastra/code-sdk/utils/errors';
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
@@ -117,4 +118,42 @@ export function notify(state: TUIState, reason: NotificationReason, message?: st
     message,
     hookManager: state.hookManager,
   });
+}
+
+/**
+ * Fire the notification for an input-request event the moment it is received,
+ * before the event enters the TUI's serialized dispatch queue. A pending prompt
+ * blocks that queue until the user answers, so any notify call living inside a
+ * queued handler is starved exactly when the user has walked away. This helper
+ * runs synchronously in the controller subscription listener instead.
+ *
+ * Non-input-request events are a no-op. Never throws: a notification failure
+ * must not break event delivery.
+ */
+export function notifyForInputRequest(state: TUIState, event: AgentControllerEvent): void {
+  try {
+    if (event.type === 'tool_approval_required') {
+      notify(state, 'tool_approval', `Approve ${event.toolName}?`);
+      return;
+    }
+    if (event.type === 'tool_suspended') {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      // Sandbox check first, mirroring the dispatch routing order.
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        notify(state, 'sandbox_access', `Sandbox access requested: ${String(payload.path ?? '')}`);
+      } else if (event.toolName === 'ask_user') {
+        notify(state, 'ask_question', String(payload.question ?? ''));
+      } else if (event.toolName === 'submit_plan') {
+        const planPath = String(payload.path ?? '');
+        notify(
+          state,
+          'plan_approval',
+          planPath ? `Plan "${planPath}" requires approval` : 'Plan requires your approval',
+        );
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[notify error] ${msg}\n`);
+  }
 }
