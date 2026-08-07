@@ -104,7 +104,8 @@ export type ToolDisplay = 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' |
  * result, error, approval). Returns either a postable message (closes the
  * streaming session if open, posts/edits the message, then reopens on the
  * next chunk), a streaming chunk (pushed into the streaming session — opens
- * one lazily if needed), or `undefined` to skip the event.
+ * one lazily if needed unless `openIfEmpty` is `false`), or `undefined` to
+ * skip the event.
  *
  * In static drivers (`streaming: false`), returning `{ kind: 'stream' }`
  * flattens the chunk to a plain-text fallback message.
@@ -173,7 +174,18 @@ export interface ToolDisplayContext {
 /** Return value from a {@link ToolDisplayFn}. */
 export type ToolDisplayResult =
   | { kind: 'post'; message: PostableMessage }
-  | { kind: 'stream'; chunk: StreamChunk }
+  | {
+      kind: 'stream';
+      chunk: StreamChunk;
+      /**
+       * Whether this result may open a streaming session when none is active.
+       * Set to `false` for chunks that only apply to an existing session.
+       * Ignored by the static driver.
+       *
+       * @default true
+       */
+      openIfEmpty?: boolean;
+    }
   | undefined
   | void;
 

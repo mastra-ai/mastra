@@ -11,6 +11,7 @@ import {
   migrateLegacyVariedPack,
   parseCustomProviders,
   parseThreadSettings,
+  resolveDefaultThinkingLevel,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
@@ -32,6 +33,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     models: {
       activeModelPackId: 'anthropic',
       modeDefaults: {},
+      modeThinkingDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
       observerModelOverride: null,
@@ -693,6 +695,58 @@ describe('resolveThreadActiveModelPackId', () => {
     });
 
     expect(resolved).toBeNull();
+  });
+});
+
+describe('resolveDefaultThinkingLevel', () => {
+  it('returns the mode default when set for the mode', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, modeThinkingDefaults: { build: 'high' } },
+      preferences: { ...createSettings().preferences, thinkingLevel: 'low' },
+    });
+
+    expect(resolveDefaultThinkingLevel(settings, 'build')).toEqual({ level: 'high', source: 'mode-default' });
+  });
+
+  it('falls back to the global default when the mode has no entry', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, modeThinkingDefaults: { build: 'high' } },
+      preferences: { ...createSettings().preferences, thinkingLevel: 'low' },
+    });
+
+    expect(resolveDefaultThinkingLevel(settings, 'plan')).toEqual({ level: 'low', source: 'global' });
+  });
+
+  it('falls back to the global default when no mode is provided', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, modeThinkingDefaults: { build: 'max' } },
+      preferences: { ...createSettings().preferences, thinkingLevel: 'medium' },
+    });
+
+    expect(resolveDefaultThinkingLevel(settings, null)).toEqual({ level: 'medium', source: 'global' });
+    expect(resolveDefaultThinkingLevel(settings)).toEqual({ level: 'medium', source: 'global' });
+  });
+
+  it('round-trips modeThinkingDefaults through save/load and drops invalid levels', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-settings-'));
+    const path = join(dir, 'settings.json');
+    try {
+      writeFileSync(
+        path,
+        JSON.stringify({
+          models: { modeThinkingDefaults: { build: 'high', plan: 'nonsense', fast: 'max' } },
+        }),
+      );
+
+      const loaded = loadSettings(path);
+      expect(loaded.models.modeThinkingDefaults).toEqual({ build: 'high', fast: 'max' });
+
+      loaded.models.modeThinkingDefaults = { plan: 'xhigh' };
+      saveSettings(loaded, path);
+      expect(loadSettings(path).models.modeThinkingDefaults).toEqual({ plan: 'xhigh' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

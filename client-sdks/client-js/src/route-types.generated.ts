@@ -19947,7 +19947,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   settings?:
     | {
         yolo: boolean;
-        thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+        thinkingLevel?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') | undefined;
         notifications: 'off' | 'bell' | 'system' | 'both';
         smartEditing: boolean;
       }

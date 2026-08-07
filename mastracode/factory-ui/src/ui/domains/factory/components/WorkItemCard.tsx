@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ArrowUpRight,
-  CircleDot,
   EllipsisVertical,
   Link2,
   MessageSquare,
@@ -19,7 +18,14 @@ import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { setDragPayload } from '../boardDrag';
-import { externalLinkLabel, itemThreadSession, liveSessions, metadataLabels, workItemMeta } from '../boardItems';
+import {
+  externalLinkLabel,
+  itemThreadSession,
+  liveSessions,
+  metadataLabels,
+  pullRequestStatusForItem,
+  workItemMeta,
+} from '../boardItems';
 import { RUN_PHASE_LABELS, itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
@@ -30,8 +36,9 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, PullRequestStatusIcon, SOURCE_ICONS } from './BoardIcons';
+import { BoardStageIcon, SourceIcon } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
 function decisionStatusText(decision: FactoryDecisionSummary): string {
@@ -57,6 +64,7 @@ export function WorkItemCard({
   pendingRunRoles,
   onCreateSession,
   onStartRun,
+  onRestartRun,
   onMove,
   onRemove,
 }: {
@@ -79,14 +87,12 @@ export function WorkItemCard({
   /** Card click fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
+  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? {
-    icon: CircleDot,
-    className: 'text-icon3',
-  };
   const evaluating = evaluatingStage !== undefined;
   const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -95,6 +101,16 @@ export function WorkItemCard({
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === undefined ? [] : runSpec.actions.filter(action => !(action.role in sessions));
   const defaultRunAction = runActions[0];
+  // A Done-lane PR that's still open likely picked up commits after its
+  // review; offer a manual re-review even though the review slot is used. The
+  // run re-enters Reviewing and follows up in the existing thread.
+  const reReviewAction =
+    columnStage === 'done' &&
+    item.source === 'github-pr' &&
+    ['open', 'draft'].includes(pullRequestStatusForItem(item)) &&
+    runSpec !== undefined
+      ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
+      : undefined;
   const threadSession = itemThreadSession(sessions);
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
@@ -176,6 +192,15 @@ export function WorkItemCard({
                     </DropdownMenu.Item>
                   );
                 })}
+              {runSpec !== undefined && reReviewAction !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || pendingRunRoles.has(reReviewAction.role)}
+                  onClick={() => onRestartRun(runSpec, reReviewAction)}
+                >
+                  {actionIcon(reReviewAction.label)}
+                  <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
               {item.url !== null && (
                 <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
                   <ArrowUpRight aria-hidden />
@@ -201,9 +226,9 @@ export function WorkItemCard({
           <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
           <div className="flex min-w-0 items-center gap-1.5">
             {item.source === 'github-pr' ? (
-              <PullRequestStatusIcon item={item} />
+              <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
             ) : (
-              <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+              <SourceIcon source={item.source} />
             )}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />

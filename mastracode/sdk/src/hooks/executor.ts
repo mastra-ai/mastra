@@ -21,6 +21,12 @@ export async function executeHook(hook: HookDefinition, stdinPayload: HookStdin)
     const child = spawn(shell, shellArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: stdinPayload.cwd,
+      // Without this, Node's default Windows argument escaping re-quotes
+      // hook.command before cmd.exe ever sees it, so a quoted path (or any
+      // path containing spaces) reaches the child process with literal "
+      // characters embedded in it. mastracode/tui's shell-runner.ts already
+      // sets this for its own cmd invocations; this call site just missed it.
+      ...(isWindows ? { windowsVerbatimArguments: true } : {}),
       env: {
         ...process.env,
         MASTRA_HOOK_EVENT: stdinPayload.hook_event_name,
