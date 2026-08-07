@@ -197,82 +197,31 @@ export class InMemoryMemory extends MemoryStorage {
     if (include && include.length > 0) {
       for (const includeItem of include) {
         const targetMessage = this.db.messages.get(includeItem.id);
-        if (targetMessage) {
-          // Convert StorageMessageType to MastraDBMessage
-          const convertedMessage = {
-            id: targetMessage.id,
-            threadId: targetMessage.thread_id,
-            content: safelyParseJSON(targetMessage.content),
-            role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: targetMessage.type,
-            createdAt: targetMessage.createdAt,
-            resourceId: targetMessage.resourceId,
-          } as MastraDBMessage;
+        // The target thread is discovered from the message itself so cross-thread
+        // includes work, but the resource scope of the query is always honoured.
+        if (!targetMessage) continue;
+        if (optionalResourceId && targetMessage.resourceId !== optionalResourceId) continue;
 
-          // Only add if not already in messages array (deduplication)
-          if (!messageIds.has(convertedMessage.id)) {
-            messages.push(convertedMessage);
-            messageIds.add(convertedMessage.id);
-          }
+        // The target message and its neighbours, scoped to the target's own thread
+        // and to the requested resource when one was given.
+        const contextWindow = Array.from(this.db.messages.values())
+          .filter(
+            msg =>
+              msg.thread_id === targetMessage.thread_id &&
+              (!optionalResourceId || msg.resourceId === optionalResourceId),
+          )
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-          // Add previous messages if requested
-          if (includeItem.withPreviousMessages) {
-            const allThreadMessages = Array.from(this.db.messages.values())
-              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        const targetIndex = contextWindow.findIndex(msg => msg.id === includeItem.id);
+        if (targetIndex === -1) continue;
 
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
-              for (let i = startIndex; i < targetIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messageIds.has(message.id)) {
-                  const convertedPrevMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraDBMessage;
-                  messages.push(convertedPrevMessage);
-                  messageIds.add(message.id);
-                }
-              }
-            }
-          }
+        const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages ?? 0));
+        const endIndex = targetIndex + (includeItem.withNextMessages ?? 0) + 1;
 
-          // Add next messages if requested
-          if (includeItem.withNextMessages) {
-            const allThreadMessages = Array.from(this.db.messages.values())
-              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const endIndex = Math.min(
-                allThreadMessages.length,
-                targetIndex + (includeItem.withNextMessages || 0) + 1,
-              );
-              for (let i = targetIndex + 1; i < endIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messageIds.has(message.id)) {
-                  const convertedNextMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraDBMessage;
-                  messages.push(convertedNextMessage);
-                  messageIds.add(message.id);
-                }
-              }
-            }
-          }
+        for (const message of contextWindow.slice(startIndex, endIndex)) {
+          if (messageIds.has(message.id)) continue;
+          messages.push(this.parseStoredMessage(message));
+          messageIds.add(message.id);
         }
       }
     }
