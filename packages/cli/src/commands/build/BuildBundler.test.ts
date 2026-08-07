@@ -93,7 +93,7 @@ describe('BuildBundler', () => {
       });
     });
 
-    it('optimizes dependencies when a bundler config omits externals', async () => {
+    it('defaults externals to true when a bundler config omits externals', async () => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({ sourcemap: true });
       const { BuildBundler } = await import('./BuildBundler');
@@ -103,8 +103,8 @@ describe('BuildBundler', () => {
 
       expect(options).toEqual({
         sourcemap: true,
+        externals: true,
       });
-      expect(options.externals).toBeUndefined();
     });
 
     it('preserves explicit externals true in a custom bundler config', async () => {
@@ -120,6 +120,26 @@ describe('BuildBundler', () => {
 
       expect(options).toEqual({
         externals: true,
+        sourcemap: true,
+      });
+    });
+
+    it.each([
+      { label: 'false', externals: false },
+      { label: 'an empty array', externals: [] },
+    ])('preserves explicit externals $label in a custom bundler config', async ({ externals }) => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals,
+        sourcemap: true,
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toEqual({
+        externals,
         sourcemap: true,
       });
     });

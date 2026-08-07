@@ -22,7 +22,7 @@ export class BuildBundler extends Bundler {
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
 
-    if (!bundlerOptions?.[IS_DEFAULT]) {
+    if (!bundlerOptions?.[IS_DEFAULT] && bundlerOptions?.externals !== undefined) {
       return bundlerOptions;
     }
 
