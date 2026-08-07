@@ -58,6 +58,7 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from './session-subscriptions.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
+import type { GithubVerifiedWebhookObserver } from './webhook.js';
 
 type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
   ? TInput
@@ -143,6 +144,8 @@ export interface GithubIntegrationConfig {
    * replica-stable OAuth/install `state` secret (see `./config.ts`).
    */
   webhookSecret?: string;
+  /** Trusted control-plane consumers of every signature-verified delivery. */
+  verifiedWebhookObservers?: readonly GithubVerifiedWebhookObserver[];
 }
 
 /** Human-readable names of the required config fields, for construction errors. */
@@ -316,6 +319,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #clientSecret: string;
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
+  readonly #verifiedWebhookObservers: readonly GithubVerifiedWebhookObserver[];
   #storage: IntegrationContext['storage'] | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
 
@@ -334,6 +338,7 @@ export class GithubIntegration implements FactoryIntegration {
     this.#clientSecret = config.clientSecret;
     this.#slug = config.slug;
     this.#webhookSecret = config.webhookSecret || undefined;
+    this.#verifiedWebhookObservers = [...(config.verifiedWebhookObservers ?? [])];
   }
 
   /** App slug — the URL name used to build the install URL. */
@@ -1099,6 +1104,7 @@ export class GithubIntegration implements FactoryIntegration {
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
+      verifiedWebhookObservers: this.#verifiedWebhookObservers,
     });
   }
 

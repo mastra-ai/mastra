@@ -20,7 +20,11 @@ export interface GithubWebhookHandlerOptions {
   github: GithubIntegration;
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  /** Receives every signature-verified delivery, including unsupported event types. */
+  verifiedWebhookObservers?: readonly GithubVerifiedWebhookObserver[];
 }
+
+export type GithubVerifiedWebhookObserver = (event: ParsedGithubWebhook) => Promise<void>;
 
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'issues',
@@ -485,6 +489,8 @@ export async function handleGithubWebhook(
 ): Promise<GithubWebhookResult> {
   const parsed = await parseGithubWebhook(c, options.github.webhookSecret);
   if ('status' in parsed) return parsed;
+
+  await Promise.all((options.verifiedWebhookObservers ?? []).map(observer => observer(parsed)));
 
   if (!SUPPORTED_GITHUB_WEBHOOK_EVENTS.has(parsed.event)) {
     return { status: 202, body: { ok: true, ignored: true } };
