@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@daytonaio/sdk": "^0.143.0"
+    "@daytonaio/sdk": "^0.200.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

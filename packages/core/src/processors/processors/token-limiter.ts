@@ -3,7 +3,7 @@ import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
-import type { ProcessInputStepArgs, Processor } from '../index';
+import type { ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -56,6 +56,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
   private static readonly TOKENS_PER_CONVERSATION = 24;
+
+  /**
+   * Chunk types carrying generated output visible to the caller. Only these are
+   * counted against the limit, and only these are withheld once it is reached.
+   * Lifecycle chunks (`step-start`, response metadata), reasoning deltas and
+   * tool traffic are neither counted nor withheld.
+   */
+  private static readonly OUTPUT_CHUNK_TYPES = new Set<ChunkType['type']>(['text-delta', 'object']);
 
   constructor(options: number | TokenLimiterOptions) {
     if (typeof options === 'number') {
@@ -253,38 +261,44 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     return total;
   }
 
-  async processOutputStream(args: {
-    part: ChunkType;
-    streamParts: ChunkType[];
-    state: Record<string, any>;
-    abort: (reason?: string) => never;
-  }): Promise<ChunkType | null> {
+  async processOutputStream(args: ProcessOutputStreamArgs<TokenLimiterTripWireMetadata>): Promise<ChunkType | null> {
     // Always process output streams (this is the main/original functionality)
-    const { part, state, abort } = args;
+    const { part, state, abort, writer } = args;
     const limit = this.maxTokens;
 
-    // Initialize currentTokens in state if not present
-    if (state.currentTokens === undefined) {
-      state.currentTokens = 0;
+    // Chunks that don't carry generated output pass through untouched: counting
+    // them would spend the budget on payloads the caller never sees (a single
+    // `step-start` embeds the whole request body), and withholding them breaks
+    // the run (a withheld `tool-call` is never executed by the agentic loop).
+    if (!TokenLimiterProcessor.OUTPUT_CHUNK_TYPES.has(part.type)) {
+      return part;
     }
 
     // Count tokens in the current part
     const chunkTokens = await this.countTokensInChunk(part);
-
-    if (this.countMode === 'cumulative') {
-      // Add to cumulative count
-      state.currentTokens += chunkTokens;
-    } else {
-      // Only check the current part
-      state.currentTokens = chunkTokens;
-    }
+    const previousTokens = typeof state.currentTokens === 'number' ? state.currentTokens : 0;
+    const currentTokens = this.countMode === 'cumulative' ? previousTokens + chunkTokens : chunkTokens;
+    state.currentTokens = currentTokens;
 
     // Check if we've exceeded the limit
-    if (state.currentTokens > limit) {
+    if (currentTokens > limit) {
       if (this.strategy === 'abort') {
-        abort(`Token limit of ${limit} exceeded (current: ${state.currentTokens})`);
+        abort(`Token limit of ${limit} exceeded (current: ${currentTokens})`);
       } else {
-        // truncate strategy - don't emit this part
+        // truncate strategy - don't emit this part, but tell the caller once that
+        // output is being withheld so truncation isn't silent
+        if (!state.limitReachedNotified) {
+          state.limitReachedNotified = true;
+          try {
+            await writer?.custom({
+              type: 'data-token-limit-reached',
+              data: { processorId: this.id, limit, tokens: currentTokens },
+              transient: true,
+            });
+          } catch {
+            // never let the notification break the stream
+          }
+        }
         // If we're in part mode, reset the count for next part
         if (this.countMode === 'part') {
           state.currentTokens = 0;
@@ -313,32 +327,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       // This is similar to how the memory processor handles object content
       const objectString = JSON.stringify(part.object);
       return this.countTokens(objectString);
-    } else if (part.type === 'tool-call') {
-      // For tool-call chunks, count tool name and args
-      let tokenString = part.payload.toolName;
-      if (part.payload.args) {
-        if (typeof part.payload.args === 'string') {
-          tokenString += part.payload.args;
-        } else {
-          tokenString += JSON.stringify(part.payload.args);
-        }
-      }
-      return this.countTokens(tokenString);
-    } else if (part.type === 'tool-result') {
-      // For tool-result chunks, count the result
-      let tokenString = '';
-      if (part.payload.result !== undefined) {
-        if (typeof part.payload.result === 'string') {
-          tokenString += part.payload.result;
-        } else {
-          tokenString += JSON.stringify(part.payload.result);
-        }
-      }
-      return this.countTokens(tokenString);
-    } else {
-      // For other part types, count the JSON representation
-      return this.countTokens(JSON.stringify(part));
     }
+
+    // Anything else carries no generated output and is not counted
+    return 0;
   }
 
   /**
