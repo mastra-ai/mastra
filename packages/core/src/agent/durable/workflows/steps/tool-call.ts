@@ -506,13 +506,16 @@ export function createDurableToolCallStep() {
         resumeSchema?: string;
         suspendPayload?: unknown;
         delegatedRunId?: string;
+        approvalToolName?: string;
+        approvalArgs?: unknown;
       }) => {
         if (!messageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,
-          toolName,
-          args,
+          toolName: opts.approvalToolName ?? toolName,
+          args: opts.approvalArgs ?? args,
+          ...(opts.approvalToolName ? { parentToolName: toolName, parentArgs: args } : {}),
           type: opts.type,
           // `runId` is the outer resumable durable run. When a delegated
           // sub-agent/workflow suspends, its inner suspended run is preserved
@@ -590,7 +593,7 @@ export function createDurableToolCallStep() {
           return (
             !!meta?.[metadataKey]?.[toolCallId] ||
             Object.values(meta?.[metadataKey] ?? {}).some(
-              (e: any) => e?.toolCallId === toolCallId || e?.toolName === toolName,
+              (e: any) => e?.toolCallId === toolCallId || e?.parentToolName === toolName || e?.toolName === toolName,
             )
           );
         });
@@ -605,7 +608,9 @@ export function createDurableToolCallStep() {
         const key = entries[toolCallId]
           ? toolCallId
           : (Object.keys(entries).find(k => entries[k]?.toolCallId === toolCallId) ??
-            Object.keys(entries).find(k => entries[k]?.toolName === toolName) ??
+            Object.keys(entries).find(
+              k => entries[k]?.parentToolName === toolName || entries[k]?.toolName === toolName,
+            ) ??
             (entries[toolName] ? toolName : undefined));
         if (key) {
           delete entries[key];
@@ -872,6 +877,16 @@ export function createDurableToolCallStep() {
               ? suspendOptions.runId
               : undefined;
           if (suspendOptions?.requireToolApproval) {
+            const innerApproval =
+              typeof suspendOptions.requireToolApproval === 'object' && suspendOptions.requireToolApproval
+                ? suspendOptions.requireToolApproval
+                : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
+                  ? suspendPayload.requireToolApproval
+                  : null;
+
+            const approvalToolName = innerApproval?.toolName ?? toolName;
+            const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : args;
+
             // Tool is requesting approval during execution
             const approvalResumeSchema = JSON.stringify({
               type: 'object',
@@ -888,31 +903,41 @@ export function createDurableToolCallStep() {
                 type: 'tool-call-approval',
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema },
+                payload: {
+                  toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                  resumeSchema: approvalResumeSchema,
+                },
               });
             }
 
             if (pubsub) {
               await emitSuspendedEvent(pubsub, runId, {
                 toolCallId,
-                toolName,
-                args,
+                toolName: approvalToolName,
+                args: approvalArgs,
                 type: 'approval',
                 resumeSchema: approvalResumeSchema,
               });
             }
 
             // Add approval metadata to message before persisting
-            addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema, delegatedRunId });
+            addToolMetadata({
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+              delegatedRunId,
+              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
+            });
 
             await doFlush();
 
-            endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
+            endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
 
             return suspend(
               {
                 type: 'approval',
-                requireToolApproval: { toolCallId, toolName, args },
+                requireToolApproval: { toolCallId, toolName: approvalToolName, args: approvalArgs },
                 // Persist the inner suspended run id in the workflow snapshot,
                 // partitioned per tool call (resumeLabel = toolCallId), so the
                 // resume leg can recover it even if message metadata is stale.

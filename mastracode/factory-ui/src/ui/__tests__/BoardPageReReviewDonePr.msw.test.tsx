@@ -180,9 +180,7 @@ describe('Re-review action for open PRs in Done', () => {
 
     await waitForMutationsIdle(client);
     expect(startRequests).toHaveLength(1);
-    expect(router.state.location.pathname).toBe(
-      `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${NEW_THREAD_ID}`,
-    );
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review`);
     expect(startRequests[0]).toMatchObject({
       sessionId: SESSION_ID,
       destinationStage: 'review',

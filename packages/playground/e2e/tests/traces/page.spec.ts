@@ -2,14 +2,14 @@ import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb, expectRouteDocsLink } from '../__utils__/route-header';
 
-test.describe('Observability traces page', () => {
+test.describe('Traces page', () => {
   test.afterEach(async () => {
     await resetStorage();
   });
 
-  test.describe('when the observability page is visited', () => {
+  test.describe('when the traces page is visited', () => {
     test('shows the page header and docs link', async ({ page }) => {
-      await page.goto('/observability');
+      await page.goto('/traces');
 
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectCurrentBreadcrumb(page, 'Traces');
@@ -21,7 +21,7 @@ test.describe('Observability traces page', () => {
     });
 
     test('shows the filter dropdown', async ({ page }) => {
-      await page.goto('/observability');
+      await page.goto('/traces');
 
       // The unified filter dropdown button should be present
       const filterButton = page.getByRole('button', { name: 'Filter' });
@@ -29,7 +29,7 @@ test.describe('Observability traces page', () => {
     });
 
     test('renders the empty state or traces list with the default date preset', async ({ page }) => {
-      await page.goto('/observability');
+      await page.goto('/traces');
 
       // We check that the page has loaded and the traces tools are visible
       // The date preset dropdown defaults to "Last 24 hours"
@@ -39,7 +39,7 @@ test.describe('Observability traces page', () => {
 
   test.describe('when a scorer link is followed from a trace', () => {
     test.skip('opens the scorer detail page focused on the selected score', async ({ page }) => {
-      await page.goto('/observability');
+      await page.goto('/traces');
 
       const firstTraceRow = page.locator('main li button').first();
       await expect(firstTraceRow).toBeVisible();
