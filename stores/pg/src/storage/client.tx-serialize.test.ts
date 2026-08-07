@@ -94,6 +94,23 @@ describe('TransactionClient COMMIT/ROLLBACK drain', () => {
     expect(statements).toEqual(['BEGIN', 'SLOW2', 'COMMIT']);
   });
 
+  it('rolls back when a fire-and-forget query fails', async () => {
+    const { client, statements } = createStrictClient();
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool;
+    const adapter = new PoolAdapter(pool);
+
+    await expect(
+      adapter.tx(async t => {
+        void t.none('FAIL1');
+        return 'ok';
+      }),
+    ).rejects.toThrow('FAIL1');
+
+    expect(statements).toEqual(['BEGIN', 'FAIL1', 'ROLLBACK']);
+  });
+
   it('PinnedClientAdapter also drains before ROLLBACK', async () => {
     const { client, statements } = createStrictClient();
     const pool = {} as Pool;
@@ -108,5 +125,20 @@ describe('TransactionClient COMMIT/ROLLBACK drain', () => {
     ).rejects.toThrow('FAIL1');
 
     expect(statements).toEqual(['BEGIN', 'FAIL1', 'SLOW2', 'ROLLBACK']);
+  });
+
+  it('PinnedClientAdapter rolls back when a fire-and-forget query fails', async () => {
+    const { client, statements } = createStrictClient();
+    const pool = {} as Pool;
+    const adapter = new PinnedClientAdapter(pool, client);
+
+    await expect(
+      adapter.tx(async t => {
+        void t.none('FAIL1');
+        return 'ok';
+      }),
+    ).rejects.toThrow('FAIL1');
+
+    expect(statements).toEqual(['BEGIN', 'FAIL1', 'ROLLBACK']);
   });
 });

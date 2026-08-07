@@ -173,8 +173,9 @@ export class PoolAdapter implements DbClient {
         return result;
       } catch (error) {
         // Drain before ROLLBACK: Promise.all in batch() rejects on the first
-        // failure while later enqueued queries may still be running.
-        await txClient.drain();
+        // failure while later enqueued queries may still be running. Preserve
+        // the callback/drain error that caused this catch.
+        await txClient.drain().catch(() => undefined);
         try {
           await client.query('ROLLBACK');
         } catch (rollbackError) {
@@ -205,23 +206,34 @@ class TransactionClient implements TxClient {
    * Serialization tail. Without this gate, concurrent t.none()/t.query()
    * from Promise.all / batch land on the same PoolClient at once.
    */
-  #tail: Promise<unknown> = Promise.resolve();
+  #tail: Promise<void> = Promise.resolve();
+  #error: { value: unknown } | undefined;
 
   constructor(private readonly client: PoolClient) {}
 
   #enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const next = this.#tail.then(fn, fn);
-    this.#tail = next.catch(() => undefined);
+    const next = this.#tail.then(fn);
+    this.#tail = next.then(
+      () => undefined,
+      error => {
+        this.#error ??= { value: error };
+      },
+    );
     return next;
   }
 
   /**
-   * Wait until every enqueued query has settled.
+   * Wait until every enqueued query has settled and surface the first failure.
    * PoolAdapter calls this before COMMIT/ROLLBACK so those control
    * statements never overlap in-flight work on the same client.
    */
   async drain(): Promise<void> {
     await this.#tail;
+    if (this.#error) {
+      const { value } = this.#error;
+      this.#error = undefined;
+      throw value;
+    }
   }
 
   none(query: string, values?: QueryValues): Promise<null> {
