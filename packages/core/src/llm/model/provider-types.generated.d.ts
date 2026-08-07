@@ -4777,6 +4777,18 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.6',
   ];
   readonly sakana: readonly ['fugu', 'fugu-ultra', 'fugu-ultra-20260615'];
+  readonly sambanova: readonly [
+    'gpt-oss-120b',
+    'DeepSeek-V3.1',
+    'DeepSeek-R1-0528',
+    'DeepSeek-R1-Distill-Llama-70B',
+    'DeepSeek-V3-0324',
+    'Llama-4-Maverick-17B-128E-Instruct',
+    'Llama-3.3-Swallow-70B-Instruct-v0.4',
+    'Meta-Llama-3.3-70B-Instruct',
+    'Meta-Llama-3.1-8B-Instruct',
+    'Qwen3-32B',
+  ];
   readonly mixlayer: readonly [
     'qwen/qwen3.5-122b-a10b',
     'qwen/qwen3.5-27b',

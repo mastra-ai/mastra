@@ -113,6 +113,11 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
     url: 'https://api.moonshot.cn/anthropic/v1',
     npm: '@ai-sdk/anthropic',
   },
+  // SambaNova uses OpenAI-compatible API with their own SDK package
+  sambanova: {
+    url: 'https://api.sambanova.ai/v1',
+    npm: 'sambanova-ai-provider',
+  },
 };
 
 export class ModelsDevGateway extends MastraModelGateway {
