@@ -1,5 +1,4 @@
 .header {
-  padding: 0 var(--ifm-menu-link-padding-horizontal);
   margin-bottom: 1rem;
   transition: all 150ms ease-in-out;
 }
@@ -10,7 +9,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 0.6rem 0;
+  padding: 0.6rem var(--ifm-menu-link-padding-horizontal);
   border: 0;
   color: var(--ifm-menu-color);
   background: transparent;
@@ -33,12 +32,7 @@
   transform: rotate(-90deg);
   width: 1.25rem;
   height: 1.25rem;
-}
-
-@media (min-width: 997px) {
-  .backArrow {
-    left: -0.5rem;
-  }
+  left: 0.25rem;
 }
 
 .backButton:hover,

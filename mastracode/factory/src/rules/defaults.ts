@@ -161,6 +161,29 @@ function issueOpened(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function issueClosed(context: FactoryGithubRuleContext) {
+  if (!context.item || context.item.source !== 'github-issue' || !context.issue) return;
+  if (context.board !== 'work') return;
+  // Already off the board: nothing to reconcile.
+  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // Issue closure is a repository fact, not third-party input — no actor trust
+  // gate. `not_planned` (and `duplicate`) means abandoned, everything else is
+  // completed work.
+  const canceled = context.issue.stateReason === 'not_planned' || context.issue.stateReason === 'duplicate';
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: 'work',
+    stage: canceled ? 'canceled' : 'done',
+    message: {
+      text:
+        `GitHub issue #${context.issue.number} was closed` +
+        `${context.issue.stateReason ? ` (${context.issue.stateReason})` : ''}; ` +
+        `this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+    },
+  } as const;
+}
+
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
   return {
@@ -303,6 +326,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   github: {
     issueOpened: { onEvent: issueOpened },
     issueEdited: { onEvent: retriageGithubIssue },
+    issueClosed: { onEvent: issueClosed },
     issueCommentCreated: { onEvent: retriageGithubIssue },
     issueCommentEdited: { onEvent: retriageGithubIssue },
     issueCommentDeleted: { onEvent: retriageGithubIssue },

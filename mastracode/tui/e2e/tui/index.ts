@@ -53,6 +53,7 @@ import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
 import { loginPreservesModelPackScenario } from './login-preserves-model-pack.js';
 import { loginSeedsOmDefaultScenario } from './login-seeds-om-default.js';
+import { mcpDisableEnableScenario } from './mcp-disable-enable.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
 import { mcpOauthAuthenticateScenario } from './mcp-oauth-authenticate.js';
@@ -80,6 +81,7 @@ import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
+import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
@@ -222,6 +224,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'login-preserves-model-pack': loginPreservesModelPackScenario,
   'login-seeds-om-default': loginSeedsOmDefaultScenario,
   'modal-and-shell': modalAndShellScenario,
+  'mcp-disable-enable': mcpDisableEnableScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
   'mcp-oauth-authenticate': mcpOauthAuthenticateScenario,
@@ -254,6 +257,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
+  'permission-request-hook': permissionRequestHookScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
   'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,

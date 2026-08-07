@@ -136,6 +136,14 @@ function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
 
+/**
+ * Bind dates as UTC strings because node-postgres serializes Date parameters
+ * for TIMESTAMP columns using the process's local timezone.
+ */
+function toUtcISOString(date: Date): string {
+  return date.toISOString();
+}
+
 function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
   const deduped = new Map<string, MastraDBMessage>();
   for (const message of messages) {
@@ -645,6 +653,8 @@ export class MemoryPG extends MemoryStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+      const createdAt = toUtcISOString(thread.createdAt);
+      const updatedAt = toUtcISOString(thread.updatedAt);
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id,
@@ -669,10 +679,10 @@ export class MemoryPG extends MemoryStorage {
           thread.resourceId,
           thread.title,
           thread.metadata ? JSON.stringify(thread.metadata) : null,
-          thread.createdAt,
-          thread.createdAt,
-          thread.updatedAt,
-          thread.updatedAt,
+          createdAt,
+          createdAt,
+          updatedAt,
+          updatedAt,
         ],
       );
 
@@ -723,6 +733,7 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const now = new Date();
+      const nowStr = toUtcISOString(now);
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET
@@ -733,7 +744,7 @@ export class MemoryPG extends MemoryStorage {
                     WHERE id = $5
                     RETURNING *
                 `,
-        [title, mergedMetadata, now, now, id],
+        [title, mergedMetadata, nowStr, nowStr, id],
       );
 
       return {
@@ -1398,7 +1409,7 @@ export class MemoryPG extends MemoryStorage {
           const values: unknown[] = [];
           const valuePlaceholders = batch
             .map((message, messageIndex) => {
-              const createdAt = message.createdAt || new Date();
+              const createdAt = toUtcISOString(message.createdAt || new Date());
               values.push(
                 message.id,
                 message.threadId,
@@ -1432,7 +1443,7 @@ export class MemoryPG extends MemoryStorage {
         }
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-        const now = new Date();
+        const now = toUtcISOString(new Date());
         for (const threadIdToUpdate of threadIds) {
           await t.none(
             `UPDATE ${threadTableName}
@@ -1662,11 +1673,15 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    const createdAt = toUtcISOString(resource.createdAt);
+    const updatedAt = toUtcISOString(resource.updatedAt);
     await this.#db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
         metadata: JSON.stringify(resource.metadata),
+        createdAt,
+        updatedAt,
       },
     });
 
@@ -1806,6 +1821,7 @@ export class MemoryPG extends MemoryStorage {
         const sourceMessages = await t.manyOrNone<MessageRowFromDB>(messageQuery, messageParams);
 
         const now = new Date();
+        const nowStr = toUtcISOString(now);
 
         // Determine the last message ID for clone metadata
         const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
@@ -1847,10 +1863,10 @@ export class MemoryPG extends MemoryStorage {
             newThread.resourceId,
             newThread.title,
             newThread.metadata ? JSON.stringify(newThread.metadata) : null,
-            now,
-            now,
-            now,
-            now,
+            nowStr,
+            nowStr,
+            nowStr,
+            nowStr,
           ],
         );
 
@@ -1869,6 +1885,7 @@ export class MemoryPG extends MemoryStorage {
           } catch {
             // use content as is
           }
+          const createdAt = toUtcISOString(new Date(normalizedMsg.createdAt));
 
           await t.none(
             `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
@@ -1877,8 +1894,8 @@ export class MemoryPG extends MemoryStorage {
               newMessageId,
               newThreadId,
               typeof normalizedMsg.content === 'string' ? normalizedMsg.content : JSON.stringify(normalizedMsg.content),
-              normalizedMsg.createdAt,
-              normalizedMsg.createdAt,
+              createdAt,
+              createdAt,
               normalizedMsg.role,
               normalizedMsg.type || 'v2',
               targetResourceId,
