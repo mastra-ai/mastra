@@ -309,23 +309,19 @@ describe('platform entry (src/mastra/index.ts)', () => {
       },
     );
 
-    it(
-      'boots on the default auth path when only WORKOS_API_KEY is set',
-      { timeout: 60_000 },
-      async () => {
-        // varlock rejects an API-key-only env at the dev-script level; this
-        // guards direct boot paths that bypass it. A half-configured pair must
-        // not construct the provider (which would throw on the missing
-        // clientId) — boot survives on the default platform-backed path.
-        vi.stubEnv('WORKOS_API_KEY', 'sk_test_fake');
-        const mod = await import('./index.js');
-        expect(mod.mastra).toBeDefined();
-        // Half a pair falls through to the platform-backed default, so login
-        // still rides the studio provider's shared API.
-        const location = await loginRedirect(mod);
-        expect(location).toContain('platform.mastra.ai');
-      },
-    );
+    it('boots on the default auth path when only WORKOS_API_KEY is set', { timeout: 60_000 }, async () => {
+      // varlock rejects an API-key-only env at the dev-script level; this
+      // guards direct boot paths that bypass it. A half-configured pair must
+      // not construct the provider (which would throw on the missing
+      // clientId) — boot survives on the default platform-backed path.
+      vi.stubEnv('WORKOS_API_KEY', 'sk_test_fake');
+      const mod = await import('./index.js');
+      expect(mod.mastra).toBeDefined();
+      // Half a pair falls through to the platform-backed default, so login
+      // still rides the studio provider's shared API.
+      const location = await loginRedirect(mod);
+      expect(location).toContain('platform.mastra.ai');
+    });
 
     it(
       'defers to the platform when MASTRA_SHARED_API_URL is set, warning that WORKOS_* is ignored',
@@ -341,7 +337,9 @@ describe('platform entry (src/mastra/index.ts)', () => {
           // contract: the studio provider wins and login rides the shared API.
           expect(location).toContain('shared.example.com');
           expect(
-            warn.mock.calls.some(call => String(call[0]).includes('WORKOS') && String(call[0]).includes('MASTRA_SHARED_API_URL')),
+            warn.mock.calls.some(
+              call => String(call[0]).includes('WORKOS') && String(call[0]).includes('MASTRA_SHARED_API_URL'),
+            ),
           ).toBe(true);
         } finally {
           warn.mockRestore();
