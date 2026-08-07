@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 
 const STORAGE_KEY = 'mastracode.pinnedSessions';
 const CHANGE_EVENT = 'mastracode:pinned-sessions-change';
@@ -53,12 +53,12 @@ function savePinnedSessions(sessions: Set<string>) {
 
 export function usePinnedSessions() {
   const pinnedSessions = useSyncExternalStore(subscribe, readPinnedSessions, () => new Set<string>());
-  const setPinned = useCallback((sessionId: string, pinned: boolean) => {
+  const setPinned = (sessionId: string, pinned: boolean) => {
     const next = new Set(readPinnedSessions());
     if (pinned) next.add(sessionId);
     else next.delete(sessionId);
     savePinnedSessions(next);
-  }, []);
+  };
 
   return { pinnedSessions, setPinned };
 }
