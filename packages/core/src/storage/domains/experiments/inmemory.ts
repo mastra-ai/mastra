@@ -42,6 +42,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       name: input.name,
       description: input.description,
       metadata: input.metadata,
+      provenance: input.provenance ?? null,
+      runnerAttestation: input.runnerAttestation ?? null,
+      experimentSetId: input.experimentSetId ?? null,
+      comparisonId: input.comparisonId ?? null,
+      variantId: input.variantId ?? null,
+      trialIndex: input.trialIndex ?? null,
       status: 'pending',
       totalItems: input.totalItems,
       succeededCount: 0,
@@ -54,8 +60,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       createdAt: now,
       updatedAt: now,
     };
-    this.db.experiments.set(experiment.id, experiment);
-    return experiment;
+    this.db.experiments.set(experiment.id, structuredClone(experiment));
+    return structuredClone(experiment);
   }
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
@@ -77,8 +83,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       metadata: input.metadata ?? existing.metadata,
       updatedAt: new Date(),
     };
-    this.db.experiments.set(input.id, updated);
-    return updated;
+    this.db.experiments.set(input.id, structuredClone(updated));
+    return structuredClone(updated);
   }
 
   async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
@@ -90,7 +96,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
       return null;
     }
-    return row;
+    return structuredClone(row);
   }
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
@@ -112,6 +118,18 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.status) {
       experiments = experiments.filter(r => r.status === args.status);
     }
+    if (args.experimentSetId !== undefined) {
+      experiments = experiments.filter(r => r.experimentSetId === args.experimentSetId);
+    }
+    if (args.comparisonId !== undefined) {
+      experiments = experiments.filter(r => r.comparisonId === args.comparisonId);
+    }
+    if (args.variantId !== undefined) {
+      experiments = experiments.filter(r => r.variantId === args.variantId);
+    }
+    if (args.trialIndex !== undefined) {
+      experiments = experiments.filter(r => r.trialIndex === args.trialIndex);
+    }
     if (args.filters?.organizationId !== undefined) {
       experiments = experiments.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);
     }
@@ -128,7 +146,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const end = perPageInput === false ? experiments.length : start + perPage;
 
     return {
-      experiments: experiments.slice(start, end),
+      experiments: experiments.slice(start, end).map(experiment => structuredClone(experiment)),
       pagination: {
         total: experiments.length,
         page,
@@ -177,6 +195,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      comment: null,
       toolMockReport: input.toolMockReport ?? null,
       organizationId: input.organizationId ?? null,
       projectId: input.projectId ?? null,
@@ -198,6 +217,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       ...existing,
       status: input.status !== undefined ? input.status : existing.status,
       tags: input.tags !== undefined ? input.tags : existing.tags,
+      comment: input.comment !== undefined ? input.comment : existing.comment,
     };
     this.db.experimentResults.set(input.id, updated);
     return updated;

@@ -1,0 +1,102 @@
+/* Tailwind v4 entry for the MastraCode web UI.
+ *
+ * The compiled Playground UI stylesheet is imported from main.tsx. This file
+ * only adds Tailwind utilities and imports raw design tokens for @theme-based
+ * utility generation. */
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Raw design tokens (:root + @theme) shipped by playground-ui. Importing the
+ * uncompiled theme lets Tailwind read @theme and generate DS utilities without
+ * treating theme.css as the component stylesheet. */
+@import '@mastra/playground-ui/theme.css';
+@import './domains/factory/metrics-theme.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Alias the `icon` text ramp onto the design-system `neutral` ramp.
+ * The web UI uses `text-icon1..6` for its text hierarchy, but the DS theme
+ * only ships `--neutral1..6` — without this mapping those utilities generate
+ * no color and every tier collapses to the inherited body color. Declared
+ * `inline` so the utilities resolve `var(--neutral*)` at the class site and
+ * keep flipping with the light/dark theme. */
+@theme inline {
+  --color-icon1: var(--neutral1);
+  --color-icon2: var(--neutral2);
+  --color-icon3: var(--neutral3);
+  --color-icon4: var(--neutral4);
+  --color-icon5: var(--neutral5);
+  --color-icon6: var(--neutral6);
+  --color-pr-merged: var(--pr-merged);
+}
+
+/* Merged pull requests read purple everywhere; the DS accent ramp has no purple.
+ * Brightens on near-black, darkens on white so it stays legible in both themes. */
+:root {
+  --pr-merged: oklch(0.714 0.203 305.5);
+}
+
+html.light {
+  --pr-merged: oklch(0.496 0.265 302);
+}
+
+/* Keyframes must live inside @theme so Tailwind emits them alongside the
+ * `--animate-*` utility that references them. */
+@theme inline {
+  --animate-factory-ticket-move: factory-ticket-move 7s ease-in-out infinite;
+  --animate-factory-ticket-appear: factory-ticket-appear 7s ease-out infinite;
+
+  @keyframes factory-ticket-move {
+    0%,
+    6% {
+      opacity: 0;
+      transform: translateY(12px);
+      background-color: var(--surface3);
+    }
+    14%,
+    34% {
+      opacity: 1;
+      transform: translateY(0);
+      background-color: var(--surface3);
+    }
+    46%,
+    66% {
+      opacity: 1;
+      transform: translateX(calc(100% + 2.25rem));
+      background-color: color-mix(in oklab, var(--accent1) 18%, var(--surface3));
+    }
+    78%,
+    92% {
+      opacity: 1;
+      transform: translateX(calc(200% + 4.5rem));
+      background-color: color-mix(in oklab, var(--accent3) 22%, var(--surface3));
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(calc(200% + 4.5rem));
+      background-color: color-mix(in oklab, var(--accent3) 22%, var(--surface3));
+    }
+  }
+
+  @keyframes factory-ticket-appear {
+    0%,
+    16% {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    24%,
+    34% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    46%,
+    92% {
+      opacity: 1;
+      transform: translateY(-4.75rem);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-4.75rem);
+    }
+  }
+}

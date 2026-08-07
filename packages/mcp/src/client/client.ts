@@ -8,13 +8,15 @@ import { createTool } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import {
+  Client,
+  SdkHttpError,
+  SSEClientTransport,
+  StreamableHTTPClientTransport,
+  DEFAULT_REQUEST_TIMEOUT_MSEC,
+} from '@modelcontextprotocol/client';
 import type {
+  Transport,
   EmptyResult,
   GetPromptResult,
   ListPromptsResult,
@@ -23,25 +25,8 @@ import type {
   LoggingLevel,
   ReadResourceResult,
   ClientCapabilities,
-} from '@modelcontextprotocol/sdk/types.js';
-import {
-  CallToolResultSchema,
-  ListResourcesResultSchema,
-  ReadResourceResultSchema,
-  ResourceListChangedNotificationSchema,
-  ResourceUpdatedNotificationSchema,
-  ListResourceTemplatesResultSchema,
-  ListPromptsResultSchema,
-  GetPromptResultSchema,
-  PromptListChangedNotificationSchema,
-  ToolListChangedNotificationSchema,
-  ElicitRequestSchema,
-  ProgressNotificationSchema,
-  ListRootsRequestSchema,
-  LoggingMessageNotificationSchema,
-  EmptyResultSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-
+} from '@modelcontextprotocol/client';
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
@@ -60,6 +45,12 @@ import type {
   Root,
   RequireToolApproval,
 } from './types';
+import {
+  assertHostAllowed,
+  fetchFollowingAllowedRedirects,
+  isUrlPolicyError,
+  wrapFetchWithHostPolicy,
+} from './url-policy';
 
 // Re-export types for convenience
 export type {
@@ -130,8 +121,7 @@ function extractToolErrorText(content: unknown): string {
 
 function getDatadogScope(): DatadogScopeLike | null {
   const testTracer = (globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL] as
-    | DatadogTracerLike
-    | undefined;
+    DatadogTracerLike | undefined;
   const tracer = testTracer ?? loadDatadogTracer();
 
   if (typeof tracer?.scope === 'function') {
@@ -230,6 +220,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private pendingAuthTransport?: StreamableHTTPClientTransport | SSEClientTransport;
+  private clientBaseOnClose?: () => void;
+  private clientConnectionOnClose?: () => void;
   private _authState?: MCPServerAuthState;
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
@@ -345,7 +337,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private setupLogging(): void {
     if (this.enableServerLogs) {
-      this.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification: any) => {
+      this.client.setNotificationHandler('notifications/message', (notification: any) => {
         const { level, ...params } = notification.params;
         this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
       });
@@ -360,7 +352,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   private setupRootsHandler(): void {
     this.log('debug', 'Setting up roots/list request handler');
-    this.client.setRequestHandler(ListRootsRequestSchema, async () => {
+    this.client.setRequestHandler('roots/list', async () => {
       this.log('debug', `Responding to roots/list request with ${this._roots.length} roots`);
       return { roots: this._roots };
     });
@@ -413,13 +405,30 @@ export class InternalMastraMCPClient extends MastraBase {
     await this.client.notification({ method: 'notifications/roots/list_changed' });
   }
 
+  private buildStdioEnv(): Record<string, string> {
+    const configured = this.serverConfig.env || {};
+    if (this.serverConfig.inheritDefaultEnv === false) {
+      // The SDK's StdioClientTransport unconditionally spreads getDefaultEnvironment()
+      // under the env we pass it, so an empty base alone cannot suppress the curated
+      // defaults. Explicitly override each curated key with undefined — Node's spawn
+      // drops env entries whose value is undefined — so only configured entries reach
+      // the subprocess.
+      const suppressed: Record<string, string | undefined> = {};
+      for (const key of Object.keys(getDefaultEnvironment())) {
+        suppressed[key] = undefined;
+      }
+      return { ...suppressed, ...configured } as Record<string, string>;
+    }
+    return { ...getDefaultEnvironment(), ...configured };
+  }
+
   private async connectStdio(command: string) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
     try {
       this.transport = new StdioClientTransport({
         command,
         args: this.serverConfig.args,
-        env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
+        env: this.buildStdioEnv(),
         stderr: this.serverConfig.stderr,
         cwd: this.serverConfig.cwd,
       });
@@ -432,14 +441,37 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } =
+      this.serverConfig;
+
+    // Fail fast with a clear error before any transport is constructed.
+    if (allowedHosts !== undefined) {
+      assertHostAllowed(url, allowedHosts);
+    }
 
     // Wrap fetch so request-scoped metadata still flows through normal MCP POSTs, while
     // the long-lived Streamable HTTP event stream does not inherit the active Datadog span.
+    // When allowedHosts is set, the same wrapper enforces the host policy: on the default
+    // path via manual redirect following (hops blocked before being sent), and on the
+    // custom-fetch path via a pre-request check plus post-hoc response validation.
+    const policyUserFetch =
+      userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
       const requestContext = this.operationContextStore.getStore() ?? null;
-      const executeFetch = () =>
-        userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
+      const executeFetch = (): Promise<Response> => {
+        if (allowedHosts === undefined) {
+          return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
+        }
+        if (policyUserFetch) {
+          return policyUserFetch(requestUrl, init, requestContext);
+        }
+        return fetchFollowingAllowedRedirects(
+          (u: string | URL, i?: RequestInit) => globalThis.fetch(u, i),
+          requestUrl,
+          init,
+          allowedHosts,
+        );
+      };
 
       return shouldDetachPersistentTransportRequest(init) ? runOutsideDatadogTraceScope(executeFetch) : executeFetch();
     };
@@ -477,9 +509,20 @@ export class InternalMastraMCPClient extends MastraBase {
           throw error;
         }
 
-        // @modelcontextprotocol/sdk 1.24.0+ throws StreamableHTTPError with 'code' property
-        // Older @modelcontextprotocol/sdk: fallback to SSE (legacy behavior)
-        const status = error?.code;
+        // A policy violation is final: retrying the blocked host over SSE cannot
+        // succeed, and falling through would bury the policy error under a generic
+        // "could not connect" message.
+        if (isUrlPolicyError(error)) {
+          throw error;
+        }
+
+        // The Streamable HTTP transport reports non-OK responses as SdkHttpError, which
+        // carries the HTTP status on `status` (`code` is a string SdkErrorCode, not a
+        // status). Servers that only speak the deprecated HTTP+SSE transport answer the
+        // initial POST with 400/404/405, which is the signal to retry over SSE; any other
+        // status is a real failure. Non-HTTP failures (network, timeout) keep the legacy
+        // behavior of attempting the SSE fallback.
+        const status = error instanceof SdkHttpError ? error.status : undefined;
         if (status !== undefined && !SSE_FALLBACK_STATUS_CODES.includes(status)) {
           throw error;
         }
@@ -488,12 +531,26 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     if (shouldTrySSE) {
+      // The SDK's cleanup after a failed streamable initialize is fire-and-forget,
+      // so the streamable transport may still be attached; detach it or the SSE
+      // attempt is rejected with "Already connected to a transport".
+      await this.detachStaleClientTransport();
+
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       // Fallback to SSE transport
       // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
       // Only supply our span-detaching fetch when the caller hasn't provided one, so an explicit
-      // eventSourceInit.fetch is preserved rather than overwritten.
-      const sseEventSourceInit = { ...eventSourceInit, fetch: eventSourceInit?.fetch ?? fetch };
+      // eventSourceInit.fetch is preserved rather than overwritten. When allowedHosts is set, a
+      // caller-supplied eventSourceInit.fetch is wrapped with the same policy check + post-hoc
+      // redirect validation as the custom-fetch path — otherwise it would bypass the policy.
+      const callerSseFetch = eventSourceInit?.fetch;
+      const sseEventSourceInit = {
+        ...eventSourceInit,
+        fetch:
+          callerSseFetch && allowedHosts !== undefined
+            ? wrapFetchWithHostPolicy(callerSseFetch, allowedHosts)
+            : (callerSseFetch ?? fetch),
+      };
 
       const sseTransport = new SSEClientTransport(url, {
         requestInit,
@@ -510,6 +567,10 @@ export class InternalMastraMCPClient extends MastraBase {
           this.markNeedsAuth(sseTransport);
           throw sseError;
         }
+        // Surface policy violations directly instead of the generic connect error.
+        if (isUrlPolicyError(sseError)) {
+          throw sseError;
+        }
         this.log(
           'error',
           `Failed to connect with SSE transport after failing to connect to Streamable HTTP transport first. SSE error: ${sseError}`,
@@ -524,6 +585,59 @@ export class InternalMastraMCPClient extends MastraBase {
     this.closePendingAuthTransport();
     if (authProvider) {
       this._authState = 'authorized';
+    }
+  }
+
+  /**
+   * Detaches whatever transport is still attached to the underlying SDK Client.
+   *
+   * The SDK assigns its internal `_transport` before `transport.start()` and never
+   * clears it when `start()` throws, and its cleanup after a failed initialize is a
+   * fire-and-forget `void this.close()`. Either way a stale transport can remain
+   * attached, making every subsequent `client.connect()` throw "Already connected
+   * to a transport" and permanently wedging this client (issue #19862). Mastra's
+   * own `this.transport` is only assigned after a successful connect, so
+   * disconnect/forceReconnect never see the stale one. Calling this before every
+   * connect attempt restores the invariant that a connect starts from a detached
+   * SDK client.
+   */
+  private async detachStaleClientTransport(): Promise<void> {
+    const stale = this.client.transport;
+    if (!stale) {
+      return;
+    }
+    if (stale === this.pendingAuthTransport) {
+      // Keep the transport alive: finishAuth must complete the OAuth flow on it.
+      // Just sever its link to the SDK client so the next connect isn't rejected.
+      this.severClientTransportLink(stale);
+      return;
+    }
+    this.log('debug', 'Closing stale SDK client transport before connect attempt');
+    try {
+      // Close fires the SDK's onclose chain, which rejects in-flight requests and
+      // clears the SDK client's transport reference.
+      await stale.close();
+    } catch (e) {
+      this.log('debug', 'Error closing stale SDK client transport (ignored)', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    // Safety net in case close() did not fire the onclose chain.
+    this.severClientTransportLink(stale);
+  }
+
+  /**
+   * Severs the mutual references between the SDK client and a stale transport
+   * without closing it. Clearing the transport's callbacks ensures a later
+   * close() of the stale transport cannot reach into the SDK client and clear
+   * the state of a newer live connection.
+   */
+  private severClientTransportLink(stale: Transport): void {
+    stale.onclose = undefined;
+    stale.onerror = undefined;
+    stale.onmessage = undefined;
+    if (this.client.transport === stale) {
+      (this.client as unknown as { _transport?: Transport })._transport = undefined;
     }
   }
 
@@ -588,6 +702,8 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private isConnected: Promise<boolean> | null = null;
+  private reconnectPromise: Promise<void> | null = null;
+  private lifecycleGeneration = 0;
 
   /**
    * Connects to the MCP server using the configured transport.
@@ -607,6 +723,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
     this.isConnected = new Promise<boolean>(async (resolve, reject) => {
       try {
+        // A previous failed connect attempt can leave a stale transport attached
+        // to the SDK client; release it or every reconnect fails (issue #19862).
+        await this.detachStaleClientTransport();
+
         const { command, url } = this.serverConfig;
 
         if (command) {
@@ -621,24 +741,36 @@ export class InternalMastraMCPClient extends MastraBase {
 
         resolve(true);
 
-        // Set up disconnect handler to reset state.
-        const originalOnClose = this.client.onclose;
-        this.client.onclose = () => {
-          this.log('debug', `MCP server connection closed`);
-          // Close the stale transport before any reconnect so its EventSource/session
-          // can't keep retrying and leak server-side sessions (issue #16693). Clear
-          // synchronously first so a concurrent connect() sees a clean slate.
-          const staleTransport = this.transport;
-          this.transport = undefined;
-          this.isConnected = null;
-          this.serverInstructions = undefined;
-          if (staleTransport) {
-            void staleTransport.close().catch(() => {});
+        // Scope the reset to this connection so an older handler retained across
+        // reconnects cannot clear the state of a replacement connection.
+        const connectedTransport = this.transport;
+        const connectionPromise = this.isConnected;
+        if (this.client.onclose !== this.clientConnectionOnClose) {
+          this.clientBaseOnClose = this.client.onclose;
+        }
+        const connectionOnClose = () => {
+          if (this.transport === connectedTransport) {
+            this.log('debug', `MCP server connection closed`);
+            // Close the stale transport before any reconnect so its EventSource/session
+            // can't keep retrying and leak server-side sessions (issue #16693). Clear
+            // synchronously first so a concurrent connect() sees a clean slate.
+            const staleTransport = this.transport;
+            this.transport = undefined;
+            if (this.isConnected === connectionPromise) {
+              this.isConnected = null;
+            }
+            this.serverInstructions = undefined;
+            if (staleTransport) {
+              // Prevent a duplicate late close signal from this transport from
+              // reaching the SDK client after a replacement connection is attached.
+              this.severClientTransportLink(staleTransport);
+              void staleTransport.close().catch(() => {});
+            }
           }
-          if (typeof originalOnClose === 'function') {
-            originalOnClose();
-          }
+          this.clientBaseOnClose?.();
         };
+        this.clientConnectionOnClose = connectionOnClose;
+        this.client.onclose = connectionOnClose;
       } catch (e) {
         this.isConnected = null;
         reject(e);
@@ -717,16 +849,32 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   async disconnect() {
+    // Invalidate tool calls that started before this explicit teardown. Their
+    // recovery path must not establish a replacement connection afterwards.
+    this.lifecycleGeneration++;
+
+    // A reconnect that started first may publish a replacement transport.
+    // Wait for it, then tear down whichever transport is current.
+    const reconnectPromise = this.reconnectPromise;
+    if (reconnectPromise) {
+      await reconnectPromise.catch(() => {});
+    }
+
     // Release any transport left pending from an unfinished authorization flow,
     // even when there is no live transport to tear down.
     this.closePendingAuthTransport();
     if (!this.transport) {
+      // Even without a live transport, a failed connect attempt may have left a
+      // stale transport attached to the SDK client; release it so a future
+      // connect starts clean (issue #19862).
+      await this.detachStaleClientTransport();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
     this.log('debug', `Disconnecting from MCP server`);
+    const disconnectedTransport = this.transport;
     try {
-      await this.transport.close();
+      await disconnectedTransport.close();
       this.log('debug', 'Successfully disconnected from MCP server');
     } catch (e) {
       this.log('error', 'Error during MCP server disconnect', {
@@ -734,6 +882,7 @@ export class InternalMastraMCPClient extends MastraBase {
       });
       throw e;
     } finally {
+      this.severClientTransportLink(disconnectedTransport);
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
@@ -766,66 +915,133 @@ export class InternalMastraMCPClient extends MastraBase {
    * @internal
    */
   async forceReconnect(): Promise<void> {
-    this.log('debug', 'Forcing reconnection to MCP server...');
-
-    // Release any transport left pending from an unfinished authorization flow
-    // before rebuilding the connection.
-    this.closePendingAuthTransport();
-
-    // Disconnect current connection (ignore errors as connection may already be broken)
-    try {
-      if (this.transport) {
-        await this.transport.close();
-      }
-    } catch (e) {
-      this.log('debug', 'Error during force disconnect (ignored)', {
-        error: e instanceof Error ? e.message : String(e),
-      });
+    if (this.reconnectPromise) {
+      this.log('debug', 'Reconnection already in progress; waiting for it to complete');
+      return await this.reconnectPromise;
     }
 
-    // Reset connection state
-    this.transport = undefined;
-    this.isConnected = null;
-    this.serverInstructions = undefined;
+    const reconnectPromise = (async () => {
+      this.log('debug', 'Forcing reconnection to MCP server...');
 
-    // Reconnect
-    await this.connect();
-    this.log('debug', 'Successfully reconnected to MCP server');
+      // Release any transport left pending from an unfinished authorization flow
+      // before rebuilding the connection.
+      this.closePendingAuthTransport();
+
+      // Disconnect current connection (ignore errors as connection may already be broken)
+      const disconnectedTransport = this.transport;
+      try {
+        if (disconnectedTransport) {
+          await disconnectedTransport.close();
+        }
+      } catch (e) {
+        this.log('debug', 'Error during force disconnect (ignored)', {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      } finally {
+        if (disconnectedTransport) {
+          this.severClientTransportLink(disconnectedTransport);
+        }
+      }
+
+      // Reset connection state only when it still belongs to the transport that
+      // this reconnect attempt disconnected. A close callback may have already
+      // cleared it, but must not let us erase a replacement transport.
+      if (!disconnectedTransport || this.transport === disconnectedTransport) {
+        this.transport = undefined;
+        this.isConnected = null;
+        this.serverInstructions = undefined;
+      }
+
+      await this.connect();
+      this.log('debug', 'Successfully reconnected to MCP server');
+    })();
+    this.reconnectPromise = reconnectPromise;
+
+    try {
+      await reconnectPromise;
+    } finally {
+      if (this.reconnectPromise === reconnectPromise) {
+        this.reconnectPromise = null;
+      }
+    }
+  }
+
+  private async reconnectAfterTransportFailure(failedTransport: Transport | undefined, lifecycleGeneration: number) {
+    while (true) {
+      if (this.lifecycleGeneration !== lifecycleGeneration) {
+        throw new Error('MCP client was disconnected while recovering the failed transport');
+      }
+
+      const reconnectPromise = this.reconnectPromise;
+      if (reconnectPromise) {
+        await reconnectPromise;
+        // Re-evaluate after the owner clears the settled promise. The transport
+        // that failed may itself be the replacement created by that reconnect.
+        continue;
+      }
+
+      if (failedTransport && this.transport && this.transport !== failedTransport) {
+        this.log('debug', 'Connection was already replaced after the failed operation; skipping reconnect');
+        return;
+      }
+
+      await this.forceReconnect();
+
+      if (this.lifecycleGeneration !== lifecycleGeneration) {
+        throw new Error('MCP client was disconnected while recovering the failed transport');
+      }
+      return;
+    }
   }
 
   async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
-    return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/read', params: { uri } }, ReadResourceResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/read', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async subscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, EmptyResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/subscribe', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async unsubscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, EmptyResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/unsubscribe', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
-    return await this.client.request({ method: 'resources/templates/list' }, ListResourceTemplatesResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/templates/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   /**
@@ -833,9 +1049,12 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async listPrompts(): Promise<ListPromptsResult> {
     this.log('debug', `Requesting prompts from MCP server`);
-    return await this.client.request({ method: 'prompts/list' }, ListPromptsResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'prompts/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   /**
@@ -847,7 +1066,6 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
       { method: 'prompts/get', params: { name, arguments: args } },
-      GetPromptResultSchema,
       { timeout: this.timeout },
     );
   }
@@ -858,7 +1076,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   setPromptListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting prompt list changed notification handler');
-    this.client.setNotificationHandler(PromptListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/prompts/list_changed', () => {
       handler();
     });
   }
@@ -869,21 +1087,21 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   setToolListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting tool list changed notification handler');
-    this.client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/tools/list_changed', () => {
       handler();
     });
   }
 
   setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
     this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification: any) => {
+    this.client.setNotificationHandler('notifications/resources/updated', (notification: any) => {
       handler(notification.params);
     });
   }
 
   setResourceListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting resource list changed notification handler');
-    this.client.setNotificationHandler(ResourceListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/resources/list_changed', () => {
       handler();
     });
   }
@@ -902,7 +1120,7 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     }
 
-    this.client.setRequestHandler(ElicitRequestSchema, async request => {
+    this.client.setRequestHandler('elicitation/create', async request => {
       this.log('debug', `Received elicitation request: ${request.params.message}`);
       return handler(request.params);
     });
@@ -910,7 +1128,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setProgressNotificationHandler(handler: ProgressHandler): void {
     this.log('debug', 'Setting progress notification handler');
-    this.client.setNotificationHandler(ProgressNotificationSchema, notification => {
+    this.client.setNotificationHandler('notifications/progress', notification => {
       handler(notification.params);
     });
   }
@@ -922,7 +1140,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Wraps the output schema with a validator that always succeeds. The MCP SDK validates
+   * Wraps the output schema with a validator that always succeeds. The MCP client validates
    * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
    */
   private convertOutputSchema(
@@ -1035,7 +1253,6 @@ export class InternalMastraMCPClient extends MastraBase {
                     arguments: input,
                     ...(combinedMeta ? { _meta: combinedMeta } : {}),
                   },
-                  CallToolResultSchema,
                   {
                     timeout: this.timeout,
                     signal: context?.abortSignal,
@@ -1071,6 +1288,8 @@ export class InternalMastraMCPClient extends MastraBase {
                 return res;
               };
 
+              const failedTransport = this.transport;
+              const lifecycleGeneration = this.lifecycleGeneration;
               try {
                 return await executeToolCall();
               } catch (e) {
@@ -1082,7 +1301,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
                   try {
                     // Force reconnection
-                    await this.forceReconnect();
+                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
 
                     // Retry the tool call with fresh connection
                     this.log('debug', `Retrying tool ${tool.name} after reconnection...`);

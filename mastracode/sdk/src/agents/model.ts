@@ -1,10 +1,11 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import { loadSettings } from '../onboarding/settings.js';
+import { loadSettings, stripMastraCodeCustomProviderPrefix } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { resolveCredentialStore } from './credential-resolver.js';
+import { resolveCustomProviders } from './custom-provider-source.js';
 import {
   MASTRA_GATEWAY_PREFIX,
   MASTRACODE_GATEWAY_ID,
@@ -29,6 +30,12 @@ export {
   resolveTenantFromRequestContext,
 } from './credential-resolver.js';
 export type { CredentialTenant, CredentialStoreProvider } from './credential-resolver.js';
+export {
+  setCustomProvidersSource,
+  hasCustomProvidersSource,
+  resolveCustomProviders,
+} from './custom-provider-source.js';
+export type { CustomProvidersSource } from './custom-provider-source.js';
 
 type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
@@ -83,9 +90,20 @@ export function resolveModel(
   // standalone `amazon-bedrock/<model>` form so they resolve through the
   // dedicated Bedrock gateway.
   const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
-  const normalizedInput = modelId.startsWith(bedrockLegacyPrefix)
+  const bedrockNormalizedInput = modelId.startsWith(bedrockLegacyPrefix)
     ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
     : modelId;
+  // Deployed web registers a custom providers source (DB-backed, tenant
+  // scoped); when registered it is authoritative and settings.json custom
+  // providers are ignored. Undefined = local settings-based behavior.
+  const customProviders = resolveCustomProviders(options?.requestContext) ?? settings.customProviders;
+  // Ids selected from the shared /models catalog were previously persisted in
+  // the gateway-qualified `mastracode/<customProviderId>/<model>` form, which
+  // parses the provider as `mastracode` and breaks provider config lookup.
+  // Normalize at resolution time (in addition to stripping at selection time)
+  // so already-saved ids and any surface that persists the raw catalog id
+  // still resolve to the custom provider.
+  const normalizedInput = stripMastraCodeCustomProviderPrefix(bedrockNormalizedInput, customProviders);
   const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
   const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');
@@ -125,7 +143,7 @@ export function resolveModel(
     mastraGatewayApiKey: mgApiKey,
     routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
     thinkingLevel: options?.thinkingLevel,
-    customProviders: settings.customProviders,
+    customProviders,
     credentialStore,
   });
 

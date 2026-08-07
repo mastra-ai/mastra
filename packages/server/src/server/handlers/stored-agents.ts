@@ -36,6 +36,7 @@ import {
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
 import { enrichOrStripFavorites, prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { validateAgentInstructionReferences } from './validate-agent-instructions';
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
@@ -556,6 +557,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     id: providedId,
     metadata,
     visibility: bodyVisibility,
+    autoPublish,
     name,
     description,
     instructions,
@@ -644,6 +646,12 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         }
       }
 
+      await validateAgentInstructionReferences({
+        instructions: createInstructions,
+        mastra,
+        requestContext,
+      });
+
       const input = {
         id,
         authorId,
@@ -679,21 +687,36 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         await agentsStore.create({ agent: input });
       }
 
-      // Publish the initial version so the agent is immediately usable.
-      // Without this, the thin record stays as status='draft' with activeVersionId=null,
-      // which makes the agent unreachable via status='published' resolution.
+      // Publish the initial version so the agent is immediately usable. Without this the
+      // thin record stays at status='draft' with activeVersionId=null, which makes the
+      // agent unreachable via status='published' resolution — a created agent that
+      // resolves nowhere. That's why publishing is the default.
+      //
+      // Callers staging an agent for later review, and Studio when it saves an override
+      // for a code-defined agent, pass autoPublish: false. In the override case the code
+      // definition already serves traffic, so the first save must behave like every later
+      // save and stay a draft until the user explicitly publishes.
+      //
+      // A code-source editor can't honour that: there is no draft/publish step there
+      // (the save writes the override file, git is the version history) and filesystem
+      // storage only persists published entities, so an unpublished record would never
+      // reach disk. The editor's own source is server-side knowledge — a client can't
+      // reliably determine it before saving — so the flag is overridden here.
+      const isCodeSourceEditor = editor?.getSource?.() === 'code';
       const { versions } = await agentsStore.listVersions({ agentId: id, perPage: 1 });
       const initialVersion = versions[0];
-      if (initialVersion) {
+      if (initialVersion && (autoPublish !== false || isCodeSourceEditor)) {
         await agentsStore.update({
           id,
           activeVersionId: initialVersion.id,
           status: 'published',
         });
-        editor?.agent.clearCache(id);
       }
+      editor?.agent.clearCache(id);
 
-      // Return the resolved agent (thin record + version config) using the newly published version
+      // Return the resolved agent (thin record + version config). Published resolution falls
+      // back to the latest version, so an unpublished code-agent override still returns the
+      // config the caller just saved.
       const resolved = await agentsStore.getByIdResolved(id, { status: 'published' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
@@ -760,8 +783,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     workspace,
     browser,
     requestContextSchema,
-    // Version metadata
+    // Version options
     changeMessage,
+    autoPublish = false,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -812,6 +836,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Studio to own. This keeps stored snapshots (and the per-entity files
       // they get persisted to) free of fields the server never reads back.
       let codeAgentForUpdate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+      let shouldValidateStoredInstructions = true;
       try {
         codeAgentForUpdate = mastra.getAgentById?.(storedAgentId) as typeof codeAgentForUpdate;
       } catch {
@@ -825,12 +850,19 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
           }
         } else {
           instructions = undefined;
+          shouldValidateStoredInstructions = false;
         }
         if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
           tools = undefined;
           integrationTools = undefined;
           mcpClients = undefined;
         }
+      }
+
+      if (shouldValidateStoredInstructions) {
+        const effectiveInstructions =
+          instructions ?? (await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' }))?.instructions;
+        await validateAgentInstructionReferences({ instructions: effectiveInstructions, mastra, requestContext });
       }
 
       const mergedMetadata: Record<string, unknown> = { ...(existing.metadata ?? {}), ...(metadata ?? {}) };
@@ -919,17 +951,16 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       if (isCodeSource && autoVersionResult.versionCreated && !changeMessage) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 2 });
         const previousVersion = versions[1];
-        if (previousVersion) {
+        const isPublishedVersion = previousVersion?.id === existing.activeVersionId;
+        if (previousVersion && !isPublishedVersion) {
           await agentsStore.deleteVersion(previousVersion.id);
         }
       }
 
-      // Auto-publish: activate the latest version so the update is immediately
-      // visible in list views. The Agent Builder UI has no separate "Publish"
-      // button, so without this every edit after creation would create orphaned
-      // draft versions that never surface in the list.
-      // When a proper publish flow ships, this block can be removed.
-      if (autoVersionResult.versionCreated) {
+      // Publication remains opt-in so Classic Studio can save drafts without moving the active version,
+      // while Agent Builder can preserve immediate runtime updates by sending autoPublish: true.
+      // This flag is a bridge until version creation and publication move to dedicated APIs.
+      if (autoVersionResult.versionCreated && autoPublish) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
         if (latestVersion) {

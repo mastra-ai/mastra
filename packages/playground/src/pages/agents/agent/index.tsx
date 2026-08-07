@@ -24,6 +24,7 @@ import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
+import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
@@ -73,6 +74,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   }, [isSettingsView, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
+  const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
@@ -99,7 +101,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   }
 
   if (!agent) {
-    return <div className="text-center py-4">Agent not found</div>;
+    return <div className="py-4 text-center">Agent not found</div>;
   }
 
   if (!isSettingsView && !threadId) {
@@ -166,6 +168,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                               refreshThreadList={handleRefreshThreadList}
                               modelList={agent?.modelList}
                               messageId={messageId}
+                              suggestedPrompts={suggestedPrompts}
                               isNewThread={isNewThread}
                               runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
                             />

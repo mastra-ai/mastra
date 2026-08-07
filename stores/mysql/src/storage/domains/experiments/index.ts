@@ -57,6 +57,12 @@ interface ExperimentRow {
   name: string | null;
   description: string | null;
   metadata: string | null;
+  provenance: string | null;
+  runnerAttestation: string | null;
+  experimentSetId: string | null;
+  comparisonId: string | null;
+  variantId: string | null;
+  trialIndex: number | null;
   status: string;
   totalItems: number;
   succeededCount: number;
@@ -85,6 +91,7 @@ interface ExperimentResultRow {
   traceId: string | null;
   status: string | null;
   tags: string | null;
+  comment: string | null;
   createdAt: Date | string;
 }
 
@@ -104,6 +111,11 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     return [
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with
       // pg/libsql/spanner/mongodb experiments adapters).
+      {
+        name: 'idx_experiments_grouping',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
+      },
       {
         name: 'idx_experiments_org_project',
         table: TABLE_EXPERIMENTS,
@@ -180,12 +192,22 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+      ],
     });
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['comment', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -209,6 +231,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       name: row.name ?? undefined,
       description: row.description ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
+      provenance: parseJSON<Experiment['provenance']>(row.provenance) ?? null,
+      runnerAttestation: parseJSON<Experiment['runnerAttestation']>(row.runnerAttestation) ?? null,
+      experimentSetId: row.experimentSetId ?? null,
+      comparisonId: row.comparisonId ?? null,
+      variantId: row.variantId ?? null,
+      trialIndex: row.trialIndex ?? null,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems,
       succeededCount: row.succeededCount,
@@ -239,6 +267,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       traceId: row.traceId ?? null,
       status: (row.status as ExperimentResultStatus | null) ?? null,
       tags: row.tags ? (parseJSON<string[]>(row.tags) ?? null) : null,
+      comment: row.comment ?? null,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
     };
   }
@@ -262,6 +291,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+          provenance: input.provenance ? JSON.stringify(input.provenance) : null,
+          runnerAttestation: input.runnerAttestation ? JSON.stringify(input.runnerAttestation) : null,
+          experimentSetId: input.experimentSetId ?? null,
+          comparisonId: input.comparisonId ?? null,
+          variantId: input.variantId ?? null,
+          trialIndex: input.trialIndex ?? null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
@@ -286,6 +321,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
@@ -405,6 +446,22 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (args.status) {
         conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
         params.push(args.status);
+      }
+      if (args.experimentSetId !== undefined) {
+        conditions.push(`${quoteIdentifier('experimentSetId', 'column name')} = ?`);
+        params.push(args.experimentSetId);
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push(`${quoteIdentifier('comparisonId', 'column name')} = ?`);
+        params.push(args.comparisonId);
+      }
+      if (args.variantId !== undefined) {
+        conditions.push(`${quoteIdentifier('variantId', 'column name')} = ?`);
+        params.push(args.variantId);
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push(`${quoteIdentifier('trialIndex', 'column name')} = ?`);
+        params.push(args.trialIndex);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
@@ -647,6 +704,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       }
       if (input.tags !== undefined) {
         updateData.tags = input.tags ? JSON.stringify(input.tags) : null;
+      }
+      if (input.comment !== undefined) {
+        updateData.comment = input.comment;
       }
 
       if (Object.keys(updateData).length > 0) {

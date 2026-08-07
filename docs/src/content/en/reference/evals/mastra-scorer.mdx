@@ -9,7 +9,7 @@ packages:
 
 The `MastraScorer` class is the base class for all scorers in Mastra. It provides a standard `.run()` method for evaluating input/output pairs and supports multi-step scoring workflows with preprocess → analyze → generateScore → generateReason execution flow.
 
-**Note:** Most users should use [`createScorer`](./create-scorer) to create scorer instances. Direct instantiation of `MastraScorer` isn't recommended.
+Most users should use [`createScorer`](./create-scorer) to create scorer instances. Direct instantiation of `MastraScorer` isn't recommended.
 
 ## How to get a `MastraScorer` instance
 
@@ -31,7 +31,7 @@ const scorer = createScorer({
 
 ## `.run()` method
 
-The `.run()` method is the primary way to execute your scorer and evaluate input/output pairs. It processes the data through your defined steps (preprocess → analyze → generateScore → generateReason) and returns a comprehensive result object with the score, reasoning, and intermediate results.
+The `.run()` method is the primary way to execute your scorer and evaluate input/output pairs. It processes the data through your defined steps (preprocess → analyze → generateScore → generateReason) and returns a detailed result object with the score, reasoning, and intermediate results.
 
 ```typescript
 const result = await scorer.run({
@@ -129,8 +129,148 @@ const result = await scorer.run({
     type: 'string',
     description: 'Generate reason prompt, if defined (optional).',
   },
+  {
+    name: 'judge',
+    type: 'ScorerJudgeResults',
+    description: 'Execution details for prompt-based scorer steps, if any (optional).',
+  },
 ]}
 />
+
+### Judge results
+
+The optional `judge` record contains details about the judge model calls made by prompt-based scorer steps. Its known keys are `preprocess`, `analyze`, `generateScore`, and `generateReason`. Each key contains an ordered `executions` array.
+
+```typescript
+interface ScorerJudgeExecutionBase {
+  prompt: string
+  judgeModelId: string
+  judgeProvider?: string
+  attemptCount: number
+  modelCallCount: number
+  durationMs: number
+}
+
+interface ScorerJudgeExecutionSuccess extends ScorerJudgeExecutionBase {
+  status: 'success'
+  output: JSONValue
+  usage: ScorerJudgeUsage
+  cost?: {
+    amount: number
+    unit: string
+    source: string
+  }
+}
+
+interface ScorerJudgeExecutionFailure extends ScorerJudgeExecutionBase {
+  status: 'failed'
+  output?: JSONValue
+  rawOutput?: string
+  usage?: ScorerJudgeUsage
+  finishReason?: string
+  error: {
+    name: string
+    message: string
+    code?: string
+  }
+}
+
+type ScorerJudgeExecution = ScorerJudgeExecutionSuccess | ScorerJudgeExecutionFailure
+
+interface ScorerJudgeUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  reasoningTokens?: number
+  cachedInputTokens?: number
+  cacheCreationInputTokens?: number
+}
+
+type ScorerJudgeResults = Partial<
+  Record<
+    'preprocess' | 'analyze' | 'generateScore' | 'generateReason',
+    { executions: ScorerJudgeExecution[] }
+  >
+>
+```
+
+Use the step key to access its judge execution details:
+
+```typescript
+const execution = result.judge?.generateScore?.executions[0]
+
+console.log(execution?.status)
+console.log(execution?.judgeModelId)
+console.log(execution?.usage?.totalTokens)
+console.log(execution?.durationMs)
+```
+
+The `status` value describes the outcome of the logical prompt-step execution, not the quality of the evaluated response. A structured-output fallback that eventually succeeds creates one `success` execution with an `attemptCount` greater than one. Exhausted attempts create one `failed` execution.
+
+Successful executions require validated `output` and normalized `usage`. Failed executions require an `error` summary and include only the evidence the runtime received. A failed execution includes `output` only when the output was validated before a later callback or orchestration failure. Mastra doesn't parse `rawOutput` to create `output`.
+
+`attemptCount` counts judge invocations, including a structured-output fallback. `modelCallCount` counts the completed model steps across those attempts. `durationMs` covers the full prompt-step execution.
+
+Function steps don't create `judge` entries. Usage in this record belongs to the scorer's judge model, not the agent or workflow being evaluated. Filter by `status` when aggregating successful executions. Include both statuses when aggregating all completed provider usage. The optional `cost` field is present only on successful executions that directly report an authoritative cost, source, and unit.
+
+Use Mastra metrics to query aggregate usage, latency, and estimated cost across scorer runs. The `judge` record describes one scorer run and doesn't query metrics or traces.
+
+### Failed runs
+
+A failed scorer stage still rejects the `.run()` promise. Catch `ScorerRunError` to inspect completed stages and any results they produced:
+
+```typescript
+import { ScorerRunError } from '@mastra/core/evals'
+
+try {
+  const result = await scorer.run({ input, output })
+  console.log(result.score)
+} catch (error) {
+  if (error instanceof ScorerRunError) {
+    console.log(error.failedStep)
+    console.log(error.completedSteps)
+    console.log(error.result?.score)
+
+    const failedExecution = error.result?.judge?.[error.failedStep]?.executions.find(
+      execution => execution.status === 'failed',
+    )
+    console.log(failedExecution?.error)
+  }
+
+  throw error
+}
+```
+
+`ScorerRunError` exposes these properties:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'failedStep',
+    type: 'ScorerStepName',
+    description: 'The scorer stage that failed.',
+  },
+  {
+    name: 'completedSteps',
+    type: 'ScorerStepName[]',
+    description: 'The scorer stages that completed before the failure, in execution order.',
+  },
+  {
+    name: 'result',
+    type: 'ScorerRunResultSnapshot | undefined',
+    description:
+      'Outputs from completed scorer stages and judge execution evidence from attempted prompt stages. This property is omitted when neither is available.',
+  },
+]}
+/>
+
+The `result` snapshot contains completed stage outputs and judge execution evidence. For example, if `generateReason` fails after `generateScore` returns `0`, `error.result.score` is `0`, the `generateScore` execution has `status: 'success'`, and the `generateReason` execution has `status: 'failed'`. The run remains failed.
+
+A prompt failure can create `error.result` with only run identity, input, and a failed `judge` entry. A function stage that fails before producing a scorer field doesn't create a result.
+
+`JSON.stringify(error)` uses the standard `MastraError` serialization and omits `result`, including successful and failed judge evidence. Read `result` explicitly when you need scorer artifacts or raw failed output.
+
+An in-memory experiment result can keep a completed score or reason from a failed scorer along with `error`, `failedStep`, and `completedSteps`. The scorer is still treated as failed, and a recovered score isn't written to legacy successful-score storage.
 
 ## Step execution flow
 

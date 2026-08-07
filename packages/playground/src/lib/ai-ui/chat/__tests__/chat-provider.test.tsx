@@ -3,16 +3,17 @@ import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/ho
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -159,6 +160,19 @@ const SendOnMount = ({ text }: { text: string }) => {
   return null;
 };
 
+const ModelSelectionHarness = () => {
+  const { setModel, setProvider } = usePlaygroundModel();
+  const send = useChatSend();
+
+  return (
+    <>
+      <button onClick={() => setModel('google', 'gemini-2.5-flash')}>Select model</button>
+      <button onClick={() => setProvider('openai')}>Change provider</button>
+      <button onClick={() => send({ message: 'Use selected model' })}>Send message</button>
+    </>
+  );
+};
+
 /**
  * Subscribes to the memory timeline panel's React Query keys (the playground-ui
  * hooks) so the test can observe whether OM stream events trigger a refetch.
@@ -179,6 +193,51 @@ describe('ChatProvider', () => {
     // Default tests target the legacy stream-until-idle route, not signals.
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe('when Studio selects a request-scoped model', () => {
+    it('only sends an explicit override without mutating the agent', async () => {
+      const captured: Captured[] = [];
+      const onMutation = vi.fn();
+      server.use(
+        ...baseHandlers(captured),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/model`, () => {
+          onMutation();
+          return HttpResponse.json({ message: 'unexpected mutation' });
+        }),
+      );
+
+      render(
+        <Wrapper>
+          <PlaygroundModelProvider defaultProvider="openai" defaultModel="gpt-4o-mini">
+            <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+              <ModelSelectionHarness />
+            </ChatProvider>
+          </PlaygroundModelProvider>
+        </Wrapper>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+      await waitFor(() => expect(captured).toHaveLength(1));
+      expect(captured[0].body).not.toHaveProperty('model');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select model' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+      await waitFor(() => expect(captured).toHaveLength(2));
+      expect(captured[1].body.model).toBe('google/gemini-2.5-flash');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Change provider' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+      await waitFor(() => expect(captured).toHaveLength(3));
+      expect(captured[2].body).not.toHaveProperty('model');
+      expect(onMutation).not.toHaveBeenCalled();
+    });
   });
 
   it('streams via the agent stream endpoint and forwards the modelSettings', async () => {
@@ -462,7 +521,8 @@ describe('ChatProvider', () => {
     const omPart = latestMessages
       .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
       .find(part => (part as { toolCallId?: string }).toolCallId === 'om-buffering-cycle-reload') as
-      { state?: string; output?: { omData?: Record<string, unknown> } } | undefined;
+      | { state?: string; output?: { omData?: Record<string, unknown> } }
+      | undefined;
 
     expect(omPart?.state).toBe('output-available');
     expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { InternalSpans } from '../observability';
 import type { SuspendOptions } from '../workflows';
-import { createStep, createWorkflow } from '../workflows/evented';
+import { createStep, createWorkflow } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskStatus } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
@@ -10,7 +10,7 @@ export { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 const inputSchema = z.object({ taskId: z.string() });
 
-const attemptOutcomeSchema = z.enum(['success', 'retry', 'cancelled', 'timed_out']);
+const attemptOutcomeSchema = z.enum(['success', 'retry', 'failed', 'cancelled', 'timed_out']);
 
 const attemptOutputSchema = z.object({
   taskId: z.string(),
@@ -34,18 +34,20 @@ const bodyOutputSchema = z.object({
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
 /**
- * Builds the per-task evented workflow that owns executor + retries.
+ * Builds the per-task workflow that owns executor + retries.
+ *
+ * Uses the standard (default) execution engine so the workflow runs entirely
+ * in-process on whatever host calls `run.start()`. This is critical for
+ * distributed deployments where the background-task worker must
+ * execute tools locally — routing through the evented pipeline would send
+ * step execution to the orchestration worker / API, which don't have the
+ * internal workflow or task contexts registered.
  *
  * Shape: outer workflow runs an inner `[run-attempt, classify-outcome]`
  * workflow inside a `dountil` loop. `run-attempt` invokes the executor and
  * categorises the outcome; `classify-outcome` persists final state, advances
  * retry bookkeeping, and decides whether the loop is done. The dountil
  * predicate exits on `done === true`.
- *
- * The nested-workflow-as-loop-body path lives in
- * `processWorkflowEnd → processWorkflowLoop` and was fixed in PR #16312.
- * Suspend/resume routes through the runtime's nested-workflow auto-detect
- * (`processWorkflowStepRun` resume branch).
  *
  * Step bodies close over `manager` directly — the bg-tasks layer is the only
  * consumer of the `@internal` private fields.
@@ -70,9 +72,14 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       //      wins when present.
       //   2. Static executor registered by tool name. Used by remote workers
       //      that received the dispatch via PubSub and don't have access to
-      //      the producer's per-task closure.
+      //      the producer's per-task closure. Agent-owned executors are
+      //      namespaced as `agentId:toolName` to avoid cross-agent collisions;
+      //      we try the namespaced key first, then fall back to the plain key.
       const ctx = manager.taskContexts.get(taskId);
-      const executor = ctx?.executor ?? manager.getStaticExecutor(task.toolName);
+      const executor =
+        ctx?.executor ??
+        (task.agentId ? manager.getStaticExecutor(`${task.agentId}:${task.toolName}`) : undefined) ??
+        manager.getStaticExecutor(task.toolName);
       if (!executor) {
         const errorInfo = {
           message:
@@ -98,14 +105,17 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       const onProgress = async (chunk: any) => {
         if (shouldThrottleProgress) {
           const now = Date.now();
-          if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs!) return;
+          if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs) return;
           lastProgressEmitMs = now;
         }
         await manager.publishLifecycleEvent('task.output', { ...task, chunk });
       };
 
       const abortController = new AbortController();
-      manager.activeAbortControllers.set(taskId, abortController);
+      if (!manager.registerActiveAbortController(taskId, abortController)) {
+        manager.deregisterTaskContext(taskId);
+        return { taskId, outcome: 'cancelled' as const };
+      }
       // Wire the workflow's run-level abort signal into our local controller
       // so `workflow.getRun(taskId).cancel()` propagates to the executor.
       const onWorkflowAbort = () => abortController.abort(new Error('Task cancelled'));
@@ -169,6 +179,14 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           return { taskId, outcome: 'cancelled' as const };
         }
 
+        // Graceful process shutdown is not a task failure. Leave storage at
+        // `running` so retryable tasks can be recovered by the next process;
+        // non-retryable tasks are persisted as cancelled by manager.shutdown().
+        if (manager.isShuttingDown()) {
+          manager.deregisterTaskContext(taskId);
+          return { taskId, outcome: 'cancelled' as const };
+        }
+
         // Treat any aborted-signal exit as a timeout. The cancel path is
         // already handled by the storage-status check above, so if we reach
         // here with `signal.aborted`, it's the timeout abort. The
@@ -181,6 +199,16 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           error?.message?.startsWith('Task timed out after ')
         ) {
           return { taskId, outcome: 'timed_out' as const };
+        }
+
+        // Authorization denials are non-retryable — retrying cannot succeed
+        // and would just burn attempts before surfacing the denial.
+        if (error?.name === 'FGADeniedError') {
+          return {
+            taskId,
+            outcome: 'failed' as const,
+            error: { name: error.name, message: error?.message ?? 'Authorization denied', stack: error?.stack },
+          };
         }
 
         return {
@@ -239,8 +267,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         return { taskId, done: true, result };
       }
 
-      // outcome === 'retry'
-      if (task.retryCount < task.maxRetries) {
+      // outcome === 'retry' | 'failed'
+      if (outcome === 'retry' && task.retryCount < task.maxRetries) {
         await storage.updateTask(taskId, {
           retryCount: task.retryCount + 1,
           error: undefined,
@@ -249,7 +277,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         return { taskId, done: false };
       }
 
-      // Retries exhausted: persist failure and throw so the workflow run ends
+      // Retries exhausted (or non-retryable failure): persist failure and
+      // throw so the workflow run ends
       // in `failed` rather than completing cleanly. Throw matches the prior
       // single-step behavior — workflow-run history stays accurate.
       const errorInfo = error ?? { message: 'Unknown error' };
@@ -260,6 +289,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         await manager.publishLifecycleEvent('task.failed', failedTask);
       }
       const thrown = new Error(errorInfo.message);
+      if (errorInfo.name) thrown.name = errorInfo.name;
       if (errorInfo.stack) thrown.stack = errorInfo.stack;
       throw thrown;
     },

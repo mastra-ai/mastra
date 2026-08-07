@@ -133,7 +133,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
     case 'text-delta':
-      if (value.delta) {
+      // Keep empty deltas that carry provider metadata (e.g. Gemini thought signatures),
+      // otherwise that metadata is dropped before it reaches the consumer.
+      if (value.delta || value.providerMetadata != null) {
         return {
           type: 'text-delta',
           runId: ctx.runId,
@@ -365,7 +367,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 }
 
 export type OutputChunkType<OUTPUT = undefined> =
-  TextStreamPart<ToolSet> | ObjectStreamPart<Partial<OUTPUT>> | undefined;
+  | TextStreamPart<ToolSet>
+  | ObjectStreamPart<Partial<OUTPUT>>
+  | undefined;
 
 export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   chunk,

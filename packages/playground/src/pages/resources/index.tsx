@@ -51,19 +51,19 @@ export default function Resources() {
   return (
     <PageLayout width="narrow">
       <PageLayout.MainArea>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
+        <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
           {resources.map(resource => (
             <a
               key={resource.href}
               href={resource.href}
               {...(resource.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-              className="group flex flex-col gap-3 rounded-lg border border-border1 bg-surface2 p-5 transition-colors hover:border-accent1 hover:bg-surface3"
+              className="group border-border1 bg-surface2 hover:border-accent1 hover:bg-surface3 flex flex-col gap-3 rounded-lg border p-5 transition-colors"
             >
               <div className="flex items-center gap-2.5">
-                <resource.icon className="h-5 w-5 text-icon3 group-hover:text-accent1 transition-colors" />
-                <span className="text-ui-md font-medium text-text1">{resource.title}</span>
+                <resource.icon className="text-icon3 group-hover:text-accent1 h-5 w-5 transition-colors" />
+                <span className="text-ui-md text-text1 font-medium">{resource.title}</span>
                 {resource.external && (
-                  <ExternalLinkIcon className="h-3.5 w-3.5 text-icon3 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ExternalLinkIcon className="text-icon3 ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
               <p className="text-ui-sm text-text3 leading-relaxed">{resource.description}</p>

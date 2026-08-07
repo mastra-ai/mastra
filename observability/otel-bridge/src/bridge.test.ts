@@ -8,7 +8,8 @@
  */
 
 import type { CreateSpanOptions, LogEvent } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
+import { DefaultObservabilityInstance } from '@mastra/observability';
 import { isSpanContextValid, trace } from '@opentelemetry/api';
 import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
@@ -35,7 +36,7 @@ describe('OtelBridge', () => {
 
     logExporter = new InMemoryLogRecordExporter();
     loggerProvider = new LoggerProvider({
-      processors: [new SimpleLogRecordProcessor(logExporter)],
+      processors: [new SimpleLogRecordProcessor({ exporter: logExporter })],
     });
     otelLogs.setGlobalLoggerProvider(loggerProvider);
   });
@@ -506,7 +507,7 @@ describe('OtelBridge', () => {
       try {
         const customLogExporter = new InMemoryLogRecordExporter();
         const customLoggerProvider = new LoggerProvider({
-          processors: [new SimpleLogRecordProcessor(customLogExporter)],
+          processors: [new SimpleLogRecordProcessor({ exporter: customLogExporter })],
         });
         const bridge = new OtelBridge({ loggerProvider: customLoggerProvider });
 
@@ -559,7 +560,7 @@ describe('OtelBridge', () => {
         const customTracerProvider = new tracing.BasicTracerProvider();
         const customLogExporter = new InMemoryLogRecordExporter();
         const customLoggerProvider = new LoggerProvider({
-          processors: [new SimpleLogRecordProcessor(customLogExporter)],
+          processors: [new SimpleLogRecordProcessor({ exporter: customLogExporter })],
         });
 
         const bridge = new OtelBridge({ tracerProvider: customTracerProvider, loggerProvider: customLoggerProvider });
@@ -641,6 +642,94 @@ describe('OtelBridge', () => {
       } finally {
         trace.setGlobalTracerProvider(tracerProvider);
       }
+    });
+  });
+
+  describe('span map cleanup', () => {
+    const mapSize = (bridge: OtelBridge) => bridge['otelSpanMap'].size;
+
+    const makeInstance = (bridge: OtelBridge, config: Record<string, unknown> = {}) =>
+      new DefaultObservabilityInstance({
+        serviceName: 'map-cleanup',
+        name: 'map-cleanup-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+        ...config,
+      } as any);
+
+    const runWorkflow = (tracing: DefaultObservabilityInstance, steps = 5) => {
+      const run = tracing.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        attributes: { workflowId: 'wf-1' },
+        tracingPolicy: { internal: InternalSpans.NONE },
+      })!;
+
+      for (let i = 0; i < steps; i++) {
+        const step = run.createChildSpan({
+          type: SpanType.WORKFLOW_STEP,
+          name: `step-${i}`,
+          attributes: { stepId: `step-${i}` },
+          tracingPolicy: { internal: InternalSpans.NONE },
+        });
+        step.end();
+      }
+
+      run.end();
+    };
+
+    it('does not retain entries for exported spans', async () => {
+      const bridge = new OtelBridge();
+      const tracing = makeInstance(bridge);
+
+      for (let run = 0; run < 4; run++) runWorkflow(tracing);
+      await tracing.flush();
+
+      expect(mapSize(bridge)).toBe(0);
+      await bridge.shutdown();
+    });
+
+    it('does not retain entries for spans dropped by excludeSpanTypes', async () => {
+      const bridge = new OtelBridge();
+      const tracing = makeInstance(bridge, { excludeSpanTypes: [SpanType.WORKFLOW_STEP] });
+
+      for (let run = 0; run < 4; run++) runWorkflow(tracing);
+      await tracing.flush();
+
+      expect(mapSize(bridge)).toBe(0);
+      await bridge.shutdown();
+    });
+
+    it('does not retain entries for spans dropped by spanFilter', async () => {
+      const bridge = new OtelBridge();
+      const tracing = makeInstance(bridge, {
+        spanFilter: (span: { type: SpanType }) => span.type !== SpanType.WORKFLOW_STEP,
+      });
+
+      for (let run = 0; run < 4; run++) runWorkflow(tracing);
+      await tracing.flush();
+
+      expect(mapSize(bridge)).toBe(0);
+      await bridge.shutdown();
+    });
+
+    it('does not retain entries for spans dropped by an output processor', async () => {
+      const bridge = new OtelBridge();
+      const tracing = makeInstance(bridge, {
+        spanOutputProcessors: [
+          {
+            name: 'drop-steps',
+            process: (span: { type: SpanType }) => (span.type === SpanType.WORKFLOW_STEP ? undefined : span),
+            shutdown: async () => {},
+          },
+        ],
+      });
+
+      for (let run = 0; run < 4; run++) runWorkflow(tracing);
+      await tracing.flush();
+
+      expect(mapSize(bridge)).toBe(0);
+      await bridge.shutdown();
     });
   });
 });

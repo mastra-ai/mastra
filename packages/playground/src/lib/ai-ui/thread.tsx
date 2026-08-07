@@ -8,6 +8,7 @@ import {
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
+  ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import {
   MessageScroller,
@@ -35,6 +36,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
@@ -46,6 +48,7 @@ import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
+const EMPTY_SUGGESTED_PROMPTS: string[] = [];
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously, so
@@ -104,6 +107,7 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   threadId?: string;
+  suggestedPrompts?: string[];
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
@@ -119,6 +123,7 @@ export const Thread = ({
   agentName,
   agentId,
   threadId,
+  suggestedPrompts,
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
@@ -146,22 +151,22 @@ export const Thread = ({
   return (
     <ComposerAttachmentsProvider>
       <MessageScrollerProvider>
-        <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+        <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
           <MessageScroller>
             <MessageScrollerViewport
               ref={areaRef}
-              className="overflow-y-scroll h-full"
+              className="h-full overflow-y-scroll"
               style={{ overflowAnchor: 'none' }}
             >
               {isEmpty ? (
-                <ThreadWelcome agentName={agentName} />
+                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
               ) : (
                 <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
                   <ThreadRailLayer turns={threadRailTurns} />
                   <div
                     ref={messagesContainerRef}
                     data-testid="thread-message-column"
-                    className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
                   >
                     <BracketOverlay containerRef={messagesContainerRef} />
                     <MessageScrollerContent className="flex flex-col gap-6 py-6">
@@ -197,11 +202,13 @@ export const Thread = ({
                 </div>
               )}
             </MessageScrollerViewport>
-            <MessageScrollerButton className="z-30" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
+              <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
+            </div>
           </MessageScroller>
 
           {showThumbnailInChat && agentId && threadId && (
-            <div className="mb-2 max-w-3xl w-full mx-auto px-4">
+            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
               <BrowserThumbnail agentName={agentName} />
             </div>
           )}
@@ -224,13 +231,15 @@ export const Thread = ({
 
 export interface ThreadWelcomeProps {
   agentName?: string;
+  suggestedPrompts?: string[];
 }
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
   return (
     <div className="flex w-full grow flex-col items-center pt-[15vh]">
       <Avatar name={agentName || 'Agent'} size="lg" />
       <p className="mt-4 font-medium">How can I help you today?</p>
+      <SuggestedPromptList prompts={suggestedPrompts} />
     </div>
   );
 };
@@ -292,47 +301,49 @@ const AgentComposer = ({
         <ComposerAttachments>
           <ChatComposerAttachments />
         </ComposerAttachments>
-        <ComposerBox sendingPulseKey={sendPulseKey}>
-          <ComposerInput
-            ref={textareaRef}
-            value={text}
-            autoFocus={false}
-            placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-            onChange={event => {
-              setThreadInput(event.target.value);
-            }}
-            onKeyDown={event => {
-              // Ignore Enter while an IME composition is active (e.g. committing a
-              // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-              // `keyCode === 229` fallback covers browsers that fire keydown without it.
-              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-              if (event.key === 'Enter' && !event.shiftKey) {
-                if (sendBlocked) return;
-                event.preventDefault();
-                event.stopPropagation();
-                void submit();
-              }
-            }}
-            disabled={!canExecuteAgent}
-          />
-          {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
-          <ComposerActions>
-            <ComposerActionRow
-              canExecute={canExecuteAgent}
-              agentId={agentId}
-              runOptionsSlot={runOptionsSlot}
-              showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
-              isEmpty={isEmpty}
-              isRunning={isRunning}
-              canSendWhileStreaming={canSendWhileStreaming}
-              onCancel={() => void cancelRun()}
-              onSetText={value => {
-                setThreadInput(value);
+        <ComposerRing busy={isRunning}>
+          <ComposerBox sendingPulseKey={sendPulseKey}>
+            <ComposerInput
+              ref={textareaRef}
+              value={text}
+              autoFocus={false}
+              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+              onChange={event => {
+                setThreadInput(event.target.value);
               }}
-              voiceCall={voiceCall}
+              onKeyDown={event => {
+                // Ignore Enter while an IME composition is active (e.g. committing a
+                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  if (sendBlocked) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void submit();
+                }
+              }}
+              disabled={!canExecuteAgent}
             />
-          </ComposerActions>
-        </ComposerBox>
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+            <ComposerActions>
+              <ComposerActionRow
+                canExecute={canExecuteAgent}
+                agentId={agentId}
+                runOptionsSlot={runOptionsSlot}
+                showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                isEmpty={isEmpty}
+                isRunning={isRunning}
+                canSendWhileStreaming={canSendWhileStreaming}
+                onCancel={() => void cancelRun()}
+                onSetText={value => {
+                  setThreadInput(value);
+                }}
+                voiceCall={voiceCall}
+              />
+            </ComposerActions>
+          </ComposerBox>
+        </ComposerRing>
       </Composer>
     </div>
   );
@@ -355,7 +366,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="h-5 w-5 text-neutral3 hover:text-neutral6" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
     </Button>
   );
 };
@@ -388,11 +399,11 @@ const ComposerActionRow = ({
   return (
     <>
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+        <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
-                <ComposerModelSwitcher agentId={agentId} />
+              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
+                <ComposerModelSwitcher />
               </div>
               <ComposerModelSettings agentId={agentId} />
             </>
@@ -450,10 +461,10 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="rounded-full border border-border1 bg-surface5"
+        className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>

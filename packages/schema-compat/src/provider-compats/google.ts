@@ -321,11 +321,12 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
         s['type'] = 'object';
         s['nullable'] = true;
       } else {
-        // Multiple non-null types — can't represent as single OpenAPI 3.0 type.
-        // Drop `type` entirely; don't emit a bare `nullable` (it's meaningless
-        // without an accompanying type and Gemini may reject it).
+        // Multiple non-null types — can't be a single OpenAPI 3.0 `type`. Emit an
+        // `anyOf` of the per-type variants (the shape Gemini accepts) instead of
+        // dropping `type`, which would leave a typeless property Gemini rejects.
         delete s['type'];
-        delete s['nullable'];
+        s['anyOf'] = nonNull.map(t => ({ type: t }));
+        if (hasNull) s['nullable'] = true;
       }
     }
 
@@ -364,6 +365,32 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
         s['anyOf'] = nonNull;
         s['nullable'] = true;
       }
+    }
+
+    // Any node that still lacks a Gemini-recognised shape (`type`, `anyOf`, `oneOf`,
+    // `allOf`, `$ref`, `enum`, or object/array structure) — e.g. a `z.any()` that
+    // serialises to `{}` — is rewritten into a permissive `anyOf` rather than left
+    // typeless (which Gemini rejects) or deleted (which silently drops a field the
+    // model is expected to fill, e.g. `resumeData` in tool suspend/resume).
+    if (
+      !s['type'] &&
+      !s['anyOf'] &&
+      !s['oneOf'] &&
+      !s['allOf'] &&
+      !s['$ref'] &&
+      !s['enum'] &&
+      !s['const'] &&
+      !s['properties'] &&
+      !s['items']
+    ) {
+      s['anyOf'] = [
+        ...['string', 'number', 'integer', 'boolean', 'object'].map(t => ({ type: t })),
+        {
+          type: 'array',
+          items: { anyOf: ['string', 'number', 'integer', 'boolean', 'object'].map(t => ({ type: t })) },
+        },
+      ];
+      s['nullable'] = true;
     }
   }
 

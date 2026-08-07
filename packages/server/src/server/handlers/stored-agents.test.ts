@@ -1,11 +1,13 @@
 import type { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createStoredAgentBodySchema, updateStoredAgentBodySchema } from '../schemas/stored-agents';
 import type { ServerContext } from '../server-adapter';
+import { ACTIVATE_AGENT_VERSION_ROUTE, GET_AGENT_VERSION_ROUTE } from './agent-versions';
 import {
   LIST_STORED_AGENTS_ROUTE,
   GET_STORED_AGENT_ROUTE,
@@ -19,6 +21,7 @@ import {
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
+import { handleAutoVersioning } from './version-helpers';
 import type * as VersionHelpers from './version-helpers';
 
 vi.mock('./version-helpers', async importOriginal => {
@@ -232,6 +235,7 @@ interface MockEditor {
   prompt: {
     preview: ReturnType<typeof vi.fn>;
   };
+  getSource?: ReturnType<typeof vi.fn>;
   getSourceControlProvider?: ReturnType<typeof vi.fn>;
 }
 
@@ -300,6 +304,11 @@ function createAuthenticatedContext(mastra: MockMastra, userId: string, permissi
   return ctx;
 }
 
+async function useRealAutoVersioningOnce() {
+  const actual = await vi.importActual<typeof VersionHelpers>('./version-helpers');
+  vi.mocked(handleAutoVersioning).mockImplementationOnce(actual.handleAutoVersioning);
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -318,6 +327,221 @@ describe('Stored Agents Handlers', () => {
     mockStorage = createMockStorage(mockAgentsStore);
     mockEditor = createMockEditor(mockAgentsStore);
     mockMastra = createMockMastra({ storage: mockStorage, editor: mockEditor });
+  });
+
+  describe('prompt block reference validation', () => {
+    async function createMastraWithPromptBlock(blockId: string, published: boolean) {
+      const storage = new InMemoryStore();
+      const promptBlocksStore = await storage.getStore('promptBlocks');
+      await promptBlocksStore.create({
+        promptBlock: {
+          id: blockId,
+          name: `Prompt block ${blockId}`,
+          content: 'Published prompt block content',
+        },
+      });
+
+      if (published) {
+        const version = await promptBlocksStore.getLatestVersion(blockId);
+        if (!version) {
+          throw new Error('Expected prompt block version');
+        }
+        await promptBlocksStore.update({
+          id: blockId,
+          activeVersionId: version.id,
+          status: 'published',
+        });
+      }
+
+      return {
+        storage,
+        mastra: createMockMastra({ storage: storage as unknown as MockStorage }),
+      };
+    }
+
+    it('rejects create when a referenced prompt block cannot be resolved and lists each ID once', async () => {
+      const storage = new InMemoryStore();
+      const mastra = createMockMastra({ storage: storage as unknown as MockStorage });
+
+      await expect(
+        CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          id: 'missing-ref-agent',
+          name: 'Missing Ref Agent',
+          instructions: [
+            { type: 'prompt_block_ref', id: 'missing-block' },
+            { type: 'prompt_block_ref', id: 'missing-block' },
+          ],
+          model: { provider: 'openai', name: 'gpt-4' },
+        }),
+      ).rejects.toThrow('Unable to verify referenced prompt blocks: missing-block');
+
+      const agentsStore = await storage.getStore('agents');
+      expect(await agentsStore.getById('missing-ref-agent')).toBeNull();
+    });
+
+    it('rejects create when a referenced prompt block is unpublished and lists its ID', async () => {
+      const { mastra } = await createMastraWithPromptBlock('draft-block', false);
+
+      await expect(
+        CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          id: 'draft-only-agent',
+          name: 'Draft Only Agent',
+          instructions: [{ type: 'prompt_block_ref', id: 'draft-block' }],
+          model: { provider: 'openai', name: 'gpt-4' },
+        }),
+      ).rejects.toThrow('Unable to use unpublished referenced prompt blocks: draft-block');
+    });
+
+    it('rejects unpublished references even when inline runtime content remains', async () => {
+      const { mastra } = await createMastraWithPromptBlock('draft-block', false);
+
+      await expect(
+        CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          id: 'mixed-content-agent',
+          name: 'Mixed Content Agent',
+          instructions: [
+            { type: 'prompt_block_ref', id: 'draft-block' },
+            { type: 'text', content: 'Inline runtime content' },
+          ],
+          model: { provider: 'openai', name: 'gpt-4' },
+        }),
+      ).rejects.toThrow('Unable to use unpublished referenced prompt blocks: draft-block');
+    });
+
+    it('rejects update before persisting an unresolved prompt block reference', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore.create({
+        agent: {
+          id: 'update-ref-agent',
+          name: 'Update Ref Agent',
+          instructions: 'Existing instructions',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      const mastra = createMockMastra({ storage: storage as unknown as MockStorage, editor: createMockEditor() });
+
+      await expect(
+        UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          storedAgentId: 'update-ref-agent',
+          instructions: [{ type: 'prompt_block_ref', id: 'missing-update-block' }],
+        }),
+      ).rejects.toThrow('Unable to verify referenced prompt blocks: missing-update-block');
+
+      expect((await agentsStore.getByIdResolved('update-ref-agent', { status: 'draft' }))?.instructions).toBe(
+        'Existing instructions',
+      );
+    });
+
+    it('rejects update before persisting an unpublished prompt block reference', async () => {
+      const { storage, mastra } = await createMastraWithPromptBlock('draft-update-block', false);
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore.create({
+        agent: {
+          id: 'update-draft-ref-agent',
+          name: 'Update Draft Ref Agent',
+          instructions: 'Existing instructions',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      await expect(
+        UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          storedAgentId: 'update-draft-ref-agent',
+          instructions: [
+            { type: 'prompt_block_ref', id: 'draft-update-block' },
+            { type: 'text', content: 'Inline runtime content' },
+          ],
+        }),
+      ).rejects.toThrow('Unable to use unpublished referenced prompt blocks: draft-update-block');
+
+      expect((await agentsStore.getByIdResolved('update-draft-ref-agent', { status: 'draft' }))?.instructions).toBe(
+        'Existing instructions',
+      );
+    });
+
+    it('rejects update when the existing effective instructions contain an unresolved reference', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore.create({
+        agent: {
+          id: 'existing-missing-ref-agent',
+          name: 'Existing Missing Ref Agent',
+          instructions: [{ type: 'prompt_block_ref', id: 'missing-existing-block' }],
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      const mastra = createMockMastra({ storage: storage as unknown as MockStorage });
+
+      await expect(
+        UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          storedAgentId: 'existing-missing-ref-agent',
+          name: 'Renamed Agent',
+        }),
+      ).rejects.toThrow('Unable to verify referenced prompt blocks: missing-existing-block');
+
+      expect((await agentsStore.getByIdResolved('existing-missing-ref-agent', { status: 'draft' }))?.name).toBe(
+        'Existing Missing Ref Agent',
+      );
+    });
+
+    it('rejects activation when the version references unpublished prompt blocks and lists their IDs', async () => {
+      const { storage, mastra } = await createMastraWithPromptBlock('draft-block', false);
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore.create({
+        agent: {
+          id: 'activate-ref-agent',
+          name: 'Activate Ref Agent',
+          instructions: [{ type: 'prompt_block_ref', id: 'draft-block' }],
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      const version = await agentsStore.getLatestVersion('activate-ref-agent');
+      if (!version) {
+        throw new Error('Expected agent version');
+      }
+
+      await expect(
+        ACTIVATE_AGENT_VERSION_ROUTE.handler({
+          ...createTestContext(mastra),
+          agentId: 'activate-ref-agent',
+          versionId: version.id,
+        }),
+      ).rejects.toThrow('Unable to use unpublished referenced prompt blocks: draft-block');
+
+      expect((await agentsStore.getById('activate-ref-agent'))?.activeVersionId).toBeUndefined();
+    });
+
+    it('activates a version with a published prompt block reference', async () => {
+      const { storage, mastra } = await createMastraWithPromptBlock('published-block', true);
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore.create({
+        agent: {
+          id: 'published-ref-agent',
+          name: 'Published Ref Agent',
+          instructions: [{ type: 'prompt_block_ref', id: 'published-block' }],
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      const version = await agentsStore.getLatestVersion('published-ref-agent');
+      if (!version) {
+        throw new Error('Expected agent version');
+      }
+
+      await ACTIVATE_AGENT_VERSION_ROUTE.handler({
+        ...createTestContext(mastra),
+        agentId: 'published-ref-agent',
+        versionId: version.id,
+      });
+
+      expect((await agentsStore.getById('published-ref-agent'))?.activeVersionId).toBe(version.id);
+    });
   });
 
   describe('LIST_STORED_AGENTS_ROUTE', () => {
@@ -931,10 +1155,128 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).status).toBe(413);
       }
     });
+
+    describe('initial version publication', () => {
+      const setupCreate = async (
+        agentId: string,
+        codeAgent?: Record<string, unknown>,
+        editorSource?: 'code' | 'db',
+      ) => {
+        const storage = new InMemoryStore();
+        const agentsStore = await storage.getStore('agents');
+        const editor = createMockEditor();
+        editor.getSource = vi.fn().mockReturnValue(editorSource);
+        editor.agent.create = vi
+          .fn()
+          .mockImplementation(async (input: unknown) => agentsStore.create({ agent: input as never }));
+        const createMastra = createMockMastra({
+          storage: storage as unknown as MockStorage,
+          editor,
+          agents: codeAgent ? { [agentId]: codeAgent } : undefined,
+        });
+
+        return { agentsStore, createMastra };
+      };
+
+      it('publishes the initial version by default so the new agent resolves at status=published', async () => {
+        const agentId = 'storage-only-create';
+        const { agentsStore, createMastra } = await setupCreate(agentId);
+
+        await CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(createMastra),
+          id: agentId,
+          name: 'Storage Only',
+          instructions: 'Be helpful',
+          model: { name: 'gpt-4', provider: 'openai' },
+        });
+
+        const record = await agentsStore.getById(agentId);
+        const initialVersion = await agentsStore.getLatestVersion(agentId);
+
+        expect(initialVersion).toBeTruthy();
+        expect(record?.activeVersionId).toBe(initialVersion?.id);
+        expect(record?.status).toBe('published');
+      });
+
+      it('leaves the agent unpublished when autoPublish is false so it can be staged for review', async () => {
+        const agentId = 'staged-create';
+        const { agentsStore, createMastra } = await setupCreate(agentId);
+
+        const created = await CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(createMastra),
+          id: agentId,
+          name: 'Staged Agent',
+          instructions: 'Be helpful',
+          model: { name: 'gpt-4', provider: 'openai' },
+          autoPublish: false,
+        });
+
+        const record = await agentsStore.getById(agentId);
+        const initialVersion = await agentsStore.getLatestVersion(agentId);
+
+        expect(initialVersion).toBeTruthy();
+        expect(record?.activeVersionId).toBeUndefined();
+        expect(record?.status).toBe('draft');
+        // The unpublished draft is still returned so the caller sees what was just saved.
+        expect(created.instructions).toBe('Be helpful');
+      });
+
+      it('leaves an override for a code-defined agent unpublished when Studio stages it as a draft', async () => {
+        const agentId = 'code-override-create';
+        const { agentsStore, createMastra } = await setupCreate(agentId, {
+          source: 'code',
+          __getEditorConfig: () => ({ instructions: true, tools: true }),
+        });
+
+        await CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(createMastra),
+          id: agentId,
+          name: 'Code Override',
+          instructions: 'Override instructions',
+          model: { name: 'gpt-4', provider: 'openai' },
+          autoPublish: false,
+        });
+
+        const record = await agentsStore.getById(agentId);
+
+        // The code definition keeps serving traffic until the override is published.
+        expect(record?.activeVersionId).toBeUndefined();
+        expect(record?.status).toBe('draft');
+      });
+
+      it('publishes anyway in code-source mode, where only published entities reach disk', async () => {
+        const agentId = 'code-source-create';
+        const { agentsStore, createMastra } = await setupCreate(
+          agentId,
+          {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: true, tools: true }),
+          },
+          'code',
+        );
+
+        await CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(createMastra),
+          id: agentId,
+          name: 'Code Source Override',
+          instructions: 'Override instructions',
+          model: { name: 'gpt-4', provider: 'openai' },
+          autoPublish: false,
+        });
+
+        const record = await agentsStore.getById(agentId);
+        const initialVersion = await agentsStore.getLatestVersion(agentId);
+
+        // Code-source saves have no publish step — the write to disk is the save — so
+        // honouring autoPublish: false would silently drop the override.
+        expect(record?.activeVersionId).toBe(initialVersion?.id);
+        expect(record?.status).toBe('published');
+      });
+    });
   });
 
   describe('UPDATE_STORED_AGENT_ROUTE', () => {
-    it.skip('should update an existing stored agent', async () => {
+    it('should update an existing stored agent', async () => {
       mockAgentsData.set('update-test', {
         id: 'update-test',
         name: 'Original Name',
@@ -1224,42 +1566,150 @@ describe('Stored Agents Handlers', () => {
       }
     });
 
-    it('should auto-publish by updating activeVersionId when a new version is created', async () => {
-      const newVersionId = 'v-autopub-2';
-      mockAgentsData.set('autopub-test', {
-        id: 'autopub-test',
-        name: 'Original Name',
-        instructions: 'Original instructions',
-        model: { name: 'gpt-4', provider: 'openai' },
-        activeVersionId: 'v-autopub-1',
+    describe('version publication lifecycle', () => {
+      const setupPublishedAgent = async (agentId: string, source?: 'code') => {
+        const storage = new InMemoryStore();
+        const editor = createMockEditor();
+        if (source) {
+          editor.getSource = vi.fn().mockReturnValue(source);
+        }
+        const lifecycleMastra = createMockMastra({
+          storage: storage as unknown as MockStorage,
+          editor,
+        });
+        const agentsStore = await storage.getStore('agents');
+        await agentsStore.create({
+          agent: {
+            id: agentId,
+            name: 'Lifecycle Agent',
+            instructions: 'Published instructions',
+            model: { name: 'gpt-4', provider: 'openai' },
+          },
+        });
+        const publishedVersion = await agentsStore.getLatestVersion(agentId);
+        if (!publishedVersion) {
+          throw new Error('Expected initial agent version');
+        }
+        await agentsStore.update({
+          id: agentId,
+          activeVersionId: publishedVersion.id,
+          status: 'published',
+        });
+
+        return { agentsStore, lifecycleMastra, publishedVersion };
+      };
+
+      it('keeps a PATCH-created version as a draft until it is activated', async () => {
+        const agentId = 'draft-lifecycle-test';
+        const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId);
+        await useRealAutoVersioningOnce();
+
+        const updated = await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Draft instructions',
+        });
+        const draftVersion = await agentsStore.getLatestVersion(agentId);
+        if (!draftVersion) {
+          throw new Error('Expected draft agent version');
+        }
+
+        expect(updated.instructions).toBe('Draft instructions');
+        expect(draftVersion.id).not.toBe(publishedVersion.id);
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(publishedVersion.id);
+
+        const published = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+        });
+        const draft = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          status: 'draft',
+        });
+        const specificDraft = await GET_AGENT_VERSION_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          agentId,
+          versionId: draftVersion.id,
+        });
+
+        expect(published.instructions).toBe('Published instructions');
+        expect(draft.instructions).toBe('Draft instructions');
+        expect(specificDraft.instructions).toBe('Draft instructions');
+
+        await ACTIVATE_AGENT_VERSION_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          agentId,
+          versionId: draftVersion.id,
+        });
+        const publishedAfterActivation = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+        });
+
+        expect(publishedAfterActivation.instructions).toBe('Draft instructions');
       });
 
-      // Override the global mock for this test to simulate a new version being created.
-      // The auto-publish branch only runs when versionCreated is true.
-      const { handleAutoVersioning } = await import('./version-helpers');
-      vi.mocked(handleAutoVersioning).mockImplementationOnce(async (_store, _id, _existing, updatedAgent) => ({
-        agent: updatedAgent as any,
-        versionCreated: true,
-      }));
+      it('auto-publishes a PATCH-created version when requested', async () => {
+        const agentId = 'auto-publish-lifecycle-test';
+        const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId);
+        await useRealAutoVersioningOnce();
+        const updateInput = {
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Auto-published instructions',
+          autoPublish: true,
+        };
 
-      // listVersions is called multiple times: once by enforceRetentionLimit
-      // inside handleAutoVersioning, then again by the auto-publish code.
-      // Return the new version each time so auto-publish can activate it.
-      mockAgentsStore.listVersions.mockResolvedValue({
-        versions: [{ id: newVersionId, versionNumber: 2 }],
-        total: 2,
+        await UPDATE_STORED_AGENT_ROUTE.handler(updateInput);
+        const latestVersion = await agentsStore.getLatestVersion(agentId);
+        if (!latestVersion) {
+          throw new Error('Expected updated agent version');
+        }
+        const published = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+        });
+
+        expect(latestVersion.id).not.toBe(publishedVersion.id);
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(latestVersion.id);
+        expect(published.instructions).toBe('Auto-published instructions');
       });
 
-      await UPDATE_STORED_AGENT_ROUTE.handler({
-        ...createTestContext(mockMastra),
-        storedAgentId: 'autopub-test',
-        name: 'Updated Name',
-        instructions: 'Updated instructions',
-      });
+      it('preserves the active code-source version while replacing an unpublished rolling draft', async () => {
+        const agentId = 'code-source-draft-test';
+        const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId, 'code');
+        await useRealAutoVersioningOnce();
 
-      // Verify activeVersionId was updated to the latest version
-      const stored = mockAgentsData.get('autopub-test');
-      expect(stored?.activeVersionId).toBe(newVersionId);
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'First rolling draft',
+        });
+        const firstDraft = await agentsStore.getLatestVersion(agentId);
+        if (!firstDraft) {
+          throw new Error('Expected first rolling draft');
+        }
+
+        expect(await agentsStore.getVersion(publishedVersion.id)).not.toBeNull();
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(publishedVersion.id);
+
+        await useRealAutoVersioningOnce();
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Second rolling draft',
+        });
+        const secondDraft = await agentsStore.getLatestVersion(agentId);
+        if (!secondDraft) {
+          throw new Error('Expected second rolling draft');
+        }
+
+        expect(secondDraft.id).not.toBe(firstDraft.id);
+        expect(await agentsStore.getVersion(firstDraft.id)).toBeNull();
+        expect(await agentsStore.getVersion(publishedVersion.id)).not.toBeNull();
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(publishedVersion.id);
+      });
     });
 
     it('threads toolProviders into the auto-versioning snapshot config', async () => {
