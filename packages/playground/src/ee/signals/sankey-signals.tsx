@@ -2,6 +2,7 @@ import type { DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable, useMouseSensor, useTouchSensor } from '@hello-pangea/dnd';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import type {
   SankeyChartColumn,
@@ -14,7 +15,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChartNoAxesGantt, GripVertical, Waypoints, X } from 'lucide-react';
+import { ArrowLeftRight, ChartNoAxesGantt, GripVertical, Info, Waypoints, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
@@ -26,14 +27,14 @@ import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { NoiseDetailPanel } from './noise-detail-panel';
 import {
   buildSignalGraphSummary,
+  dataContextLabel,
   getSignalRecordNodeId,
   getSignalRecordNodeLabel,
   getSignalRecordNodeValue,
   selectFlowSnapshotIds,
-  snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
-import { formatSignalName, getSignalDescription } from './signal-formatting';
+import { formatSignalName, getSignalDescription, SIGNAL_DESCRIPTIONS } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
@@ -61,6 +62,54 @@ const DRILL_IN_TRACE_LIMIT = 2000;
 const DRAG_SENSORS = [useMouseSensor, useTouchSensor];
 
 type SignalsViewMode = 'flow' | 'compare' | 'lifelines';
+
+/** One-line answer to "what am I looking at?" for each view, shown under the tabs. */
+const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
+  flow: "How this agent's traces distribute across goal, sentiment, behavior, and outcome themes at this point in time.",
+  compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
+  lifelines: "Each theme's share of traces across the whole selected range.",
+};
+
+const EXPLAINER_SIGNAL_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
+
+/** "What is this?" popover for first-time viewers: signals → themes → snapshots. */
+function TraceIntelligenceExplainer() {
+  return (
+    <Popover>
+      <PopoverTrigger
+        className="text-neutral3 hover:text-neutral6 flex cursor-pointer items-center gap-1 text-xs transition-colors"
+        type="button"
+      >
+        <Icon size="sm">
+          <Info />
+        </Icon>
+        What is this?
+      </PopoverTrigger>
+      <PopoverContent align="start" aria-label="What is trace intelligence?" className="max-w-sm space-y-3 p-4 text-xs">
+        <p className="text-neutral5">
+          Every trace from this agent is analyzed for four signals, and traces with similar signals are clustered into
+          named themes.
+        </p>
+        <ul className="space-y-1.5">
+          {EXPLAINER_SIGNAL_ORDER.map(signalName => (
+            <li key={signalName} className="text-neutral4">
+              <span
+                className="font-mono text-[10px] font-semibold tracking-widest uppercase"
+                style={{ color: nodeColor(getSignalHue(signalName)) }}
+              >
+                {signalName}
+              </span>{' '}
+              — {SIGNAL_DESCRIPTIONS[signalName]}
+            </li>
+          ))}
+        </ul>
+        <p className="text-neutral4">
+          Snapshots capture the themes at points in time, so the views above show how they appear, grow, and fade.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; icon: React.ReactNode; label: string }) {
   return (
@@ -474,7 +523,7 @@ export function SankeySignals({
           onSnapshotChange={selectSnapshot}
         />
         <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-          {snapshotSummaryLabel(snapshot, undefined)}
+          {dataContextLabel(snapshots, totalSnapshots, undefined)}
         </p>
         <SignalsFrameLoadingSkeleton />
       </main>
@@ -525,20 +574,24 @@ export function SankeySignals({
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <Tabs<SignalsViewMode>
-          value={viewMode}
-          defaultTab="flow"
-          onValueChange={handleViewModeChange}
-          className="w-fit"
-        >
-          <TabList variant="pill-ghost">
-            <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
-            <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
-            <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
-          </TabList>
-        </Tabs>
+        <div className="flex min-w-0 flex-wrap items-center gap-4">
+          <Tabs<SignalsViewMode>
+            value={viewMode}
+            defaultTab="flow"
+            onValueChange={handleViewModeChange}
+            className="w-fit"
+          >
+            <TabList variant="pill-ghost">
+              <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
+              <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
+              <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+            </TabList>
+          </Tabs>
+          <TraceIntelligenceExplainer />
+        </div>
         {dateRangePicker}
       </div>
+      <p className="text-neutral3 text-xs">{VIEW_DESCRIPTIONS[viewMode]}</p>
       {viewMode === 'compare' ? (
         <ThemeCompare
           entityId={entityId}
@@ -570,7 +623,9 @@ export function SankeySignals({
             onSnapshotChange={selectSnapshot}
           />
           <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-            {drillIn ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}` : snapshotSummaryLabel(snapshot, flow)}
+            {drillIn
+              ? `Filtered · ${dataContextLabel(snapshots, totalSnapshots, flow)}`
+              : dataContextLabel(snapshots, totalSnapshots, flow)}
           </p>
           {drillIn ? (
             <ThemeFilterBanner

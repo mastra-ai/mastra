@@ -174,10 +174,41 @@ export function snapshotSummaryLabel(snapshot: ThemeSnapshot, flow: ThemeFlowRes
     : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt);
   if (!flow) return date;
 
-  const traceCount = flow.stages[0]?.traceCount ?? flow.snapshot.traceCount;
-  const themeCount = flow.stages.reduce(
-    (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
-    0,
-  );
+  const { traceCount, themeCount } = flowCounts(flow);
   return `${date} · ${traceLabel(traceCount)} · ${themeLabel(themeCount)}`;
+}
+
+/**
+ * "Range · N snapshots · N traces at this point · N themes" line rendered
+ * under the flow timeline: what data the whole view covers plus what the
+ * selected snapshot holds. Counts come from the charted flow (cohort stage
+ * totals), so a drilled flow reports the drilled subset; range-only while the
+ * flow is loading.
+ */
+export function dataContextLabel(
+  snapshots: ThemeSnapshot[],
+  totalSnapshots: number,
+  flow: ThemeFlowResponse | undefined,
+) {
+  const first = snapshots[0];
+  const last = snapshots[snapshots.length - 1];
+  const parts = [
+    ...(first && last ? [formatSnapshotWindow(first.startedAt, last.endedAt)] : []),
+    `${totalSnapshots} ${totalSnapshots === 1 ? 'snapshot' : 'snapshots'}`,
+  ];
+  if (flow) {
+    const { traceCount, themeCount } = flowCounts(flow);
+    parts.push(`${traceLabel(traceCount)} at this point`, themeLabel(themeCount));
+  }
+  return parts.join(' · ');
+}
+
+function flowCounts(flow: ThemeFlowResponse) {
+  return {
+    traceCount: flow.stages[0]?.traceCount ?? flow.snapshot.traceCount,
+    themeCount: flow.stages.reduce(
+      (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
+      0,
+    ),
+  };
 }

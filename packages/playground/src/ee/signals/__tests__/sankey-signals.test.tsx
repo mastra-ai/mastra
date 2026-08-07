@@ -461,10 +461,46 @@ describe('SankeySignals', () => {
       expect(screen.queryByRole('link', { name: 'Trace intelligence documentation' })).toBeNull();
     });
 
-    it('shows date, trace count, and theme count below the timeline', async () => {
+    it('shows the range, snapshot count, trace count, and theme count below the timeline', async () => {
       renderSankeySignals();
 
-      expect(await screen.findByText('Jul 1–8, 2026 · 50 traces · 9 themes')).not.toBeNull();
+      expect(
+        await screen.findByText('Jul 1–8, 2026 · 4 snapshots · 50 traces at this point · 9 themes'),
+      ).not.toBeNull();
+    });
+
+    it('describes the active view under the tabs and swaps it with the tab', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      expect(
+        screen.getByText(
+          "How this agent's traces distribute across goal, sentiment, behavior, and outcome themes at this point in time.",
+        ),
+      ).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+
+      expect(
+        await screen.findByText('Which themes grew, shrank, appeared, or disappeared between two points in time.'),
+      ).not.toBeNull();
+      expect(screen.queryByText(/How this agent's traces distribute/)).toBeNull();
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+
+      expect(await screen.findByText("Each theme's share of traces across the whole selected range.")).not.toBeNull();
+    });
+
+    it('explains the four signals and themes from the info popover', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'What is this?' }));
+
+      const popover = await screen.findByRole('dialog', { name: 'What is trace intelligence?' });
+      expect(popover.textContent).toContain('four signals');
+      expect(popover.textContent).toContain('named themes');
+      expect(popover.textContent).toContain('What the user wanted from the interaction.');
+      expect(popover.textContent).toContain('How the interaction ended.');
     });
 
     it('shows the selected snapshot context without controls for a single snapshot', async () => {
