@@ -12,4 +12,4 @@ import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 <SlackIcon className="size-4" />;
 ```
 
-Both take the same props as the other brand icons (`SVGProps<SVGSVGElement>`) and are sized with a class rather than a `size` prop. `GithubIcon` also dropped its clip path, which carried a hardcoded element id and duplicated it on every instance when the icon was rendered many times on one page.
+Both take the same props as the other brand icons (`SVGProps<SVGSVGElement>`) and are sized with a class rather than a `size` prop. `GithubIcon` no longer emits a duplicate element id when the same page renders it many times.

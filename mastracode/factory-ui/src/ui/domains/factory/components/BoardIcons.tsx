@@ -18,17 +18,16 @@ import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
 
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
-export const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> =
-  {
-    'github-issue': { icon: GithubIcon, className: 'text-icon5' },
-    'github-pr': { icon: GitPullRequest, className: 'text-accent1' },
-    'linear-issue': { icon: LinearIcon, className: 'text-accent3' },
-    'slack-thread': { icon: SlackIcon, className: '' },
-    manual: { icon: CircleDot, className: 'text-icon3' },
-  };
+const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
+  'github-issue': { icon: GithubIcon, className: 'text-icon5' },
+  'github-pr': { icon: GitPullRequest, className: 'text-accent1' },
+  'linear-issue': { icon: LinearIcon, className: 'text-accent3' },
+  'slack-thread': { icon: SlackIcon, className: '' },
+  manual: { icon: CircleDot, className: 'text-icon3' },
+};
 
 export function SourceIcon({ source, className }: { source: WorkItemSource; className?: string }) {
-  const { icon: Icon, className: sourceClassName } = SOURCE_ICONS[source] ?? SOURCE_ICONS.manual;
+  const { icon: Icon, className: sourceClassName } = SOURCE_ICONS[source];
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
 }
 
