@@ -120,8 +120,9 @@ async function healRecoveredSessionState(options: {
   // restores the trusted instruction source for untrusted checkouts.
   try {
     const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    const sourceSession = (await options.sessions?.getBySessionId(binding.sessionId)) ?? null;
-    if (sourceSession && sourceSession.orgId === binding.orgId) {
+    const foundSession = (await options.sessions?.getBySessionId(binding.sessionId)) ?? null;
+    const sourceSession = foundSession?.orgId === binding.orgId ? foundSession : null;
+    if (sourceSession) {
       updates.projectRepositoryId = sourceSession.projectRepositoryId;
     }
     const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';
@@ -129,7 +130,7 @@ async function healRecoveredSessionState(options: {
       updates.untrustedCheckout = true;
       const metadataBaseBranch = item?.metadata?.baseBranch;
       const baseRef =
-        (sourceSession?.orgId === binding.orgId ? sourceSession.baseBranch || undefined : undefined) ??
+        sourceSession?.baseBranch ||
         (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);
       if (baseRef) updates.baseRef = baseRef;
     }

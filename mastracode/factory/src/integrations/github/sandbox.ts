@@ -218,10 +218,16 @@ async function gitTransfer(
   options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
 ): Promise<SandboxCommandResult> {
   const { beforeRetry, ...shOptions } = options;
+  const deadlineMs = Date.now() + (shOptions.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
   for (let attempt = 0; ; attempt++) {
-    const result = await sh(sandbox, script, shOptions);
+    const result = await sh(sandbox, script, {
+      ...shOptions,
+      timeoutMs: Math.max(deadlineMs - Date.now(), 1),
+    });
     if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
-    await new Promise(resolve => setTimeout(resolve, GIT_TRANSFER_RETRY_DELAY_MS * (attempt + 1)));
+    const delayMs = GIT_TRANSFER_RETRY_DELAY_MS * (attempt + 1);
+    if (deadlineMs - Date.now() <= delayMs) return result;
+    await new Promise(resolve => setTimeout(resolve, delayMs));
     await beforeRetry?.(attempt + 1);
   }
 }
