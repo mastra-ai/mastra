@@ -460,11 +460,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // will see them on the next turn. This handles both tool-not-found errors
         // (hallucinated tool names) and tool execution errors (tool throws).
         //
-        // Check for pending HITL tool calls (tools with no result and no error).
-        // In mixed turns with errors and pending HITL tools,
-        // the HITL suspension path should take priority over continuing the loop.
+        // Check for pending HITL tool calls (no result and no error); in mixed turns these
+        // take priority over continuing the loop. Exclude aborted calls: they also lack a
+        // result/error but were cancelled, not awaiting input, so they must not count as a
+        // suspension or be recorded as a result (see tool-call-step.ts). Denied approvals are
+        // resolved, not pending, so they are excluded too.
         const hasPendingHITL = inputData.some(
-          tc => tc.result === undefined && !tc.error && !tc.providerExecuted && !isDeniedApproval(tc),
+          tc => tc.result === undefined && !tc.error && !tc.aborted && !tc.providerExecuted && !isDeniedApproval(tc),
         );
 
         if (errorResults?.length > 0 && !hasPendingHITL) {

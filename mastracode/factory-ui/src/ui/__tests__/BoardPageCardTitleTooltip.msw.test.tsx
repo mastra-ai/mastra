@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import type { FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -22,6 +23,7 @@ const LONG_ITEM_TITLE =
   'Login fails with a 500 when the session cookie is rotated mid-request on the staging environment';
 const LONG_CANDIDATE_TITLE =
   'Crash on logout when the refresh token has already been revoked by another tab in the same browser';
+const DECISION_ERROR = 'Project source-control connection not found for this organization and integration.';
 
 const issueWorkItem = {
   id: 'item-1',
@@ -56,8 +58,21 @@ const issueCandidate = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const failedDecision: FactoryDecisionSummary = {
+  id: 'decision-1',
+  evaluationId: 'evaluation-1',
+  workItemId: issueWorkItem.id,
+  type: 'startReview',
+  status: 'failed',
+  attempts: 1,
+  lastError: DECISION_ERROR,
+  createdAt: '2026-07-18T00:00:00.000Z',
+  updatedAt: '2026-07-18T00:01:00.000Z',
+  completedAt: '2026-07-18T00:01:00.000Z',
+};
+
 /** Stubs the board's data endpoints with one work item and one candidate. */
-function stubBoardEndpoints() {
+function stubBoardEndpoints(decisions: FactoryDecisionSummary[] = []) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -86,9 +101,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [issueWorkItem] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-      HttpResponse.json({ decisions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () => HttpResponse.json({ decisions })),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: {
@@ -116,7 +129,21 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('Board card title tooltip', () => {
+describe('Board card tooltips', () => {
+  it('shows failed rule effects as a compact badge with the error on hover', async () => {
+    stubBoardEndpoints([failedDecision]);
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const errorBadge = await screen.findByRole('alert', { name: `Rule effect failed: ${DECISION_ERROR}` });
+    expect(errorBadge).toHaveTextContent('Error');
+    expect(screen.queryByText(`Rule effect failed: ${DECISION_ERROR}`)).not.toBeInTheDocument();
+
+    await user.hover(errorBadge);
+
+    expect(await screen.findByText(`Rule effect failed: ${DECISION_ERROR}`)).toBeVisible();
+  });
+
   it('reveals the full work-item title on hover', async () => {
     stubBoardEndpoints();
     const user = userEvent.setup();

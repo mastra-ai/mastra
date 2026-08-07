@@ -33,6 +33,7 @@ export interface LinearIssue {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  creator?: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;
