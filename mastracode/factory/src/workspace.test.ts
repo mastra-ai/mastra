@@ -4,8 +4,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalSandbox } from '@mastra/core/workspace';
-import type { LocalFilesystem } from '@mastra/core/workspace';
+import { LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -220,7 +219,7 @@ function fakeGithubIntegration() {
           return project
             ? {
                 id: project.id,
-                connectionId: 'connection-1',
+                connectionId: `connection-${project.id}`,
                 repositoryId: 'repository-1',
                 branch: project.defaultBranch,
                 sandboxWorkdir: project.sandboxWorkdir,
@@ -229,7 +228,13 @@ function fakeGithubIntegration() {
             : null;
         }),
       },
-      connections: { get: vi.fn(async () => ({ id: 'connection-1', installationId: 'installation-1' })) },
+      connections: {
+        get: vi.fn(async ({ id }: { id: string }) => ({
+          id,
+          installationId: 'installation-1',
+          factoryProjectId: id.replace(/^connection-/, ''),
+        })),
+      },
       repositories: {
         get: vi.fn(async () => {
           const project = mocks.projects[0];
@@ -456,7 +461,10 @@ describe('getFactoryWorkspace', () => {
 });
 
 describe('GitHub session workspace preparation', () => {
-  async function createLocalFactory(rootPrefix = 'mastracode-web-local-sessions-') {
+  async function createLocalFactory(
+    rootPrefix = 'mastracode-web-local-sessions-',
+    extras: Partial<Parameters<typeof createWorkspaceFactory>[0]> = {},
+  ) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
     const machine = new LocalSandbox({ workingDirectory: root });
@@ -469,6 +477,7 @@ describe('GitHub session workspace preparation', () => {
         github: fakeGithubIntegration() as any,
         fleet,
         workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        ...extras,
       }),
     };
   }
@@ -615,6 +624,106 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+  });
+
+  describe('durable factory filesystem', () => {
+    const projectsStorage = {
+      get: async ({ id }: { orgId: string; id: string }) =>
+        id === 'project-1' ? { id, name: 'Alpha Project' } : id === 'project-2' ? { id, name: 'Beta Project' } : null,
+    } as any;
+
+    async function createDocsFactory() {
+      const durableRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-factory-fs-'));
+      tempDirs.push(durableRoot);
+      const durable = new LocalFilesystem({ basePath: durableRoot });
+      const { workspace } = await createLocalFactory('mastracode-web-local-sessions-', {
+        filesystem: durable,
+        projects: projectsStorage,
+      });
+      return { durable, workspace };
+    }
+
+    it('exposes /factory and round-trips a file through the workspace filesystem', async () => {
+      const { durable, workspace } = await createDocsFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      const sessionWorkspace = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+      });
+      const filesystem = sessionWorkspace.filesystem!;
+
+      const planPath = '/factory/projects/Alpha Project/repos/octocat__hello/plans/foo.md';
+      await filesystem.writeFile(planPath, 'the plan');
+      expect(await filesystem.readFile(planPath, { encoding: 'utf8' })).toBe('the plan');
+      // Persisted in the durable backend under the tenancy prefix, not the sandbox.
+      expect(
+        await durable.readFile('orgs/org-1/projects/Alpha Project/repos/octocat__hello/plans/foo.md', {
+          encoding: 'utf8',
+        }),
+      ).toBe('the plan');
+      // Instructions advertise the mount and the session's own directories.
+      const instructions = filesystem.getInstructions?.() ?? '';
+      expect(instructions).toContain('/factory/shared');
+      expect(instructions).toContain('/factory/projects/Alpha Project/repos/octocat__hello');
+      expect(instructions).toContain('shell commands cannot see /factory');
+    });
+
+    it('shares files across sessions of the same project and hides sibling projects', async () => {
+      const { workspace } = await createDocsFactory();
+      addProject();
+      addProject({ id: 'project-2' });
+      addSession({ id: 'session-a', projectRepositoryId: 'project-1' });
+      addSession({ id: 'session-b', projectRepositoryId: 'project-1' });
+      addSession({ id: 'session-c', projectRepositoryId: 'project-2' });
+
+      const first = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await first.filesystem!.writeFile('/factory/projects/Alpha Project/shared/note.md', 'alpha note');
+      await first.filesystem!.writeFile('/factory/shared/org-note.md', 'org note');
+
+      // A later session in the same project reads the doc back.
+      const second = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
+      expect(
+        await second.filesystem!.readFile('/factory/projects/Alpha Project/shared/note.md', { encoding: 'utf8' }),
+      ).toBe('alpha note');
+
+      // A sibling-project session sees /shared but not Alpha Project's files.
+      const sibling = await workspace({ requestContext: createGithubRequestContext('project-2', 'session-c') });
+      expect(await sibling.filesystem!.readFile('/factory/shared/org-note.md', { encoding: 'utf8' })).toBe('org note');
+      expect(await sibling.filesystem!.readdir('/factory/projects')).toEqual([
+        { name: 'Beta Project', type: 'directory' },
+      ]);
+      await expect(sibling.filesystem!.readFile('/factory/projects/Alpha Project/shared/note.md')).rejects.toThrow();
+      expect(await sibling.filesystem!.exists('/factory/projects/Alpha Project/shared/note.md')).toBe(false);
+    });
+
+    it('isolates orgs in the durable backend', async () => {
+      const { durable, workspace } = await createDocsFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      const sessionWorkspace = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+      });
+      await sessionWorkspace.filesystem!.writeFile('/factory/shared/org-note.md', 'org-1 note');
+
+      // The doc lives under org-1's prefix; org-2's tree is empty.
+      expect(await durable.exists('orgs/org-1/shared/org-note.md')).toBe(true);
+      expect(await durable.exists('orgs/org-2/shared/org-note.md')).toBe(false);
+    });
+
+    it('keeps the plain sandbox filesystem when no durable filesystem is configured', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      const sessionWorkspace = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+      });
+      const instructions = sessionWorkspace.filesystem!.getInstructions?.() ?? '';
+      expect(sessionWorkspace.filesystem!.provider).not.toBe('factory');
+      expect(instructions).not.toContain('/factory');
+    });
   });
 
   function createRemoteFactory() {

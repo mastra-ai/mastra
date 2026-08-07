@@ -42,6 +42,8 @@ Write the full plan into the conversation, structured as:
 
 The plan must be executable by someone with no access to this conversation beyond this message.
 
+When the workspace exposes the durable `/factory` mount (the filesystem instructions advertise it), also write the full plan there — e.g. `<your repo directory>/plans/<work-item>.md`, using your repo directory as advertised in the filesystem instructions and the work item's identifier (issue number or Linear ID) as the file name. Use the workspace file tools; shell commands cannot see the mount. Reference that path in the transition rationale so later sessions can find it. The plan message in this conversation stays the authoritative handoff; the file is a durable copy that survives sandbox teardown. Without the mount, skip this step.
+
 ## Phase 4: Transition
 
 End the run with a single `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal.

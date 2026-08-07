@@ -61,6 +61,8 @@ export const queryKeys = {
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
+  factoryFsList: (factoryProjectId: string | undefined) => ['factory-fs', 'list', factoryProjectId ?? null] as const,
+  factoryFsFile: (path: string | undefined) => ['factory-fs', 'file', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,

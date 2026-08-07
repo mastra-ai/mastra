@@ -9,10 +9,11 @@ import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
-import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import type { SkillSource, SkillSourceEntry, SkillSourceStat, WorkspaceFilesystem } from '@mastra/core/workspace';
 import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
+import { FactoryFilesystem } from './filesystem.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -26,6 +27,7 @@ import {
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -125,10 +127,19 @@ export interface CreateWorkspaceFactoryOptions {
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  /**
+   * Durable filesystem shared across factory sessions. When set, session
+   * workspaces overlay it at `/factory` on top of the sandbox filesystem
+   * (see `FactoryFilesystem`). Omitted → no durable mount.
+   */
+  filesystem?: WorkspaceFilesystem;
+  /** Projects storage used to name the session's `/factory` project
+   * directory. Without it the directory falls back to the project id. */
+  projects?: Pick<FactoryProjectsStorage, 'get'>;
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, fleet, workItems } = options;
+  const { sandbox: sandboxConfig, github, fleet, workItems, filesystem: durableFilesystem, projects } = options;
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
   const githubTokenInjectors = new Map<
     string,
@@ -353,7 +364,33 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       registerGithubTokenInjector(requestContext, injectGithubToken);
       registerGithubPatKind(requestContext, patKind);
 
-      const filesystem = new SandboxFilesystem({ sandbox, workdir });
+      const sandboxFilesystem = new SandboxFilesystem({ sandbox, workdir });
+      let filesystem: SandboxFilesystem | FactoryFilesystem = sandboxFilesystem;
+      if (durableFilesystem) {
+        // Name the project directory after the factory project. Best-effort:
+        // an unresolved project falls back to its id so the mount still works.
+        let projectName = connection.factoryProjectId;
+        if (projects) {
+          try {
+            const project = await projects.get({ orgId: session.orgId, id: connection.factoryProjectId });
+            if (project?.name) projectName = project.name;
+          } catch (error) {
+            // Fall back to the project id. Loud: files written under the id
+            // land in a directory later name-resolved sessions cannot see.
+            console.warn(
+              `[FactoryFilesystem] Could not resolve project ${connection.factoryProjectId} — using its id as the project directory`,
+              error,
+            );
+          }
+        }
+        filesystem = new FactoryFilesystem({
+          inner: sandboxFilesystem,
+          durable: durableFilesystem,
+          orgId: session.orgId,
+          projectName,
+          repoSlug: repoFullName,
+        });
+      }
       const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
       const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
       const workspace = new Workspace({

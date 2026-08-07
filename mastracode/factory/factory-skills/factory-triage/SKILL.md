@@ -80,6 +80,8 @@ fi
 
 Set `COMMENT_BODY` to the marker followed by the handoff. Update the oldest marked comment authored by the current GitHub identity when duplicates exist; do not add another comment merely because a newer Factory comment exists. If a human deleted the marked comment, create it again.
 
+When the workspace exposes the durable `/factory` mount (the filesystem instructions advertise it), also persist the handoff there — e.g. `<your repo directory>/triage/<work-item>.md`, using your repo directory as advertised in the filesystem instructions and the work item's identifier as the file name. Use the workspace file tools; shell commands cannot see the mount. The file survives sandbox teardown so the planning session can read it back. Without the mount, skip this step.
+
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
 - When the current stage is **Intake** or **Triage**, make the terminal `factory_transition_work_item` call: valid/actionable issues go to `planning`; issues that should be closed go to `done` with the close rationale.

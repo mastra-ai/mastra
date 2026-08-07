@@ -20,10 +20,10 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import { LocalSandbox } from '@mastra/core/workspace';
+import { LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
+import { InProcessSandboxAddressRegistry, PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
@@ -200,6 +200,29 @@ const sandbox = hasPlatformSandboxEnv
       env: localSandboxEnv(),
     });
 
+// Durable factory filesystem: platform bucket when the platform identity
+// AND a bucket are configured, otherwise a local folder so dev exercises the
+// same `/factory` code path. The platform sandbox env can be complete
+// while no bucket is attached — fall back to the local folder and say so
+// rather than failing the boot.
+const platformBucketName = process.env.MASTRA_PLATFORM_BUCKET_NAME?.trim();
+const factoryFsLocalRoot =
+  process.env.MASTRACODE_FACTORY_FS_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'factory-fs');
+const factoryFilesystem =
+  hasPlatformSandboxEnv && platformBucketName
+    ? new PlatformFilesystem({ bucketName: platformBucketName })
+    : new LocalFilesystem({ basePath: factoryFsLocalRoot });
+if (hasPlatformSandboxEnv && platformBucketName) {
+  console.log(`[FactoryFilesystem] MASTRA_PLATFORM_BUCKET_NAME set — durable /factory on the platform bucket.`);
+} else {
+  if (hasPlatformSandboxEnv) {
+    console.warn(
+      '[FactoryFilesystem] Platform sandbox env is set but MASTRA_PLATFORM_BUCKET_NAME is not — durable /factory falls back to a local folder, which does not survive replica moves.',
+    );
+  }
+  console.log(`[FactoryFilesystem] Durable /factory on local folder ${factoryFsLocalRoot}.`);
+}
+
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →
 // Postgres (the paired PgVector rides the same database for recall search).
@@ -291,6 +314,9 @@ export const factory = new MastraFactory({
     // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
   },
+  // Durable factory-wide filesystem, mounted at /factory in every session
+  // workspace (see selection above: platform bucket or local folder).
+  filesystem: factoryFilesystem,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

@@ -18,6 +18,7 @@ import type {
   ThinkingConfigInfo,
   UpdateThinkingConfigResponse,
 } from '@mastra/factory/routes/config';
+import type { FactoryFsEntry, FactoryFsFile, FactoryFsListing } from '@mastra/factory/routes/factory-fs';
 import type {
   ArtifactEntry,
   ArtifactListing,
@@ -41,6 +42,7 @@ export type {
   ThinkingConfigInfo,
   UpdateThinkingConfigResponse,
 };
+export type { FactoryFsEntry, FactoryFsFile, FactoryFsListing };
 export type {
   ArtifactEntry,
   ArtifactListing,

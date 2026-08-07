@@ -29,7 +29,7 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { LocalSandbox } from '@mastra/core/workspace';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryAuthUser } from './auth.js';
 import {
   buildAuthRoutes,
@@ -46,6 +46,7 @@ import { releaseWorkItemSandboxes } from './integrations/github/sandbox-release.
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
+import { FactoryFsRoutes } from './routes/factory-fs.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -142,6 +143,16 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
   sandbox?: MastraFactorySandboxConfig;
+  /**
+   * Durable filesystem shared across the factory — exposed to session agents
+   * under the `/factory` mount. Files there survive sandbox teardown, making
+   * it a good home for anything that doesn't belong in version control
+   * (plans, notes, handoffs, scratch data — usage is up to agents and users).
+   * Any `WorkspaceFilesystem` instance — `PlatformFilesystem`
+   * (`@mastra/platform-workspace`) on deployments, `LocalFilesystem`
+   * (`@mastra/core/workspace`) for local dev. Omitted → no durable mount.
+   */
+  filesystem?: WorkspaceFilesystem;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -413,6 +424,11 @@ export class MastraFactory {
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
     });
+    const factoryFsRoutes = new FactoryFsRoutes({
+      auth: routeAuth,
+      filesystem: this.#config.filesystem,
+      projects: factoryProjectsStorage,
+    });
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
@@ -623,6 +639,7 @@ export class MastraFactory {
           ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
+          ...(this.#config.filesystem ? { filesystem: this.#config.filesystem, projects: factoryProjectsStorage } : {}),
           fleet,
         }),
         disableGithubSignals: true,
@@ -742,6 +759,7 @@ export class MastraFactory {
             },
           }),
           ...projectRoutes.routes(),
+          ...factoryFsRoutes.routes(),
           ...auditDomain.routes(),
         ],
         buildServerConfig: () => {
