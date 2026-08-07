@@ -264,6 +264,13 @@ export const paginationQuerySchema = z.object({
   perPage: z.coerce.number().optional().default(10),
 });
 
+export const listExperimentsQuerySchema = paginationQuerySchema.extend({
+  experimentSetId: z.string().optional(),
+  comparisonId: z.string().optional(),
+  variantId: z.string().optional(),
+  trialIndex: z.coerce.number().int().min(0).optional(),
+});
+
 export const tenancyQuerySchema = z.object({
   organizationId: z.string().optional().describe('Restrict lookup to the given organization'),
   projectId: z.string().optional().describe('Restrict lookup to the given project'),
@@ -346,6 +353,24 @@ export const triggerExperimentBodySchema = z.object({
   itemTimeout: experimentTimeoutSchema
     .optional()
     .describe('Fallback execution timeout per item in milliseconds, from 1 to 1,800,000 (30 minutes)'),
+  provenance: z
+    .object({
+      source: z.string().optional(),
+      sourceId: z.string().optional(),
+      sourceVersion: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional()
+    .describe('Caller-provided provenance claims for the experiment execution'),
+  grouping: z
+    .object({
+      experimentSetId: z.string().optional(),
+      comparisonId: z.string().optional(),
+      variantId: z.string().optional(),
+      trialIndex: z.number().int().min(0).optional(),
+    })
+    .optional()
+    .describe('Stable grouping dimensions for comparisons and repeated trials'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
   versions: z
     .object({
@@ -419,6 +444,27 @@ export const experimentResponseSchema = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  provenance: z
+    .object({
+      source: z.string().optional(),
+      sourceId: z.string().optional(),
+      sourceVersion: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    })
+    .nullable()
+    .optional(),
+  runnerAttestation: z
+    .object({
+      runnerId: z.string(),
+      invocationId: z.string(),
+      runnerVersion: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+  experimentSetId: z.string().nullable().optional(),
+  comparisonId: z.string().nullable().optional(),
+  variantId: z.string().nullable().optional(),
+  trialIndex: z.number().int().nullable().optional(),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),
   succeededCount: z.number(),

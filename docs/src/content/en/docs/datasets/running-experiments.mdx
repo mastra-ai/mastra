@@ -68,6 +68,24 @@ const summary = await dataset.startExperiment({
 
 Each item's `input` is passed directly to `agent.generate()`, so it must be a `string`, `string[]`, or `CoreMessage[]`.
 
+#### Memory-enabled agents
+
+When the target agent has its own memory and the request context carries a resource id (`MASTRA_RESOURCE_ID_KEY`, set by auth middleware, the experiment or item `requestContext`, or the Studio **Run Experiment** form), the experiment runner injects a fresh memory thread for each item. A resource id in the request context means "run as this resource": each item's conversation persists as a thread under that resource, and retried items get a new thread per attempt so earlier failed attempts can't leak into the retry's context.
+
+Injected threads are tagged so you can map them back to the run: thread metadata carries the `experimentId` and the dataset item's id as `experimentItemId`. No thread title is generated for them.
+
+Because the threads belong to the caller's resource, resource-scoped memory features both read and write that resource's state during the run:
+
+- Resource-scoped working memory updates persist to the resource, and later items in the run see updates made by earlier items.
+- Resource-scoped semantic recall can surface the resource's prior conversations to the experiment, and experiment transcripts become recallable in that resource's later conversations.
+
+This is useful when you want to evaluate an agent against a real user's accumulated context. If you don't want experiment runs touching real user state, run the experiment with a dedicated evaluation resource id instead.
+
+Thread injection is skipped in the following cases:
+
+- If the request context also sets `MASTRA_THREAD_ID_KEY`, the runner uses that thread as-is, so every item (and retry) shares the same conversation.
+- If the agent has no memory, or the request context has no resource id, the run is memoryless and nothing is persisted.
+
 ### Registered workflow
 
 Point to a workflow registered on your Mastra instance:

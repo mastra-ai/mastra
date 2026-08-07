@@ -1036,6 +1036,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   stepStartEmitted = true;
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
+                    messageId: currentMessageId,
                     request,
                     warnings,
                   });
