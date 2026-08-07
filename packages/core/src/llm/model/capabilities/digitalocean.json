@@ -72,6 +72,7 @@
     "deepseek-4-flash",
     "deepseek-r1-distill-llama-70b",
     "deepseek-v3",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "gemma-4-31B-it",
     "glm-5",
@@ -103,6 +104,7 @@
   "structuredOutput": [
     "alibaba-qwen3-32b",
     "deepseek-r1-distill-llama-70b",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "gemma-4-31B-it",
     "glm-5.1",
