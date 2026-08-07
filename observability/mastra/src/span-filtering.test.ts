@@ -125,6 +125,9 @@ describe('Span Filtering', () => {
       expect(stepSpan.isExcluded).toBe(true);
       expect(toolSpan.getParentSpanId()).toBe(modelSpan.id);
       expect(toolSpan.exportSpan().parentSpanId).toBe(modelSpan.id);
+      // includeInternalSpans must still skip excludeSpanTypes ancestors
+      expect(toolSpan.getParentSpanId(true)).toBe(modelSpan.id);
+      expect(toolSpan.exportSpan(true).parentSpanId).toBe(modelSpan.id);
 
       toolSpan.end();
       stepSpan.end();

@@ -286,18 +286,18 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   abstract get isValid(): boolean;
 
   /**
-   * Get the closest parent span, optionally skipping internal spans.
-   * When `includeInternalSpans` is false/undefined, also skips ancestors
-   * dropped by `excludeSpanTypes` so exported `parentSpanId` values point
-   * at spans that exporters actually receive.
+   * Get the closest parent span.
+   * Always skips ancestors dropped by `excludeSpanTypes` (`isExcluded`), so
+   * exported `parentSpanId` values never point at spans exporters omit.
+   * When `includeInternalSpans` is false/undefined, also skips `isInternal`
+   * ancestors.
    */
   public getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined {
     if (!this.parent) {
       return undefined;
     }
-    if (includeInternalSpans) return this.parent;
     const parent = this.parent as AnyBaseSpan;
-    if (parent.isInternal || parent.isExcluded) {
+    if (parent.isExcluded || (!includeInternalSpans && parent.isInternal)) {
       return parent.getParentSpan(includeInternalSpans);
     }
     return this.parent;

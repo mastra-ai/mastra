@@ -2,4 +2,4 @@
 "@mastra/observability": patch
 ---
 
-fix(observability): reparent spans past excludeSpanTypes ancestors so exporters no longer orphan tool-call descendants
+Fixed span exports when `excludeSpanTypes` removes a parent span. Descendant spans now use the nearest exported parent, so exporters retain tool calls.
