@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Drawer,
   DrawerBody,
@@ -7,11 +6,20 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
+import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { useState } from 'react';
 
+import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
+import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS, traceLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
+import { themeTrendDirection } from './theme-trend-data';
+import type { ThemeHistoryPoint } from './theme-trend-data';
 import { TraceInsightView } from './trace-insight-view';
+
+const TREND_CHART_HEIGHT = 32;
 
 interface ThemeDetailPanelProps {
   entityId: string;
@@ -20,6 +28,74 @@ interface ThemeDetailPanelProps {
   snapshotTotal: number;
   selection: ThemeSelection | undefined;
   onClose: () => void;
+}
+
+function trendPointLabel(point: ThemeHistoryPoint) {
+  return `${formatSnapshotDate(point.startedAt)} · ${traceLabel(point.traceCount)} (${Math.round(point.coverage * 100)}%)`;
+}
+
+/**
+ * Trace count over time for one theme. Absent stretches (death points with
+ * zero traces) drop the area to the baseline, so a theme's rise and fall —
+ * including disappearing and coming back — reads without clustering jargon.
+ */
+function TrendChart({ points, color }: { points: ThemeHistoryPoint[]; color: string }) {
+  const firstTime = new Date(points[0].startedAt).getTime();
+  const lastTime = new Date(points[points.length - 1].startedAt).getTime();
+  const timeSpan = lastTime - firstTime;
+  const maxCount = Math.max(1, ...points.map(point => point.traceCount));
+  const x = (point: ThemeHistoryPoint) =>
+    timeSpan === 0 ? 50 : ((new Date(point.startedAt).getTime() - firstTime) / timeSpan) * 100;
+  const y = (point: ThemeHistoryPoint) => (1 - point.traceCount / maxCount) * (TREND_CHART_HEIGHT - 4) + 2;
+  const coordinates = points.map(point => `${x(point)},${y(point)}`);
+
+  return (
+    <div className="mt-3">
+      <div className="relative h-8" data-testid="trend-chart">
+        <svg
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 size-full"
+          preserveAspectRatio="none"
+          viewBox={`0 0 100 ${TREND_CHART_HEIGHT}`}
+        >
+          <polygon
+            fill={color}
+            fillOpacity={0.14}
+            points={[`0,${TREND_CHART_HEIGHT}`, ...coordinates, `100,${TREND_CHART_HEIGHT}`].join(' ')}
+          />
+          <polyline
+            fill="none"
+            stroke={color}
+            strokeOpacity={0.7}
+            strokeWidth={1.2}
+            vectorEffect="non-scaling-stroke"
+            points={coordinates.join(' ')}
+          />
+        </svg>
+        {points.map(point => {
+          const label = trendPointLabel(point);
+          return (
+            <Tooltip key={point.snapshotId}>
+              <TooltipTrigger
+                aria-label={label}
+                className="absolute size-2 -translate-x-1/2 -translate-y-1/2 cursor-default rounded-full hover:brightness-125"
+                style={{
+                  left: `${x(point)}%`,
+                  top: `${(y(point) / TREND_CHART_HEIGHT) * 100}%`,
+                  backgroundColor: color,
+                }}
+              />
+              <TooltipContent>{label}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+      <div className="text-neutral3 mt-1 flex justify-between font-mono text-[11px]">
+        <span>{formatSnapshotDate(points[0].startedAt)}</span>
+        <span>{formatSnapshotDate(points[points.length - 1].startedAt)}</span>
+      </div>
+    </div>
+  );
 }
 
 export function ThemeDetailPanel({
@@ -45,7 +121,7 @@ export function ThemeDetailPanel({
     selection?.signalName ?? 'goal',
     snapshotId,
     selection?.themeId,
-    5,
+    EXAMPLES_PAGE_SIZE,
     examplesOffset,
   );
   const historyQuery = useThemeHistory(
@@ -55,6 +131,7 @@ export function ThemeDetailPanel({
     snapshotTotal > 1 ? selection?.themeId : undefined,
   );
   const title = detailQuery.data?.theme?.label ?? selection?.label ?? 'Theme details';
+  const signalName = selection?.signalName;
 
   return (
     <Drawer
@@ -71,8 +148,22 @@ export function ThemeDetailPanel({
     >
       <DrawerContent>
         <DrawerHeader className="border-border1 border-b">
+          {signalName !== undefined && (
+            <span
+              className="font-mono text-xs font-semibold tracking-widest"
+              style={{ color: nodeColor(getSignalHue(signalName)) }}
+            >
+              <Tooltip>
+                <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
+                <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
+              </Tooltip>
+              <span aria-hidden="true"> theme</span>
+            </span>
+          )}
           <DrawerTitle>{title}</DrawerTitle>
-          <DrawerDescription className="sr-only">Details for {title}</DrawerDescription>
+          <DrawerDescription className="sr-only">
+            Details for the {signalName ?? 'selected'} theme {title}
+          </DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="grid content-start gap-6 overflow-y-auto p-6">
           {insightTraceId !== undefined && (
@@ -97,18 +188,9 @@ export function ThemeDetailPanel({
                     <p className="text-neutral5 mt-3 text-sm">
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </p>
-                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <dt className="text-neutral3">Traces</dt>
-                        <dd className="text-neutral5 mt-1 font-mono">{detailQuery.data.theme.traceCount}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-neutral3">Stage share</dt>
-                        <dd className="text-neutral5 mt-1 font-mono">
-                          {Math.round(detailQuery.data.theme.coverage * 100)}%
-                        </dd>
-                      </div>
-                    </dl>
+                    <p className="text-neutral5 mt-3 font-mono text-sm tabular-nums">
+                      {shareSentence(detailQuery.data.theme.traceCount, detailQuery.data.theme.coverage)}
+                    </p>
                   </section>
 
                   <section aria-labelledby="theme-examples-heading">
@@ -140,41 +222,36 @@ export function ThemeDetailPanel({
                             ))}
                           </ul>
                         )}
-                        {examplesQuery.data.nextOffset !== undefined && (
-                          <Button
-                            className="mt-3"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setExamplesOffset(examplesQuery.data.nextOffset ?? 0)}
-                          >
-                            Next examples
-                          </Button>
-                        )}
+                        <ExamplesPager
+                          traceCount={detailQuery.data.theme.traceCount}
+                          offset={examplesOffset}
+                          onOffsetChange={setExamplesOffset}
+                        />
                       </>
                     )}
                   </section>
 
                   {snapshotTotal > 1 && (
-                    <section aria-labelledby="theme-history-heading">
-                      <h2
-                        id="theme-history-heading"
-                        className="text-neutral3 font-mono text-xs tracking-wider uppercase"
-                      >
-                        History
+                    <section aria-labelledby="theme-trend-heading">
+                      <h2 id="theme-trend-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
+                        Trend
                       </h2>
-                      {historyQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading history…</p>}
-                      {historyQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load history.</p>}
-                      {historyQuery.data && (
-                        <ol className="mt-3 space-y-3">
-                          {historyQuery.data.points.map(point => (
-                            <li key={point.snapshotId} className="border-border2 border-l pl-3 text-sm">
-                              <p className="text-neutral5 font-medium capitalize">{point.state}</p>
-                              <p className="text-neutral3 mt-1 font-mono text-xs">
-                                {point.traceCount} traces · {Math.round(point.coverage * 100)}%
-                              </p>
-                            </li>
-                          ))}
-                        </ol>
+                      {historyQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading trend…</p>}
+                      {historyQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load the trend.</p>}
+                      {historyQuery.data && historyQuery.data.points.length > 0 && (
+                        <>
+                          <p className="text-neutral5 mt-3 text-sm">
+                            First seen {formatSnapshotDate(historyQuery.data.points[0].startedAt)} · in{' '}
+                            {historyQuery.data.points.length} of {snapshotTotal} snapshots ·{' '}
+                            {themeTrendDirection(historyQuery.data.points)}
+                          </p>
+                          {historyQuery.data.points.length >= 2 && (
+                            <TrendChart
+                              points={historyQuery.data.points}
+                              color={nodeColor(getSignalHue(signalName ?? 'goal'))}
+                            />
+                          )}
+                        </>
                       )}
                     </section>
                   )}

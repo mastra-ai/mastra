@@ -90,7 +90,7 @@ function useFlowHandlers(onPathsRequest?: () => void) {
     ),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/examples`, ({ request }) => {
       const offset = new URL(request.url).searchParams.get('offset');
-      return HttpResponse.json(offset === '1' ? secondThemeExamplesResponse : firstThemeExamplesResponse);
+      return HttpResponse.json(offset === '5' ? secondThemeExamplesResponse : firstThemeExamplesResponse);
     }),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/history`, () =>
       HttpResponse.json(themeHistoryResponse),
@@ -439,9 +439,10 @@ describe('SankeySignals drill-in', () => {
       expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
       expect(await screen.findByText('Users want to add a transcript to their workspace.')).not.toBeNull();
       expect(await screen.findByText('Add this transcript to my workspace.')).not.toBeNull();
-      expect(await screen.findByText(/^birth$/i)).not.toBeNull();
+      expect(await screen.findByRole('heading', { name: 'Trend' })).not.toBeNull();
+      expect(screen.queryByText(/^birth$/i)).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Next examples' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
       expect(await screen.findByText('Save the transcript with the project.')).not.toBeNull();
     });
   });
@@ -480,8 +481,8 @@ describe('SankeySignals drill-in', () => {
           'Noise contains trace signal summaries that did not consistently match a recurring theme in this snapshot.',
         ),
       ).not.toBeNull();
-      expect(await within(dialog).findByText('2')).not.toBeNull();
-      expect(within(dialog).getByText('67%')).not.toBeNull();
+      expect(await within(dialog).findByText('2 of 3 traces in this snapshot (67%)')).not.toBeNull();
+      expect(within(dialog).queryByText('Stage share')).toBeNull();
       expect(
         await within(dialog).findByText('The agent retried a fetch without establishing a recurring behavior pattern.'),
       ).not.toBeNull();
@@ -592,7 +593,7 @@ describe('SankeySignals drill-in', () => {
   });
 
   describe('when only one snapshot exists', () => {
-    it('omits theme history from the detail panel', async () => {
+    it('omits the theme trend from the detail panel', async () => {
       useFlowHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -604,7 +605,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
-      expect(screen.queryByRole('heading', { name: 'History' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Trend' })).toBeNull();
     });
   });
 
@@ -767,14 +768,14 @@ describe('SankeySignals drill-in', () => {
             offset: url.searchParams.get('offset') ?? '',
           });
           return HttpResponse.json(
-            url.searchParams.get('offset') === '1' ? secondThemeExamplesResponse : firstThemeExamplesResponse,
+            url.searchParams.get('offset') === '5' ? secondThemeExamplesResponse : firstThemeExamplesResponse,
           );
         }),
       );
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Next examples' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       await screen.findByText('Save the transcript with the project.');
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       await waitFor(() =>

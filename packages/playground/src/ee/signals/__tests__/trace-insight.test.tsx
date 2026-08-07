@@ -70,7 +70,7 @@ function registerThemeDrilldownHandlers() {
     ),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/examples`, ({ request }) => {
       const offset = new URL(request.url).searchParams.get('offset');
-      return HttpResponse.json(offset === '1' ? secondThemeExamplesResponse : firstThemeExamplesResponse);
+      return HttpResponse.json(offset === '5' ? secondThemeExamplesResponse : firstThemeExamplesResponse);
     }),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/history`, () =>
       HttpResponse.json(themeHistoryResponse),
@@ -191,7 +191,7 @@ describe('Trace signals trace insight', () => {
       renderSignals();
 
       await openThemeDetails();
-      fireEvent.click(await screen.findByRole('button', { name: 'Next examples' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       fireEvent.click(
         await screen.findByRole('button', { name: 'View trace insight for Save the transcript with the project.' }),
       );

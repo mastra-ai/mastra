@@ -186,8 +186,16 @@ export const themeDetailResponse = {
     label: 'Add transcript',
     description: 'Users want to add a transcript to their workspace.',
     state: 'continue',
-    traceCount: 2,
+    traceCount: 6,
     coverage: 2 / 3,
+  },
+} satisfies ThemeDetailResponse;
+
+export const zeroCoverageThemeDetailResponse = {
+  snapshot,
+  theme: {
+    ...themeDetailResponse.theme,
+    coverage: 0,
   },
 } satisfies ThemeDetailResponse;
 
@@ -203,8 +211,28 @@ export const firstThemeExamplesResponse = {
       signalText: 'Add this transcript to my workspace.',
       traceStartedAt: '2026-07-20T10:00:00.000Z',
     },
+    {
+      traceId: 'trace-3',
+      extractedTraceId: 'extracted-3',
+      signalText: 'Attach the standup transcript to the workspace.',
+    },
+    {
+      traceId: 'trace-4',
+      extractedTraceId: 'extracted-4',
+      signalText: 'Upload this call transcript for the team.',
+    },
+    {
+      traceId: 'trace-5',
+      extractedTraceId: 'extracted-5',
+      signalText: 'Put the interview transcript into my workspace.',
+    },
+    {
+      traceId: 'trace-6',
+      extractedTraceId: 'extracted-6',
+      signalText: 'Store the retro transcript with the workspace.',
+    },
   ],
-  nextOffset: 1,
+  nextOffset: 5,
 } satisfies ThemeExamplesResponse;
 
 export const secondThemeExamplesResponse = {
@@ -288,6 +316,22 @@ export const themeHistoryResponse = {
     },
   ],
   relationships: [],
+} satisfies ThemeHistoryResponse;
+
+export const fadingThemeHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [
+    themeHistoryResponse.points[0],
+    {
+      ...themeHistoryResponse.points[1],
+      trend: { popularity: -0.4, signalScore: -0.2, strength: 'strong' },
+    },
+  ],
+} satisfies ThemeHistoryResponse;
+
+export const singlePointThemeHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [themeHistoryResponse.points[1]],
 } satisfies ThemeHistoryResponse;
 
 export const firstThemePathsResponse = {

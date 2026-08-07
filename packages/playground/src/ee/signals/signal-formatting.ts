@@ -29,6 +29,13 @@ export function themeLabel(count: number) {
   return `${count} ${count === 1 ? 'theme' : 'themes'}`;
 }
 
+/** "28 of 70 traces in this snapshot (40%)" — replaces the old "Stage share" stat. */
+export function shareSentence(traceCount: number, coverage: number) {
+  if (coverage <= 0) return `${traceLabel(traceCount)} in this snapshot`;
+  const stageTotal = Math.round(traceCount / coverage);
+  return `${traceCount} of ${stageTotal} traces in this snapshot (${Math.round(coverage * 100)}%)`;
+}
+
 // Hoisted: TimelineTrack formats every tick on each render.
 const SNAPSHOT_CUTOFF_FORMAT = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -39,6 +46,19 @@ const SNAPSHOT_CUTOFF_FORMAT = new Intl.DateTimeFormat('en-US', {
   hour12: false,
   timeZone: 'UTC',
 });
+
+const SNAPSHOT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+export function formatSnapshotDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return SNAPSHOT_DATE_FORMAT.format(date);
+}
 
 export function formatSnapshotCutoff(cutoffAt: string) {
   const date = new Date(cutoffAt);
