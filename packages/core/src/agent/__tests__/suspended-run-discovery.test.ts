@@ -658,11 +658,13 @@ describe('suspended-run discovery', () => {
 
       const scoped = await supervisor.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' });
       expect(scoped.runs.map(run => run.runId)).toEqual([stream.runId]);
+      // The outer resumable run retains its own toolCallId, but discloses the
+      // actual inner approval target and arguments to the user.
       expect(scoped.runs[0]!.toolCalls).toEqual([
         {
           toolCallId: 'sup-call-1',
-          toolName: 'agent-billing-agent',
-          args: { message: 'Find Dero Israel' },
+          toolName: 'findUserTool',
+          args: { name: 'Dero Israel' },
           requiresApproval: true,
         },
       ]);
@@ -703,16 +705,16 @@ describe('suspended-run discovery', () => {
         // consume until suspension
       }
 
-      // Each agent in the chain sees only its own suspended run.
+      // Each agent in the chain sees only its own suspended run. Every layer
+      // discloses the leaf approval target while retaining its layer's resumable
+      // toolCallId internally.
       const supervisorRuns = await supervisor.listSuspendedRuns();
       expect(supervisorRuns.runs.map(run => run.runId)).toEqual([stream.runId]);
-      // The supervisor's resumable run shows the delegation call to mid, not the
-      // real approval tool (which lives on the leaf's run).
       expect(supervisorRuns.runs[0]!.toolCalls).toEqual([
         {
           toolCallId: 'sup-call-1',
-          toolName: 'agent-mid-agent',
-          args: { message: 'Find Dero Israel' },
+          toolName: 'findUserTool',
+          args: { name: 'Dero Israel' },
           requiresApproval: true,
         },
       ]);
@@ -720,11 +722,13 @@ describe('suspended-run discovery', () => {
       const midRuns = await mid.listSuspendedRuns();
       expect(midRuns.runs).toHaveLength(1);
       expect(midRuns.runs[0]!.runId).not.toBe(stream.runId);
-      expect(midRuns.runs[0]!.toolCalls[0]!.toolName).toBe('agent-leaf-agent');
+      expect(midRuns.runs[0]!.toolCalls[0]).toMatchObject({
+        toolName: 'findUserTool',
+        args: { name: 'Dero Israel' },
+      });
 
       const leafRuns = await leaf.listSuspendedRuns();
       expect(leafRuns.runs).toHaveLength(1);
-      // Only the innermost (leaf) run surfaces the actual approval tool + args.
       expect(leafRuns.runs[0]!.toolCalls).toEqual([
         {
           toolCallId: expect.any(String),

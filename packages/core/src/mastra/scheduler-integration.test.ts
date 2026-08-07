@@ -554,6 +554,112 @@ describe('Mastra — workflow scheduler integration', () => {
     });
   });
 
+  describe('stored-agent readiness (end-to-end)', () => {
+    function makeEditor(getById: (id: string) => Promise<unknown>) {
+      return {
+        registerWithMastra: () => {},
+        agent: { getById },
+      } as unknown as NonNullable<ConstructorParameters<typeof Mastra>[0]>['editor'];
+    }
+
+    async function bootWithEditor(
+      storage: InstanceType<typeof MockStore>,
+      getById: (id: string) => Promise<unknown>,
+      missesBeforeDelete: number,
+    ): Promise<Mastra> {
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete },
+        editor: makeEditor(getById),
+      });
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+      return mastra;
+    }
+
+    async function insertDueAgentSchedule(
+      storage: InstanceType<typeof MockStore>,
+      id: string,
+      agentId: string,
+    ): Promise<number> {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const past = Date.now() - 5_000;
+      await schedulesStore.createSchedule({
+        id,
+        target: { type: 'agent', agentId, prompt: 'check in' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: past,
+        createdAt: past,
+        updatedAt: past,
+      });
+      return past;
+    }
+
+    it('does not delete a schedule for a stored agent that only the editor can resolve', async () => {
+      const storage = new MockStore();
+      // Simulates a cold start: the agent is NOT in the Mastra registry, only
+      // resolvable through the editor (stored agents hydrate lazily).
+      const editorGetById = vi.fn(async (id: string) =>
+        id === 'stored-a1' ? { generate: vi.fn().mockResolvedValue({ runId: 'run-1' }) } : null,
+      );
+      const mastra = await bootWithEditor(storage, editorGetById, 2);
+      const past = await insertDueAgentSchedule(storage, 'stored-agent-sched', 'stored-a1');
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      // More ticks than missesBeforeDelete — before the fix the registry-only
+      // predicate deleted the row here without ever publishing a fire.
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await flushAsyncInit();
+
+      const row = await schedulesStore.getSchedule('stored-agent-sched');
+      expect(row).not.toBeNull();
+      expect(row!.nextFireAt).toBeGreaterThan(past); // the fire was claimed & published
+      expect(editorGetById).toHaveBeenCalledWith('stored-a1');
+
+      await mastra.shutdown();
+    });
+
+    it('does not burn grace misses when the editor lookup fails transiently', async () => {
+      const storage = new MockStore();
+      const editorGetById = vi.fn(async () => {
+        throw new Error('storage down');
+      });
+      const mastra = await bootWithEditor(storage, editorGetById, 1);
+      await insertDueAgentSchedule(storage, 'flaky-editor-sched', 'stored-a1');
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      // missesBeforeDelete is 1, so a single counted miss would delete the
+      // row. A throwing editor must not count as a miss.
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await flushAsyncInit();
+
+      expect(await schedulesStore.getSchedule('flaky-editor-sched')).not.toBeNull();
+
+      await mastra.shutdown();
+    });
+
+    it('still deletes a schedule when the editor confirms the agent is gone', async () => {
+      const storage = new MockStore();
+      const editorGetById = vi.fn(async () => null);
+      const mastra = await bootWithEditor(storage, editorGetById, 2);
+      await insertDueAgentSchedule(storage, 'gone-agent-sched', 'deleted-a1');
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      await mastra.scheduler!.tick();
+      expect(await schedulesStore.getSchedule('gone-agent-sched')).not.toBeNull();
+      await mastra.scheduler!.tick();
+      expect(await schedulesStore.getSchedule('gone-agent-sched')).toBeNull();
+
+      await mastra.shutdown();
+    });
+  });
+
   describe('storage init ordering (#17905)', () => {
     /**
      * Models a SQL store whose tables only exist after init(): writing a

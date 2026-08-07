@@ -9,6 +9,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { RequestContext } from '../../request-context';
 import { createSkill } from '../../skills/create-skill';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
@@ -264,6 +265,82 @@ describe('Agent-level skills wiring', () => {
       const sharedSkill = skillsList.find(s => s.name === 'shared-name');
       expect(sharedSkill).toBeDefined();
       expect(sharedSkill!.description).toBe('inline version wins');
+    });
+  });
+
+  describe('dynamic skills resolver', () => {
+    it('runs the resolver once per execution, not once per resolution site', async () => {
+      const resolver = vi.fn(() => [
+        createSkill({
+          name: 'per-request',
+          description: 'Resolved per request.',
+          instructions: 'Do the thing.',
+        }),
+      ]);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-once',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      await agent.generate('Hello');
+      expect(resolver).toHaveBeenCalledTimes(1);
+
+      // Skills still reach the model on the single resolution
+      const systemMsgs = getSystemMessages(capturedPrompt);
+      expect(systemMsgs.join('\n')).toContain('per-request');
+    });
+
+    it('runs the resolver again for the next execution', async () => {
+      const resolver = vi.fn(() => []);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-per-request',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      await agent.generate('First');
+      await agent.generate('Second');
+
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares one resolution across calls that pass the same requestContext', async () => {
+      const resolver = vi.fn(() => []);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-shared-rc',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      const requestContext = new RequestContext();
+      await agent.listSkills({ requestContext });
+      await agent.listSkills({ requestContext });
+
+      expect(resolver).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache a failed resolution', async () => {
+      const resolver = vi.fn().mockRejectedValueOnce(new Error('skills service unavailable')).mockResolvedValue([]);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-retry',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      const requestContext = new RequestContext();
+      await expect(agent.listSkills({ requestContext })).rejects.toThrow('skills service unavailable');
+      await expect(agent.listSkills({ requestContext })).resolves.toEqual([]);
+
+      expect(resolver).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -3,7 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { GitBranch, MoreHorizontal, Trash2 } from 'lucide-react';
+import { GitBranch, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { SessionPreviewCard } from './SessionPreviewCard';
@@ -25,7 +25,9 @@ export function SessionNavRow({
   status,
   merged,
   preview,
+  pinned = false,
   onSelect,
+  onPinChange,
   onDelete,
 }: {
   name: string;
@@ -40,7 +42,9 @@ export function SessionNavRow({
   merged?: boolean;
   status?: 'running' | 'attention';
   preview?: SessionPreviewDetails;
+  pinned?: boolean;
   onSelect: () => void;
+  onPinChange: (pinned: boolean) => void;
   onDelete: () => void;
 }) {
   const button = (
@@ -53,7 +57,10 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       <GitBranch />
-      <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
+      <MainSidebar.NavLabel className="flex-initial">{name}</MainSidebar.NavLabel>
+      {pinned && !loading ? (
+        <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
+      ) : null}
       {loading ? (
         <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3 ml-auto shrink-0" />
       ) : status === 'running' ? (
@@ -99,6 +106,10 @@ export function SessionNavRow({
         }
       />
       <DropdownMenu.Content align="end" className="min-w-28">
+        <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
+          {pinned ? <PinOff /> : <Pin />}
+          {pinned ? 'Unpin' : 'Pin session'}
+        </DropdownMenu.Item>
         <DropdownMenu.Item variant="destructive" onClick={onDelete}>
           <Trash2 />
           Delete

@@ -2,8 +2,15 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import { getCustomProviderId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '@mastra/code-sdk/onboarding/settings';
-import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
+import {
+  getCustomProviderId,
+  isThinkingLevelSetting,
+  loadSettings,
+  saveSettings,
+  THINKING_LEVEL_VALUES,
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+} from '@mastra/code-sdk/onboarding/settings';
+import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
@@ -499,6 +506,25 @@ export interface ProviderOMDefaultsResponse {
   config: OMConfigInfo;
 }
 
+/** `GET /web/config/thinking` — deployment-scoped reasoning-effort defaults. */
+export interface ThinkingConfigInfo {
+  /** All selectable levels, in escalation order. */
+  levels: readonly ThinkingLevelSetting[];
+  /** `preferences.thinkingLevel` — fallback when a mode has no default. */
+  globalDefault: ThinkingLevelSetting;
+  /** `models.modeThinkingDefaults` — per-mode overrides of the global default. */
+  modeDefaults: Record<string, ThinkingLevelSetting>;
+  /** Mode ids known to the controller (for rendering per-mode rows). */
+  modes: string[];
+}
+
+/** `PUT /web/config/thinking` success payload. */
+export interface UpdateThinkingConfigResponse {
+  ok: true;
+  globalDefault: ThinkingLevelSetting;
+  modeDefaults: Record<string, ThinkingLevelSetting>;
+}
+
 export function readOMConfig(session: OMSession): OMConfigInfo {
   const state = session.state.get() ?? {};
   const observeAttachments = state.observeAttachments;
@@ -624,6 +650,11 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   onCredentialsChanged?: (tenant: { orgId: string; userId?: string }) => void;
   /** Notifies the host after custom providers change so model-router caches can be dropped. */
   onCustomProvidersChanged?: (tenant: { orgId: string }) => void;
+  /**
+   * Path of the server's settings.json backing the deployment-scoped thinking
+   * defaults. Defaults to the standard app-data location; injectable for tests.
+   */
+  settingsPath?: string;
 }
 
 /**
@@ -635,6 +666,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
+ *   - `GET    /web/config/thinking`                — read thinking (reasoning-effort) defaults
+ *   - `PUT    /web/config/thinking`                — set global/per-mode thinking defaults
  *   - `GET    /web/config/om`                      — read OM models/thresholds/observe-attachments
  *   - `PUT    /web/config/om/:role/model`          — switch observer/reflector model
  *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
@@ -1027,6 +1060,105 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
             await applyPackToSession({ controller, session, pack });
             return c.json({ ok: true, activePackId: pack.id });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      // ── Thinking (reasoning-effort) defaults ─────────────────────────────────
+      // Deployment-scoped defaults stored in the server's settings.json: the
+      // global `preferences.thinkingLevel` plus per-mode
+      // `models.modeThinkingDefaults`. These are what request-time resolution
+      // falls back to when a session carries no explicit override — including
+      // automated (rule-driven) Factory runs nobody opens interactively. In
+      // tenant mode, writes are disabled because the settings file is shared
+      // deployment-wide rather than scoped to an organization.
+
+      registerApiRoute('/web/config/thinking', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          try {
+            const settings = loadSettings(options.settingsPath);
+            const modes = controller.listModes?.().map(mode => mode.id) ?? [];
+            return c.json({
+              levels: THINKING_LEVEL_VALUES,
+              globalDefault: settings.preferences.thinkingLevel,
+              modeDefaults: settings.models.modeThinkingDefaults,
+              modes,
+            });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute('/web/config/thinking', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          if (auth.enabled()) {
+            return c.json({ error: 'Deployment thinking defaults can only be changed in local mode' }, 403);
+          }
+          let body: { globalDefault?: unknown; modeDefaults?: unknown };
+          try {
+            const parsed: unknown = await c.req.json();
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              return c.json({ error: 'Request body must be a JSON object' }, 400);
+            }
+            body = parsed as { globalDefault?: unknown; modeDefaults?: unknown };
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          if (body.globalDefault === undefined && body.modeDefaults === undefined) {
+            return c.json({ error: 'Provide globalDefault and/or modeDefaults' }, 400);
+          }
+          if (body.globalDefault !== undefined && !isThinkingLevelSetting(body.globalDefault)) {
+            return c.json(
+              { error: `Invalid globalDefault — expected one of: ${THINKING_LEVEL_VALUES.join(', ')}` },
+              400,
+            );
+          }
+          // Per-mode patch semantics: a valid level sets the mode's default,
+          // `null` clears it (back to the global default).
+          const modePatch: Record<string, ThinkingLevelSetting | null> = {};
+          if (body.modeDefaults !== undefined) {
+            if (!body.modeDefaults || typeof body.modeDefaults !== 'object' || Array.isArray(body.modeDefaults)) {
+              return c.json({ error: 'modeDefaults must be an object of mode → level (or null to clear)' }, 400);
+            }
+            const knownModes = new Set(controller.listModes?.().map(mode => mode.id) ?? []);
+            for (const [mode, level] of Object.entries(body.modeDefaults as Record<string, unknown>)) {
+              if (!knownModes.has(mode)) {
+                return c.json({ error: `Unknown mode "${mode}"` }, 400);
+              }
+              if (level === null) {
+                modePatch[mode] = null;
+              } else if (isThinkingLevelSetting(level)) {
+                modePatch[mode] = level;
+              } else {
+                return c.json(
+                  { error: `Invalid level for mode "${mode}" — expected one of: ${THINKING_LEVEL_VALUES.join(', ')}` },
+                  400,
+                );
+              }
+            }
+          }
+          try {
+            const settings = loadSettings(options.settingsPath);
+            if (body.globalDefault !== undefined && isThinkingLevelSetting(body.globalDefault)) {
+              settings.preferences.thinkingLevel = body.globalDefault;
+            }
+            for (const [mode, level] of Object.entries(modePatch)) {
+              if (level === null) delete settings.models.modeThinkingDefaults[mode];
+              else settings.models.modeThinkingDefaults[mode] = level;
+            }
+            saveSettings(settings, options.settingsPath);
+            return c.json({
+              ok: true,
+              globalDefault: settings.preferences.thinkingLevel,
+              modeDefaults: settings.models.modeThinkingDefaults,
+            });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
