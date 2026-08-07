@@ -262,11 +262,13 @@ function FlowCard({
                     {...provided.droppableProps}
                     ref={provided.innerRef}
                     aria-label="Trace signal column headers"
-                    className="flex items-center gap-1 px-4 pb-1"
+                    className="flex items-center gap-1 px-8 pb-1"
                     role="group"
                   >
                     {headerSignalNames.map((signalName, index) => {
                       const label = formatSignalName(signalName);
+                      const offsetPercent =
+                        headerSignalNames.length > 1 ? (index / (headerSignalNames.length - 1) - 0.5) * 100 : 0;
                       return (
                         <Draggable
                           key={signalName}
@@ -284,7 +286,7 @@ function FlowCard({
                                   : 'hover:border-border1 hover:bg-surface2'
                               }`}
                               data-dragging={dragSnapshot.isDragging}
-                              style={dragProvided.draggableProps.style}
+                              style={{ ...dragProvided.draggableProps.style, translate: `${offsetPercent}%` }}
                             >
                               <Tooltip>
                                 <TooltipTrigger

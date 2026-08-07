@@ -597,6 +597,19 @@ describe('SankeySignals', () => {
       expect(screen.queryByTestId('signals-analysis-scroll')).toBeNull();
       expect(screen.queryByTestId('signals-analysis-canvas')).toBeNull();
     });
+
+    it('aligns the header centers with the Sankey edge and interior columns', async () => {
+      renderSankeySignals();
+
+      await screen.findByLabelText('Reorder Outcome');
+      const offsets = screen.getAllByTestId('signal-column-header').map(header => {
+        const draggable = header.closest<HTMLElement>('[data-rfd-draggable-id]');
+        if (!draggable) throw new Error('Trace signal column header draggable was not rendered');
+        return draggable.style.translate;
+      });
+
+      expect(offsets).toEqual(['-50%', '-16.666666666666668%', '16.666666666666664%', '50%']);
+    });
   });
 
   describe('when a signal column header is reordered', () => {
