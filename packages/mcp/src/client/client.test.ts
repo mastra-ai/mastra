@@ -675,7 +675,6 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
     toolCalls: string[];
     breakAfterToolCall: boolean;
@@ -721,7 +720,7 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
       });
     });
 
-    testServer = { httpServer, mcpServer, serverTransport: undefined as any, baseUrl, toolCalls, breakAfterToolCall: false };
+    testServer = { httpServer, mcpServer, baseUrl, toolCalls, breakAfterToolCall: false };
   });
 
   afterEach(async () => {
