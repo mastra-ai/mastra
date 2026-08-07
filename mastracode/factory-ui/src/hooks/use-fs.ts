@@ -1,6 +1,5 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
 
-import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
@@ -12,12 +11,7 @@ import type {
   WorkspaceRenderedListing,
 } from '../api/types';
 
-/** An undefined url means a required param is still missing, so the query stays idle instead of firing a broken request. */
-function getOrSkip<T>(client: ApiClient, url: string | undefined) {
-  if (!url) return skipToken;
-  return () => client.get<T>(url);
-}
-
+/** A builder returns undefined while a required param is missing, which is what turns its query into a skipToken below. */
 function directoryListingUrl(path: string | undefined) {
   if (!path) return '/web/fs/list';
   return `/web/fs/list?${new URLSearchParams({ path })}`;
@@ -63,18 +57,20 @@ function workspaceDiffUrl(
  */
 export function useDirectoryListing(path: string | undefined) {
   const { client } = useApiConfig();
+  const url = directoryListingUrl(path);
   return useQuery<DirectoryListing>({
     queryKey: queryKeys.fsList(path),
     placeholderData: previousData => previousData,
-    queryFn: () => client.get<DirectoryListing>(directoryListingUrl(path)),
+    queryFn: () => client.get<DirectoryListing>(url),
   });
 }
 
 export function useArtifactListing(path: string | undefined) {
   const { client } = useApiConfig();
+  const url = artifactListingUrl(path);
   return useQuery<ArtifactListing>({
     queryKey: queryKeys.artifactsList(path),
-    queryFn: getOrSkip<ArtifactListing>(client, artifactListingUrl(path)),
+    queryFn: url ? () => client.get<ArtifactListing>(url) : skipToken,
   });
 }
 
@@ -84,10 +80,11 @@ export function useWorkspaceRenderedListing(
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
+  const url = workspaceRenderedListingUrl(workspacePath, renderedRoot);
   return useQuery<WorkspaceRenderedListing>({
     queryKey: queryKeys.workspaceRenderedList(workspacePath, renderedRoot),
     enabled,
-    queryFn: getOrSkip<WorkspaceRenderedListing>(client, workspaceRenderedListingUrl(workspacePath, renderedRoot)),
+    queryFn: url ? () => client.get<WorkspaceRenderedListing>(url) : skipToken,
   });
 }
 
@@ -97,19 +94,21 @@ export function useWorkspaceFile(
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
+  const url = workspaceFileUrl(workspacePath, filePath);
   return useQuery<WorkspaceFile>({
     queryKey: queryKeys.workspaceFile(workspacePath, filePath),
     enabled,
-    queryFn: getOrSkip<WorkspaceFile>(client, workspaceFileUrl(workspacePath, filePath)),
+    queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
   });
 }
 
 export function useWorkspaceChanges(workspacePath: string | undefined, { enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
+  const url = workspaceChangesUrl(workspacePath);
   return useQuery<WorkspaceChanges>({
     queryKey: queryKeys.workspaceChanges(workspacePath),
     enabled,
-    queryFn: getOrSkip<WorkspaceChanges>(client, workspaceChangesUrl(workspacePath)),
+    queryFn: url ? () => client.get<WorkspaceChanges>(url) : skipToken,
   });
 }
 
@@ -120,9 +119,10 @@ export function useWorkspaceDiff(
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
+  const url = workspaceDiffUrl(workspacePath, filePath, previousFilePath);
   return useQuery<WorkspaceDiff>({
     queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
     enabled,
-    queryFn: getOrSkip<WorkspaceDiff>(client, workspaceDiffUrl(workspacePath, filePath, previousFilePath)),
+    queryFn: url ? () => client.get<WorkspaceDiff>(url) : skipToken,
   });
 }
