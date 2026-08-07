@@ -42,12 +42,13 @@ interface SkillsProcessorBaseOptions {
    * meaningless to the model. Override this to advertise a location the
    * model can actually reach, or a plain identifier.
    *
-   * Note: the default location doubles as a skill identifier — the `skill`
-   * and `skill_read` tools resolve it back to the skill via its path.
-   * Overridden values do not get that treatment: unless the returned string
-   * is the skill's name or canonical path, tools cannot resolve it. When an
-   * override is set, the injected instruction therefore directs the model to
-   * refer to skills by name instead of by location.
+   * Remapped locations remain valid skill identifiers: the processor
+   * registers each rendered location as an alias with the skills registry
+   * (via `WorkspaceSkills.registerLocationAlias`), so the `skill` and
+   * `skill_read` tools resolve it back to the underlying skill. If a custom
+   * `WorkspaceSkills` implementation does not support alias registration,
+   * the injected instruction instead directs the model to refer to skills
+   * by name.
    */
   formatLocation?: (skill: Skill) => string;
 }
@@ -114,10 +115,15 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   // ===========================================================================
 
   /**
-   * Format skill location (path to SKILL.md file)
+   * Format skill location (path to SKILL.md file).
+   * Remapped locations are registered as aliases with the skills registry so
+   * the `skill` and `skill_read` tools can resolve them back to the skill.
    */
   private formatLocation(skill: Skill): string {
-    return this._formatLocation ? this._formatLocation(skill) : `${skill.path}/SKILL.md`;
+    if (!this._formatLocation) return `${skill.path}/SKILL.md`;
+    const location = this._formatLocation(skill);
+    this._skills?.registerLocationAlias?.(location, skill.path);
+    return location;
   }
 
   /**
@@ -236,14 +242,15 @@ ${skillsMd}`;
         });
       }
 
-      // Add instruction to use the skill tool. When a formatLocation override
-      // is set, the rendered location is display metadata that tools cannot
-      // resolve back to a skill, so direct the model to refer to skills by
-      // name instead of by location.
-      const locationGuidance = this._formatLocation
-        ? 'The location field is informational metadata: it is not guaranteed to exist on your workspace filesystem and is not a skill identifier, so refer to skills by name and read skill files with `skill_read` rather than with filesystem tools. '
-        : 'If multiple skills share the same name, use the skill path (shown in the location field) instead of the name to disambiguate. ' +
-          'The location field identifies a skill for the `skill` and `skill_read` tools; it is not guaranteed to exist on your workspace filesystem, so read skill files with `skill_read` rather than with filesystem tools. ';
+      // Add instruction to use the skill tool. Remapped locations are
+      // registered as aliases with the skills registry, so the location field
+      // stays a valid tool identifier. Only when the skills implementation
+      // cannot register aliases does the guidance fall back to by-name usage.
+      const locationResolvable = !this._formatLocation || typeof this._skills?.registerLocationAlias === 'function';
+      const locationGuidance = locationResolvable
+        ? 'If multiple skills share the same name, use the exact location (shown in the location field) instead of the name to disambiguate. ' +
+          'The location field identifies a skill for the `skill` and `skill_read` tools; it is not guaranteed to exist on your workspace filesystem, so read skill files with `skill_read` rather than with filesystem tools. '
+        : 'The location field is informational metadata: it is not guaranteed to exist on your workspace filesystem and is not a skill identifier, so refer to skills by name and read skill files with `skill_read` rather than with filesystem tools. ';
       messageList.addSystem({
         role: 'system',
         content:

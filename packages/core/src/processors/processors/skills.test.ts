@@ -280,10 +280,34 @@ describe('SkillsProcessor', () => {
       const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
       expect(contents).toContain('The location field identifies a skill for the `skill` and `skill_read` tools');
       expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
-      expect(contents).toContain('use the skill path (shown in the location field)');
+      expect(contents).toContain('use the exact location (shown in the location field)');
     });
 
-    it('should not advertise remapped locations as skill identifiers when formatLocation is overridden', async () => {
+    it('should register remapped locations as aliases and keep the location a skill identifier', async () => {
+      const registerLocationAlias = vi.fn();
+      const aliasSkills: WorkspaceSkills = { ...createMockWorkspaceSkills(), registerLocationAlias };
+      const remappedProcessor = new SkillsProcessor({
+        skills: aliasSkills,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      // Every rendered location is registered so tools can resolve it back to the skill.
+      expect(registerLocationAlias).toHaveBeenCalledWith('/mnt/bundle/code-review/SKILL.md', '/skills/code-review');
+      expect(registerLocationAlias).toHaveBeenCalledWith('/mnt/bundle/testing/SKILL.md', '/skills/testing');
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('The location field identifies a skill for the `skill` and `skill_read` tools');
+      expect(contents).not.toContain('refer to skills by name and read skill files');
+    });
+
+    it('should fall back to by-name guidance when the skills registry cannot register aliases', async () => {
+      // createMockWorkspaceSkills() does not implement registerLocationAlias,
+      // so remapped locations cannot round-trip through get()/has().
       const remappedProcessor = new SkillsProcessor({
         workspace: mockWorkspace,
         formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
@@ -295,10 +319,8 @@ describe('SkillsProcessor', () => {
       } as any);
 
       const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
-      // Remapped locations do not resolve via WorkspaceSkills.get(), so the
-      // instruction must not present the location as a tool identifier.
       expect(contents).not.toContain('The location field identifies a skill');
-      expect(contents).not.toContain('use the skill path (shown in the location field)');
+      expect(contents).not.toContain('use the exact location (shown in the location field)');
       expect(contents).toContain('refer to skills by name');
       expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
     });

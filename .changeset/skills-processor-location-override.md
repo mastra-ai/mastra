@@ -11,4 +11,4 @@ new SkillsProcessor({
 });
 ```
 
-The skill-tool instruction now also tells the model that `location` may not exist on its filesystem, so it reads skill files with `skill_read` instead of filesystem tools. With the default location, the instruction notes that `location` also identifies a skill for the `skill` and `skill_read` tools; when a `formatLocation` override is set, remapped locations are not skill identifiers, so the instruction directs the model to refer to skills by name.
+Remapped locations remain valid skill identifiers: the processor registers each rendered location as an alias with the skills registry, so the `skill` and `skill_read` tools resolve it back to the underlying skill. The skill-tool instruction now also tells the model that `location` may not exist on its filesystem, so it reads skill files with `skill_read` instead of filesystem tools. If a custom `WorkspaceSkills` implementation does not support alias registration, the instruction falls back to directing the model to refer to skills by name.
